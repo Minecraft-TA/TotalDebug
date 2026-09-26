@@ -1,5 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
+import com.github.minecraft_ta.totalDebugCompanion.model.ChangesView;
+import com.github.minecraft_ta.totalDebugCompanion.model.ConfigFileView;
+import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
+import com.github.minecraft_ta.totalDebugCompanion.model.KeyBindingsView;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import java.util.function.Predicate;
@@ -11,6 +17,7 @@ import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
+import com.github.minecraft_ta.totalDebugCompanion.model.PackConfigurationView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LiteralUsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
@@ -32,6 +39,7 @@ import javax.swing.SwingUtilities;
 import java.awt.event.ActionEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -120,6 +128,10 @@ public final class NavigationService {
                     .flatMap(module -> project.sources().sourcesForModule(module.id()).stream())
                     .anyMatch(source -> source.path().equals(entry.archive().toAbsolutePath().normalize()));
             case NavigationTarget.ModPage ignored -> true;
+            case NavigationTarget.PackConfiguration ignored -> true;
+            case NavigationTarget.Changes ignored -> true;
+            case NavigationTarget.KeyBindings ignored -> true;
+            case NavigationTarget.Content ignored -> true;
             case null, default -> false;
         };
         if (!available) return null;
@@ -133,6 +145,10 @@ public final class NavigationService {
                     case NavigationTarget.ArchiveEntry entry -> requireRevealed(fileTree.revealArchivePath(entry.archive(), entry.entryName()));
                     case NavigationTarget.RuntimeClass type -> revealRuntimePath(type.binaryName(), type.binaryName().replace('.', '/') + ".class");
                     case NavigationTarget.ModPage page -> requireRevealed(fileTree.revealModPage(page));
+                    case NavigationTarget.PackConfiguration ignored -> requireRevealed(fileTree.revealPackConfiguration());
+                    case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges());
+                    case NavigationTarget.KeyBindings ignored -> requireRevealed(fileTree.revealKeyBindings());
+                    case NavigationTarget.Content content -> requireRevealed(fileTree.revealContent(content.registry()));
                     default -> throw new IllegalArgumentException("Editor has no tree location");
                 };
                 reportFailure(result, target);
@@ -287,6 +303,29 @@ public final class NavigationService {
                         view -> view.modId().equals(page.modId()),
                         () -> new ModView(editors.get(), page)
                 ).thenAccept(view -> view.show(page)), activation);
+                case NavigationTarget.PackConfiguration ignored -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        PackConfigurationView.class,
+                        view -> true,
+                        () -> new PackConfigurationView(editors.get())
+                ).thenAccept(PackConfigurationView::refresh), activation);
+                case NavigationTarget.Changes ignored -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        ChangesView.class,
+                        view -> true,
+                        () -> new ChangesView(editors.get())
+                ).thenAccept(ChangesView::refresh), activation);
+                case NavigationTarget.Content content -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        ContentView.class,
+                        view -> true,
+                        () -> new ContentView(editors.get())
+                ).thenAccept(view -> view.show(content.registry())), activation);
+                case NavigationTarget.KeyBindings keys -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        KeyBindingsView.class,
+                        view -> true,
+                        () -> new KeyBindingsView(editors.get())
+                ).thenAccept(view -> {
+                    view.refresh();
+                    view.show(keys.binding());
+                }), activation);
                 case NavigationTarget.Definition definition -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         DefinitionView.class,
                         view -> view.subject().equals(definition.subject()),
@@ -587,6 +626,20 @@ public final class NavigationService {
                 view.navigateToOffset(target.offset());
             }, SwingUtilities::invokeLater), activation);
         }
+        // A mod's configuration file is edited, with the checks its Configuration tab applies.
+        ProjectScope project = requireProject();
+        var owner = project.catalog().index().flatMap(index ->
+                ConfigSources.owner(index, project.profile().workspaceDirectory(), path));
+        if (owner.isPresent()) {
+            return dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                    ConfigFileView.class,
+                    view -> view.getPath().equals(path),
+                    () -> new ConfigFileView(editors.get(), path, owner.get())
+            ).thenAcceptAsync(view -> {
+                if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+                if (target.offset() > 0) view.navigateToOffset(target.offset());
+            }, SwingUtilities::invokeLater), activation);
+        }
         return openResource(new LocalFileSource(path), activation);
     }
 
@@ -727,6 +780,11 @@ public final class NavigationService {
             case NavigationTarget.ModuleSearch ignored -> "Search Everywhere";
             case NavigationTarget.Inspection inspection -> inspection.subject().subject();
             case NavigationTarget.ModPage page -> "mod " + page.modId();
+            case NavigationTarget.PackConfiguration ignored -> "modpack configuration";
+            case NavigationTarget.Changes ignored -> "changes";
+            case NavigationTarget.KeyBindings ignored -> "key bindings";
+            case NavigationTarget.Content content -> "modpack " + (content.registry().isEmpty() ? "content"
+                    : ContentKinds.of(content.registry()).plural().toLowerCase(Locale.ROOT));
             case NavigationTarget.Definition definition -> definition.subject().format();
             case NavigationTarget.RuntimeModuleNode node -> "module " + node.moduleId();
         };

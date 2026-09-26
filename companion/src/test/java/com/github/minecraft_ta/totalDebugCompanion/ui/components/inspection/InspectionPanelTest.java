@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
@@ -109,7 +110,7 @@ class InspectionPanelTest {
         assertEquals("Block", section.title());
         assertEquals(List.of(
                 Fact.text("ID", "minecraft:chest")
-                        .withLink(FactLink.toSubject(new SubjectRef.Definition(SubjectRef.DefinitionKind.BLOCK, "minecraft:chest"))),
+                        .withLink(FactLink.toSubject(new SubjectRef.Definition(RegistryIds.BLOCK, "minecraft:chest"))),
                 Fact.text("Mod", "Minecraft").withLink(FactLink.toSubject(new SubjectRef.Mod("minecraft"))),
                 Fact.text("Position", "12, 64, -3 in minecraft:overworld"),
                 Fact.text("Block", "ChestBlock")
@@ -129,7 +130,7 @@ class InspectionPanelTest {
             }
         });
         assertEquals(List.of(new NavigationTarget.ModPage("minecraft"),
-                new NavigationTarget.Definition(new SubjectRef.Definition(SubjectRef.DefinitionKind.BLOCK, "minecraft:furnace"))),
+                new NavigationTarget.Definition(new SubjectRef.Definition(RegistryIds.BLOCK, "minecraft:furnace"))),
                 opened);
     }
 

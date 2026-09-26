@@ -91,8 +91,9 @@ public final class ContextMenus {
         install(table, point -> {
             int row = table.rowAtPoint(point);
             if (row < 0) return null;
-            table.getSelectionModel().setSelectionInterval(row, row);
-            return table.getSelectedRow() == row ? menu.apply(row) : null;
+            // A right-click inside a selection of several rows keeps it, so the menu can act on all of them.
+            if (!table.isRowSelected(row)) table.getSelectionModel().setSelectionInterval(row, row);
+            return table.isRowSelected(row) ? menu.apply(row) : null;
         }, () -> menu.apply(table.getSelectedRow()), () -> {
             int row = table.getSelectedRow();
             if (row < 0) return null;

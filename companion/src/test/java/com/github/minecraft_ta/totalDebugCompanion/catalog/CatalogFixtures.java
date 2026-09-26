@@ -38,6 +38,14 @@ public final class CatalogFixtures {
         return jar;
     }
 
+    public static final String CONTEXT_IN_GAME = "net.neoforged.neoforge.client.settings.KeyConflictContext.IN_GAME";
+    public static final String CONTEXT_GUI = "net.neoforged.neoforge.client.settings.KeyConflictContext.GUI";
+
+    private static PackCatalog.RegistryEntry entry(String id, String name, String className, String icon,
+                                                   List<PackCatalog.Link> links, Map<String, String> facts) {
+        return new PackCatalog.RegistryEntry(id, name, className, icon, links, facts);
+    }
+
     public static PackCatalog catalog(Path jar) {
         return new PackCatalog(INVENTORY, "en_us",
                 List.of(new PackCatalog.Mod("testmod", "Test Mod", "1.2.3", "Widgets for tests", List.of("Tester"),
@@ -55,12 +63,30 @@ public final class CatalogFixtures {
                                                         List.of("FAST", "SLOW"), PackCatalog.Restart.WORLD))))),
                         new PackCatalog.Mod("neoforge", "NeoForge", "21.1.250", "", List.of(), "LGPL", Map.of(), "",
                                 "minecraft+neoforge", jar.resolveSibling("neoforge.jar").toUri(), List.of(), List.of())),
-                List.of(new PackCatalog.BlockEntry("testmod:widget_block", "Widget Block", "testmod.WidgetBlock",
-                        "testmod:widget_block", "testmod:widget_entity")),
-                List.of(new PackCatalog.ItemEntry("testmod:widget", "Widget", "testmod.Widget", "", "", Map.of()),
-                        new PackCatalog.ItemEntry("testmod:widget_block", "Widget Block", "net.minecraft.world.item.BlockItem",
-                                "testmod:widget_block", "", Map.of()),
-                        new PackCatalog.ItemEntry("c:shared_dust", "Shared Dust", "c.Dust", "", "c:item/dust", Map.of(0, 0xFF0000))),
-                List.of(new PackCatalog.EntityTypeEntry("testmod:gremlin", "Gremlin", "monster", "")));
+                List.of(new PackCatalog.Registry(RegistryIds.BLOCK, List.of(
+                                entry("testmod:widget_block", "Widget Block", "testmod.WidgetBlock", "testmod:widget_block",
+                                        List.of(new PackCatalog.Link("item", RegistryIds.ITEM, "testmod:widget_block"),
+                                                new PackCatalog.Link("block_entity_type", "minecraft:block_entity_type",
+                                                        "testmod:widget_entity")), Map.of()))),
+                        new PackCatalog.Registry(RegistryIds.ITEM, List.of(
+                                entry("testmod:widget", "Widget", "testmod.Widget", "testmod:widget", List.of(), Map.of()),
+                                entry("testmod:widget_block", "Widget Block", "net.minecraft.world.item.BlockItem",
+                                        "testmod:widget_block",
+                                        List.of(new PackCatalog.Link("block", RegistryIds.BLOCK, "testmod:widget_block")), Map.of()),
+                                entry("c:shared_dust", "Shared Dust", "c.Dust", "c:shared_dust", List.of(), Map.of()))),
+                        new PackCatalog.Registry(RegistryIds.ENTITY_TYPE, List.of(
+                                entry("testmod:gremlin", "Gremlin", "", "", List.of(), Map.of("category", "monster")))),
+                        new PackCatalog.Registry(RegistryIds.FLUID, List.of(
+                                entry("testmod:goo", "Goo", "testmod.GooFluid", "", List.of(), Map.of())))),
+                Map.of("c:shared_dust", new PackCatalog.ItemAppearance("c:item/dust", Map.of(0, 0xFF0000))),
+                List.of(new PackCatalog.KeyBinding("key.testmod.spin", "Spin widgets", "key.categories.testmod", "Test Mod",
+                                "testmod", "key.keyboard.r", "NONE", CONTEXT_IN_GAME),
+                        new PackCatalog.KeyBinding("key.drop", "Drop Selected Item", "key.categories.inventory",
+                                "Inventory", "minecraft", "key.keyboard.q", "NONE", CONTEXT_IN_GAME),
+                        new PackCatalog.KeyBinding("key.testmod.peek", "Peek into widgets", "key.categories.testmod",
+                                "Test Mod", "testmod", "key.keyboard.left.shift", "NONE", CONTEXT_GUI)),
+                List.of(new PackCatalog.KeyContext(CONTEXT_IN_GAME, "IN_GAME", List.of(CONTEXT_IN_GAME)),
+                        new PackCatalog.KeyContext(CONTEXT_GUI, "GUI", List.of(CONTEXT_GUI))),
+                Map.of("key.keyboard.q", "Q", "key.keyboard.r", "R", "key.keyboard.left.shift", "Left Shift"));
     }
 }

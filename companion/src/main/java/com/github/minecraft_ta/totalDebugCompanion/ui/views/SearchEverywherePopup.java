@@ -13,9 +13,9 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ModLogoIcons;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogMessages;
 
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.function.Supplier;
 
@@ -26,12 +26,14 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Category;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ClassResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.DefinitionResult;
+import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.KeyBindingResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ModResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ResourceResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Result;
@@ -144,13 +146,15 @@ public class SearchEverywherePopup extends JFrame {
     private final RuntimeIndexService indexLoader;
     private final Supplier<RuntimeBinding> runtime;
     private final Supplier<PackCatalogService> catalog;
+    /** The current project's options.txt, which holds the keys; null without a project. */
+    private final Supplier<Path> options;
     private final CatalogIcons catalogIcons;
     private final Consumer<NavigationTarget> navigator;
     private CatalogSearch catalogSearch;
     private final Map<String, Icon> modLogos = new HashMap<>();
     private String resultNote = "";
     SearchEverywherePopup(Window owner, RuntimeIndexService indexLoader, Supplier<RuntimeBinding> runtime,
-                          Supplier<PackCatalogService> catalog, ItemIconService itemIcons,
+                          Supplier<PackCatalogService> catalog, Supplier<Path> options, ItemIconService itemIcons,
                           Consumer<NavigationTarget> navigator) {
         this.owner = owner;
         if (owner != null && !owner.getFocusableWindowState()) {
@@ -160,6 +164,7 @@ public class SearchEverywherePopup extends JFrame {
         this.indexLoader = indexLoader;
         this.runtime = runtime;
         this.catalog = Objects.requireNonNull(catalog, "catalog");
+        this.options = Objects.requireNonNull(options, "options");
         this.catalogIcons = new CatalogIcons(itemIcons, PREVIEW_SIZE);
         this.navigator = navigator;
         this.moduleFilterPopup = new ModuleFilterPopup(
@@ -455,6 +460,7 @@ public class SearchEverywherePopup extends JFrame {
             case BLOCKS -> "Search blocks";
             case ENTITIES -> "Search entity types";
             case RESOURCES -> "Search resource paths";
+            case KEY_BINDINGS -> "Search key bindings by action or key, such as ctrl+g";
             case CLASSES, SYMBOLS -> "Search classes and symbols";
             case TEXT -> "Search indexed string literals";
         };
@@ -467,7 +473,7 @@ public class SearchEverywherePopup extends JFrame {
         if (index == null) {
             this.catalogSearch = null;
         } else if (this.catalogSearch == null || this.catalogSearch.index() != index) {
-            this.catalogSearch = new CatalogSearch(index);
+            this.catalogSearch = new CatalogSearch(index, this.options.get());
             this.modLogos.clear();
         }
         return this.catalogSearch;
@@ -680,6 +686,7 @@ public class SearchEverywherePopup extends JFrame {
             case ModResult mod -> navigator.accept(new NavigationTarget.ModPage(mod.modId()));
             case DefinitionResult definition -> navigator.accept(new NavigationTarget.Definition(definition.entry().subject()));
             case ResourceResult resource -> navigator.accept(resource.resource().target());
+            case KeyBindingResult key -> navigator.accept(new NavigationTarget.KeyBindings(key.name()));
         }
     }
 
@@ -708,6 +715,7 @@ public class SearchEverywherePopup extends JFrame {
             case ModResult mod -> mod.modId();
             case DefinitionResult definition -> definition.entry().id();
             case ResourceResult resource -> resource.resource().path();
+            case KeyBindingResult key -> key.name();
         };
     }
 
@@ -719,6 +727,7 @@ public class SearchEverywherePopup extends JFrame {
             case ModResult ignored -> null;
             case DefinitionResult ignored -> null;
             case ResourceResult ignored -> null;
+            case KeyBindingResult ignored -> null;
         };
         if (sourceIds == null) return catalogSummary(result);
         var sources = Arrays.stream(sourceIds)
@@ -745,6 +754,7 @@ public class SearchEverywherePopup extends JFrame {
             case ModResult mod -> "M:" + mod.modId();
             case DefinitionResult definition -> "D:" + definition.entry().subject().format();
             case ResourceResult resource -> "R:" + resource.resource().file() + "!" + resource.resource().path();
+            case KeyBindingResult key -> "K:" + key.name();
         };
     }
 
@@ -753,12 +763,9 @@ public class SearchEverywherePopup extends JFrame {
         PrimarySecondaryText text = switch (result) {
             case ModResult ignored -> PrimarySecondaryText.primary("Mod");
             case DefinitionResult definition -> new PrimarySecondaryText(definition.owner(),
-                    switch (definition.entry().kind()) {
-                        case ITEM -> "Item";
-                        case BLOCK -> "Block";
-                        case ENTITY_TYPE -> "Entity type";
-                    });
+                    ContentKinds.of(definition.entry().registry()).singular());
             case ResourceResult resource -> new PrimarySecondaryText(resource.owner(), "Resource");
+            case KeyBindingResult key -> new PrimarySecondaryText(key.owner(), "Key binding");
             default -> PrimarySecondaryText.primary("");
         };
         return new ModuleSummary(text, (text.primary() + "  " + text.secondary()).strip());
@@ -841,11 +848,15 @@ public class SearchEverywherePopup extends JFrame {
                     presentation = new PrimarySecondaryText(definition.entry().title(), definition.entry().id());
                     Icon drawn = catalogIcons.icon(definition.icon(), list);
                     icon = drawn == null
-                            ? new CenteredIcon(SubjectIcons.definition(definition.entry().kind()), PREVIEW_SIZE) : drawn;
+                            ? new CenteredIcon(ContentKinds.of(definition.entry().registry()).icon(), PREVIEW_SIZE) : drawn;
                 }
                 case ResourceResult resource -> {
                     presentation = new PrimarySecondaryText(resource.resource().fileName(), resource.resource().path());
                     icon = FileTypeResolver.resolve(resource.resource().fileName()).icon();
+                }
+                case KeyBindingResult key -> {
+                    presentation = new PrimarySecondaryText(key.action(), key.key());
+                    icon = Icons.KEYBOARD;
                 }
             }
 

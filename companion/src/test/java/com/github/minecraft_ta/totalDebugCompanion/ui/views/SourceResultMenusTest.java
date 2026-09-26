@@ -24,7 +24,7 @@ class SourceResultMenusTest {
         try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
             SwingUtilities.invokeAndWait(() -> {
                 List<NavigationTarget> opened = new ArrayList<>();
-                var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, new ItemIconService(), opened::add);
+                var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, () -> null, new ItemIconService(), opened::add);
                 try {
                     DefaultListModel<SearchEverywhereSearch.Result> model = model(popup, "resultModel");
                     model.addElement(new SearchEverywhereSearch.ClassResult("example.First", "First", "example", 0, 0));

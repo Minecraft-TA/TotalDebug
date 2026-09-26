@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderResourceRoot;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ModelAppearance;
@@ -22,7 +23,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.Fact
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.ItemTabIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
@@ -58,6 +59,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -92,7 +94,7 @@ public final class DefinitionPanel extends JPanel {
                            ItemIconService icons, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.subject = Objects.requireNonNull(subject, "subject");
-        this.tabIcon = new ItemTabIcon(SubjectIcons.definition(subject.kind()));
+        this.tabIcon = new ItemTabIcon(ContentKinds.of(subject.registry()).icon());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         this.sources = Objects.requireNonNull(sources, "sources");
         this.icons = Objects.requireNonNull(icons, "icons");
@@ -126,14 +128,6 @@ public final class DefinitionPanel extends JPanel {
         return this.tabIcon;
     }
 
-    static String kindLabel(SubjectRef.DefinitionKind kind) {
-        return switch (kind) {
-            case BLOCK -> "Block type";
-            case ITEM -> "Item type";
-            case ENTITY_TYPE -> "Entity type";
-        };
-    }
-
     void rebuild() {
         if (this.disposed) return;
         PackCatalogService.State state = this.catalog.state();
@@ -142,7 +136,7 @@ public final class DefinitionPanel extends JPanel {
         this.header.setTitle(title());
         String namespace = this.subject.namespace();
         List<JComponent> subtitle = new ArrayList<>();
-        subtitle.add(SubjectHeader.text(kindLabel(this.subject.kind())));
+        subtitle.add(SubjectHeader.text(ContentKinds.of(this.subject.registry()).singular()));
         subtitle.add(SubjectHeader.text(this.subject.id()));
         String owner = this.index == null ? namespace : this.index.ownerName(namespace);
         subtitle.add(new LinkLabel(owner, Icons.MOD, "mod " + namespace,
@@ -176,35 +170,22 @@ public final class DefinitionPanel extends JPanel {
         }
     }
 
-    /** What the catalog records about the definition, with links to related definitions, its mod and its class. */
+    /**
+     * What the catalog records about the definition: its mod and class, the entries it links to, and its further
+     * facts, each named after its key.
+     */
     List<FactSection> sections() {
         List<Fact> facts = new ArrayList<>();
         facts.add(Fact.text("ID", this.subject.id()));
         String namespace = this.subject.namespace();
         this.index.mod(namespace).ifPresent(mod ->
                 facts.add(Fact.text("Mod", mod.title()).withLink(FactLink.toSubject(new SubjectRef.Mod(mod.id())))));
-        switch (this.subject.kind()) {
-            case BLOCK -> this.index.block(this.subject.id()).ifPresent(block -> {
-                classFact(facts, block.className());
-                related(facts, "Item", SubjectRef.DefinitionKind.ITEM, block.item());
-                if (!block.blockEntityType().isEmpty()) facts.add(Fact.text("Block entity type", block.blockEntityType()));
-            });
-            case ITEM -> this.index.item(this.subject.id()).ifPresent(item -> {
-                classFact(facts, item.className());
-                related(facts, "Block", SubjectRef.DefinitionKind.BLOCK, item.block());
-                if (!item.model().isEmpty()) facts.add(Fact.text("Model", item.model()));
-            });
-            case ENTITY_TYPE -> this.index.entityType(this.subject.id()).ifPresent(type -> {
-                if (!type.category().isEmpty()) facts.add(Fact.text("Category", type.category()));
-                related(facts, "Spawn egg", SubjectRef.DefinitionKind.ITEM, type.spawnEgg());
-            });
-        }
-        String title = switch (this.subject.kind()) {
-            case BLOCK -> "Block";
-            case ITEM -> "Item";
-            case ENTITY_TYPE -> "Entity type";
-        };
-        return List.of(new FactSection(title, facts, facts.size()));
+        this.index.definition(this.subject).ifPresent(entry -> {
+            classFact(facts, entry.className());
+            for (PackCatalog.Link link : entry.links()) related(facts, link);
+            new TreeMap<>(entry.facts()).forEach((key, value) -> facts.add(Fact.text(ContentKinds.label(key), value)));
+        });
+        return List.of(new FactSection(ContentKinds.of(this.subject.registry()).singular(), facts, facts.size()));
     }
 
     private static void classFact(List<Fact> facts, String className) {
@@ -213,11 +194,13 @@ public final class DefinitionPanel extends JPanel {
                 .withLink(FactLink.toClass(className)));
     }
 
-    private void related(List<Fact> facts, String label, SubjectRef.DefinitionKind kind, String id) {
-        if (id.isEmpty()) return;
-        SubjectRef.Definition related = new SubjectRef.Definition(kind, id);
-        String name = this.index.entry(related).map(CatalogIndex.Entry::title).orElse(id);
-        facts.add(Fact.text(label, name).withLink(FactLink.toSubject(related)));
+    /** A related entry, linked to its page when its registry was captured and named by its id otherwise. */
+    private void related(List<Fact> facts, PackCatalog.Link link) {
+        String label = ContentKinds.label(link.relation());
+        SubjectRef.Definition related = new SubjectRef.Definition(link.registry(), link.id());
+        facts.add(this.index.entry(related)
+                .map(entry -> Fact.text(label, entry.title()).withLink(FactLink.toSubject(related)))
+                .orElse(Fact.text(label, link.id())));
     }
 
     private void loadIcon() {
@@ -225,13 +208,13 @@ public final class DefinitionPanel extends JPanel {
         Optional<CatalogIndex.ItemIcon> icon = this.index == null || this.entry == null || this.entry.iconItem().isEmpty()
                 ? Optional.empty() : this.index.itemIcon(this.entry.iconItem());
         if (icon.isEmpty()) {
-            this.header.setIcon(SubjectIcons.definition(this.subject.kind()));
+            this.header.setIcon(ContentKinds.of(this.subject.registry()).icon());
             return;
         }
         this.icons.render(icon.get().model(), icon.get().tints(), SubjectHeader.ICON_SIZE)
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                     if (this.disposed) return;
-                    this.header.setIcon(image.<Icon>map(ImageIcon::new).orElse(SubjectIcons.definition(this.subject.kind())));
+                    this.header.setIcon(image.<Icon>map(ImageIcon::new).orElse(ContentKinds.of(this.subject.registry()).icon()));
                 }));
         this.icons.render(icon.get().model(), icon.get().tints(), this.tabIcon.size())
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
@@ -252,14 +235,14 @@ public final class DefinitionPanel extends JPanel {
         String blockId = "";
         String itemModel = "";
         if (this.index != null) {
-            switch (this.subject.kind()) {
-                case BLOCK -> {
+            switch (this.subject.registry()) {
+                case RegistryIds.BLOCK -> {
                     blockId = this.subject.id();
-                    String item = this.index.block(this.subject.id()).map(PackCatalog.BlockEntry::item).orElse("");
+                    String item = this.index.definition(this.subject).map(entry -> entry.link("item")).orElse("");
                     if (!item.isEmpty()) itemModel = this.icons.itemIcon(item).model();
                 }
-                case ITEM -> itemModel = this.icons.itemIcon(this.subject.id()).model();
-                case ENTITY_TYPE -> {
+                case RegistryIds.ITEM -> itemModel = this.icons.itemIcon(this.subject.id()).model();
+                default -> {
                 }
             }
         }

@@ -74,6 +74,34 @@ class ContextMenusTest {
     }
 
     @Test
+    void rightClickInsideATableSelectionKeepsItAndOutsideSelectsTheRow() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = new JTable(new Object[][]{{"first"}, {"second"}, {"third"}}, new Object[]{"Name"});
+            table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+            table.setSize(400, table.getRowHeight() * 3);
+            List<Integer> selectedCounts = new ArrayList<>();
+            ContextMenus.installTable(table, row -> {
+                selectedCounts.add(table.getSelectedRowCount());
+                return new JPopupMenu() {
+                    @Override public void show(Component invoker, int x, int y) { }
+                };
+            });
+            table.setRowSelectionInterval(0, 1);
+            rightClick(table, 1);
+            assertEquals(List.of(2), selectedCounts);
+            assertArrayEquals(new int[]{0, 1}, table.getSelectedRows());
+            rightClick(table, 2);
+            assertArrayEquals(new int[]{2}, table.getSelectedRows());
+        });
+    }
+
+    private static void rightClick(JTable table, int row) {
+        var bounds = table.getCellRect(row, 0, true);
+        table.dispatchEvent(new MouseEvent(table, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
+                0, bounds.x + 5, bounds.y + bounds.height / 2, 1, true, MouseEvent.BUTTON3));
+    }
+
+    @Test
     void defaultCopyUsesItsActionEvenAfterRenamingAndRespectsEnabledState() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             JTree tree = new JTree();

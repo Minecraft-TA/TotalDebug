@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import java.nio.file.Path;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -13,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DebuggerMcpProjectGuardTest {
     @Test void sourceLoadingCannotCarryABreakpointIntoTheNextProject() throws Exception {
-        var scope = new ProjectScope(new Object(), new CompanionProfile("test", Path.of("data"), Path.of("game")), InstanceState.inMemory());
+        var scope = new ProjectScope(new Object(), new CompanionProfile("test", Path.of("data"), Path.of("game")), InstanceState.inMemory(), ChangeRecord.inMemory());
         var source = new DebugEngine.Source(URI.create("file:///old-project/Target.java"), "Target", "class Target {}");
         try (var controller = new DebuggerSessionController(name -> source)) {
             var service = new DebuggerMcpService(() -> controller, name -> {

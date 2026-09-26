@@ -57,9 +57,16 @@ public class Icons {
     public static final FlatSVGIcon RESOURCE_BUNDLE = new FlatSVGIcon("icons/resourceBundle.svg");
     public static final FlatSVGIcon MODULE = new FlatSVGIcon("icons/module.svg");
     public static final FlatSVGIcon MOD = new FlatSVGIcon("icons/mod.svg");
+    public static final FlatSVGIcon MODPACK = new FlatSVGIcon("icons/modpack.svg");
+    public static final FlatSVGIcon CHANGES = new FlatSVGIcon("icons/changes.svg");
+    public static final FlatSVGIcon SAVE = new FlatSVGIcon("icons/save.svg");
+    public static final FlatSVGIcon REVERT = new FlatSVGIcon("icons/revert.svg");
+    public static final FlatSVGIcon KEYBOARD = new FlatSVGIcon("icons/keyboard.svg");
     public static final FlatSVGIcon BLOCK = new FlatSVGIcon("icons/block.svg");
     public static final FlatSVGIcon ITEM = new FlatSVGIcon("icons/item.svg");
     public static final FlatSVGIcon ENTITY = new FlatSVGIcon("icons/entity.svg");
+    public static final FlatSVGIcon FLUID = new FlatSVGIcon("icons/fluid.svg");
+    public static final FlatSVGIcon SOUND = new FlatSVGIcon("icons/sound.svg");
     public static final FlatSVGIcon WEB = new FlatSVGIcon("icons/web.svg");
     public static final FlatSVGIcon PRISM = new FlatSVGIcon("icons/prism.svg", 16, 16);
     public static final FlatSVGIcon PRISM_INSTANCE = new FlatSVGIcon("icons/prism-instance.svg");

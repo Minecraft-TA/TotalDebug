@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -14,8 +15,8 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptSubject;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.values.ScriptResultTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
@@ -219,7 +220,7 @@ public final class InspectionPanel extends JPanel {
             parts.add(new LinkLabel(modName, Icons.MOD, "mod " + namespace,
                     () -> this.navigator.accept(new NavigationTarget.ModPage(namespace))));
             SubjectRef.Definition definition = definition(this.identity);
-            parts.add(new LinkLabel(this.identity.title(), SubjectIcons.definition(definition.kind()),
+            parts.add(new LinkLabel(this.identity.title(), ContentKinds.of(definition.registry()).icon(),
                     definition.format(), () -> this.navigator.accept(new NavigationTarget.Definition(definition))));
         }
         this.header.setSubtitle(parts);
@@ -227,7 +228,7 @@ public final class InspectionPanel extends JPanel {
 
     static SubjectRef.Definition definition(SubjectIdentity identity) {
         return new SubjectRef.Definition(identity.kind() == SubjectIdentity.Kind.ENTITY
-                ? SubjectRef.DefinitionKind.ENTITY_TYPE : SubjectRef.DefinitionKind.BLOCK, identity.registryId());
+                ? RegistryIds.ENTITY_TYPE : RegistryIds.BLOCK, identity.registryId());
     }
 
     private static String namespace(String registryId) {

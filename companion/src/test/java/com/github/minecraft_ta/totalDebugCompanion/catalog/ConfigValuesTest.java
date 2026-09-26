@@ -32,8 +32,9 @@ class ConfigValuesTest {
 
         ConfigValues values = ConfigValues.read(file);
 
-        assertEquals(Map.of("widgets.speed", "9", "widgets.mode", "SLOW", "widgets.names", "[a, b]",
+        assertEquals(Map.of("widgets.speed", "9", "widgets.mode", "SLOW", "widgets.names", "[\"a\", \"b\"]",
                 "widgets.ratio", "0.5"), values.values());
+        assertEquals("\"SLOW\"", values.literals().get("widgets.mode"));
         assertEquals(List.of(new PackCatalog.ConfigSection("widgets", "Widget behavior")), values.sections());
         assertEquals("How fast widgets spin", values.settings().getFirst().comment());
         assertEquals(4, values.settings().size());

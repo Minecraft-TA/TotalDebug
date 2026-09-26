@@ -266,6 +266,10 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         refreshActions();
         this.projectSelector.refresh();
     }
+    @Override public void changesRecorded() {
+        this.fileTreeView.reloadProfile();
+    }
+
     @Override public void catalogChanged() {
         this.fileTreeView.reloadProfile();
         if (this.searchEverywherePopup != null) this.searchEverywherePopup.catalogChanged();
@@ -508,6 +512,9 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         return new SearchEverywherePopup(this, indexLoader, this::searchRuntime, () -> {
             ProjectScope scope = project.get();
             return scope == null ? null : scope.catalog();
+        }, () -> {
+            ProjectScope scope = project.get();
+            return scope == null ? null : scope.keyBindings().options();
         }, itemIcons, target -> navigation().navigate(target));
     }
 

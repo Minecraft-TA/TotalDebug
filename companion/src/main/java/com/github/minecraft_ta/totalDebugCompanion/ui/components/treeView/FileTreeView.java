@@ -229,8 +229,10 @@ public class FileTreeView extends JScrollPane {
             scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
             rootItems.add(scripts);
         }
-        var mods = new ModTreeItems.Root(() -> new ModTreeItems.Snapshot(scope.catalog().state(), scope.sources()));
-        if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent()) {
+        var mods = new ModTreeItems.Root(() -> new ModTreeItems.Snapshot(scope.catalog().state(), scope.sources(),
+                scope.changes().size()));
+        // Recorded changes alone keep the root, since Changes is where they are reverted.
+        if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent() || scope.changes().size() > 0) {
             rootItems.add(mods);
         }
         if (binding != null && !catalog.modules().isEmpty()) {
@@ -306,9 +308,9 @@ public class FileTreeView extends JScrollPane {
         return revealRuntimeDirectory(source.module(), path);
     }
 
-    /** Selects a mod's node, or the group of the requested tab, in the Mods tree. */
+    /** Selects a mod's node, or the group of the requested tab, under Mods in the Modpack tree. */
     public CompletableFuture<Boolean> revealModPage(NavigationTarget.ModPage page) {
-        List<String> path = new ArrayList<>();
+        List<String> path = new ArrayList<>(List.of(ModTreeItems.MODS));
         var scope = project.get();
         var index = scope == null ? null : scope.catalog().index().orElse(null);
         if (index != null && index.mod(page.modId()).isEmpty() && index.otherNamespaces().contains(page.modId())) {
@@ -318,7 +320,31 @@ public class FileTreeView extends JScrollPane {
         if (page.tab() != ModTab.OVERVIEW) {
             path.add(ModTreeItems.groupName(page.tab()));
         }
+        if (page.tab() == ModTab.CONTENT && !page.section().isEmpty()) {
+            path.add(page.section());
+        }
         return this.tree.revealItemPath(ModTreeItems.ROOT, path);
+    }
+
+    /** Selects the Configuration row of the Modpack tree. */
+    public CompletableFuture<Boolean> revealPackConfiguration() {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.CONFIGURATION));
+    }
+
+    /** Selects the row of a kind under Content in the Modpack tree, or Content itself for an empty registry. */
+    public CompletableFuture<Boolean> revealContent(String registry) {
+        return this.tree.revealItemPath(ModTreeItems.ROOT,
+                registry.isEmpty() ? List.of(ModTreeItems.CONTENT) : List.of(ModTreeItems.CONTENT, registry));
+    }
+
+    /** Selects the Key bindings row of the Modpack tree. */
+    public CompletableFuture<Boolean> revealKeyBindings() {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.KEY_BINDINGS));
+    }
+
+    /** Selects the Changes row of the Modpack tree. */
+    public CompletableFuture<Boolean> revealChanges() {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.CHANGES));
     }
 
     /** Selects a runtime module's node in the Runtime tree. */

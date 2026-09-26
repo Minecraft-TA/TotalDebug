@@ -35,6 +35,9 @@ public record InstancePaths(Path home) {
 
     public Path scripts() { return home.resolve("scripts"); }
     public Path state() { return home.resolve("state.json"); }
+    public Path changes() { return home.resolve("changes.json"); }
+    /** Held by the running game; see {@link GameLock}. */
+    public Path gameLock() { return home.resolve("game.lock"); }
     public Path cache() { return home.resolve("cache"); }
     public Path runtime() { return cache().resolve("runtime"); }
     public Path inventory() { return runtime().resolve("inventory.json"); }

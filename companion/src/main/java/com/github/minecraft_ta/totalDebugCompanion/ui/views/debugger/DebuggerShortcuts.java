@@ -1,8 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
 import javax.swing.Action;
+import javax.swing.JComponent;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import java.awt.Component;
 import java.awt.KeyboardFocusManager;
 import java.awt.KeyEventDispatcher;
 import java.awt.Window;
@@ -21,6 +23,11 @@ public final class DebuggerShortcuts implements KeyEventDispatcher, AutoCloseabl
     static final String STEP_OVER = "debugger.stepOver";
     static final String STEP_INTO = "debugger.stepInto";
     static final String STEP_OUT = "debugger.stepOut";
+    /**
+     * Client property set to {@code true} on a component while it takes every key press, such as a key binding waiting
+     * for its new key; the shortcuts leave keys pressed inside it alone.
+     */
+    public static final String TAKES_ALL_KEYS = "debuggerShortcuts.takesAllKeys";
 
     private final List<Binding> bindings;
     private final Set<Window> windows = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -61,7 +68,7 @@ public final class DebuggerShortcuts implements KeyEventDispatcher, AutoCloseabl
         Window window = event.getComponent() instanceof Window sourceWindow
                 ? sourceWindow
                 : SwingUtilities.getWindowAncestor(event.getComponent());
-        if (!this.windows.contains(window)) {
+        if (!this.windows.contains(window) || takesAllKeys(event.getComponent())) {
             return false;
         }
 
@@ -90,6 +97,15 @@ public final class DebuggerShortcuts implements KeyEventDispatcher, AutoCloseabl
         this.closed = true;
         this.windows.clear();
         KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(this);
+    }
+
+    private static boolean takesAllKeys(Component component) {
+        for (Component current = component; current != null; current = current.getParent()) {
+            if (current instanceof JComponent swing && Boolean.TRUE.equals(swing.getClientProperty(TAKES_ALL_KEYS))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Binding bindingFor(KeyStroke keyStroke) {

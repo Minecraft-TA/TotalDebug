@@ -1,10 +1,13 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
+import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
 import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ContentBrowser;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ResourceBrowser;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totalDebugCompanion.testui.OffscreenPopupFactory;
@@ -539,12 +542,15 @@ final class UiScenarioDriver {
             }
             case SERVICE_STATUS -> advanceServiceStatus(context);
             case MOD_PAGE -> context.once("mod-page", () -> navigate(new NavigationTarget.ModPage("testmod")));
+            case PACK_CONFIGURATION -> context.once("pack-configuration", () -> navigate(new NavigationTarget.PackConfiguration()));
+            case KEY_BINDINGS -> context.once("key-bindings", () -> navigate(new NavigationTarget.KeyBindings("")));
+            case CONTENT -> context.once("content", () -> navigate(new NavigationTarget.Content("")));
             case MOD_CONFIGURATION -> context.once("mod-configuration", () ->
                     navigate(new NavigationTarget.ModPage("testmod", ModTab.CONFIGURATION, "")));
             case MOD_RESOURCES -> context.once("mod-resources", () ->
                     navigate(new NavigationTarget.ModPage("testmod", ModTab.RESOURCES, "")));
             case DEFINITION_PAGE -> context.once("definition-page", () -> navigate(new NavigationTarget.Definition(
-                    new SubjectRef.Definition(SubjectRef.DefinitionKind.BLOCK, "testmod:widget_block"))));
+                    new SubjectRef.Definition(RegistryIds.BLOCK, "testmod:widget_block"))));
             case INDEXING -> {
                 selectCodeEditor(context);
                 context.once("indexing", () -> mainWindow.setRuntimeIndexStatus(
@@ -589,6 +595,13 @@ final class UiScenarioDriver {
             case MOD_PAGE -> mainWindow.getEditorTabs().getSelectedEditor() instanceof ModView view
                     && "Test Mod".equals(view.getTitle());
             case MOD_CONFIGURATION -> showsTable("Test Mod", "Setting");
+            case PACK_CONFIGURATION -> showsTable("Configuration", "Setting");
+            case KEY_BINDINGS -> showsTable("Key bindings", "Action");
+            case CONTENT -> {
+                ContentBrowser browser = findComponent(mainWindow, ContentBrowser.class);
+                yield mainWindow.getEditorTabs().getSelectedEditor() instanceof ContentView && browser != null
+                        && browser.isShowing() && browser.count() > 0;
+            }
             case MOD_RESOURCES -> {
                 var editor = mainWindow.getEditorTabs().getSelectedEditor();
                 ResourceBrowser browser = findComponent(mainWindow, ResourceBrowser.class);

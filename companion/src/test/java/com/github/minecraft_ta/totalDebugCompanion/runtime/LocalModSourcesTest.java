@@ -38,7 +38,7 @@ class LocalModSourcesTest {
                 var tree = (LazyFileJTree) view.getViewport().getView();
                 var root = tree.getModel().getRoot();
                 assertEquals(2, tree.getModel().getChildCount(root));
-                assertEquals("mods", ((LazyTreeNode) tree.getModel().getChild(root, 0)).getUserObject().getName());
+                assertEquals("modpack", ((LazyTreeNode) tree.getModel().getChild(root, 0)).getUserObject().getName());
                 assertEquals("runtime", ((LazyTreeNode) tree.getModel().getChild(root, 1)).getUserObject().getName());
                 tree.setRootNodes();
             });

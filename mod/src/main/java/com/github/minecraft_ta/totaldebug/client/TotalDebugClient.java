@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client;
 
+import com.github.minecraft_ta.totaldebug.client.catalog.KeyBindingEdits;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogCapture;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogPublisher;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
@@ -13,9 +14,12 @@ import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.network.ServerSourceRequestPayload;
+import com.github.minecraft_ta.totaldebug.storage.GameLock;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+import java.io.IOException;
 import net.minecraft.client.Minecraft;
 
 import java.nio.file.Path;
@@ -28,6 +32,8 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Owns the client-only runtime assembled after Minecraft has reached client setup. */
 public final class TotalDebugClient {
     private static volatile TotalDebugClient instance;
+    /** Held, never read: the lock lasts as long as the game. */
+    private static GameLock gameLock;
 
     private final CompanionAppClient companionApp;
     private final ClientCodeOpenService codeOpen;
@@ -46,6 +52,7 @@ public final class TotalDebugClient {
                 .toAbsolutePath()
                 .normalize();
         InstancePaths paths = new InstancePaths(totalDebugDirectory);
+        holdGameLock(paths);
         CompanionAppClient companionApp = new CompanionAppClient(
                 totalDebugDirectory,
                 TotalDebugConfig.CLIENT.companionDevelopmentJar.get()
@@ -80,6 +87,8 @@ public final class TotalDebugClient {
             this.snapshotRequested = true;
             this.catalogs.request(inventoryId, modules);
         });
+        companionApp.setKeyBindingHandler(message -> Minecraft.getInstance().execute(() ->
+                companionApp.sendKeyBindingResult(new KeyBindingResultMessage(KeyBindingEdits.apply(message.payload())))));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(WorldSubject subject) {
@@ -110,6 +119,18 @@ public final class TotalDebugClient {
         companionApp.setStopScriptHandler(this.scripts::stopScript);
         companionApp.setSessionClosedHandler(this.scripts::close);
         companionApp.startDiscovery(() -> TotalDebugConfig.CLIENT.useCompanionApp.get());
+    }
+
+    /**
+     * Holds the instance's game lock until the game exits, so Companion does not write the game's files while it runs
+     * without a connection. The process ending releases it.
+     */
+    private static void holdGameLock(InstancePaths paths) {
+        try {
+            gameLock = GameLock.hold(paths.gameLock());
+        } catch (IOException exception) {
+            TotalDebug.LOGGER.warn("Companion cannot tell that this game is running: {}", exception.getMessage());
+        }
     }
 
     public static synchronized void initialize(Minecraft minecraft) {

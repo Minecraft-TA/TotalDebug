@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ class ScriptViewTest {
 
     @Test void basenameRenameChangesLocationWithoutChangingTheOpenEditorsGeneratedIdentity() throws Exception {
         var profile = CompanionProfile.forGame(Files.createDirectory(directory.resolve("game")));
-        var project = new ProjectScope(new Object(), profile, InstanceState.inMemory());
+        var project = new ProjectScope(new Object(), profile, InstanceState.inMemory(), ChangeRecord.inMemory());
         try {
             Path root = Files.createDirectories(project.scriptFiles().root());
             Path original = Files.writeString(root.resolve("Original.tdscript"), "return 42;");

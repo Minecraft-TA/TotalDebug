@@ -1,12 +1,16 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
@@ -86,22 +90,29 @@ class CatalogPanelsTest {
         List<NavigationTarget> opened = new ArrayList<>();
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
-                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, opened::add);
+                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()),
+                        new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(), () -> false), opened::add);
                 try {
                     assertEquals("Test Mod", panel.title());
                     assertTrue(labels(panel).contains("1.2.3"), labels(panel)::toString);
-                    assertEquals("Items 1", panel.tabs().getTitleAt(ModTab.ITEMS.ordinal()));
-                    assertEquals("Entities 1", panel.tabs().getTitleAt(ModTab.ENTITIES.ordinal()));
+                    assertEquals("Content 4", panel.tabs().getTitleAt(ModTab.CONTENT.ordinal()),
+                            "a block, an item, an entity type and a fluid; the block's item is listed as the block");
                     assertEquals("Configuration 1", panel.tabs().getTitleAt(ModTab.CONFIGURATION.ordinal()));
 
-                    panel.show(new NavigationTarget.ModPage("testmod", ModTab.ITEMS, ""));
-                    assertEquals(new NavigationTarget.ModPage("testmod", ModTab.ITEMS, ""), panel.target());
-                    CatalogEntryTable items = panel.entryTable(ModTab.ITEMS);
-                    items.setFilter("block");
-                    assertEquals(0, items.rowCount());
-                    items.setFilter("widget");
-                    assertEquals(1, items.rowCount());
-                    assertEquals("testmod:widget", items.entryAt(0).id());
+                    panel.show(new NavigationTarget.ModPage("testmod", ModTab.CONTENT, RegistryIds.ITEM));
+                    assertEquals(new NavigationTarget.ModPage("testmod", ModTab.CONTENT, RegistryIds.ITEM), panel.target());
+                    CatalogEntryTable table = panel.contentBrowser().table();
+                    table.setFilter("block");
+                    assertEquals(0, table.rowCount());
+                    table.setFilter("widget");
+                    assertEquals(1, table.rowCount());
+                    assertEquals("testmod:widget", table.entryAt(0).id());
+                    assertEquals(3, table.table().getColumnCount(), "one kind needs no Kind column");
+
+                    panel.show(new NavigationTarget.ModPage("testmod", ModTab.CONTENT, ""));
+                    assertEquals(2, table.rowCount(), "All lists the widget block and the widget item");
+                    assertEquals("Kind", table.table().getColumnName(3));
+                    assertEquals(new NavigationTarget.ModPage("testmod", ModTab.CONTENT, ""), panel.target());
                 } finally {
                     settle(panel.resourceLoad());
                     panel.dispose();
@@ -115,7 +126,8 @@ class CatalogPanelsTest {
         PackCatalogService catalog = readyCatalog();
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
-                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, target -> { });
+                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()),
+                        new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(), () -> false), target -> { });
                 try {
                     List<FactSection> sections = panel.sections(catalog.index().orElseThrow().mod("testmod").orElseThrow());
                     assertEquals(List.of("Mod", "Dependencies"), sections.stream().map(FactSection::title).toList());
@@ -135,7 +147,8 @@ class CatalogPanelsTest {
         PackCatalogService catalog = readyCatalog();
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
-                ModPanel panel = new ModPanel("absent", catalog, RuntimeSourceCatalog::empty, icons, this.directory, target -> { });
+                ModPanel panel = new ModPanel("absent", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()),
+                        new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(), () -> false), target -> { });
                 try {
                     assertTrue(labels(panel).contains("absent is not an installed mod"), labels(panel)::toString);
                     assertEquals(1, panel.tabs().getTabCount(), "Only the Overview has something to show");
@@ -153,7 +166,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 DefinitionPanel panel = new DefinitionPanel(
-                        new SubjectRef.Definition(SubjectRef.DefinitionKind.BLOCK, "testmod:widget_block"),
+                        new SubjectRef.Definition(RegistryIds.BLOCK, "testmod:widget_block"),
                         catalog, RuntimeSourceCatalog::empty, icons, target -> { });
                 try {
                     assertEquals("Widget Block", panel.title());
@@ -162,13 +175,24 @@ class CatalogPanelsTest {
                             Fact.text("Mod", "Test Mod").withLink(FactLink.toSubject(new SubjectRef.Mod("testmod"))),
                             Fact.text("Class", "WidgetBlock").withLink(FactLink.toClass("testmod.WidgetBlock")),
                             Fact.text("Item", "Widget Block").withLink(FactLink.toSubject(
-                                    new SubjectRef.Definition(SubjectRef.DefinitionKind.ITEM, "testmod:widget_block"))),
+                                    new SubjectRef.Definition(RegistryIds.ITEM, "testmod:widget_block"))),
                             Fact.text("Block entity type", "testmod:widget_entity")
-                    ), panel.sections().getFirst().facts());
-                    assertTrue(labels(panel).contains("Block type"), labels(panel)::toString);
+                    ), panel.sections().getFirst().facts(), "a link into a registry that was not captured names its id");
+                    assertTrue(labels(panel).contains("Block"), labels(panel)::toString);
                 } finally {
                     settle(panel.resourceLoad());
                     panel.dispose();
+                }
+                DefinitionPanel fluid = new DefinitionPanel(new SubjectRef.Definition(RegistryIds.FLUID, "testmod:goo"),
+                        catalog, RuntimeSourceCatalog::empty, icons, target -> { });
+                try {
+                    assertEquals("Goo", fluid.title());
+                    assertEquals("Fluid", fluid.sections().getFirst().title());
+                    assertEquals(Fact.text("Class", "GooFluid").withLink(FactLink.toClass("testmod.GooFluid")),
+                            fluid.sections().getFirst().facts().get(2));
+                } finally {
+                    settle(fluid.resourceLoad());
+                    fluid.dispose();
                 }
             });
         }
@@ -180,7 +204,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 DefinitionPanel panel = new DefinitionPanel(
-                        new SubjectRef.Definition(SubjectRef.DefinitionKind.ITEM, "testmod:widget"),
+                        new SubjectRef.Definition(RegistryIds.ITEM, "testmod:widget"),
                         empty, RuntimeSourceCatalog::empty, icons, target -> { });
                 try {
                     assertTrue(labels(panel).contains(CatalogMessages.unavailable(new PackCatalogService.None())),

@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import org.junit.jupiter.api.Test;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
@@ -166,7 +167,7 @@ class CompanionSessionRejectionTest {
         String token = "correct-token-value-1234567890abcdef";
         var configuration = new CompanionLaunchConfiguration(temporaryDirectory);
         Object lifecycle = new Object();
-        var scope = new ProjectScope(lifecycle, new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory());
+        var scope = new ProjectScope(lifecycle, new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory(), ChangeRecord.inMemory());
         try (var session = new CompanionSession(token);
              var compiler = new ScriptCompilationService(message -> true, message -> true);
              Client client = configuredClient(null)) {

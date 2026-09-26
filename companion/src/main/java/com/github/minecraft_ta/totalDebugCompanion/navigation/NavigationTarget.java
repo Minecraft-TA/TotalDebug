@@ -26,23 +26,50 @@ public sealed interface NavigationTarget permits
         NavigationTarget.ModuleSearch,
         NavigationTarget.Inspection,
         NavigationTarget.ModPage,
+        NavigationTarget.PackConfiguration,
+        NavigationTarget.Changes,
+        NavigationTarget.KeyBindings,
+        NavigationTarget.Content,
         NavigationTarget.Definition,
         NavigationTarget.RuntimeModuleNode {
 
     /**
      * An installed mod's page, or a namespace's or runtime module's page when no captured mod has that id.
-     * {@code resourceCategory} selects a resource category on the Resources tab and is empty otherwise.
+     * {@code section} selects a part of the tab: a registry such as {@code minecraft:fluid} on the Content tab, a
+     * resource category on the Resources tab; empty selects none.
      */
-    record ModPage(String modId, ModTab tab, String resourceCategory) implements NavigationTarget {
+    record ModPage(String modId, ModTab tab, String section) implements NavigationTarget {
         public ModPage {
             modId = requireText(modId, "modId");
             Objects.requireNonNull(tab, "tab");
-            resourceCategory = Objects.requireNonNullElse(resourceCategory, "");
+            section = Objects.requireNonNullElse(section, "");
         }
 
         public ModPage(String modId) {
             this(modId, ModTab.OVERVIEW, "");
         }
+    }
+
+    /** The registered content of every mod; {@code registry}, such as {@code minecraft:fluid}, selects a kind, empty all. */
+    record Content(String registry) implements NavigationTarget {
+        public Content {
+            registry = Objects.requireNonNullElse(registry, "");
+        }
+    }
+
+    /** The key bindings of every mod in the pack; {@code binding}, such as {@code key.jump}, is shown when not empty. */
+    record KeyBindings(String binding) implements NavigationTarget {
+        public KeyBindings {
+            binding = Objects.requireNonNullElse(binding, "");
+        }
+    }
+
+    /** What Companion changed in the pack. */
+    record Changes() implements NavigationTarget {
+    }
+
+    /** The settings of every mod in the pack. */
+    record PackConfiguration() implements NavigationTarget {
     }
 
     /** A registered block, item or entity type, described by the captured pack catalog. */

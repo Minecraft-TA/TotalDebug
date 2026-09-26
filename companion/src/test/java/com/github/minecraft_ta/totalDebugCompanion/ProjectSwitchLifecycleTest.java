@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTa
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
@@ -263,8 +264,8 @@ class ProjectSwitchLifecycleTest {
                     new EditorTabs(), tree, app.currentScope(), window::editorContext));
         });
         var navigation = created.join();
-        var scopeA = new ProjectScope(new Object(), app.currentProject(), InstanceState.inMemory());
-        var scopeB = new ProjectScope(new Object(), app.currentProject(), InstanceState.inMemory());
+        var scopeA = new ProjectScope(new Object(), app.currentProject(), InstanceState.inMemory(), ChangeRecord.inMemory());
+        var scopeB = new ProjectScope(new Object(), app.currentProject(), InstanceState.inMemory(), ChangeRecord.inMemory());
         navigation.projectChanged(scopeA);
         for (String directory : List.of("A/one", "A/two"))
             navigation.navigate(new NavigationTarget.LocalDirectory(Path.of(directory))).get(3, TimeUnit.SECONDS);

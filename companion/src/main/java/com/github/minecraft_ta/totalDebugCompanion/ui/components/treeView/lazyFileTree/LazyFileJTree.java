@@ -703,14 +703,15 @@ public class LazyFileJTree extends JTree {
         return location != null && isAttached((TreeNode) location.path().getLastPathComponent());
     }
 
+    /** Items by sort priority, then folders before files, then by name. */
     static int compareTreeItems(TreeItem first, TreeItem second) {
-        int directoryOrder = Boolean.compare(second.isDirectory(), first.isDirectory());
-        if (directoryOrder != 0) {
-            return directoryOrder;
-        }
         int priorityOrder = Integer.compare(first.getSortPriority(), second.getSortPriority());
         if (priorityOrder != 0) {
             return priorityOrder;
+        }
+        int directoryOrder = Boolean.compare(second.isDirectory(), first.isDirectory());
+        if (directoryOrder != 0) {
+            return directoryOrder;
         }
         int nameOrder = String.CASE_INSENSITIVE_ORDER.compare(first.getName(), second.getName());
         return nameOrder != 0 ? nameOrder : first.getName().compareTo(second.getName());

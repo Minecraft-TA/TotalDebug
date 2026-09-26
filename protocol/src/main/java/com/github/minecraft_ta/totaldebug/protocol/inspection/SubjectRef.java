@@ -6,8 +6,8 @@ import java.util.regex.Pattern;
 
 /**
  * Names an inspected thing by where it is found, never by a retained object. Its text form is used on the wire and
- * for copying, e.g. {@code block minecraft:overworld 12 64 -3}, {@code entity <uuid>}, {@code mod mekanism} or
- * {@code definition item mekanism:energy_tablet}.
+ * for copying, e.g. {@code block minecraft:overworld 12 64 -3}, {@code entity <uuid>}, {@code mod mekanism},
+ * {@code definition item mekanism:energy_tablet} or {@code definition mekanism:chemical mekanism:hydrogen}.
  */
 public sealed interface SubjectRef {
     int MAX_TEXT_LENGTH = 320;
@@ -46,9 +46,9 @@ public sealed interface SubjectRef {
             }
             case "definition" -> {
                 if (parts.length != 3) {
-                    throw new IllegalArgumentException("Expected: definition <block|item|entity_type> <registry id>");
+                    throw new IllegalArgumentException("Expected: definition <registry> <id>");
                 }
-                return new Definition(DefinitionKind.fromWireName(parts[1]), parts[2]);
+                return new Definition(parts[1].contains(":") ? parts[1] : Definition.MINECRAFT + parts[1], parts[2]);
             }
             default -> throw new IllegalArgumentException("Unknown subject kind: " + parts[0]);
         }
@@ -126,36 +126,20 @@ public sealed interface SubjectRef {
         }
     }
 
-    enum DefinitionKind {
-        BLOCK("block"),
-        ITEM("item"),
-        ENTITY_TYPE("entity_type");
+    /**
+     * An entry of a registry, such as a block type or a fluid, as opposed to one occurrence of it. {@code registry} is
+     * the registry's id, such as {@code minecraft:block}; the text form leaves out the {@code minecraft} namespace of
+     * a registry.
+     */
+    record Definition(String registry, String id) implements SubjectRef {
+        static final String MINECRAFT = "minecraft:";
 
-        private final String wireName;
-
-        DefinitionKind(String wireName) {
-            this.wireName = wireName;
-        }
-
-        public String wireName() {
-            return this.wireName;
-        }
-
-        public static DefinitionKind fromWireName(String wireName) {
-            for (DefinitionKind kind : values()) {
-                if (kind.wireName.equals(wireName)) {
-                    return kind;
-                }
-            }
-            throw new IllegalArgumentException("Unknown definition kind: " + wireName);
-        }
-    }
-
-    /** A registered block, item or entity type, as opposed to one occurrence of it. */
-    record Definition(DefinitionKind kind, String id) implements SubjectRef {
         public Definition {
-            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(registry, "registry");
             Objects.requireNonNull(id, "id");
+            if (registry.length() > 256 || !RESOURCE_ID.matcher(registry).matches()) {
+                throw new IllegalArgumentException("Invalid registry: " + registry);
+            }
             if (id.length() > 256 || !RESOURCE_ID.matcher(id).matches()) {
                 throw new IllegalArgumentException("Invalid registry id: " + id);
             }
@@ -167,7 +151,8 @@ public sealed interface SubjectRef {
 
         @Override
         public String format() {
-            return "definition " + this.kind.wireName() + " " + this.id;
+            String registry = this.registry.startsWith(MINECRAFT) ? this.registry.substring(MINECRAFT.length()) : this.registry;
+            return "definition " + registry + " " + this.id;
         }
     }
 }

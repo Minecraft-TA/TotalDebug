@@ -18,9 +18,11 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.KeyBindingResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
@@ -29,6 +31,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.SetKeyBindingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.tth05.scnet.Client;
@@ -114,6 +117,9 @@ public final class CompanionAppClient implements AutoCloseable {
     );
     private volatile Runnable sessionClosedHandler = () -> { };
     private volatile BiConsumer<String, Map<String, String>> packCatalogHandler = (inventoryId, modules) -> { };
+    private volatile Consumer<SetKeyBindingMessage> keyBindingHandler = message -> send(new KeyBindingResultMessage(
+            new KeyBindingResultPayload(message.payload().requestId(), message.payload().name(), "", "", "", "",
+                    "The game is not ready to change key bindings yet")));
     private volatile RuntimeInventoryPublisher.PublishedInventory publishedInventory;
     private volatile Consumer<CompanionStartupProgress> progressListener = progress -> { };
     private volatile boolean closing;
@@ -242,6 +248,15 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     public void sendPackCatalog(PackCatalogMessage message) {
+        send(message);
+    }
+
+    /** Receives Companion's requests to put a key binding on a key; runs on the connection thread. */
+    public void setKeyBindingHandler(Consumer<SetKeyBindingMessage> handler) {
+        this.keyBindingHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    public void sendKeyBindingResult(KeyBindingResultMessage message) {
         send(message);
     }
 
@@ -396,6 +411,13 @@ public final class CompanionAppClient implements AutoCloseable {
                 return;
             }
             this.scriptRequestHandler.accept(message);
+        });
+        transport.getMessageBus().listenAlways(SetKeyBindingMessage.class, message -> {
+            if (!attempt.authenticated()) {
+                failSession(attempt, "Companion sent a key binding request before authentication", null);
+                return;
+            }
+            this.keyBindingHandler.accept(message);
         });
         transport.getMessageBus().listenAlways(StopScriptMessage.class, message -> {
             if (!attempt.authenticated()) {

@@ -118,6 +118,9 @@ public final class UiDevHarness {
                 	mode = "FAST"
                 """);
         ProjectScope scope = application.currentScope();
+        // The test mod's Spin binding moved to Q, where it collides with dropping an item.
+        Files.writeString(scope.profile().workspaceDirectory().resolve("options.txt"),
+                "key_key.testmod.spin:key.keyboard.q\nkey_key.drop:key.keyboard.q\n");
         Path file = scope.paths().catalog();
         Files.createDirectories(file.getParent());
         CatalogFixtures.catalog(jar).write(file);

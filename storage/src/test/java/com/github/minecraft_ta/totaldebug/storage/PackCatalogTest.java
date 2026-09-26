@@ -1,15 +1,16 @@
 package com.github.minecraft_ta.totaldebug.storage;
 
-import com.github.minecraft_ta.totaldebug.storage.PackCatalog.BlockEntry;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ConfigFile;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ConfigSection;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ConfigSetting;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ConfigType;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.Dependency;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.DependencyType;
-import com.github.minecraft_ta.totaldebug.storage.PackCatalog.EntityTypeEntry;
-import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ItemEntry;
+import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ItemAppearance;
+import com.github.minecraft_ta.totaldebug.storage.PackCatalog.Link;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.Mod;
+import com.github.minecraft_ta.totaldebug.storage.PackCatalog.Registry;
+import com.github.minecraft_ta.totaldebug.storage.PackCatalog.RegistryEntry;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.Restart;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.Side;
 import org.junit.jupiter.api.Test;
@@ -45,13 +46,26 @@ class PackCatalogTest {
                                                 new ConfigSetting("machines.mode", "", "FAST", "",
                                                         List.of("FAST", "SLOW"), Restart.NONE))),
                                 new ConfigFile("mekanism-world.toml", ConfigType.SERVER, null, List.of(), List.of())))),
-                List.of(new BlockEntry("mekanism:metallurgic_infuser", "Metallurgic Infuser",
-                        "mekanism.common.block.BlockMachine", "mekanism:metallurgic_infuser", "mekanism:metallurgic_infuser")),
-                List.of(new ItemEntry("mekanism:energy_tablet", "Energy Tablet", "mekanism.common.item.ItemEnergized",
-                        "", "", Map.of()),
-                        new ItemEntry("minecraft:leather_helmet", "Leather Cap", "net.minecraft.world.item.ArmorItem",
-                                "", "minecraft:item/leather_helmet_custom", Map.of(0, 0xA06540))),
-                List.of(new EntityTypeEntry("minecraft:zombie", "Zombie", "monster", "minecraft:zombie_spawn_egg")));
+                List.of(new Registry("minecraft:block", List.of(new RegistryEntry("mekanism:metallurgic_infuser",
+                                "Metallurgic Infuser", "mekanism.common.block.BlockMachine", "mekanism:metallurgic_infuser",
+                                List.of(new Link("item", "minecraft:item", "mekanism:metallurgic_infuser"),
+                                        new Link("block_entity_type", "minecraft:block_entity_type", "mekanism:metallurgic_infuser")),
+                                Map.of()))),
+                        new Registry("minecraft:item", List.of(
+                                new RegistryEntry("mekanism:energy_tablet", "Energy Tablet", "mekanism.common.item.ItemEnergized",
+                                        "mekanism:energy_tablet", List.of(), Map.of()),
+                                new RegistryEntry("minecraft:leather_helmet", "Leather Cap", "net.minecraft.world.item.ArmorItem",
+                                        "minecraft:leather_helmet", List.of(), Map.of()))),
+                        new Registry("minecraft:entity_type", List.of(new RegistryEntry("minecraft:zombie", "Zombie", "",
+                                "minecraft:zombie_spawn_egg", List.of(new Link("spawn_egg", "minecraft:item", "minecraft:zombie_spawn_egg")),
+                                Map.of("category", "monster")))),
+                        new Registry("minecraft:sound_event", List.of(new RegistryEntry("minecraft:block.anvil.land", "", "", "",
+                                List.of(), Map.of())))),
+                Map.of("minecraft:leather_helmet", new ItemAppearance("minecraft:item/leather_helmet_custom", Map.of(0, 0xA06540))),
+                List.of(new PackCatalog.KeyBinding("key.mekanism.mode", "Mode Switch", "constants.mekanism.mod_name",
+                        "Mekanism", "mekanism", "key.keyboard.n", "SHIFT", "mekanism.Context#0")),
+                List.of(new PackCatalog.KeyContext("mekanism.Context#0", "Context", List.of("mekanism.Context#0"))),
+                Map.of("key.keyboard.n", "N", "key.keyboard.z", "Y"));
         Path file = this.directory.resolve("catalog.json");
 
         catalog.write(file);
@@ -75,27 +89,40 @@ class PackCatalogTest {
 
     @Test
     void rejectsInvalidContent() throws Exception {
-        assertInvalid("{\"format\":2,\"inventoryId\":\" \",\"language\":\"en_us\"}", "Blank inventory id");
-        assertInvalid(catalogJson("\"items\":[{\"id\":\"a:b\"},{\"id\":\"a:b\"}]"), "Duplicate item id a:b");
-        assertInvalid(catalogJson("\"blocks\":[{\"id\":\"Not An Id\"}]"), "Invalid block id");
+        assertInvalid("{\"format\":" + PackCatalog.FORMAT_VERSION + ",\"inventoryId\":\" \",\"language\":\"en_us\"}",
+                "Blank inventory id");
+        assertInvalid(catalogJson(registry("minecraft:item", "{\"id\":\"a:b\"},{\"id\":\"a:b\"}")),
+                "Duplicate minecraft:item entry id a:b");
+        assertInvalid(catalogJson(registry("minecraft:block", "{\"id\":\"Not An Id\"}")), "Invalid entry id");
+        assertInvalid(catalogJson("\"registries\":[{\"id\":\"a:b\",\"entries\":[]},{\"id\":\"a:b\",\"entries\":[]}]"),
+                "Duplicate registry id a:b");
         assertInvalid(catalogJson("\"mods\":[{\"id\":\"M\",\"module\":\"m\",\"file\":\"file:///m.jar\"}]"), "Invalid mod id");
         assertInvalid(catalogJson("\"mods\":[{\"id\":\"mod\",\"module\":\"m\",\"file\":\"file:///m.jar\","
                 + "\"configs\":[{\"fileName\":\"a.toml\",\"type\":\"WORLD\"}]}]"), "WORLD");
-        assertInvalid(catalogJson("\"items\":[{\"id\":\"a:b\",\"block\":\"no id\"}]"), "Invalid block of a:b");
-        assertInvalid(catalogJson("\"items\":[]} trailing"), "");
+        assertInvalid(catalogJson(registry("minecraft:item",
+                "{\"id\":\"a:b\",\"links\":[{\"relation\":\"block\",\"registry\":\"minecraft:block\",\"id\":\"no id\"}]}")),
+                "Invalid linked id");
+        assertInvalid(catalogJson(registry("minecraft:item", "{\"id\":\"a:b\",\"facts\":{\"Bad Key\":\"x\"}}")),
+                "Invalid fact of a:b");
+        assertInvalid(catalogJson("\"registries\":[]} trailing"), "");
+        assertInvalid(catalogJson("\"keyBindings\":[{\"name\":\"key.jump\",\"defaultKey\":\"key.keyboard.space\","
+                + "\"defaultModifier\":\"NONE\",\"context\":\"missing\"}]"), "unknown context missing");
     }
 
     @Test
     void readsLargeCatalogs() throws Exception {
-        List<ItemEntry> items = new ArrayList<>();
-        List<BlockEntry> blocks = new ArrayList<>();
+        List<RegistryEntry> items = new ArrayList<>();
+        List<RegistryEntry> blocks = new ArrayList<>();
         for (int i = 0; i < 30_000; i++) {
-            items.add(new ItemEntry("pack:item_" + i, "Item " + i, "pack.Item", "", "", Map.of()));
+            items.add(new RegistryEntry("pack:item_" + i, "Item " + i, "pack.Item", "pack:item_" + i, List.of(), Map.of()));
         }
         for (int i = 0; i < 20_000; i++) {
-            blocks.add(new BlockEntry("pack:block_" + i, "Block " + i, "pack.Block", "pack:item_" + i, ""));
+            blocks.add(new RegistryEntry("pack:block_" + i, "Block " + i, "pack.Block", "pack:item_" + i,
+                    List.of(new Link("item", "minecraft:item", "pack:item_" + i)), Map.of()));
         }
-        PackCatalog catalog = new PackCatalog("inventory", "en_us", List.of(), blocks, items, List.of());
+        PackCatalog catalog = new PackCatalog("inventory", "en_us", List.of(),
+                List.of(new Registry("minecraft:block", blocks), new Registry("minecraft:item", items)), Map.of(),
+                List.of(), List.of(), Map.of());
         Path file = this.directory.resolve("catalog.json");
 
         catalog.write(file);
@@ -108,13 +135,17 @@ class PackCatalogTest {
     void displaysDefaultsAndFileValuesAlike() {
         assertEquals("FAST", ConfigSetting.display("FAST"));
         assertEquals("GAME", ConfigSetting.display(Restart.GAME));
-        assertEquals("[a, 3, true]", ConfigSetting.display(List.of("a", 3, true)));
+        assertEquals("[\"a\", 3, true, \"GAME\"]", ConfigSetting.display(List.of("a", 3, true, Restart.GAME)));
         assertEquals("0.5", ConfigSetting.display(0.5));
         assertEquals("", ConfigSetting.display(null));
     }
 
+    private static String registry(String id, String entries) {
+        return "\"registries\":[{\"id\":\"" + id + "\",\"entries\":[" + entries + "]}]";
+    }
+
     private static String catalogJson(String content) {
-        return "{\"format\":2,\"inventoryId\":\"inventory\",\"language\":\"en_us\"," + content + "}";
+        return "{\"format\":" + PackCatalog.FORMAT_VERSION + ",\"inventoryId\":\"inventory\",\"language\":\"en_us\"," + content + "}";
     }
 
     private void assertInvalid(String json, String message) throws IOException {

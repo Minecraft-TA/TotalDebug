@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.script;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
@@ -109,7 +110,7 @@ class ExecutionRunsTest {
     @ValueSource(booleans = {false, true})
     void disconnectWhileWaitingForAdmissionCannotSubmitToTheReplacementConnection(boolean targeted) throws Exception {
         Object lifecycle = new Object();
-        var project = new ProjectScope(lifecycle, new CompanionProfile("project", directory, directory), InstanceState.inMemory());
+        var project = new ProjectScope(lifecycle, new CompanionProfile("project", directory, directory), InstanceState.inMemory(), ChangeRecord.inMemory());
         var sent = new LinkedBlockingQueue<RunScriptMessage>();
         try (var session = new CompanionSession("execution-runs-test-token");
              var snapshot = ScriptCompilationServiceTest.fixture(directory);
@@ -200,7 +201,7 @@ class ExecutionRunsTest {
         final CompanionSession session = new CompanionSession("execution-runs-test-token");
         final EditorScriptRunServiceTest.ResultBus bus = new EditorScriptRunServiceTest.ResultBus();
         final ScriptCompilationService compiler = new ScriptCompilationService(message -> false, message -> false);
-        final ProjectScope project = new ProjectScope(new Object(), new CompanionProfile("project", directory, directory), InstanceState.inMemory());
+        final ProjectScope project = new ProjectScope(new Object(), new CompanionProfile("project", directory, directory), InstanceState.inMemory(), ChangeRecord.inMemory());
         final ExecutionRuns runs;
 
         Fixture(boolean connected) {

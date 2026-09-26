@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.CopyValue;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
@@ -277,7 +278,7 @@ class StatusInteractionTest extends StatusBarTestFixture {
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void activityPopupAndStopControlsStayInsideTheirViewports(boolean longName, @TempDir Path directory) throws Exception {
-        var project = new ProjectScope(new Object(), new CompanionProfile("activity-test", directory, directory), InstanceState.inMemory());
+        var project = new ProjectScope(new Object(), new CompanionProfile("activity-test", directory, directory), InstanceState.inMemory(), ChangeRecord.inMemory());
         try {
             SwingUtilities.invokeAndWait(() -> {
                 var bar = statusBar(target -> {});

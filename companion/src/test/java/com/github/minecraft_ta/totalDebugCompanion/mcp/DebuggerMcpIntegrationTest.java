@@ -18,6 +18,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.AfterAll;
@@ -91,7 +92,7 @@ class DebuggerMcpIntegrationTest {
             CodeModeJobService jobs = new CodeModeJobService(() -> false, new NoOpTransport(),
                     Clock.systemUTC());
             DebuggerMcpService debugger = new DebuggerMcpService(() -> controller, name -> source);
-            var scope = new ProjectScope(new Object(), new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory());
+            var scope = new ProjectScope(new Object(), new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory(), ChangeRecord.inMemory());
             try (jobs; CompanionMcpServer server = new CompanionMcpServer(temporaryDirectory.resolve("data"), jobs, 0, debugger, () -> scope, new TestProjectControls())) {
                 server.start();
                 String base = server.endpointUrl().substring(0, server.endpointUrl().length() - 4);

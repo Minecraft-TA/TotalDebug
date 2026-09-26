@@ -17,6 +17,7 @@ import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCent
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService.ReadySnapshot;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
@@ -228,7 +229,7 @@ class EditorScriptRunServiceTest {
         final ResultBus bus = new ResultBus();
         final LinkedBlockingQueue<RunScriptMessage> sent = new LinkedBlockingQueue<>();
         final ScriptCompilationService compiler = new ScriptCompilationService(sent::add, message -> false);
-        final ProjectScope project = new ProjectScope(new Object(), new CompanionProfile("project", directory, directory), InstanceState.inMemory());
+        final ProjectScope project = new ProjectScope(new Object(), new CompanionProfile("project", directory, directory), InstanceState.inMemory(), ChangeRecord.inMemory());
         final ExecutionRuns executions;
         final EditorScriptRunService runs;
         final ReadySnapshot snapshot;

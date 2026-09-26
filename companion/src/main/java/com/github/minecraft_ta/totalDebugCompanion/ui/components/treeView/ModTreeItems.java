@@ -11,11 +11,11 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogMessages;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ModLogoIcons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
-import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 
@@ -25,15 +25,22 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * The Mods tree: one node per installed mod with logical groups for what it registered, its configuration and its
- * resources. Individual blocks and items are not nodes; a group opens the matching tab of the mod's page.
+ * The Modpack tree (see docs/MODPACK.md): the pack's mods and its configuration. Mods has one node per installed mod
+ * with logical groups for what it registered, its configuration and its resources. Individual blocks and items are
+ * not nodes; a group opens the matching tab of the mod's page.
  */
 final class ModTreeItems {
-    static final String ROOT = "mods";
+    static final String ROOT = "modpack";
+    static final String MODS = "mods";
+    static final String CONFIGURATION = "configuration";
+    static final String CHANGES = "changes";
+    static final String KEY_BINDINGS = "key-bindings";
+    static final String CONTENT = "content";
     static final String OTHER_NAMESPACES = "other-namespaces";
     private static final Set<String> PLATFORM = Set.of("minecraft", "neoforge");
 
@@ -45,13 +52,17 @@ final class ModTreeItems {
         return tab.name().toLowerCase(Locale.ROOT);
     }
 
-    /** What the tree shows now: the captured catalog when ready, otherwise the runtime's modules. */
-    record Snapshot(PackCatalogService.State state, RuntimeSourceCatalog sources) {
+    /**
+     * What the tree shows now: the captured catalog when ready, otherwise the runtime's modules, and how many changes
+     * Companion made that are still in effect.
+     */
+    record Snapshot(PackCatalogService.State state, RuntimeSourceCatalog sources, int changes) {
         CatalogIndex index() {
             return this.state instanceof PackCatalogService.Ready ready ? ready.index() : null;
         }
     }
 
+    /** The Modpack root; its status tells whether the pack's catalog is captured. */
     static final class Root extends DirectoryTreeItem {
         private final Supplier<Snapshot> snapshot;
 
@@ -59,19 +70,60 @@ final class ModTreeItems {
             super(ROOT);
             this.snapshot = snapshot;
             String status = CatalogMessages.status(snapshot.get().state());
-            setPresentation(new PrimarySecondaryText("Mods", status));
-            setIcon(Icons.MOD);
+            setPresentation(new PrimarySecondaryText("Modpack", status));
+            setIcon(Icons.MODPACK);
         }
 
         @Override
         public String getTooltip() {
             String unavailable = CatalogMessages.unavailable(this.snapshot.get().state());
-            return unavailable.isEmpty() ? "Installed mods" : unavailable;
+            return unavailable.isEmpty() ? "The pack's mods and configuration" : unavailable;
         }
 
         @Override
         public List<TreeItem> loadChildren() {
-            return children(this.snapshot.get());
+            return packChildren(this.snapshot.get());
+        }
+    }
+
+    /**
+     * The rows under Modpack: Mods, Content, Configuration and Key bindings once the catalog describes them, and
+     * Changes while Companion has changes in effect.
+     */
+    static List<TreeItem> packChildren(Snapshot snapshot) {
+        List<TreeItem> children = new ArrayList<>();
+        children.add(new Mods(snapshot));
+        if (snapshot.index() != null && !snapshot.index().entries().isEmpty()) children.add(new Content(null, snapshot.index().content()));
+        if (snapshot.index() != null) children.add(new Configuration());
+        if (snapshot.index() != null && !snapshot.index().catalog().keyBindings().isEmpty()) {
+            children.add(new KeyBindings(snapshot.index().catalog().keyBindings().size()));
+        }
+        if (snapshot.changes() > 0) children.add(new Changes(snapshot.changes()));
+        return children;
+    }
+
+    /** The installed mods, and the namespaces registered without a mod. */
+    static final class Mods extends DirectoryTreeItem {
+        private final Snapshot snapshot;
+
+        Mods(Snapshot snapshot) {
+            super(MODS);
+            this.snapshot = snapshot;
+            CatalogIndex index = snapshot.index();
+            setPresentation(new PrimarySecondaryText("Mods",
+                    index == null ? "" : NumberFormat.getIntegerInstance(Locale.ROOT).format(index.mods().size())));
+            setIcon(Icons.MOD);
+            setSortPriority(0);
+        }
+
+        @Override
+        public String getTooltip() {
+            return "Installed mods";
+        }
+
+        @Override
+        public List<TreeItem> loadChildren() {
+            return children(this.snapshot);
         }
     }
 
@@ -163,10 +215,10 @@ final class ModTreeItems {
         public List<TreeItem> loadChildren() {
             List<TreeItem> children = new ArrayList<>();
             if (this.index != null && this.summary.captured()) {
-                group(children, ModTab.BLOCKS, this.index.entries(this.summary.id(), SubjectRef.DefinitionKind.BLOCK).size());
-                group(children, ModTab.ITEMS, this.index.entries(this.summary.id(), SubjectRef.DefinitionKind.ITEM).size());
-                group(children, ModTab.ENTITIES, this.index.entries(this.summary.id(), SubjectRef.DefinitionKind.ENTITY_TYPE).size());
+                Map<String, List<CatalogIndex.Entry>> content = this.index.content(this.summary.id());
+                if (!content.isEmpty()) children.add(new Content(this.summary.id(), content));
                 group(children, ModTab.CONFIGURATION, this.summary.mod() == null ? 0 : this.summary.mod().configs().size());
+                group(children, ModTab.KEY_BINDINGS, this.index.keyBindings(this.summary.id()).size());
             }
             if (this.resourceCount != 0) children.add(new Resources(this.summary, this.resourceCount));
             return children;
@@ -191,7 +243,7 @@ final class ModTreeItems {
         }
     }
 
-    /** Blocks, Items, Entity types or Configuration of one mod. */
+    /** Configuration or Key bindings of one mod. */
     static final class Group extends TreeItem implements NavigableTreeItem {
         private final String modId;
         private final ModTab tab;
@@ -200,8 +252,7 @@ final class ModTreeItems {
             super(groupName(tab));
             this.modId = modId;
             this.tab = tab;
-            String title = tab == ModTab.ENTITIES ? "Entity types" : tab.title();
-            setPresentation(new PrimarySecondaryText(title, NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
+            setPresentation(new PrimarySecondaryText(tab.title(), NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
             setIcon(SubjectIcons.tab(tab));
             setSortPriority(tab.ordinal());
         }
@@ -214,6 +265,127 @@ final class ModTreeItems {
         @Override
         public NavigationTarget navigationTarget() {
             return new NavigationTarget.ModPage(this.modId, this.tab, "");
+        }
+    }
+
+    /** Opens the settings of every mod, those that differ from their default first. */
+    static final class Configuration extends TreeItem implements NavigableTreeItem {
+        Configuration() {
+            super(CONFIGURATION);
+            setPresentation(PrimarySecondaryText.primary("Configuration"));
+            setIcon(Icons.CONFIG_FILE);
+            setSortPriority(2);
+        }
+
+        @Override
+        public String getTooltip() {
+            return "Settings of every mod";
+        }
+
+        @Override
+        public NavigationTarget navigationTarget() {
+            return new NavigationTarget.PackConfiguration();
+        }
+    }
+
+    /**
+     * Registered content by kind, as one row per registry: the pack's, or one mod's when {@code modId} is not null.
+     * Each row is named by its registry id, so a kind is revealed by its registry.
+     */
+    static final class Content extends DirectoryTreeItem {
+        private final String modId;
+        private final Map<String, List<CatalogIndex.Entry>> content;
+
+        Content(String modId, Map<String, List<CatalogIndex.Entry>> content) {
+            super(CONTENT);
+            this.modId = modId;
+            this.content = content;
+            setPresentation(PrimarySecondaryText.primary("Content"));
+            setIcon(SubjectIcons.tab(ModTab.CONTENT));
+            setSortPriority(modId == null ? 1 : ModTab.CONTENT.ordinal());
+        }
+
+        @Override
+        public String getTooltip() {
+            return this.modId == null ? "Registered content of every mod" : "Registered content";
+        }
+
+        @Override
+        public List<TreeItem> loadChildren() {
+            List<TreeItem> children = new ArrayList<>();
+            int position = 0;
+            for (Map.Entry<String, List<CatalogIndex.Entry>> kind : this.content.entrySet()) {
+                children.add(new ContentList(this.modId, kind.getKey(), kind.getValue().size(), position++));
+            }
+            return children;
+        }
+    }
+
+    /** Opens one kind of content: the pack's, or one mod's when {@code modId} is not null. */
+    static final class ContentList extends TreeItem implements NavigableTreeItem {
+        private final String modId;
+        private final String registry;
+
+        ContentList(String modId, String registry, int count, int position) {
+            super(registry);
+            this.modId = modId;
+            this.registry = registry;
+            ContentKinds.ContentKind kind = ContentKinds.of(registry);
+            setPresentation(new PrimarySecondaryText(kind.plural(), NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
+            setIcon(kind.icon());
+            setSortPriority(position);
+        }
+
+        @Override
+        public String getTooltip() {
+            String plural = ContentKinds.of(this.registry).plural();
+            return this.modId == null ? plural + " of every mod" : plural;
+        }
+
+        @Override
+        public NavigationTarget navigationTarget() {
+            return this.modId == null ? new NavigationTarget.Content(this.registry)
+                    : new NavigationTarget.ModPage(this.modId, ModTab.CONTENT, this.registry);
+        }
+    }
+
+    /** Opens the key bindings of every mod. */
+    static final class KeyBindings extends TreeItem implements NavigableTreeItem {
+        KeyBindings(int count) {
+            super(KEY_BINDINGS);
+            setPresentation(new PrimarySecondaryText("Key bindings", NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
+            setIcon(Icons.KEYBOARD);
+            setSortPriority(3);
+        }
+
+        @Override
+        public String getTooltip() {
+            return "Key bindings of every mod";
+        }
+
+        @Override
+        public NavigationTarget navigationTarget() {
+            return new NavigationTarget.KeyBindings("");
+        }
+    }
+
+    /** Opens what Companion changed in the pack. */
+    static final class Changes extends TreeItem implements NavigableTreeItem {
+        Changes(int count) {
+            super(CHANGES);
+            setPresentation(new PrimarySecondaryText("Changes", NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
+            setIcon(Icons.CHANGES);
+            setSortPriority(4);
+        }
+
+        @Override
+        public String getTooltip() {
+            return "What Companion changed in the pack";
+        }
+
+        @Override
+        public NavigationTarget navigationTarget() {
+            return new NavigationTarget.Changes();
         }
     }
 

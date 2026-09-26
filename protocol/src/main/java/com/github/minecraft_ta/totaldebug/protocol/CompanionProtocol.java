@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 22;
+    public static final int VERSION = 23;
 
     public static final short READY = 1;
     public static final short OPEN_CLASS = 2;
@@ -21,6 +21,8 @@ public final class CompanionProtocol {
     public static final short INSPECT_SUBJECT = 30;
     public static final short RESOURCE_SNAPSHOT = 31;
     public static final short PACK_CATALOG = 32;
+    public static final short SET_KEY_BINDING = 33;
+    public static final short KEY_BINDING_RESULT = 34;
 
     private CompanionProtocol() {
     }

@@ -453,6 +453,8 @@ class CompanionReconnectTest {
         public void runtimeChanged() { }
         @Override
         public void catalogChanged() { }
+        @Override
+        public void changesRecorded() { }
         public void setGameStatus(ServiceStatus status) { game = status; gameChanged.accept(status); }
         public void setMcpStatus(ServiceStatus status) { }
         public void setRuntimeIndexStatus(RuntimeIndexService.Status status) { }
