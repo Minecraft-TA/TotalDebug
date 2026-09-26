@@ -467,12 +467,12 @@ public final class BreakpointsWindow extends JDialog {
     private void addField(int row, JLabel label, Component field) {
         GridBagLayout layout = (GridBagLayout) this.details.getLayout();
         if (layout.columnWidths == null) layout.columnWidths = new int[2];
-        layout.columnWidths[0] = Math.max(layout.columnWidths[0], label.getPreferredSize().width + UiMetrics.FORM_LABEL_GAP);
+        layout.columnWidths[0] = Math.max(layout.columnWidths[0], label.getPreferredSize().width + UiMetrics.formLabelGap());
         GridBagConstraints labelConstraints = new GridBagConstraints();
         labelConstraints.gridx = 0;
         labelConstraints.gridy = row;
         labelConstraints.anchor = GridBagConstraints.NORTHWEST;
-        labelConstraints.insets = new Insets(4, 0, UiMetrics.FORM_ROW_GAP, UiMetrics.FORM_LABEL_GAP);
+        labelConstraints.insets = new Insets(4, 0, UiMetrics.formRowGap(), UiMetrics.formLabelGap());
         this.details.add(label, labelConstraints);
 
         GridBagConstraints fieldConstraints = new GridBagConstraints();
@@ -480,7 +480,7 @@ public final class BreakpointsWindow extends JDialog {
         fieldConstraints.gridy = row;
         fieldConstraints.weightx = 1;
         fieldConstraints.fill = GridBagConstraints.HORIZONTAL;
-        fieldConstraints.insets = new Insets(0, 0, UiMetrics.FORM_ROW_GAP, 0);
+        fieldConstraints.insets = new Insets(0, 0, UiMetrics.formRowGap(), 0);
         this.details.add(field, fieldConstraints);
     }
 

@@ -174,7 +174,7 @@ public class SettingsWindow extends JDialog {
         labelConstraints.gridx = 0;
         labelConstraints.gridy = row;
         labelConstraints.anchor = GridBagConstraints.LINE_START;
-        labelConstraints.insets = new Insets(UiMetrics.FORM_ROW_GAP / 2, 0, UiMetrics.FORM_ROW_GAP / 2, UiMetrics.FORM_LABEL_GAP);
+        labelConstraints.insets = new Insets(UiMetrics.formRowGap() / 2, 0, UiMetrics.formRowGap() / 2, UiMetrics.formLabelGap());
         form.add(new JLabel(label, SwingConstants.LEADING), labelConstraints);
 
         GridBagConstraints fieldConstraints = new GridBagConstraints();
@@ -182,7 +182,7 @@ public class SettingsWindow extends JDialog {
         fieldConstraints.gridy = row;
         fieldConstraints.weightx = 1;
         fieldConstraints.fill = GridBagConstraints.HORIZONTAL;
-        fieldConstraints.insets = new Insets(UiMetrics.FORM_ROW_GAP / 2, 0, UiMetrics.FORM_ROW_GAP / 2, 0);
+        fieldConstraints.insets = new Insets(UiMetrics.formRowGap() / 2, 0, UiMetrics.formRowGap() / 2, 0);
         field.setPreferredSize(new Dimension(180, field.getPreferredSize().height));
         form.add(field, fieldConstraints);
     }

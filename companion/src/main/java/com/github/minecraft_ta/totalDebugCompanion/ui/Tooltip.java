@@ -2,8 +2,13 @@ package com.github.minecraft_ta.totalDebugCompanion.ui;
 
 import com.formdev.flatlaf.util.UIScale;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 
+import javax.swing.JComponent;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Window;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +45,12 @@ public final class Tooltip {
     }
 
     private final List<Part> parts = new ArrayList<>();
+    /** The muted colour written into tooltips so far, which a theme change replaces in those already set. */
+    private static String mutedColor;
+
+    static {
+        ThemeManager.addThemeChangeListener(theme -> recolor());
+    }
 
     private Tooltip() {
     }
@@ -136,12 +147,12 @@ public final class Tooltip {
                 case Line line -> {
                     html.append("<div").append(spacing).append('>').append(HtmlText.escape(line.text()));
                     if (line.shortcut() != null) {
-                        html.append("&nbsp;&nbsp;<font color='").append(HtmlText.hex(ThemeColors.secondaryText())).append("'>")
+                        html.append("&nbsp;&nbsp;<font color='").append(mutedHex()).append("'>")
                                 .append(HtmlText.escape(line.shortcut())).append("</font>");
                     }
                     html.append("</div>");
                 }
-                case Muted muted -> html.append("<div><font color='").append(HtmlText.hex(ThemeColors.secondaryText())).append("'>")
+                case Muted muted -> html.append("<div><font color='").append(mutedHex()).append("'>")
                         .append(HtmlText.escape(muted.text())).append("</font></div>");
                 case Paragraph paragraph -> html.append("<div").append(spacing).append('>')
                         .append(HtmlText.escape(paragraph.text()).replace("\n", "<br>")).append("</div>");
@@ -153,6 +164,36 @@ public final class Tooltip {
         }
         if (inFacts) html.append("</div>");
         return html.append("</div></html>").toString();
+    }
+
+    private static synchronized String mutedHex() {
+        mutedColor = HtmlText.hex(ThemeColors.secondaryText());
+        return mutedColor;
+    }
+
+    /**
+     * A tooltip holds its colours as text, so after a theme change the shown components' tooltips get the new muted
+     * colour in place of the old one.
+     */
+    private static void recolor() {
+        String before;
+        synchronized (Tooltip.class) {
+            before = mutedColor;
+        }
+        String now = mutedHex();
+        if (before == null || before.equals(now)) return;
+        for (Window window : Window.getWindows()) {
+            recolor(window, "<font color='" + before + "'>", "<font color='" + now + "'>");
+        }
+    }
+
+    private static void recolor(Component component, String before, String now) {
+        if (component instanceof JComponent owner && owner.getToolTipText() instanceof String text && text.contains(before)) {
+            owner.setToolTipText(text.replace(before, now));
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) recolor(child, before, now);
+        }
     }
 
     /**
