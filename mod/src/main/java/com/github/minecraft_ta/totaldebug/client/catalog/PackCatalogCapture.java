@@ -48,6 +48,7 @@ public final class PackCatalogCapture {
     private final List<PackCatalog.ItemEntry> items = new ArrayList<>();
     private final List<PackCatalog.EntityTypeEntry> entityTypes = new ArrayList<>();
     private final Map<Block, String> blockEntityTypes = new HashMap<>();
+    private Iterator<Map.Entry<IModInfo, Path>> modCursor;
     private Iterator<Block> blockCursor;
     private Iterator<Item> itemCursor;
     private Iterator<EntityType<?>> entityCursor;
@@ -70,19 +71,26 @@ public final class PackCatalogCapture {
         }
         try {
             long deadline = System.nanoTime() + SLICE_NANOS;
-            if (this.blockCursor == null) {
+            if (this.modCursor == null) {
                 this.startedAt = System.nanoTime();
-                captureMods();
-                for (BlockEntityType<?> type : BuiltInRegistries.BLOCK_ENTITY_TYPE) {
-                    String id = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type).toString();
-                    for (Block block : type.getValidBlocks()) this.blockEntityTypes.putIfAbsent(block, id);
-                }
-                this.blockCursor = BuiltInRegistries.BLOCK.iterator();
-                this.itemCursor = BuiltInRegistries.ITEM.iterator();
-                this.entityCursor = BuiltInRegistries.ENTITY_TYPE.iterator();
+                List<Map.Entry<IModInfo, Path>> mods = new ArrayList<>();
+                ModList.get().forEachModFile(file -> file.getModInfos()
+                        .forEach(info -> mods.add(Map.entry(info, file.getFilePath()))));
+                this.modCursor = mods.iterator();
             }
+            // Every part, the mods included, is captured in steps within the slice, so a large pack never stalls a frame.
             while (System.nanoTime() < deadline) {
-                if (this.blockCursor.hasNext()) {
+                if (this.modCursor.hasNext()) {
+                    captureMod(this.modCursor.next());
+                } else if (this.blockCursor == null) {
+                    for (BlockEntityType<?> type : BuiltInRegistries.BLOCK_ENTITY_TYPE) {
+                        String id = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type).toString();
+                        for (Block block : type.getValidBlocks()) this.blockEntityTypes.putIfAbsent(block, id);
+                    }
+                    this.blockCursor = BuiltInRegistries.BLOCK.iterator();
+                    this.itemCursor = BuiltInRegistries.ITEM.iterator();
+                    this.entityCursor = BuiltInRegistries.ENTITY_TYPE.iterator();
+                } else if (this.blockCursor.hasNext()) {
                     block(this.blockCursor.next());
                 } else if (this.itemCursor.hasNext()) {
                     item(this.itemCursor.next());
@@ -105,16 +113,12 @@ public final class PackCatalogCapture {
         }
     }
 
-    private void captureMods() {
-        ModList.get().forEachModFile(file -> {
-            for (IModInfo info : file.getModInfos()) {
-                try {
-                    this.mods.add(mod(info, file.getFilePath()));
-                } catch (RuntimeException exception) {
-                    TotalDebug.LOGGER.warn("Leaving mod {} out of the pack catalog", info.getModId(), exception);
-                }
-            }
-        });
+    private void captureMod(Map.Entry<IModInfo, Path> found) {
+        try {
+            this.mods.add(mod(found.getKey(), found.getValue()));
+        } catch (RuntimeException exception) {
+            TotalDebug.LOGGER.warn("Leaving mod {} out of the pack catalog", found.getKey().getModId(), exception);
+        }
     }
 
     private PackCatalog.Mod mod(IModInfo info, Path file) {

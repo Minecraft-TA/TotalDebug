@@ -4,9 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -24,6 +22,7 @@ import java.util.Set;
 public record ModelAppearance(List<File> files, List<Texture> textures, List<String> loaders) {
     private static final int MAXIMUM_JSON_BYTES = 1024 * 1024;
     private static final int MAXIMUM_TEXTURE_BYTES = 4 * 1024 * 1024;
+    private static final long MAXIMUM_TEXTURE_PIXELS = 16L * 1024 * 1024;
     private static final int MAXIMUM_MODELS = 8;
     private static final int MAXIMUM_TEXTURES = 24;
     private static final int MAXIMUM_PARENTS = 32;
@@ -165,7 +164,12 @@ public record ModelAppearance(List<File> files, List<Texture> textures, List<Str
     private static BufferedImage image(ResourcePackStack resources, String resourcePath) throws IOException {
         Optional<byte[]> bytes = resources.read(resourcePath, MAXIMUM_TEXTURE_BYTES);
         if (bytes.isEmpty()) return null;
-        BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes.get()));
+        BufferedImage image;
+        try {
+            image = TextureImages.decode(bytes.get(), MAXIMUM_TEXTURE_PIXELS);
+        } catch (TextureImages.TooLarge tooLarge) {
+            return null;
+        }
         return image == null ? null : TextureAnimation.firstFrameOfStrip(image);
     }
 

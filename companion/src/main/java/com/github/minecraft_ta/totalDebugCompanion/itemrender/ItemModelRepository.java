@@ -11,11 +11,8 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
-import javax.imageio.ImageIO;
-import javax.imageio.stream.MemoryCacheImageInputStream;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -74,17 +71,13 @@ final class ItemModelRepository {
     private BufferedImage readTextureImage(ItemModelId textureId) throws IOException {
         byte[] png = this.resources.readRequired(textureId.textureResourcePath(), MAXIMUM_TEXTURE_BYTES);
         BufferedImage decoded;
-        try (var input = new MemoryCacheImageInputStream(new ByteArrayInputStream(png))) {
-            var readers = ImageIO.getImageReaders(input);
-            if (!readers.hasNext()) throw new IOException("Unreadable texture: " + textureId);
-            var reader = readers.next();
-            try {
-                reader.setInput(input);
-                if ((long) reader.getWidth(0) * reader.getHeight(0) > MAXIMUM_TEXTURE_PIXELS)
-                    throw new ItemRenderException(ItemRenderException.Kind.RESOURCE_ERROR,
-                            "texture pixel limit", "Texture " + textureId + " exceeds the pixel limit");
-                decoded = reader.read(0);
-            } finally { reader.dispose(); }
+        try {
+            decoded = TextureImages.decode(png, MAXIMUM_TEXTURE_PIXELS);
+        } catch (TextureImages.TooLarge tooLarge) {
+            throw new ItemRenderException(ItemRenderException.Kind.RESOURCE_ERROR,
+                    "texture pixel limit", "Texture " + textureId + " exceeds the pixel limit");
+        } catch (IOException unreadable) {
+            throw new IOException("Unreadable texture: " + textureId, unreadable);
         }
         if (decoded == null) {
             throw new ItemRenderException(

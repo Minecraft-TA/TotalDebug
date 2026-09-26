@@ -542,7 +542,11 @@ public final class CompanionAppClient implements AutoCloseable {
         send(this.runtimeInventoryState);
     }
 
-    private void announceInventory() {
+    /**
+     * Announces the published inventory to the pack catalog handler again, as after authentication. Nothing happens
+     * before an inventory is published.
+     */
+    public void announceInventory() {
         var published = this.publishedInventory;
         if (published != null && published.id().equals(this.runtimeInventoryState.inventoryId())) {
             this.packCatalogHandler.accept(published.id(), published.moduleByModId());

@@ -26,7 +26,7 @@ class PackCatalogPublisherTest {
     private final BlockingQueue<PackCatalogMessage> sent = new LinkedBlockingQueue<>();
     private final AtomicInteger captures = new AtomicInteger();
     private final AtomicReference<String> language = new AtomicReference<>("en_us");
-    private CompletableFuture<PackCatalog> capture = new CompletableFuture<>();
+    private volatile CompletableFuture<PackCatalog> capture = new CompletableFuture<>();
     private PackCatalogPublisher publisher;
 
     @AfterEach
@@ -51,7 +51,7 @@ class PackCatalogPublisherTest {
 
         publisher.request("inventory", Map.of());
         assertEquals(PackCatalogMessage.AVAILABLE, next().state());
-        assertEquals(1, this.captures.get());
+        awaitCaptures(1);
     }
 
     @Test
@@ -66,7 +66,7 @@ class PackCatalogPublisherTest {
         this.language.set("de_de");
         this.publisher.request("other", Map.of());
         assertEquals(PackCatalogMessage.CAPTURING, next().state());
-        assertEquals(1, this.captures.get());
+        awaitCaptures(1);
     }
 
     @Test
@@ -83,7 +83,7 @@ class PackCatalogPublisherTest {
         this.capture = new CompletableFuture<>();
         publisher.request("inventory", Map.of());
         assertEquals(PackCatalogMessage.CAPTURING, next().state());
-        assertEquals(2, this.captures.get());
+        awaitCaptures(2);
         assertNull(this.sent.poll(100, TimeUnit.MILLISECONDS));
     }
 
@@ -100,7 +100,7 @@ class PackCatalogPublisherTest {
         publisher.request("inventory", Map.of());
 
         assertEquals(PackCatalogMessage.CAPTURING, next().state());
-        assertEquals(2, this.captures.get());
+        awaitCaptures(2);
     }
 
     @Test
@@ -109,10 +109,12 @@ class PackCatalogPublisherTest {
         PackCatalogPublisher publisher = publisher(file);
         publisher.request("old", Map.of());
         assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        awaitCaptures(1);
         CompletableFuture<PackCatalog> superseded = this.capture;
         this.capture = new CompletableFuture<>();
         publisher.request("new", Map.of());
         assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        awaitCaptures(2);
 
         superseded.complete(catalog("old", "en_us"));
         this.capture.complete(catalog("new", "en_us"));
@@ -125,10 +127,19 @@ class PackCatalogPublisherTest {
 
     private PackCatalogPublisher publisher(Path file) {
         this.publisher = new PackCatalogPublisher(file, this.language::get, (inventoryId, language, modules) -> {
+            // Take the future before counting, so a test that saw the count can replace the future for the next call.
+            CompletableFuture<PackCatalog> capture = this.capture;
             this.captures.incrementAndGet();
-            return this.capture;
+            return capture;
         }, this.sent::add);
         return this.publisher;
+    }
+
+    /** Waits for the capture count: the publisher announces a capture just before it starts one. */
+    private void awaitCaptures(int expected) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (this.captures.get() < expected && System.nanoTime() < deadline) Thread.sleep(5);
+        assertEquals(expected, this.captures.get());
     }
 
     private PackCatalogMessage next() throws InterruptedException {

@@ -22,8 +22,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -61,6 +63,7 @@ public final class ItemIconService implements AutoCloseable {
     };
     private final Map<String, Optional<BufferedImage>> fluids = new LinkedHashMap<>();
     private volatile Snapshot snapshot;
+    private long adoptions;
     private volatile Function<String, Optional<CatalogIndex.ItemIcon>> itemLookup = itemId -> Optional.empty();
     private Snapshot opened;
     private Snapshot fluidsOpened;
@@ -70,22 +73,34 @@ public final class ItemIconService implements AutoCloseable {
 
     /** Adopts a newer resource snapshot; views are told on the EDT so they can draw again. */
     public void accept(String archive, int layers) {
-        adopt(this.snapshot, new Snapshot(Path.of(archive), layers), true);
+        adopt(start(), new Snapshot(Path.of(archive), layers));
     }
 
     /**
      * Adopts the newest snapshot the game saved in a project's preview directory, or none, so icons stay available
-     * without a connection and never come from another project. Blocking; not on the Swing thread.
+     * without a connection and never come from another project. The directory is read in the background; only the
+     * newest restore adopts its result, and a snapshot announced meanwhile supersedes it.
      */
-    public void restore(Path directory) {
-        Snapshot before = this.snapshot;
-        adopt(before, newestSnapshot(directory), false);
+    public CompletableFuture<Void> restore(Path directory) {
+        return restore(directory, ForkJoinPool.commonPool());
     }
 
-    /** Replaces the snapshot; a restore only applies while nothing else was adopted since it started. */
-    private void adopt(Snapshot expected, Snapshot next, boolean announced) {
+    CompletableFuture<Void> restore(Path directory, Executor reader) {
+        long generation = start();
+        return CompletableFuture.runAsync(() -> adopt(generation, newestSnapshot(directory)), reader);
+    }
+
+    /** Starts an adoption, superseding every earlier one that has not finished. */
+    private long start() {
         synchronized (this.listeners) {
-            if (this.closed || Objects.equals(next, this.snapshot) || !announced && this.snapshot != expected) {
+            return ++this.adoptions;
+        }
+    }
+
+    /** Replaces the snapshot, unless a newer adoption started since {@code generation}. */
+    private void adopt(long generation, Snapshot next) {
+        synchronized (this.listeners) {
+            if (this.closed || generation != this.adoptions || Objects.equals(next, this.snapshot)) {
                 return;
             }
             this.snapshot = next;
@@ -134,6 +149,10 @@ public final class ItemIconService implements AutoCloseable {
 
     public boolean hasSnapshot() {
         return this.snapshot != null;
+    }
+
+    Snapshot snapshot() {
+        return this.snapshot;
     }
 
     /** Registers a listener for new snapshots and returns its removal. */

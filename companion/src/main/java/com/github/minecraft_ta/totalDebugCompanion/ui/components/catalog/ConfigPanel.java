@@ -100,6 +100,7 @@ final class ConfigPanel extends JPanel {
     private final JLabel message = new JLabel();
     private final JPanel cards = new JPanel(new CardLayout());
     private long generation;
+    private long sourceGeneration;
     private boolean updating;
 
     ConfigPanel(Path workspace, Consumer<NavigationTarget> navigator) {
@@ -302,22 +303,39 @@ final class ConfigPanel extends JPanel {
 
     private void showFile() {
         PackCatalog.ConfigFile file = selectedFile();
+        long current = ++this.sourceGeneration;
+        this.modifiedOnly.setVisible(file != null && !file.settings().isEmpty());
+        if (file == null || file.type() != PackCatalog.ConfigType.SERVER) {
+            showSources(file, file == null ? List.of() : sources(file));
+            return;
+        }
+        // A server configuration's copies are found by listing the worlds, which reads the disk.
+        CompletableFuture.supplyAsync(() -> sources(file)).whenComplete((found, failure) -> SwingUtilities.invokeLater(() -> {
+            if (current == this.sourceGeneration) showSources(file, found == null ? List.of() : found);
+        }));
+    }
+
+    private void showSources(PackCatalog.ConfigFile file, List<Source> found) {
         this.updating = true;
         try {
             this.sourceModel.removeAllElements();
-            if (file != null) sources(file).forEach(this.sourceModel::addElement);
-            this.source.setVisible(file != null && file.type() == PackCatalog.ConfigType.SERVER && this.sourceModel.getSize() > 0);
+            found.forEach(this.sourceModel::addElement);
+            this.source.setVisible(file != null && file.type() == PackCatalog.ConfigType.SERVER && !found.isEmpty());
         } finally {
             this.updating = false;
         }
-        this.modifiedOnly.setVisible(file != null && !file.settings().isEmpty());
         load();
     }
 
-    /** Where a configuration's values are: its loaded file, or for a server configuration each world and the defaults. */
+    /**
+     * Where a configuration's values are: its loaded file, or for a server configuration each world's copy and the
+     * defaults. A server configuration's loaded file belongs to the world open at capture, so every world is listed.
+     * Blocking for a server configuration; it lists the worlds.
+     */
     List<Source> sources(PackCatalog.ConfigFile file) {
-        if (file.path() != null) return List.of(new Source(file.fileName(), file.path()));
-        if (file.type() != PackCatalog.ConfigType.SERVER || this.workspace == null) return List.of();
+        if (file.type() != PackCatalog.ConfigType.SERVER || this.workspace == null) {
+            return file.path() == null ? List.of() : List.of(new Source(file.fileName(), file.path()));
+        }
         List<Source> worlds = new ArrayList<>();
         Map<Source, FileTime> modified = new HashMap<>();
         try (DirectoryStream<Path> saves = Files.newDirectoryStream(this.workspace.resolve("saves"), Files::isDirectory)) {

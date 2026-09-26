@@ -132,6 +132,14 @@ public final class TotalDebugClient {
         return Optional.ofNullable(instance);
     }
 
+    /**
+     * A client resource reload finished, such as after a language or resource pack change. The catalog holds
+     * translated names and the snapshot the winning resources, so both are brought up to date.
+     */
+    public void resourcesReloaded() {
+        this.companionApp.announceInventory();
+    }
+
     public void openOrFocus(Optional<Class<?>> targetClass) {
         this.codeView.openOrFocus(targetClass);
     }
