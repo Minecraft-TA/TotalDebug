@@ -38,6 +38,8 @@ public record InstancePaths(Path home) {
     public Path changes() { return home.resolve("changes.json"); }
     /** Held by the running game; see {@link GameLock}. */
     public Path gameLock() { return home.resolve("game.lock"); }
+    /** Contents Companion replaced in the pack, by SHA-256, so its changes can be reverted. */
+    public Path originals() { return home.resolve("originals"); }
     public Path cache() { return home.resolve("cache"); }
     public Path runtime() { return cache().resolve("runtime"); }
     public Path inventory() { return runtime().resolve("inventory.json"); }

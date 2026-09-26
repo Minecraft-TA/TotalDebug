@@ -21,16 +21,16 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiPredicate;
 
 /**
- * What Companion changed in the pack, kept per instance in {@code changes.json} (see docs/MODPACK.md). An entry holds a
- * target's value from before Companion first changed it and the value written last. Writing the original value back
- * removes the entry, so the record lists only changes still in effect. Targets are configuration settings and key
- * bindings.
+ * What Companion changed in the pack, kept per instance in {@code changes.json} (see docs/MODPACK.md and
+ * docs/RESOURCE_EDITING.md). An entry holds a target's value from before Companion first changed it and the value
+ * written last. Writing the original value back removes the entry, so the record lists only changes still in effect.
+ * Targets are configuration settings, key bindings and resources.
  */
 public final class ChangeRecord implements AutoCloseable {
     private static final int FORMAT = 1;
 
     /** Something Companion writes to. */
-    public sealed interface Target permits Setting, KeyBinding {
+    public sealed interface Target permits Setting, KeyBinding, Resource {
     }
 
     /** A setting of a configuration file; {@code file} is where it was written, such as one world's server file. */
@@ -50,6 +50,32 @@ public final class ChangeRecord implements AutoCloseable {
     public record KeyBinding(String name) implements Target {
         public KeyBinding {
             Objects.requireNonNull(name, "name");
+        }
+    }
+
+    /**
+     * A resource by its path in a pack, such as {@code assets/ns/models/block/slab.json}, and the managed pack folder it
+     * was written to. Its values are the SHA-256 of the content, or empty when there was none; {@link ResourceOriginals}
+     * keeps original contents.
+     */
+    public record Resource(String path, Path location) implements Target {
+        public Resource {
+            Objects.requireNonNull(path, "path");
+            if (!isPackPath(path)) throw new IllegalArgumentException("Not a resource path: " + path);
+            location = location.toAbsolutePath().normalize();
+        }
+
+        /**
+         * Whether {@code path} is a file of a pack: under {@code assets/} or {@code data/}, with forward slashes and no
+         * empty, {@code .} or {@code ..} segment. A name such as {@code version..json} is allowed; only whole segments
+         * could leave the pack.
+         */
+        public static boolean isPackPath(String path) {
+            if (!(path.startsWith("assets/") || path.startsWith("data/")) || path.contains("\\")) return false;
+            for (String segment : path.split("/", -1)) {
+                if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) return false;
+            }
+            return true;
         }
     }
 
@@ -114,11 +140,20 @@ public final class ChangeRecord implements AutoCloseable {
                                 JsonFiles.string(entry, "setting"));
                     }
                     case "keyBinding" -> new KeyBinding(JsonFiles.string(entry, "name"));
+                    case "resource" -> {
+                        Path location = inInstance(game, JsonFiles.string(entry, "location"));
+                        if (location == null) {
+                            System.err.println("Leaving out a change of " + JsonFiles.string(entry, "path") + " in "
+                                    + JsonFiles.string(entry, "location") + ": it is not a pack of this instance");
+                            yield null;
+                        }
+                        yield new Resource(JsonFiles.string(entry, "path"), location);
+                    }
                     default -> throw new IllegalArgumentException("Unknown change kind " + JsonFiles.string(entry, "kind"));
                 };
                 if (target == null) continue;
-                record.changes.put(target, new Change(target, JsonFiles.string(entry, "original"),
-                        JsonFiles.string(entry, "current"), Instant.parse(JsonFiles.string(entry, "firstChanged")),
+                record.changes.put(target, new Change(target, value(entry, "original"),
+                        value(entry, "current"), Instant.parse(JsonFiles.string(entry, "firstChanged")),
                         Instant.parse(JsonFiles.string(entry, "lastChanged"))));
             }
             return record;
@@ -128,11 +163,24 @@ public final class ChangeRecord implements AutoCloseable {
         }
     }
 
+    /** A value of an entry, which is empty for a resource that did not exist. */
+    private static String value(JsonObject entry, String key) {
+        JsonElement value = entry.get(key);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+            throw new IllegalArgumentException("Expected string: " + key);
+        }
+        return value.getAsString();
+    }
+
     /** Records that {@code target} changed from {@code previous} to {@code written}. */
     public void changed(Target target, String previous, String written) {
-        if (this.gameDirectory != null && target instanceof Setting setting
-                && !setting.file().toAbsolutePath().normalize().startsWith(this.gameDirectory)) {
-            throw new IllegalArgumentException(setting.file() + " is not a file of this instance");
+        Path file = switch (target) {
+            case Setting setting -> setting.file();
+            case Resource resource -> resource.location();
+            case KeyBinding ignored -> null;
+        };
+        if (this.gameDirectory != null && file != null && !file.startsWith(this.gameDirectory)) {
+            throw new IllegalArgumentException(file + " is not in this instance");
         }
         synchronized (this) {
             Change earlier = this.changes.get(target);
@@ -184,6 +232,11 @@ public final class ChangeRecord implements AutoCloseable {
         return change == null ? null : change.original();
     }
 
+    /** The change of {@code target} still in effect, or null. */
+    public synchronized Change change(Target target) {
+        return this.changes.get(target);
+    }
+
     /** Changes still in effect, the most recent first. */
     public synchronized List<Change> changes() {
         List<Change> sorted = new ArrayList<>(this.changes.values());
@@ -217,6 +270,11 @@ public final class ChangeRecord implements AutoCloseable {
                 case KeyBinding binding -> {
                     entry.addProperty("kind", "keyBinding");
                     entry.addProperty("name", binding.name());
+                }
+                case Resource resource -> {
+                    entry.addProperty("kind", "resource");
+                    entry.addProperty("path", resource.path());
+                    entry.addProperty("location", stored(resource.location()));
                 }
             }
             entry.addProperty("original", change.original());

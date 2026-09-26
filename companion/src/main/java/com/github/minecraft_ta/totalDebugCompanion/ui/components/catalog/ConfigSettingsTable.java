@@ -212,7 +212,7 @@ final class ConfigSettingsTable extends JTable {
         Row row = this.model.shown.get(viewRow);
         JPopupMenu menu = new JPopupMenu();
         if (row.setting() != null) {
-            Action edit = ContextMenus.action("Edit Value", null, "Enter", () -> edit(viewRow));
+            Action edit = ContextMenus.action("Edit Value", null, "ENTER", () -> edit(viewRow));
             edit.setEnabled(this.model.isCellEditable(viewRow, 1));
             menu.add(edit);
             Action reset = ContextMenus.action("Reset to Default", null, null, () -> reset(row));

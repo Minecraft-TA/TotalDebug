@@ -4,7 +4,9 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,6 +42,8 @@ class ChangesPanelTest {
         ChangesPanel[] panel = new ChangesPanel[1];
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(this.directory, record),
                 new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false, Runnable::run),
+                new ResourceEdits(this.directory, record, new ResourceOriginals(this.directory.resolve("originals")),
+                        Runnable::run, () -> false),
                 target -> { }));
         ConfigSettingsTable table = panel[0].settingsTable();
         try {
