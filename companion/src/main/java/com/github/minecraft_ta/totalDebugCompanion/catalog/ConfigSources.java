@@ -41,7 +41,8 @@ public final class ConfigSources {
         Path file = path.toAbsolutePath().normalize();
         for (PackCatalog.Mod mod : index.mods()) {
             for (PackCatalog.ConfigFile config : mod.configs()) {
-                if (config.path() != null && config.path().toAbsolutePath().normalize().equals(file)) {
+                Path loaded = loaded(workspace, config);
+                if (loaded != null && loaded.toAbsolutePath().normalize().equals(file)) {
                     return Optional.of(new Owner(mod, config));
                 }
                 if (workspace != null && copyOf(workspace.toAbsolutePath().normalize(), config, file)) {
@@ -50,6 +51,16 @@ public final class ConfigSources {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * The file the game loaded {@code file} from, in this instance: the catalog captured it with the directory of the
+     * instance that ran then, which a copied or moved instance no longer is. Null when the game loaded none.
+     */
+    private static Path loaded(Path workspace, PackCatalog.ConfigFile file) {
+        if (file.path() == null) return null;
+        if (workspace == null || file.type() == PackCatalog.ConfigType.SERVER) return file.path();
+        return workspace.resolve("config").resolve(file.fileName()).normalize();
     }
 
     /** Whether {@code file} is {@code config} in the defaults for new worlds or, for a server configuration, in a world. */
@@ -70,7 +81,8 @@ public final class ConfigSources {
      */
     public static List<Source> of(Path workspace, PackCatalog.ConfigFile file) {
         if (file.type() != PackCatalog.ConfigType.SERVER || workspace == null) {
-            return file.path() == null ? List.of() : List.of(new Source(file.fileName(), file.path()));
+            Path loaded = loaded(workspace, file);
+            return loaded == null ? List.of() : List.of(new Source(file.fileName(), loaded));
         }
         List<Source> worlds = new ArrayList<>();
         Map<Source, FileTime> modified = new HashMap<>();

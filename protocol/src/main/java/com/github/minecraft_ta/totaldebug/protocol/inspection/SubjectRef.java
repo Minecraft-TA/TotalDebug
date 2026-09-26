@@ -171,6 +171,11 @@ public sealed interface SubjectRef {
             if (id.length() > 256 || !RESOURCE_ID.matcher(id).matches()) {
                 throw new IllegalArgumentException("Invalid registry id: " + id);
             }
+            // The text form must parse again.
+            String shown = registry.startsWith(MINECRAFT) ? registry.substring(MINECRAFT.length()) : registry;
+            if (("definition " + shown + " " + id).length() > MAX_TEXT_LENGTH) {
+                throw new IllegalArgumentException("Definition too long: " + registry + " " + id);
+            }
         }
 
         public String namespace() {

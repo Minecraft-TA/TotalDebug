@@ -188,7 +188,9 @@ public final class ConfigEdit {
     private static boolean unbounded(String bound, boolean upper) {
         try {
             double value = Double.parseDouble(bound);
-            return upper ? value >= Integer.MAX_VALUE : value <= Integer.MIN_VALUE;
+            // Only a type's own limit means no bound; a long or double range can have a finite bound beyond int.
+            return upper ? value == Integer.MAX_VALUE || value == Long.MAX_VALUE || value >= Float.MAX_VALUE
+                    : value == Integer.MIN_VALUE || value == Long.MIN_VALUE || value <= -Float.MAX_VALUE;
         } catch (NumberFormatException notANumber) {
             return false;
         }
@@ -294,7 +296,7 @@ public final class ConfigEdit {
     }
 
     /** Whether two literals stand for the same value, such as a list written over one or several lines. */
-    private static boolean sameValue(String first, String second) {
+    public static boolean sameValue(String first, String second) {
         if (first.equals(second)) return true;
         // Another kind is another value even when it prints the same, such as "true" and true.
         if (kind(first) != kind(second)) return false;

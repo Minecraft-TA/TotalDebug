@@ -49,9 +49,9 @@ class ChangeRecordTest {
         ChangeRecord.Setting speed = setting("speed");
         record.changed(speed, "9", "12");
 
-        record.observed(speed, "12");
+        record.observed(speed, "12", String::equals);
         assertEquals(1, record.size());
-        record.observed(speed, "9");
+        record.observed(speed, "9", String::equals);
         assertEquals(0, record.size());
     }
 

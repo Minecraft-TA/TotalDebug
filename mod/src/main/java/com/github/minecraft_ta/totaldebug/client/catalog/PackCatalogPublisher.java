@@ -89,11 +89,13 @@ public final class PackCatalogPublisher implements AutoCloseable {
                          boolean reuse) {
         if (reuse && Files.isRegularFile(this.file)) {
             try {
-                if (PackCatalog.readHeader(this.file).matches(inventoryId, language)) {
+                // Read in full: a file whose header matches but whose body is damaged is captured again.
+                PackCatalog saved = PackCatalog.read(this.file);
+                if (saved.inventoryId().equals(inventoryId) && saved.language().equals(language)) {
                     publish(generation, PackCatalogMessage.available(inventoryId, this.file.toString()));
                     return;
                 }
-            } catch (IOException exception) {
+            } catch (IOException | RuntimeException exception) {
                 TotalDebug.LOGGER.info("Recapturing the pack catalog: {}", exception.getMessage());
             }
         }

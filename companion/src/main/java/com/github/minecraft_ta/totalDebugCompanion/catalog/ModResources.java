@@ -129,13 +129,15 @@ public final class ModResources {
         Path normalized = file.toAbsolutePath().normalize();
         BasicFileAttributes attributes = Files.readAttributes(normalized, BasicFileAttributes.class);
         long modified = attributes.lastModifiedTime().toMillis();
+        // A directory's own time does not change when a file deep inside it does, so directories are listed afresh.
+        if (attributes.isDirectory()) return listDirectory(normalized);
         synchronized (CACHE) {
             Listing cached = CACHE.get(normalized);
             if (cached != null && cached.size() == attributes.size() && cached.modified() == modified) {
                 return cached.resources();
             }
         }
-        List<Resource> resources = attributes.isDirectory() ? listDirectory(normalized) : listArchive(normalized);
+        List<Resource> resources = listArchive(normalized);
         synchronized (CACHE) {
             CACHE.put(normalized, new Listing(attributes.size(), modified, resources));
         }

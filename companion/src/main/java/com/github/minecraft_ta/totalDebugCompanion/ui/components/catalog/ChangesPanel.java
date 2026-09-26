@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigEdit;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindings;
@@ -286,8 +287,8 @@ public final class ChangesPanel extends JPanel {
                         problems.add(key + " is no longer in " + file.getFileName());
                         continue;
                     }
-                    this.record.observed(change.target(), literal);
-                    if (literal.equals(change.original())) continue;
+                    this.record.observed(change.target(), literal, ConfigEdit::sameValue);
+                    if (ConfigEdit.sameValue(literal, change.original())) continue;
                     PackCatalog.ConfigSetting setting = setting(described, key);
                     ConfigSettingsTable.Row row = new ConfigSettingsTable.Row(2, filePath + "." + key, key, setting.comment(),
                             setting, values.values().getOrDefault(key, ""), literal);
@@ -306,14 +307,17 @@ public final class ChangesPanel extends JPanel {
             sections.put(modId, new Section(modId, modName(index, modId), null, null));
             rows.addAll(modRows);
         }
-        KeyBindings bindings = keyBindings(index, problems);
+        Map<String, KeyBindings.Assignment> options = options(problems);
+        KeyBindings bindings = keyBindings(index, options);
         List<KeyChange> keys = new ArrayList<>();
         for (ChangeRecord.Change change : keyChanges) {
             String name = ((ChangeRecord.KeyBinding) change.target()).name();
             KeyBindings.Binding binding = bindings.bindings().stream()
                     .filter(candidate -> candidate.spec().name().equals(name)).findFirst().orElse(null);
-            KeyBindings.Assignment current = binding == null ? KeyBindings.Assignment.decode(change.current()) : binding.current();
-            this.record.observed(change.target(), current.encode());
+            // A binding the catalog does not describe still has its line in options.txt.
+            KeyBindings.Assignment current = binding != null ? binding.current()
+                    : options.getOrDefault(name, KeyBindings.Assignment.decode(change.current()));
+            this.record.observed(change.target(), current.encode(), String::equals);
             if (current.encode().equals(change.original())) continue;
             String mod = binding == null || index == null ? "" : modName(index, index.keyBindingOwner(binding.spec()));
             keys.add(new KeyChange(name, binding == null ? name : binding.name(), current,
@@ -327,13 +331,16 @@ public final class ChangesPanel extends JPanel {
     }
 
     /** The pack's bindings with the keys options.txt gives them now. */
-    private KeyBindings keyBindings(CatalogIndex index, List<String> problems) {
-        Map<String, KeyBindings.Assignment> current = Map.of();
+    private Map<String, KeyBindings.Assignment> options(List<String> problems) {
         try {
-            current = KeyBindings.readOptions(this.keyControl.options());
+            return KeyBindings.readOptions(this.keyControl.options());
         } catch (IOException exception) {
             problems.add("Could not read options.txt: " + exception.getMessage());
+            return Map.of();
         }
+    }
+
+    private static KeyBindings keyBindings(CatalogIndex index, Map<String, KeyBindings.Assignment> current) {
         PackCatalog captured = index == null ? null : index.catalog();
         return captured == null ? new KeyBindings(List.of(), List.of(), current, Map.of())
                 : new KeyBindings(captured.keyBindings(), captured.keyContexts(), current, captured.keyNames());

@@ -55,7 +55,7 @@ public final class CatalogFixtures {
                                         new PackCatalog.Dependency("jei", PackCatalog.DependencyType.OPTIONAL, "",
                                                 PackCatalog.Side.CLIENT)),
                                 List.of(new PackCatalog.ConfigFile("testmod-common.toml", PackCatalog.ConfigType.COMMON,
-                                        jar.resolveSibling("testmod-common.toml"),
+                                        jar.resolveSibling("config").resolve("testmod-common.toml"),
                                         List.of(new PackCatalog.ConfigSection("widgets", "Widget behavior")),
                                         List.of(new PackCatalog.ConfigSetting("widgets.speed", "How fast widgets spin",
                                                         "4", "1 ~ 16", List.of(), PackCatalog.Restart.NONE),

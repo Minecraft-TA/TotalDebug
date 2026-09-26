@@ -160,6 +160,14 @@ class ConfigEditTest {
     }
 
     @Test
+    void onlyATypesOwnLimitReadsAsNoBound() {
+        assertEquals("0 to 1000000000000", ConfigEdit.readableRange("0 ~ 1000000000000"));
+        assertEquals("at least 0", ConfigEdit.readableRange("0 ~ 9223372036854775807"));
+        assertEquals("at least 0", ConfigEdit.readableRange("0 ~ 2147483647"));
+        assertEquals("at most 5", ConfigEdit.readableRange("-9223372036854775808 ~ 5"));
+    }
+
+    @Test
     void aValueOfAnotherKindIsAChangeEvenWhenItPrintsTheSame() {
         String saved = "name = \"true\"\ncount = \"4\"\n";
 

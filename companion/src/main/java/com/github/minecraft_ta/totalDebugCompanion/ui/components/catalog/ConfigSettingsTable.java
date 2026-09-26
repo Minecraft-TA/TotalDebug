@@ -229,7 +229,8 @@ final class ConfigSettingsTable extends JTable {
             menu.addSeparator();
             menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Value", row.value())));
         }
-        menu.add(ContextMenus.copyAction("Copy Key", row.path()));
+        // Rows of pack-wide pages carry their mod and file in path(); the key is the setting's own path.
+        menu.add(ContextMenus.copyAction("Copy Key", row.setting() == null ? row.path() : row.setting().path()));
         return menu;
     }
 

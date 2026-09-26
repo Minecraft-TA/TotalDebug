@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiPredicate;
 
 /**
  * What Companion changed in the pack, kept per instance in {@code changes.json} (see docs/MODPACK.md). An entry holds a
@@ -150,13 +151,14 @@ public final class ChangeRecord implements AutoCloseable {
 
     /**
      * Drops the change of {@code target} when the file holds its original value again, such as after an edit made
-     * outside Companion.
+     * outside Companion. {@code sameValue} compares as the target's file does, such as {@code "a"} and {@code 'a'} in
+     * TOML.
      */
-    public void observed(Target target, String literal) {
+    public void observed(Target target, String literal, BiPredicate<String, String> sameValue) {
         boolean dropped;
         synchronized (this) {
             Change change = this.changes.get(target);
-            dropped = change != null && change.original().equals(literal);
+            dropped = change != null && sameValue.test(change.original(), literal);
             if (dropped) {
                 this.changes.remove(target);
                 scheduleSave();
