@@ -83,4 +83,23 @@ File-tree and navigation assets:
 | implementedMethod | `gutter/implementedMethod` | | implementingMethod | `gutter/implementingMethod` |
 | overriddenMethod | `gutter/overridenMethod` | | overridingMethod | `gutter/overridingMethod` |
 
+Taken unchanged from `expui` as well, with their `_dark` pairs:
+
+| here | expui | | here | expui |
+|---|---|---|---|---|
+| arrow_right | `general/chevronRight` | | refresh | `general/refresh` |
+| addToWatch | `debugger/addToWatch` | | watch | `debugger/watch` |
+| evaluateExpression | `run/evaluateExpression` | | parameter | `nodes/parameter` |
+| viewBreakpoints | `run/viewBreakpoints` | | muteBreakpoints | `run/muteBreakpoints` |
+| breakpointDisabled | `breakpoints/breakpointDisabled` | | breakpointMuted | `breakpoints/breakpointMuted` |
+| breakpointMutedDisabled | `breakpoints/breakpointMutedDisabled` | | breakpointMethodMuted | `breakpoints/breakpointMethodMuted` |
+| breakpointMethodMutedDisabled | `breakpoints/breakpointMethodMutedDisabled` | | moveToFolder | `actions/moveToButton` |
+| notifications | `toolwindows/notifications` | | web | `toolwindows/web` |
+| expand_editor | `inline/expand` | | collapse_editor | `inline/collapse` |
+
+Custom, in the same stroke weights and palette: `block` (an isometric cube for block types), `entity` (a face for entity
+types), `script` (Companion's script file) and `companion` (the application icon), each with its `_dark` pair.
+`prism.svg` is Prism Launcher's logo, with its SVG metadata kept, and `prism-instance.svg` its grass instance icon;
+see [PRISM_NOTICE.txt](PRISM_NOTICE.txt).
+
 Folder actions use JetBrains `expui/actions/newFolder`, `expui/actions/moveToButton`, and `expui/general/edit` for rename, with their matching dark variants.

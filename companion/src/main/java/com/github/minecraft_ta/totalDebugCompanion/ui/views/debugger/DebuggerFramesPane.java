@@ -59,11 +59,11 @@ final class DebuggerFramesPane extends JPanel {
         Objects.requireNonNull(selection, "selection");
         Objects.requireNonNull(navigation, "navigation");
         Objects.requireNonNull(clipboard, "clipboard");
-        this.open = ContextMenus.action("Open source", Icons.JUMP_TO_SOURCE, "ENTER",
+        this.open = ContextMenus.action("Open Source", Icons.JUMP_TO_SOURCE, "ENTER",
                 () -> navigation.open(this.frames.getSelectedValue(), true));
-        this.copyFrame = ContextMenus.action("Copy frame", Icons.COPY, "ctrl C",
+        this.copyFrame = ContextMenus.action("Copy Frame", Icons.COPY, "ctrl C",
                 () -> clipboard.accept(frameText(this.frames.getSelectedValue())));
-        this.copyStack = ContextMenus.action("Copy stack trace", Icons.COPY, "ctrl shift C",
+        this.copyStack = ContextMenus.action("Copy Stack Trace", Icons.COPY, "ctrl shift C",
                 () -> clipboard.accept(this.model.frames.stream().map(DebuggerFramesPane::frameText)
                         .collect(Collectors.joining(System.lineSeparator()))));
         for (Action action : List.of(this.open, this.copyFrame, this.copyStack)) ContextMenus.bindAction(this.frames, action);
@@ -71,7 +71,7 @@ final class DebuggerFramesPane extends JPanel {
         updateActions();
 
         JLabel heading = new JLabel("Frames");
-        heading.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        heading.setBorder(UiMetrics.barPadding());
         setBorder(DynamicMatteBorder.separatorRule(0, 0, 0, 1));
         add(heading, BorderLayout.NORTH);
 
@@ -222,7 +222,7 @@ final class DebuggerFramesPane extends JPanel {
                     list.getSelectionBackground(),
                     list
             );
-            this.label.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+            this.label.setBorder(UiMetrics.cellPadding());
             this.label.setToolTipText(source);
             return this.label;
         }

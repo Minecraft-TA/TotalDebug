@@ -74,7 +74,7 @@ public final class ProjectSelector extends JMenu {
     private void loadMenu() {
         removeAll();
         action("Open…", Icons.FOLDER, this::chooseDirectory);
-        action("Prism instances…", Icons.PRISM, this::choosePrism);
+        action("Prism Instances…", Icons.PRISM, this::choosePrism);
         var known = projects.projects();
         var current = projects.currentProject();
         var selected = known.stream().filter(project -> project.profile().equals(current)).findFirst();

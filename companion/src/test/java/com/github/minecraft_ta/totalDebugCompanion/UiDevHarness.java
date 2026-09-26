@@ -62,6 +62,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
@@ -787,6 +788,7 @@ public final class UiDevHarness {
     }
 
     public static void main(String[] args) throws Exception {
+        Locale.setDefault(Locale.ENGLISH);
         if (Arrays.asList(args).contains("--list-scenarios")) {
             for (UiRenderScenario scenario : UiRenderScenario.values()) {
                 System.out.println(scenario.id() + "\t" + scenario.description());

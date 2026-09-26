@@ -9,7 +9,6 @@ import javax.swing.JPanel;
 import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.Insets;
 import java.util.function.Consumer;
 
 /** A readable value and an explicit copy action with local feedback. */
@@ -28,7 +27,7 @@ public final class CopyValue extends JPanel {
         super(new BorderLayout(12, 0));
         this.actionName = actionName;
         setOpaque(false);
-        copy.setMargin(new Insets(2, 3, 2, 3));
+        copy.setMargin(UiMetrics.compactButtonMargin());
         copy.setToolTipText(actionName);
         copy.getAccessibleContext().setAccessibleName(actionName);
         copy.addActionListener(event -> {

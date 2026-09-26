@@ -122,7 +122,7 @@ class ImageViewPanelTest {
                 int top = (canvas.getHeight() - scale * 16) / 2;
                 canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_MOVED, 0, 0,
                         left + 3 * scale + 1, top + 7 * scale + 1, 0, false));
-                assertTrue(statuses.getLast().endsWith("|  3, 7  #8A2BE2, alpha 128"), statuses.getLast());
+                assertTrue(statuses.getLast().endsWith("    3, 7  #8A2BE2, alpha 128"), statuses.getLast());
             } finally { panel.dispose(); }
         });
     }
@@ -147,7 +147,7 @@ class ImageViewPanelTest {
                 assertEquals("Frame 2 / 2", label.getText());
                 JButton whole = (JButton) toolbar.getComponent(toolbar.getComponentCount() - 1);
                 whole.doClick(0);
-                assertTrue(statuses.getLast().startsWith("16 x 48  |"), statuses.getLast());
+                assertTrue(statuses.getLast().startsWith("16 x 48    PNG"), statuses.getLast());
                 assertFalse(frames.isEnabled());
             } finally { panel.dispose(); }
         });

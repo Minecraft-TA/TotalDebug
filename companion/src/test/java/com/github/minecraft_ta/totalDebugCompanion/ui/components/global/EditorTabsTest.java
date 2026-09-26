@@ -102,7 +102,7 @@ class EditorTabsTest {
             item(menu, "Close").doClick();
             assertTrue(first.disposed);
             assertSame(active, tabs.getSelectedEditor());
-            assertFalse(item(tabs.createContextMenu(0), "Close others").isEnabled());
+            assertFalse(item(tabs.createContextMenu(0), "Close Others").isEnabled());
         });
     }
 
@@ -117,12 +117,12 @@ class EditorTabsTest {
             tabs.openEditorTab(close);
             tabs.openEditorTab(keep);
             tabs.openEditorTab(unsaved);
-            item(tabs.createContextMenu(1), "Close others").doClick();
+            item(tabs.createContextMenu(1), "Close Others").doClick();
             assertTrue(close.disposed);
             assertFalse(keep.disposed);
             assertFalse(unsaved.disposed);
             assertEquals(2, tabs.getTabCount());
-            item(tabs.createContextMenu(0), "Close all").doClick();
+            item(tabs.createContextMenu(0), "Close All").doClick();
             assertTrue(keep.disposed);
             assertFalse(unsaved.disposed);
             assertEquals(1, tabs.getTabCount());
@@ -137,7 +137,7 @@ class EditorTabsTest {
         SwingUtilities.invokeAndWait(() -> {
             EditorTabs tabs = new EditorTabs();
             AtomicReference<IEditorPanel> revealed = new AtomicReference<>();
-            tabs.setRevealActionProvider(editor -> new AbstractAction("Reveal in tree") {
+            tabs.setRevealActionProvider(editor -> new AbstractAction("Show in Project") {
                 @Override public void actionPerformed(ActionEvent event) { revealed.set(editor); }
             });
             TestEditor file = new TestEditor();
@@ -146,12 +146,12 @@ class EditorTabsTest {
             tabs.openEditorTab(file);
             tabs.openEditorTab(active);
             JPopupMenu menu = tabs.createContextMenu(0);
-            assertTrue(item(menu, "Copy location").isEnabled());
-            item(menu, "Reveal in tree").doClick();
+            assertTrue(item(menu, "Copy Location").isEnabled());
+            item(menu, "Show in Project").doClick();
             assertSame(file, revealed.get());
             assertSame(active, tabs.getSelectedEditor());
             assertFalse(Arrays.stream(tabs.createContextMenu(1).getComponents())
-                    .anyMatch(component -> component instanceof JMenuItem item && "Copy location".equals(item.getText())));
+                    .anyMatch(component -> component instanceof JMenuItem item && "Copy Location".equals(item.getText())));
         });
     }
 

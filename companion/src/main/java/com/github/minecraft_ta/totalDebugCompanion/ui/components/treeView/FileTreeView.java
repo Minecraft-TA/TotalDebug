@@ -187,9 +187,9 @@ public class FileTreeView extends JScrollPane {
             fileActions.addMenu(menu, path, item.isDirectory());
             return menu;
         }
-        if (reference != null) menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy reference", reference)));
+        if (reference != null) menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Reference", reference)));
         if (location != null && !location.isBlank()) {
-            Action copyPath = ContextMenus.copyAction("Copy path", location);
+            Action copyPath = ContextMenus.copyAction("Copy Path", location);
             if (reference == null) ContextMenus.defaultCopy(copyPath);
             menu.add(copyPath);
         }
@@ -317,11 +317,12 @@ public class FileTreeView extends JScrollPane {
             path.add(ModTreeItems.OTHER_NAMESPACES);
         }
         path.add(page.modId());
-        if (page.tab() != ModTab.OVERVIEW) {
+        boolean singleKind = page.tab() == ModTab.CONTENT && index != null && index.content(page.modId()).size() == 1;
+        if (page.tab() != ModTab.OVERVIEW && !singleKind) {
             path.add(ModTreeItems.groupName(page.tab()));
         }
-        if (page.tab() == ModTab.CONTENT && !page.section().isEmpty()) {
-            path.add(page.section());
+        if (page.tab() == ModTab.CONTENT && (singleKind || !page.section().isEmpty())) {
+            path.add(singleKind ? index.content(page.modId()).keySet().iterator().next() : page.section());
         }
         return this.tree.revealItemPath(ModTreeItems.ROOT, path);
     }

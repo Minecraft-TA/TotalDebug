@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.GroupedRowCell;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigEdit;
@@ -30,17 +34,13 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
-import javax.swing.UIManager;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellEditor;
 
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Font;
-import java.awt.Graphics;
 import java.awt.Point;
-import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -70,7 +70,6 @@ import java.util.regex.Pattern;
  * Several settings, or a whole section, are reset or reverted together from the menu of the selection.
  */
 final class ConfigSettingsTable extends JTable {
-    private static final int CHEVRON_WIDTH = 16;
     private static final Pattern NUMBER = Pattern.compile("-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?");
 
     /** How a value is colored, the way the code editor colors literals of the same kind. */
@@ -125,9 +124,7 @@ final class ConfigSettingsTable extends JTable {
     ConfigSettingsTable() {
         setModel(this.model);
         setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        setShowGrid(false);
-        setFillsViewportHeight(true);
-        getTableHeader().setReorderingAllowed(false);
+        Tables.configure(this);
         setDefaultRenderer(Object.class, new SettingRenderer());
         setDefaultEditor(Object.class, this.editor);
         // Typing filters the settings instead of starting an edit, and leaving an edit keeps what was typed.
@@ -215,10 +212,10 @@ final class ConfigSettingsTable extends JTable {
         Row row = this.model.shown.get(viewRow);
         JPopupMenu menu = new JPopupMenu();
         if (row.setting() != null) {
-            Action edit = ContextMenus.action("Edit value", null, "Enter", () -> edit(viewRow));
+            Action edit = ContextMenus.action("Edit Value", null, "Enter", () -> edit(viewRow));
             edit.setEnabled(this.model.isCellEditable(viewRow, 1));
             menu.add(edit);
-            Action reset = ContextMenus.action("Reset to default", null, null, () -> reset(row));
+            Action reset = ContextMenus.action("Reset to Default", null, null, () -> reset(row));
             reset.setEnabled(this.model.isCellEditable(viewRow, 1) && row.modified());
             menu.add(reset);
             String original = this.original.apply(row);
@@ -230,9 +227,9 @@ final class ConfigSettingsTable extends JTable {
                 menu.add(revert);
             }
             menu.addSeparator();
-            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy value", row.value())));
+            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Value", row.value())));
         }
-        menu.add(ContextMenus.copyAction("Copy key", row.path()));
+        menu.add(ContextMenus.copyAction("Copy Key", row.path()));
         return menu;
     }
 
@@ -267,7 +264,7 @@ final class ConfigSettingsTable extends JTable {
             keys.add(row.setting().path());
         }
         JPopupMenu menu = new JPopupMenu();
-        Action reset = ContextMenus.action(resettable.isEmpty() ? "Reset to default" : "Reset " + resettable.size() + " to default",
+        Action reset = ContextMenus.action(resettable.isEmpty() ? "Reset to Default" : "Reset " + resettable.size() + " to Default",
                 null, null, () -> resettable.forEach(this::reset));
         reset.setEnabled(!resettable.isEmpty());
         menu.add(reset);
@@ -275,7 +272,7 @@ final class ConfigSettingsTable extends JTable {
             menu.add(ContextMenus.action("Revert " + reverts.size(), null, null, () -> reverts.forEach(this.edited)));
         }
         menu.addSeparator();
-        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy " + keys.size() + " keys", String.join("\n", keys))));
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy " + keys.size() + " Keys", String.join("\n", keys))));
         return menu;
     }
 
@@ -311,10 +308,8 @@ final class ConfigSettingsTable extends JTable {
     /** Clicking a section selects it for reading; only its chevron collapses it. */
     private boolean onChevron(int viewRow, Point point) {
         Row row = this.model.shown.get(viewRow);
-        if (row.setting() != null || columnAtPoint(point) != 0) return false;
-        Rectangle cell = getCellRect(viewRow, 0, true);
-        int left = cell.x + indent(row.depth());
-        return point.x >= left && point.x < left + CHEVRON_WIDTH && point.y < cell.y + getRowHeight();
+        return row.setting() == null && columnAtPoint(point) == 0
+                && GroupedRowCell.onChevron(this, viewRow, row.depth(), point.x);
     }
 
     /** Collapses or expands a section row; {@code expand} null toggles it. Setting rows are left alone. */
@@ -327,11 +322,6 @@ final class ConfigSettingsTable extends JTable {
         this.model.refilter();
         int index = this.model.shown.indexOf(row);
         if (index >= 0) setRowSelectionInterval(index, index);
-    }
-
-    /** Where a row's chevron, or a setting's name, starts inside the name column. */
-    private static int indent(int depth) {
-        return 6 + depth * 16;
     }
 
     /**
@@ -519,7 +509,7 @@ final class ConfigSettingsTable extends JTable {
      * beside it.
      */
     private final class SettingRenderer extends DefaultTableCellRenderer {
-        private final SettingCell name = new SettingCell();
+        private final GroupedRowCell name = new GroupedRowCell();
         private final JPanel valueCell = new JPanel();
         private final JLabel value = new JLabel();
         private final JLabel defaultHint = new JLabel();
@@ -533,7 +523,7 @@ final class ConfigSettingsTable extends JTable {
             this.valueCell.add(this.pendingMark);
             this.defaultHint.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
             this.pendingMark.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
-            this.valueCell.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
+            this.valueCell.setBorder(UiMetrics.cellPadding());
         }
 
         @Override
@@ -546,8 +536,8 @@ final class ConfigSettingsTable extends JTable {
                 String before = row.setting() == null ? null : before(row);
                 // Your edits are marked in the accent color; values that already differed from their default in grey.
                 Color bar = before != null ? ThemeColors.accent() : row.modified() ? ThemeColors.mutedText() : null;
-                this.name.configure(row, ConfigSettingsTable.this.model.isCollapsed(row), table.getFont(), foreground, background, bar);
-                return this.name;
+                Boolean collapsed = row.setting() == null ? ConfigSettingsTable.this.model.isCollapsed(row) : null;
+                return this.name.configure(table, PrimarySecondaryText.primary(row.name()), row.depth(), collapsed, selected, bar);
             }
             if (column == 1 && row.setting() != null) {
                 this.value.setText(literal(row.kind(), row.value()));
@@ -566,7 +556,7 @@ final class ConfigSettingsTable extends JTable {
             super.getTableCellRendererComponent(table, cell, selected, false, rowIndex, column);
             setIcon(null);
             setFont(table.getFont());
-            setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
+            setBorder(UiMetrics.cellPadding());
             setForeground(selected ? foreground : ThemeColors.secondaryText());
             return this;
         }
@@ -584,7 +574,7 @@ final class ConfigSettingsTable extends JTable {
         private boolean configuring;
 
         private ValueEditor() {
-            this.field.setBorder(BorderFactory.createEmptyBorder(0, 3, 0, 3));
+            this.field.setBorder(UiMetrics.cellPadding());
             this.field.addActionListener(event -> stopCellEditing());
             this.choices.putClientProperty("JComboBox.isTableCellEditor", Boolean.TRUE);
             // The offered values keep the color of their kind, like the value they replace.
@@ -672,33 +662,5 @@ final class ConfigSettingsTable extends JTable {
     private static List<String> options(Row row) {
         if (!row.setting().allowed().isEmpty()) return row.setting().allowed();
         return ConfigEdit.kind(row.literal()) == ConfigEdit.Kind.BOOLEAN ? List.of("true", "false") : List.of();
-    }
-
-    /** The name cell: a chevron for sections, indentation by depth, and a bar at the left edge for a changed value. */
-    private static final class SettingCell extends JLabel {
-        private static final int BAR_WIDTH = 3;
-        private Color bar;
-
-        void configure(Row row, boolean collapsed, Font font, Color foreground, Color background, Color bar) {
-            this.bar = bar;
-            setOpaque(true);
-            setBackground(background);
-            setForeground(foreground);
-            setFont(font);
-            setText(row.name());
-            setIconTextGap(2);
-            boolean section = row.setting() == null;
-            setIcon(section ? UIManager.getIcon(collapsed ? "Tree.collapsedIcon" : "Tree.expandedIcon") : null);
-            setBorder(BorderFactory.createEmptyBorder(0, indent(row.depth()) + (section ? 0 : CHEVRON_WIDTH + 2), 0, 4));
-        }
-
-        @Override
-        protected void paintComponent(Graphics graphics) {
-            super.paintComponent(graphics);
-            if (this.bar != null) {
-                graphics.setColor(this.bar);
-                graphics.fillRect(0, 1, BAR_WIDTH, getHeight() - 2);
-            }
-        }
     }
 }

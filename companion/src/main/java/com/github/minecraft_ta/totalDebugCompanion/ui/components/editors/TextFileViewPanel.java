@@ -19,7 +19,7 @@ public final class TextFileViewPanel extends AbstractTextViewPanel {
         this.editorPane.setCaretPosition(0);
         enableSearch();
         metadata.accept(
-                fileType.description() + "  |  " + content.charsetName() + "  |  " + formatBytes(content.byteCount())
+                fileType.description() + "    " + content.charsetName() + "    " + formatBytes(content.byteCount())
         );
     }
 

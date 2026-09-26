@@ -56,16 +56,15 @@ class PrimarySecondaryLabelTest {
         paint(label);
         List<JLabel> children = labels(label);
         Color darkPrimary = children.get(0).getForeground();
-        Color darkSecondary = children.get(1).getForeground();
         assertEquals(ThemeColors.text(), darkPrimary);
-        assertEquals(ThemeColors.mutedText(), darkSecondary);
+        assertEquals(ThemeColors.secondaryText(), children.get(1).getForeground());
 
         ThemeManager.installTheme(CompanionTheme.ISLANDS_LIGHT);
         paint(label);
         assertEquals(ThemeColors.text(), children.get(0).getForeground());
-        assertEquals(ThemeColors.mutedText(), children.get(1).getForeground());
+        assertEquals(ThemeColors.secondaryText(), children.get(1).getForeground());
+        // Islands gives secondary text one gray in both themes, so only the primary color shows the new theme.
         assertNotEquals(darkPrimary, children.get(0).getForeground());
-        assertNotEquals(darkSecondary, children.get(1).getForeground());
 
         ThemeManager.installTheme(CompanionTheme.DEFAULT);
     }

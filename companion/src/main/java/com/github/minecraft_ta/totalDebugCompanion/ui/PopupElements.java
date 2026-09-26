@@ -16,7 +16,6 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Color;
 import java.awt.Font;
-import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 
@@ -85,7 +84,7 @@ public final class PopupElements {
 
     public static JButton icon(Icon icon, String name, Runnable action) {
         JButton button = new FlatIconButton(icon, false);
-        button.setMargin(new Insets(2, 3, 2, 3));
+        button.setMargin(UiMetrics.compactButtonMargin());
         button.setToolTipText(name);
         button.getAccessibleContext().setAccessibleName(name);
         button.addActionListener(event -> action.run());
@@ -99,7 +98,7 @@ public final class PopupElements {
         button.setFont(UIManager.getFont("Label.font").deriveFont(Font.PLAIN));
         button.setHorizontalTextPosition(SwingConstants.LEFT);
         button.setHorizontalAlignment(SwingConstants.LEFT);
-        button.setMargin(new Insets(2, 3, 2, 3));
+        button.setMargin(UiMetrics.compactButtonMargin());
         button.setForeground(new Color(ThemeColors.link().getRGB()));
         button.addPropertyChangeListener("UI", event -> button.setForeground(new Color(ThemeColors.link().getRGB())));
         return button;

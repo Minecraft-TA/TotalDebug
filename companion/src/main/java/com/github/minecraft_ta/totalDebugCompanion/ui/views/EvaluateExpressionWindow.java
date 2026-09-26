@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
@@ -142,15 +143,16 @@ public final class EvaluateExpressionWindow extends JDialog {
         });
         this.expression.addPropertyChangeListener("multiline", event -> {
             boolean expanded = this.expression.isMultiline();
-            this.expression.setPlaceholder(expanded ? "Java expression or statements (Ctrl+Enter)" : "Evaluate Expression (Enter)");
-            this.evaluate.setToolTipText(expanded ? "Evaluate (Ctrl+Enter)" : "Evaluate (Enter)");
+            this.expression.setPlaceholder(expanded ? "Java expression or statements (Ctrl+Enter)" : "Evaluate Java expression (Enter)");
+            this.evaluate.setToolTipText(Tooltip.action("Evaluate", expanded ? "Ctrl+Enter" : "Enter").html());
             this.editorSplit.setDividerSize(expanded ? 5 : 0);
             SwingUtilities.invokeLater(() -> this.editorSplit.resetToPreferredSizes());
         });
 
-        this.evaluate.setToolTipText("Evaluate Expression (Enter)");
+        this.evaluate.setToolTipText(Tooltip.action("Evaluate", "Enter").html());
+        this.evaluate.getAccessibleContext().setAccessibleName("Evaluate");
         this.evaluate.addActionListener(event -> evaluate());
-        this.stop.setToolTipText("Stop evaluation");
+        this.stop.setToolTipText("Stop Evaluation");
         this.stop.addActionListener(event -> stop());
         this.stop.setVisible(false);
 

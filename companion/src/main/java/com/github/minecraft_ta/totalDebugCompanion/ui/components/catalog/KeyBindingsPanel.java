@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.GroupedRowCell;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
@@ -8,9 +11,9 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
-import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerShortcuts;
@@ -19,7 +22,6 @@ import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
-import javax.swing.Icon;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -27,28 +29,22 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
-import javax.swing.JToggleButton;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
-import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
-import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.TableCellRenderer;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
-import java.awt.Graphics;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
-import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
@@ -84,10 +80,6 @@ public final class KeyBindingsPanel extends JPanel {
     private static final String TABLE_CARD = "table";
     private static final String MESSAGE_CARD = "message";
     private static final String PLACEHOLDER = "Filter by action, mod or key, such as ctrl+g";
-    private static final int CHEVRON_WIDTH = 16;
-    private static final int BAR_WIDTH = 3;
-    /** Bindings sit one level inside their category, where configuration settings sit inside their section. */
-    private static final int BINDING_INDENT = 6 + 16 + CHEVRON_WIDTH + 2;
     private static final KeyBindings.Assignment NOT_BOUND = new KeyBindings.Assignment(KeyBindings.UNBOUND, "NONE");
 
     /** One row: a category heading with its number of bindings when {@code binding} is null. */
@@ -101,7 +93,7 @@ public final class KeyBindingsPanel extends JPanel {
     private final String modId;
     private final Runnable removeCatalogListener;
     private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
-    private final JToggleButton pressToSearch = new JToggleButton(Icons.KEYBOARD);
+    private final FlatIconButton pressToSearch = new FlatIconButton(Icons.KEYBOARD, true);
     private final JCheckBox changedOnly = new JCheckBox("Changed");
     private final JCheckBox collisionsOnly = new JCheckBox("Collisions");
     private final JCheckBox unboundOnly = new JCheckBox("Not bound");
@@ -146,8 +138,9 @@ public final class KeyBindingsPanel extends JPanel {
             @Override public void removeUpdate(DocumentEvent event) { applyFilter(); }
             @Override public void changedUpdate(DocumentEvent event) { applyFilter(); }
         });
-        this.pressToSearch.setToolTipText("Press a key, a combination or mouse button 3 to 5 to find what it does");
-        this.pressToSearch.putClientProperty("JButton.buttonType", "toolBarButton");
+        this.pressToSearch.setToolTipText(Tooltip.of("Search by Key")
+                .text("Press a key, a combination or mouse button 3 to 5 to find what it does").html());
+        this.pressToSearch.getAccessibleContext().setAccessibleName("Search by Key");
         this.pressToSearch.addActionListener(event -> {
             if (this.pressToSearch.isSelected()) startSearchByKey();
             else stopCapture();
@@ -174,11 +167,11 @@ public final class KeyBindingsPanel extends JPanel {
         toggles.add(this.collisionsOnly);
         toggles.add(this.unboundOnly);
         JPanel bar = new JPanel(new BorderLayout(10, 0));
-        bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        bar.setBorder(UiMetrics.barPadding());
         bar.add(search, BorderLayout.CENTER);
         bar.add(toggles, BorderLayout.EAST);
         ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
-        this.notice.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
+        this.notice.setBorder(UiMetrics.noticePadding());
         this.notice.setVisible(false);
         JPanel top = new JPanel(new BorderLayout());
         top.add(bar, BorderLayout.NORTH);
@@ -191,7 +184,7 @@ public final class KeyBindingsPanel extends JPanel {
         scroll.setBorder(BorderFactory.createEmptyBorder());
         this.cards.add(scroll, TABLE_CARD);
         this.message.setVerticalAlignment(JLabel.TOP);
-        this.message.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        this.message.setBorder(UiMetrics.messagePadding());
         this.cards.add(this.message, MESSAGE_CARD);
         add(this.cards, BorderLayout.CENTER);
 
@@ -207,15 +200,7 @@ public final class KeyBindingsPanel extends JPanel {
 
     private void configureTable() {
         this.table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        this.table.setShowGrid(false);
-        this.table.setFillsViewportHeight(true);
-        this.table.getTableHeader().setReorderingAllowed(false);
-        TableCellRenderer header = this.table.getTableHeader().getDefaultRenderer();
-        this.table.getTableHeader().setDefaultRenderer((table, value, selected, focused, row, column) -> {
-            Component component = header.getTableCellRendererComponent(table, value, selected, focused, row, column);
-            if (component instanceof JLabel label) label.setHorizontalAlignment(SwingConstants.LEADING);
-            return component;
-        });
+        Tables.configure(this.table);
         this.table.setDefaultRenderer(Object.class, new BindingRenderer());
         ToolTipManager.sharedInstance().registerComponent(this.table);
         this.table.addMouseListener(new MouseAdapter() {
@@ -461,10 +446,7 @@ public final class KeyBindingsPanel extends JPanel {
 
     /** Whether {@code x} is on the chevron of a category row. */
     private boolean onChevron(int viewRow, int x) {
-        Row row = this.model.shown.get(viewRow);
-        if (row.binding() != null) return false;
-        Rectangle cell = this.table.getCellRect(viewRow, 0, true);
-        return x >= cell.x + 6 && x < cell.x + 6 + CHEVRON_WIDTH;
+        return this.model.shown.get(viewRow).binding() == null && GroupedRowCell.onChevron(this.table, viewRow, 0, x);
     }
 
     /** Collapses or expands a category row; {@code expand} null toggles it. Filtering shows every match regardless. */
@@ -617,8 +599,8 @@ public final class KeyBindingsPanel extends JPanel {
         if (selected.isEmpty()) return null;
         KeyBindings.Binding binding = selected.getFirst();
         JPopupMenu menu = new JPopupMenu();
-        menu.add(ContextMenus.action("Change key", null, "Double-click", () -> startEdit(binding)));
-        menu.add(ContextMenus.action("Choose key…", null, null, () -> chooseKey(binding, viewRow)));
+        menu.add(ContextMenus.action("Change Key", null, "Double-click", () -> startEdit(binding)));
+        menu.add(ContextMenus.action("Choose Key…", null, null, () -> chooseKey(binding, viewRow)));
         Action reset = ContextMenus.action("Reset to " + this.bindings.display(binding.defaults()), null, null,
                 () -> apply(binding, binding.defaults()));
         reset.setEnabled(binding.changed());
@@ -631,13 +613,13 @@ public final class KeyBindingsPanel extends JPanel {
             menu.add(ContextMenus.action("Revert to " + this.bindings.display(original), null, null, () -> apply(binding, original)));
         }
         menu.addSeparator();
-        Action onKey = ContextMenus.action("Show bindings on this key", null, null,
+        Action onKey = ContextMenus.action("Show Bindings on This Key", null, null,
                 () -> this.filter.setText(this.bindings.display(binding.current())));
         onKey.setEnabled(!binding.current().unbound());
         menu.add(onKey);
-        menu.add(ContextMenus.action("Find usages of " + binding.spec().name(), Icons.SEARCH_ICON, null,
+        menu.add(ContextMenus.action("Find Usages of " + binding.spec().name(), Icons.SEARCH_ICON, null,
                 () -> this.navigator.accept(new NavigationTarget.LiteralUsages(binding.spec().name()))));
-        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy name", binding.spec().name())));
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Name", binding.spec().name())));
         return menu;
     }
 
@@ -653,11 +635,11 @@ public final class KeyBindingsPanel extends JPanel {
             names.add(binding.spec().name());
         }
         JPopupMenu menu = new JPopupMenu();
-        menu.add(bulkAction("Reset", " to default", null, defaults));
+        menu.add(bulkAction("Reset", " to Default", null, defaults));
         menu.add(bulkAction("Unbind", "", "DELETE", unbinding(selected)));
         if (!reverts.isEmpty()) menu.add(bulkAction("Revert", "", null, reverts));
         menu.addSeparator();
-        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy " + names.size() + " names", String.join("\n", names))));
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy " + names.size() + " Names", String.join("\n", names))));
         return menu;
     }
 
@@ -774,7 +756,7 @@ public final class KeyBindingsPanel extends JPanel {
      * and a bar at the edge when their key changed, keys as keycaps, and mods in muted text.
      */
     private final class BindingRenderer extends DefaultTableCellRenderer {
-        private final ActionCell action = new ActionCell();
+        private final GroupedRowCell action = new GroupedRowCell();
         private final KeyCaps caps = new KeyCaps();
 
         @Override
@@ -786,10 +768,8 @@ public final class KeyBindingsPanel extends JPanel {
             if (row.binding() == null) {
                 if (column == 0) {
                     boolean collapsed = !filtering() && KeyBindingsPanel.this.collapsed.contains(row.category());
-                    this.action.configure(new PrimarySecondaryText(row.category(), Integer.toString(row.count())),
-                            UIManager.getIcon(collapsed ? "Tree.collapsedIcon" : "Tree.expandedIcon"), table, selected,
-                            foreground, background, 6, false);
-                    return this.action;
+                    return this.action.configure(table, new PrimarySecondaryText(row.category(), Integer.toString(row.count())),
+                            0, collapsed, selected, null);
                 }
                 // Setting the background here would stay as the renderer's background for unselected cells.
                 super.getTableCellRendererComponent(table, "", selected, false, rowIndex, column);
@@ -798,9 +778,8 @@ public final class KeyBindingsPanel extends JPanel {
             KeyBindings.Binding binding = row.binding();
             switch (column) {
                 case 0 -> {
-                    this.action.configure(new PrimarySecondaryText(binding.name(), contextName(binding.effectiveContext())),
-                            null, table, selected, foreground, background, BINDING_INDENT, binding.changed());
-                    return this.action;
+                    return this.action.configure(table, new PrimarySecondaryText(binding.name(),
+                            contextName(binding.effectiveContext())), 1, null, selected, binding.changed() ? ThemeColors.accent() : null);
                 }
                 case 1 -> {
                     if (binding.spec().name().equals(KeyBindingsPanel.this.editing)) {
@@ -819,39 +798,10 @@ public final class KeyBindingsPanel extends JPanel {
                 default -> {
                     super.getTableCellRendererComponent(table, value, selected, false, rowIndex, column);
                     setIcon(null);
-                    setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+                    setBorder(UiMetrics.cellPadding());
                     setForeground(selected ? foreground : ThemeColors.secondaryText());
                     return this;
                 }
-            }
-        }
-    }
-
-    /** An action or category name with muted text beside it, indented, with the changed bar at the left edge. */
-    private static final class ActionCell extends JPanel {
-        private final PrimarySecondaryLabel label = new PrimarySecondaryLabel();
-        private boolean changed;
-
-        private ActionCell() {
-            super(new BorderLayout());
-            add(this.label, BorderLayout.CENTER);
-        }
-
-        void configure(PrimarySecondaryText text, Icon icon, JTable table, boolean selected, Color foreground,
-                       Color background, int indent, boolean changed) {
-            this.changed = changed;
-            this.label.configure(text, icon, table.getFont(), selected, foreground, background);
-            this.label.setOpaque(false);
-            setBackground(background);
-            setBorder(BorderFactory.createEmptyBorder(0, indent, 0, 6));
-        }
-
-        @Override
-        protected void paintChildren(Graphics graphics) {
-            super.paintChildren(graphics);
-            if (this.changed) {
-                graphics.setColor(ThemeColors.accent());
-                graphics.fillRect(0, 1, BAR_WIDTH, getHeight() - 2);
             }
         }
     }

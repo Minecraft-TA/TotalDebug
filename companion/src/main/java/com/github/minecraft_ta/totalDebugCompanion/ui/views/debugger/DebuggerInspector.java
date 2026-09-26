@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
@@ -180,16 +182,16 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         this.navigation = Objects.requireNonNull(navigation, "navigation");
         this.runtime = Objects.requireNonNull(runtime, "runtime");
 
-        this.expression.setPlaceholder("Evaluate Expression (Enter)");
+        this.expression.setPlaceholder("Evaluate expression (Enter)");
         this.expression.setExpandable(true);
         this.expression.addPropertyChangeListener("multiline", event -> {
             boolean expanded = this.expression.isMultiline();
-            this.expression.setPlaceholder(expanded ? "Evaluate Code (Ctrl+Enter)" : "Evaluate Expression (Enter)");
+            this.expression.setPlaceholder(expanded ? "Evaluate code (Ctrl+Enter)" : "Evaluate expression (Enter)");
             this.expression.setToolTipText(expanded
-                    ? "Evaluate (Ctrl+Enter); Add Watch (Ctrl+Shift+Enter)"
-                    : "Evaluate Expression (Enter); Add Watch (Shift+Enter)");
+                    ? Tooltip.action("Evaluate", "Ctrl+Enter").line("Add Watch", "Ctrl+Shift+Enter").html()
+                    : Tooltip.action("Evaluate Expression", "Enter").line("Add Watch", "Shift+Enter").html());
         });
-        this.expression.setToolTipText("Evaluate Expression (Enter); Add Watch (Shift+Enter)");
+        this.expression.setToolTipText(Tooltip.action("Evaluate Expression", "Enter").line("Add Watch", "Shift+Enter").html());
         this.expression.addActionListener(event -> evaluateExpression(false));
         this.expression.getInputMap(JComponent.WHEN_FOCUSED).put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK),
@@ -224,7 +226,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         JPanel input = new JPanel(new BorderLayout(6, 0));
         input.setBorder(BorderFactory.createCompoundBorder(
                 DynamicMatteBorder.separatorRule(0, 0, 1, 0),
-                BorderFactory.createEmptyBorder(6, 8, 6, 8)
+                UiMetrics.barPadding()
         ));
         input.add(this.expression.component(), BorderLayout.CENTER);
         input.add(this.addWatch, BorderLayout.EAST);
@@ -339,7 +341,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         DebugEngine.Variable parent = parentVariable(selected);
 
         if (variable != null && currentFrame != null && supportsDeclarationNavigation(variable)) {
-            menu.add(menuItem("Open source", Icons.JUMP_TO_SOURCE,
+            menu.add(menuItem("Open Source", Icons.JUMP_TO_SOURCE,
                     () -> navigateToDeclaration(currentFrame, variable, parent)));
         }
         if (value != null && currentFrame != null) {
@@ -786,8 +788,8 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         }
         Object replacement = JOptionPane.showInputDialog(
                 this,
-                "New value:",
-                "Set Value: " + variable.name(),
+                "New value",
+                "Set Value of " + variable.name(),
                 JOptionPane.PLAIN_MESSAGE,
                 null,
                 null,
@@ -854,7 +856,8 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     private static JButton createAddWatchButton() {
         JButton button = new JButton(Icons.ADD_TO_WATCH);
         FlatIconButton.configure(button);
-        button.setToolTipText("Add Watch (Shift+Enter)");
+        button.setToolTipText(Tooltip.action("Add Watch", "Shift+Enter").html());
+        button.getAccessibleContext().setAccessibleName("Add Watch");
         return button;
     }
 

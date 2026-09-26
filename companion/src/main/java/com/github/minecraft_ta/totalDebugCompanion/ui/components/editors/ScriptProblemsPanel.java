@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
@@ -48,11 +49,11 @@ public final class ScriptProblemsPanel extends JPanel {
                     case WARNING, MANDATORY_WARNING -> Icons.WARNING;
                     default -> Icons.INFORMATION;
                 });
-                setBorder(BorderFactory.createEmptyBorder(3, 6, 3, 6));
+                setBorder(UiMetrics.listRowPadding());
                 return this;
             }
         });
-        jump = ContextMenus.action("Jump to Source", Icons.JUMP_TO_SOURCE, "F4", this::navigate);
+        jump = ContextMenus.action("Open Source", Icons.JUMP_TO_SOURCE, "F4", this::navigate);
         ContextMenus.bindAction(list, jump);
         list.getInputMap().put(KeyStroke.getKeyStroke("ENTER"), "jumpToProblem");
         list.getActionMap().put("jumpToProblem", jump);
@@ -69,8 +70,8 @@ public final class ScriptProblemsPanel extends JPanel {
             refreshSourceState();
             var menu = new JPopupMenu();
             menu.add(jump);
-            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy problem", model.get(row).text())));
-            menu.add(ContextMenus.copyAction("Copy all problems",
+            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Problem", model.get(row).text())));
+            menu.add(ContextMenus.copyAction("Copy All Problems",
                     Collections.list(model.elements()).stream().map(Problem::text).collect(Collectors.joining("\n"))));
             return menu;
         });

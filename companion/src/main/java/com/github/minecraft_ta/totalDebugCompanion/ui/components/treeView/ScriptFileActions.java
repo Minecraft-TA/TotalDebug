@@ -171,7 +171,7 @@ public final class ScriptFileActions {
             if (targets.size() == 1 && !folder && target.toString().endsWith(ScriptFiles.EXTENSION))
                 item(menu, "Duplicate script", Icons.COPY, () -> duplicate(target));
         }
-        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy path", target.toString())));
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Path", target.toString())));
         if (!root) item(menu, targets.size() > 1 ? "Delete" : folder ? "Delete folder" : "Delete file", Icons.DELETE,
                 "DELETE", () -> confirmDelete(targets));
     }

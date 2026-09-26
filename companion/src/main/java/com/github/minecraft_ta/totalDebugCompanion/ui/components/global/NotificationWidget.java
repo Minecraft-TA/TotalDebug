@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -30,7 +31,6 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Graphics;
@@ -90,7 +90,7 @@ final class NotificationWidget extends JButton implements AutoCloseable {
         this.unavailable = unavailable;
         this.open = open;
         FlatIconButton.configure(this);
-        setMargin(new Insets(0, 6, 0, 6));
+        setMargin(UiMetrics.statusWidgetMargin());
         setToolTipText("Notifications");
         getAccessibleContext().setAccessibleName("Notifications");
         setIcon(Icons.NOTIFICATIONS);
@@ -98,7 +98,7 @@ final class NotificationWidget extends JButton implements AutoCloseable {
         setMinimumSize(getPreferredSize());
         setMaximumSize(getPreferredSize());
         FlatIconButton.configure(message);
-        message.setMargin(new Insets(0, 6, 0, 6));
+        message.setMargin(UiMetrics.statusWidgetMargin());
         message.setMinimumSize(new Dimension(0, 22));
         message.setMaximumSize(new Dimension(280, 22));
         message.putClientProperty("html.disable", true);
@@ -292,7 +292,7 @@ final class NotificationWidget extends JButton implements AutoCloseable {
             links.setOpaque(false);
             links.setAlignmentX(LEFT_ALIGNMENT);
             boolean script = entry.source().target() instanceof NavigationTarget.LocalFile file && file.path().toString().endsWith(".tdscript");
-            openSource = PopupElements.link(script ? "Open script" : "Open source",
+            openSource = PopupElements.link(script ? "Open Script" : "Open Source",
                     script ? Icons.SCRIPT_FILE : Icons.JUMP_TO_SOURCE, () -> checkSource(true));
             links.add(openSource);
             links.add(sourceGap);

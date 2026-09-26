@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
@@ -91,7 +93,7 @@ public final class InspectionPanel extends JPanel {
     private final ItemTabIcon tabIcon = new ItemTabIcon(Icons.EVALUATE_EXPRESSION);
     private final JComboBox<Side> runSide = new JComboBox<>(new Side[]{Side.SERVER, Side.CLIENT});
     private final JComboBox<String> face = new JComboBox<>(FACES.toArray(String[]::new));
-    private final JButton refresh = new JButton(Icons.REFRESH);
+    private final JButton refresh = new FlatIconButton(Icons.REFRESH, false);
     private final JButton toolsButton = new JButton("Tools");
     private final JToggleButton live = new JToggleButton("Live");
     private final JComboBox<Integer> liveInterval = new JComboBox<>(LIVE_INTERVALS_MS.toArray(Integer[]::new));
@@ -151,7 +153,7 @@ public final class InspectionPanel extends JPanel {
         sections.setLayout(new BoxLayout(sections, BoxLayout.Y_AXIS));
         this.builtIn.setAlignmentX(Component.LEFT_ALIGNMENT);
         this.tools.setAlignmentX(Component.LEFT_ALIGNMENT);
-        this.tools.setBorder(BorderFactory.createEmptyBorder(0, 12, 8, 12));
+        this.tools.setBorder(UiMetrics.pagePadding(0, 8));
         sections.add(this.builtIn);
         sections.add(this.tools);
         this.overview.add(sections, BorderLayout.NORTH);
@@ -164,7 +166,7 @@ public final class InspectionPanel extends JPanel {
         this.views.addTab("Data", this.data);
         this.views.addTab("Object", new JScrollPane(this.object));
         this.problem.setEditable(false);
-        this.problem.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        this.problem.setBorder(UiMetrics.messagePadding());
         this.cards.add(this.views, RESULT_CARD);
         this.cards.add(new JScrollPane(this.problem), PROBLEM_CARD);
         add(this.cards, BorderLayout.CENTER);
@@ -177,7 +179,7 @@ public final class InspectionPanel extends JPanel {
                 .html());
         this.runSide.addActionListener(event -> refresh());
         this.face.addActionListener(event -> refresh());
-        this.refresh.setToolTipText("Read again");
+        this.refresh.setToolTipText("Read Again");
         this.refresh.addActionListener(event -> refresh());
         this.liveInterval.setSelectedItem(1_000);
         this.liveInterval.setVisible(false);
@@ -243,7 +245,7 @@ public final class InspectionPanel extends JPanel {
         for (JLabel notice : List.of(this.replaced, this.problemNotice)) {
             notice.setBorder(new CompoundBorder(
                     DynamicMatteBorder.separatorRule(0, 0, 1, 0),
-                    BorderFactory.createEmptyBorder(6, 12, 6, 12)
+                    UiMetrics.pagePadding(6, 6)
             ));
             notice.setAlignmentX(Component.LEFT_ALIGNMENT);
             notice.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));

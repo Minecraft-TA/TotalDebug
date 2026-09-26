@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
@@ -45,7 +46,7 @@ public final class ConfigFilePanel extends JPanel {
         ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
         this.notice.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
         JPanel bar = new JPanel(new BorderLayout(12, 0));
-        bar.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        bar.setBorder(UiMetrics.barPadding());
         bar.add(this.notice, BorderLayout.CENTER);
         bar.add(actions, BorderLayout.EAST);
         add(bar, BorderLayout.NORTH);

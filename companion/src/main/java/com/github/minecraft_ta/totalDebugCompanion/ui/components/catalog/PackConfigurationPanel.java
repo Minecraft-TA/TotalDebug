@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
@@ -94,11 +95,11 @@ public final class PackConfigurationPanel extends JPanel {
         this.modifiedOnly.setToolTipText("Only settings that differ from their default");
         this.modifiedOnly.addActionListener(event -> applyFilter());
         JPanel bar = new JPanel(new BorderLayout(10, 0));
-        bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        bar.setBorder(UiMetrics.barPadding());
         bar.add(this.filter, BorderLayout.CENTER);
         bar.add(this.modifiedOnly, BorderLayout.EAST);
         ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
-        this.notice.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
+        this.notice.setBorder(UiMetrics.noticePadding());
         this.notice.setVisible(false);
         JPanel top = new JPanel(new BorderLayout());
         top.add(bar, BorderLayout.NORTH);
@@ -109,7 +110,7 @@ public final class PackConfigurationPanel extends JPanel {
         scroll.setBorder(BorderFactory.createEmptyBorder());
         this.cards.add(scroll, TABLE_CARD);
         this.message.setVerticalAlignment(JLabel.TOP);
-        this.message.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        this.message.setBorder(UiMetrics.messagePadding());
         this.cards.add(this.message, MESSAGE_CARD);
         add(this.cards, BorderLayout.CENTER);
 

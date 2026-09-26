@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.SectionHeading;
 
-import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import java.awt.BorderLayout;
@@ -18,10 +18,10 @@ final class PageSection extends JPanel {
         super(new BorderLayout());
         this.body = body;
         setAlignmentX(Component.LEFT_ALIGNMENT);
-        setBorder(BorderFactory.createEmptyBorder(8, 12, 4, 12));
+        setBorder(UiMetrics.pagePadding(8, 4));
         this.heading = new SectionHeading(title, null, this::toggle);
         add(this.heading, BorderLayout.NORTH);
-        body.setBorder(BorderFactory.createEmptyBorder(6, 18, 0, 0));
+        body.setBorder(UiMetrics.sectionBodyPadding());
         add(body, BorderLayout.CENTER);
     }
 

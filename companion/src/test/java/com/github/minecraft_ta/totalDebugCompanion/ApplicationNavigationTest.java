@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.HtmlText;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -293,8 +294,8 @@ class ApplicationNavigationTest {
                 connecting.get(3, TimeUnit.SECONDS);
                 SwingUtilities.invokeAndWait(() -> {
                     var window = app.createWindow();
-                    assertTrue(hasButton(window, "MCP: Listening"));
-                    assertTrue(hasButton(window, "Game: Connecting"));
+                    assertTrue(hasButton(window, HtmlText.nameAndValue("MCP", "Listening")));
+                    assertTrue(hasButton(window, HtmlText.nameAndValue("Game", "Connecting")));
                 });
             }
         }

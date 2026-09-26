@@ -7,7 +7,6 @@ import java.awt.Color;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Tooltips in one shape: a main line, a muted line for keys, ids or paths, wrapped paragraphs, label and value lines
@@ -24,7 +23,8 @@ public final class Tooltip {
     private sealed interface Part permits Line, Muted, Paragraph, Fact, Code {
     }
 
-    private record Line(String text) implements Part {
+    /** A main line; {@code shortcut} follows it in muted text when it is not null. */
+    private record Line(String text, String shortcut) implements Part {
     }
 
     private record Muted(String text) implements Part {
@@ -47,13 +47,24 @@ public final class Tooltip {
     /** A tooltip starting with {@code title}, such as a name or a short action. */
     public static Tooltip of(String title) {
         Tooltip tooltip = new Tooltip();
-        if (title != null && !title.isBlank()) tooltip.parts.add(new Line(title.strip()));
+        if (title != null && !title.isBlank()) tooltip.parts.add(new Line(title.strip(), null));
         return tooltip;
+    }
+
+    /** The tooltip of a command: its name in Title Case and its shortcut, such as Step Over with F8, muted beside it. */
+    public static Tooltip action(String name, String shortcut) {
+        return new Tooltip().line(name, shortcut);
     }
 
     /** Another main line, for tooltips listing several subjects. */
     public Tooltip line(String text) {
-        if (text != null && !text.isBlank()) this.parts.add(new Line(text.strip()));
+        if (text != null && !text.isBlank()) this.parts.add(new Line(text.strip(), null));
+        return this;
+    }
+
+    /** Another command with its shortcut muted beside it. */
+    public Tooltip line(String name, String shortcut) {
+        if (name != null && !name.isBlank()) this.parts.add(new Line(name.strip(), shortcut));
         return this;
     }
 
@@ -91,7 +102,7 @@ public final class Tooltip {
         // A single short line needs no markup.
         if (this.parts.size() == 1) {
             String plain = switch (this.parts.getFirst()) {
-                case Line line -> line.text();
+                case Line line -> line.shortcut() == null ? line.text() : null;
                 case Paragraph paragraph -> paragraph.text().contains("\n") ? null : paragraph.text();
                 default -> null;
             };
@@ -110,9 +121,9 @@ public final class Tooltip {
         for (Part part : this.parts) {
             if (part instanceof Fact fact) {
                 html.append(inFacts ? "<br>" : first ? "<div>" : "<div style='margin-top:4px'>");
-                html.append(escape(fact.label())).append(' ');
-                if (fact.color() != null) html.append("<font color='").append(hex(fact.color())).append("'>");
-                html.append(escape(fact.value()));
+                html.append(HtmlText.escape(fact.label())).append(' ');
+                if (fact.color() != null) html.append("<font color='").append(HtmlText.hex(fact.color())).append("'>");
+                html.append(HtmlText.escape(fact.value()));
                 if (fact.color() != null) html.append("</font>");
                 inFacts = true;
                 first = false;
@@ -122,12 +133,19 @@ public final class Tooltip {
             inFacts = false;
             String spacing = first ? "" : part instanceof Muted ? "" : " style='margin-top:4px'";
             switch (part) {
-                case Line line -> html.append("<div").append(spacing).append('>').append(escape(line.text())).append("</div>");
-                case Muted muted -> html.append("<div><font color='").append(hex(ThemeColors.secondaryText())).append("'>")
-                        .append(escape(muted.text())).append("</font></div>");
+                case Line line -> {
+                    html.append("<div").append(spacing).append('>').append(HtmlText.escape(line.text()));
+                    if (line.shortcut() != null) {
+                        html.append("&nbsp;&nbsp;<font color='").append(HtmlText.hex(ThemeColors.secondaryText())).append("'>")
+                                .append(HtmlText.escape(line.shortcut())).append("</font>");
+                    }
+                    html.append("</div>");
+                }
+                case Muted muted -> html.append("<div><font color='").append(HtmlText.hex(ThemeColors.secondaryText())).append("'>")
+                        .append(HtmlText.escape(muted.text())).append("</font></div>");
                 case Paragraph paragraph -> html.append("<div").append(spacing).append('>')
-                        .append(escape(paragraph.text()).replace("\n", "<br>")).append("</div>");
-                case Code code -> html.append("<pre").append(spacing).append('>').append(escape(code.text())).append("</pre>");
+                        .append(HtmlText.escape(paragraph.text()).replace("\n", "<br>")).append("</div>");
+                case Code code -> html.append("<pre").append(spacing).append('>').append(HtmlText.escape(code.text())).append("</pre>");
                 case Fact ignored -> {
                 }
             }
@@ -159,13 +177,5 @@ public final class Tooltip {
         }
         if (lines.size() > CODE_LINES) bounded.append("\n… ").append(lines.size() - CODE_LINES).append(" more lines");
         return bounded.toString();
-    }
-
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-    }
-
-    private static String hex(Color color) {
-        return String.format(Locale.ROOT, "#%06X", color.getRGB() & 0xFFFFFF);
     }
 }

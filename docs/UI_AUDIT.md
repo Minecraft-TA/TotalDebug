@@ -2,6 +2,8 @@
 
 Audit date: 13 September 2026. Planning document, not an implementation change.
 
+The rules that came out of this audit and later work are kept in [UI_GUIDE.md](UI_GUIDE.md); where the two differ, the guide wins.
+
 ## Implementation progress, 16 September 2026
 
 The findings and action counts below describe the original audit. These slices have since been completed:

@@ -79,8 +79,8 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         this.component.setBorder(BorderFactory.createEmptyBorder());
         this.actions.setOpaque(false);
         this.expand.setMargin(new Insets(2, 4, 2, 4));
-        this.expand.setToolTipText("Expand editor");
-        this.expand.getAccessibleContext().setAccessibleName("Expand editor");
+        this.expand.setToolTipText("Expand Editor");
+        this.expand.getAccessibleContext().setAccessibleName("Expand Editor");
         this.expand.addActionListener(event -> {
             setMultiline(!this.multiline);
             requestFocusInWindow();
@@ -110,7 +110,7 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         this.component.setVerticalScrollBarPolicy(multiline ? JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
                 : JScrollPane.VERTICAL_SCROLLBAR_NEVER);
         this.expand.setIcon(multiline ? Icons.COLLAPSE_EDITOR : Icons.EXPAND_EDITOR);
-        this.expand.setToolTipText(multiline ? "Collapse editor" : "Expand editor");
+        this.expand.setToolTipText(multiline ? "Collapse Editor" : "Expand Editor");
         this.expand.getAccessibleContext().setAccessibleName(this.expand.getToolTipText());
         this.container.revalidate();
         firePropertyChange("multiline", previous, multiline);

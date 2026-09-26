@@ -106,18 +106,18 @@ public final class ImageViewPanel extends JPanel {
     private JComponent createToolbar() {
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
         toolbar.setBorder(DynamicMatteBorder.rule(0, 0, 1, 0));
-        toolbar.add(button(this.zoomOut, "Zoom out", () -> zoomAtCenter(nextScale(this.canvas.scale(), -1))));
-        toolbar.add(button(this.zoomIn, "Zoom in", () -> zoomAtCenter(nextScale(this.canvas.scale(), 1))));
+        toolbar.add(button(this.zoomOut, "Zoom Out", () -> zoomAtCenter(nextScale(this.canvas.scale(), -1))));
+        toolbar.add(button(this.zoomIn, "Zoom In", () -> zoomAtCenter(nextScale(this.canvas.scale(), 1))));
         this.fit.setSelected(this.fitMode);
-        toolbar.add(button(this.fit, "Fit image to the available space", () -> {
+        toolbar.add(button(this.fit, "Fit Image", () -> {
             if (this.fit.isSelected()) fitImage();
             else setScale(this.canvas.scale(), false);
         }));
-        toolbar.add(button(new FlatIconButton(Icons.ACTUAL_ZOOM, false), "Actual size (100%)", () -> zoomAtCenter(1)));
-        toolbar.add(button(this.pixelGrid, "Pixel grid from 400%", this.canvas::repaint));
+        toolbar.add(button(new FlatIconButton(Icons.ACTUAL_ZOOM, false), "Actual Size", () -> zoomAtCenter(1)));
+        toolbar.add(button(this.pixelGrid, "Pixel Grid from 400%", this.canvas::repaint));
         if (isAnimated()) {
             toolbar.add(Box.createHorizontalStrut(10));
-            toolbar.add(button(this.play, "Pause animation", () -> setPlaying(this.play.isSelected())));
+            toolbar.add(button(this.play, "Pause Animation", () -> setPlaying(this.play.isSelected())));
             this.frameSlider.setModel(new DefaultBoundedRangeModel(0, 0, 0, this.frames.size() - 1));
             this.frameSlider.setPreferredSize(new Dimension(
                     Math.min(240, 40 + this.frames.size() * 8), this.frameSlider.getPreferredSize().height));
@@ -132,7 +132,7 @@ public final class ImageViewPanel extends JPanel {
             this.frameLabel.setForeground(ThemeColors.secondaryText());
             toolbar.add(this.frameLabel);
             toolbar.add(Box.createHorizontalStrut(6));
-            toolbar.add(button(this.wholeSheet, "Show the whole texture sheet", this::updateSheetMode));
+            toolbar.add(button(this.wholeSheet, "Show Whole Texture Sheet", this::updateSheetMode));
             updateFrameLabel();
         }
         return toolbar;
@@ -292,7 +292,7 @@ public final class ImageViewPanel extends JPanel {
     private void setPlaying(boolean playing) {
         this.play.setSelected(playing);
         this.play.setIcon(playing ? Icons.PAUSE : Icons.RUN);
-        String tooltip = playing ? "Pause animation" : "Play animation";
+        String tooltip = playing ? "Pause Animation" : "Play Animation";
         this.play.setToolTipText(tooltip);
         this.play.getAccessibleContext().setAccessibleName(tooltip);
         if (playing && !this.wholeSheet.isSelected()) this.animationTimer.start();
@@ -339,17 +339,17 @@ public final class ImageViewPanel extends JPanel {
         if (isAnimated() && !this.wholeSheet.isSelected()) {
             status.append(", ").append(this.frames.size()).append(" frames");
         }
-        status.append("  |  PNG  |  ").append(formatBytes(this.byteCount))
-                .append("  |  ").append(Math.round(this.canvas.scale() * 100)).append('%');
+        status.append("    PNG    ").append(formatBytes(this.byteCount))
+                .append("    ").append(Math.round(this.canvas.scale() * 100)).append('%');
         Point pixel = this.hoveredPixel;
         if (pixel != null && pixel.x < shown.getWidth() && pixel.y < shown.getHeight()) {
             int argb = shown.getRGB(pixel.x, pixel.y);
-            status.append("  |  ").append(pixel.x).append(", ").append(pixel.y)
+            status.append("    ").append(pixel.x).append(", ").append(pixel.y)
                     .append("  #").append(String.format(Locale.ROOT, "%06X", argb & 0xFFFFFF))
                     .append(", alpha ").append(argb >>> 24);
         }
         if (!this.animationProblem.isEmpty()) {
-            status.append("  |  ").append(this.animationProblem);
+            status.append("    ").append(this.animationProblem);
         }
         this.metadata.accept(status.toString());
     }

@@ -8,7 +8,6 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import java.nio.file.Path;
 import java.util.Locale;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
-import java.awt.Insets;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
@@ -59,14 +58,14 @@ public final class ApplicationStatusBar extends JPanel {
     private final JLabel taskFailure = PopupElements.label("");
     private final JButton retry;
     private final JCheckBox mcpEnabled = new JCheckBox("Enable MCP server");
-    private final CopyValue mcpEndpoint = new CopyValue("Copy MCP endpoint");
+    private final CopyValue mcpEndpoint = new CopyValue("Copy MCP Endpoint");
     private final JLabel mcpDetail = PopupElements.label("");
     private Consumer<Boolean> toggleMcp;
     private final JButton gameReconnect = new FlatIconButton(Icons.REFRESH, false);
     private Supplier<CompletableFuture<Void>> reconnectGame;
     private CompletableFuture<Void> reconnectAttempt;
     private final JLabel gameName = PopupElements.label("Minecraft is not connected");
-    private final CopyValue gameDirectory = new CopyValue("Copy game directory");
+    private final CopyValue gameDirectory = new CopyValue("Copy Game Directory");
     private final JPanel gameDirectoryRow = PopupElements.row(PopupElements.label("Game directory"), gameDirectory);
     private final NotificationWidget notifications;
     private final ScriptActivityWidget scriptActivity;
@@ -133,7 +132,7 @@ public final class ApplicationStatusBar extends JPanel {
         taskCards.setOpaque(false);
         taskCards.setMaximumSize(new Dimension(360, 22));
         FlatIconButton.configure(taskState);
-        taskState.setMargin(new Insets(0, 6, 0, 6));
+        taskState.setMargin(UiMetrics.statusWidgetMargin());
         taskState.putClientProperty("html.disable", true);
         taskState.addActionListener(event -> showTaskPopup());
         taskProgress.addMouseListener(new MouseAdapter() {
@@ -142,7 +141,7 @@ public final class ApplicationStatusBar extends JPanel {
         taskCards.add(taskState);
         taskCards.add(taskProgress);
         retry = new FlatIconButton(Icons.REFRESH, false);
-        retry.setMargin(new Insets(2, 3, 2, 3));
+        retry.setMargin(UiMetrics.compactButtonMargin());
         retry.addActionListener(event -> retryIndex.run());
         JPanel indexContent = PopupElements.column();
         indexContent.add(PopupElements.row(taskDetails, retry));
@@ -164,7 +163,7 @@ public final class ApplicationStatusBar extends JPanel {
         mcpContent.add(mcpDetail);
         mcpStatus.setContent(mcpContent);
         JPanel gameContent = PopupElements.column();
-        gameReconnect.setMargin(new Insets(2, 3, 2, 3));
+        gameReconnect.setMargin(UiMetrics.compactButtonMargin());
         gameReconnect.setVisible(false);
         gameReconnect.addActionListener(event -> {
             if (reconnectGame == null || reconnectAttempt != null) return;
@@ -286,14 +285,14 @@ public final class ApplicationStatusBar extends JPanel {
                 case FAILED -> "Index failed";
                 default -> status.detail();
             });
-            taskState.setToolTipText("Show index status");
+            taskState.setToolTipText("Show Index Status");
             var metrics = status.metrics();
-            taskDetails.setText(metrics == null ? taskState.getText() : String.format(Locale.getDefault(),
+            taskDetails.setText(metrics == null ? taskState.getText() : String.format(Locale.ROOT,
                     "%s %,d classes in %.1f s", metrics.rebuilt() ? "Indexed" : "Loaded", metrics.classes(), metrics.elapsedNanos() / 1_000_000_000.0));
             taskFailure.setVisible(status.phase() == RuntimeIndexService.Phase.FAILED
                     || status.phase() == RuntimeIndexService.Phase.READY && !status.detail().equals(taskState.getText()));
             if (taskFailure.isVisible()) PopupElements.wrappedText(taskFailure, status.failure() == null ? status.detail() : status.failure().toString(), 320);
-            retry.setToolTipText(status.phase() == RuntimeIndexService.Phase.FAILED ? "Retry indexing" : "Rebuild index");
+            retry.setToolTipText(status.phase() == RuntimeIndexService.Phase.FAILED ? "Retry Indexing" : "Rebuild Index");
             retry.getAccessibleContext().setAccessibleName(retry.getToolTipText());
             retry.setEnabled(status.phase() == RuntimeIndexService.Phase.FAILED || status.phase() == RuntimeIndexService.Phase.READY
                     || status.phase() == RuntimeIndexService.Phase.EMPTY);
@@ -325,7 +324,7 @@ public final class ApplicationStatusBar extends JPanel {
         boolean available = reconnectGame != null;
         gameReconnect.setVisible(available);
         gameReconnect.setEnabled(available && reconnectAttempt == null && state != ServiceStatus.State.PENDING);
-        gameReconnect.setToolTipText("Reconnect to the selected Minecraft instance");
+        gameReconnect.setToolTipText("Reconnect");
         gameReconnect.getAccessibleContext().setAccessibleName(gameReconnect.getToolTipText());
         gameStatus.setPopupAvailable(available || state == ServiceStatus.State.AVAILABLE);
         gameStatus.refreshPopup();
@@ -366,7 +365,7 @@ public final class ApplicationStatusBar extends JPanel {
         mcpStatus.applyTheme();
         SwingUtilities.updateComponentTreeUI(taskPopup);
         this.breadcrumbs.applyTheme();
-        this.editorStatusLabel.setForeground(ThemeColors.mutedText());
+        this.editorStatusLabel.setForeground(ThemeColors.secondaryText());
         repaint();
     }
 

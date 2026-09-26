@@ -99,7 +99,7 @@ public final class FactsPanel extends JPanel {
         this.collapsed = Objects.requireNonNull(collapsed, "collapsed");
         this.sections = List.copyOf(sections);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        setBorder(BorderFactory.createEmptyBorder(4, 12, 8, 12));
+        setBorder(UiMetrics.pagePadding(4, 8));
         for (FactSection section : sections) {
             SectionView view = new SectionView(section);
             this.views.add(view);
@@ -234,7 +234,7 @@ public final class FactsPanel extends JPanel {
             setAlignmentX(Component.LEFT_ALIGNMENT);
             setBorder(BorderFactory.createEmptyBorder(8, 0, 4, 0));
             add(header(section), BorderLayout.NORTH);
-            this.body.setBorder(BorderFactory.createEmptyBorder(4, 18, 0, 0));
+            this.body.setBorder(UiMetrics.sectionBodyPadding());
             add(this.body, BorderLayout.CENTER);
             build(section);
             showCollapsed();
@@ -360,7 +360,7 @@ public final class FactsPanel extends JPanel {
     /** Where a linked value leads: a class's source or another subject to inspect. */
     private static String linkTooltip(FactLink link) {
         return switch (link.kind()) {
-            case CLASS -> Tooltip.of("Open source").detail(link.target()).html();
+            case CLASS -> Tooltip.of("Open Source").detail(link.target()).html();
             case SUBJECT -> Tooltip.of("Open").detail(link.target()).html();
         };
     }

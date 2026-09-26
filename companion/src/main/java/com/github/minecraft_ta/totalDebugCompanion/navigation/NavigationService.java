@@ -136,7 +136,7 @@ public final class NavigationService {
         };
         if (!available) return null;
         Context context = captureContext();
-        return new AbstractAction("Reveal in tree") {
+        return new AbstractAction("Show in Project") {
             @Override
             public void actionPerformed(ActionEvent event) {
                 if (!isCurrent(context)) return;

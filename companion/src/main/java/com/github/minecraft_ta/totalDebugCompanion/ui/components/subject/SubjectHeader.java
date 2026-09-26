@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
-import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.Icon;
@@ -53,7 +52,7 @@ public final class SubjectHeader extends JPanel {
         add(this.controls, BorderLayout.EAST);
         setBorder(new CompoundBorder(
                 DynamicMatteBorder.separatorRule(0, 0, 1, 0),
-                BorderFactory.createEmptyBorder(8, 12, 8, 12)
+                UiMetrics.pagePadding(8, 8)
         ));
     }
 

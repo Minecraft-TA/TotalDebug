@@ -216,7 +216,13 @@ final class ModTreeItems {
             List<TreeItem> children = new ArrayList<>();
             if (this.index != null && this.summary.captured()) {
                 Map<String, List<CatalogIndex.Entry>> content = this.index.content(this.summary.id());
-                if (!content.isEmpty()) children.add(new Content(this.summary.id(), content));
+                if (content.size() == 1) {
+                    // A single kind is listed on its own rather than as the only row under Content.
+                    Map.Entry<String, List<CatalogIndex.Entry>> kind = content.entrySet().iterator().next();
+                    children.add(new ContentList(this.summary.id(), kind.getKey(), kind.getValue().size(), ModTab.CONTENT.ordinal()));
+                } else if (!content.isEmpty()) {
+                    children.add(new Content(this.summary.id(), content));
+                }
                 group(children, ModTab.CONFIGURATION, this.summary.mod() == null ? 0 : this.summary.mod().configs().size());
                 group(children, ModTab.KEY_BINDINGS, this.index.keyBindings(this.summary.id()).size());
             }

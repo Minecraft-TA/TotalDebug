@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -49,7 +50,6 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
-import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -81,7 +81,7 @@ public final class ModPanel extends JPanel {
     private final CatalogIcons listIcons;
     private final Runnable removeCatalogListener;
     private final SubjectHeader header = new SubjectHeader();
-    private final JButton browseCode = new JButton("Browse code", Icons.JAVA_CLASS);
+    private final JButton browseCode = new JButton("Browse Code", Icons.JAVA_CLASS);
     private final JTabbedPane tabs = new JTabbedPane();
     private final Map<ModTab, Component> tabContent = new EnumMap<>(ModTab.class);
     private final JPanel overview = new JPanel(new BorderLayout());
@@ -226,17 +226,15 @@ public final class ModPanel extends JPanel {
             if (index > 0) this.tabs.removeTabAt(index);
             return;
         }
-        String title = tab.title() + " " + NumberFormat.getIntegerInstance(Locale.ROOT).format(count);
         if (index < 0) {
-            int position = 0;
+            index = 0;
             for (ModTab earlier : ModTab.values()) {
                 if (earlier == tab) break;
-                if (this.tabs.indexOfComponent(this.tabContent.get(earlier)) >= 0) position++;
+                if (this.tabs.indexOfComponent(this.tabContent.get(earlier)) >= 0) index++;
             }
-            this.tabs.insertTab(title, SubjectIcons.tab(tab), content, null, position);
-        } else {
-            this.tabs.setTitleAt(index, title);
+            this.tabs.insertTab(tab.title(), SubjectIcons.tab(tab), content, null, index);
         }
+        TabTitles.setCounted(this.tabs, index, tab.title(), count);
     }
 
     private JComponent overviewContent(PackCatalog.Mod mod, String unavailable) {
@@ -248,7 +246,7 @@ public final class ModPanel extends JPanel {
             description.setLineWrap(true);
             description.setWrapStyleWord(true);
             description.setOpaque(false);
-            description.setBorder(BorderFactory.createEmptyBorder(8, 12, 4, 12));
+            description.setBorder(UiMetrics.pagePadding(8, 4));
             description.setAlignmentX(Component.LEFT_ALIGNMENT);
             content.add(description);
         }
@@ -274,7 +272,7 @@ public final class ModPanel extends JPanel {
         }
         if (mod != null && !mod.urls().isEmpty()) {
             JPanel links = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
-            links.setBorder(BorderFactory.createEmptyBorder(0, 12, 8, 12));
+            links.setBorder(UiMetrics.pagePadding(0, 8));
             links.setAlignmentX(Component.LEFT_ALIGNMENT);
             addUrl(links, "Website", mod.urls().get("display"));
             addUrl(links, "Issues", mod.urls().get("issues"));
@@ -322,7 +320,7 @@ public final class ModPanel extends JPanel {
                 ? List.of(Path.of(mod.file())) : this.summary.files();
         for (Path file : codeFiles) {
             footer.add(new LinkLabel(file.getFileName().toString(), Icons.JAR_FILE,
-                    Tooltip.of("Browse code").detail(Tooltip.shortPath(file)).html(), () -> {
+                    Tooltip.of("Browse Code").detail(Tooltip.shortPath(file)).html(), () -> {
                 if (!this.summary.moduleId().isEmpty() && hasModule(this.summary.moduleId())) {
                     this.navigator.accept(new NavigationTarget.RuntimeModuleNode(this.summary.moduleId()));
                 }
@@ -427,7 +425,7 @@ public final class ModPanel extends JPanel {
 
     private static JLabel message(String text) {
         JLabel label = new JLabel(text);
-        label.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        label.setBorder(UiMetrics.messagePadding());
         return label;
     }
 

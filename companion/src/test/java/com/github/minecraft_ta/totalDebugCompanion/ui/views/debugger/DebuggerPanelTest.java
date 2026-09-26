@@ -1,11 +1,14 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.DebuggerEditorPresentation;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
@@ -39,6 +42,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DebuggerPanelTest {
+    @BeforeAll
+    static void registerTokenMakers() {
+        CompanionApp.configureTokenMakers();
+    }
+
     @Test
     void toolbarButtonsRemainKeyboardReachableAndMuteWorksWithSpace() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
@@ -46,8 +54,9 @@ class DebuggerPanelTest {
             var actions = new DebuggerActions(controller);
             var panel = new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(), controller, actions, (frame, activate) -> {});
             try {
-                for (String tooltip : List.of("Attach debugger", "Continue (F9)", "Step Over (F8)",
-                        "Step Into (F7)", "Step Out (Shift+F8)", "Detach debugger", "View breakpoints", "Add Watch (Shift+Enter)")) {
+                for (String tooltip : List.of("Attach Debugger", Tooltip.action("Continue", "F9").html(), Tooltip.action("Step Over", "F8").html(),
+                        Tooltip.action("Step Into", "F7").html(), Tooltip.action("Step Out", "Shift+F8").html(), "Detach Debugger",
+                        "View Breakpoints", Tooltip.action("Add Watch", "Shift+Enter").html())) {
                     JButton button = findButtonByTooltip(panel, tooltip);
                     assertNotNull(button, tooltip);
                     assertTrue(button.isFocusable(), tooltip);
@@ -83,14 +92,14 @@ class DebuggerPanelTest {
             JavaExpressionField field = find(panel, JavaExpressionField.class);
             assertNotNull(field);
             assertEquals(
-                    "Evaluate Expression (Enter); Add Watch (Shift+Enter)",
+                    Tooltip.action("Evaluate Expression", "Enter").line("Add Watch", "Shift+Enter").html(),
                     field.getToolTipText()
             );
 
-            JButton addWatch = findButtonByTooltip(panel, "Add Watch (Shift+Enter)");
+            JButton addWatch = findButtonByTooltip(panel, Tooltip.action("Add Watch", "Shift+Enter").html());
             assertNotNull(addWatch);
             assertTrue(addWatch.getText() == null || addWatch.getText().isBlank());
-            assertEquals("Add Watch (Shift+Enter)", addWatch.getToolTipText());
+            assertEquals("Add Watch", addWatch.getAccessibleContext().getAccessibleName());
 
             Object actionKey = field.getInputMap(JComponent.WHEN_FOCUSED).get(
                     KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK)
@@ -317,12 +326,12 @@ class DebuggerPanelTest {
             JPopupMenu menu = inspector.createContextMenu(variables.getPathForRow(0));
             assertEquals(
                     List.of(
-                            "Open source",
+                            "Open Source",
                             "Open type source",
                             "Set value…",
-                            "Copy value",
-                            "Copy expression",
-                            "Copy type"
+                            "Copy Value",
+                            "Copy Expression",
+                            "Copy Type"
                     ),
                     menuItems(menu)
             );

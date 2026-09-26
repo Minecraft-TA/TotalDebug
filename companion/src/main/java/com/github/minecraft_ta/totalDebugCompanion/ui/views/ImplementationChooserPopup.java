@@ -354,14 +354,14 @@ public final class ImplementationChooserPopup extends BasePopup {
         var menu = new JPopupMenu();
         if (row < 0 || row >= this.listModel.size()) return menu;
         HierarchyResult result = this.listModel.get(row);
-        var open = new JMenuItem("Open source", Icons.JUMP_TO_SOURCE);
+        var open = new JMenuItem("Open Source", Icons.JUMP_TO_SOURCE);
         open.addActionListener(event -> {
             openResult(result);
             setVisible(false);
         });
         menu.add(open);
         menu.addSeparator();
-        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy reference", result.symbol().displayName())));
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Reference", result.symbol().displayName())));
         return menu;
     }
 

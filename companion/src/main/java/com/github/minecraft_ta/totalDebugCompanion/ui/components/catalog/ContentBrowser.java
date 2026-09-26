@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -10,7 +11,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecond
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
-import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.Icon;
 import javax.swing.JList;
@@ -19,9 +19,7 @@ import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
-import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Graphics;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,22 +35,6 @@ import java.util.function.Function;
  */
 public final class ContentBrowser extends JPanel {
     private static final String ALL = "";
-    /** Keeps All level with the kinds below it, which have icons. */
-    private static final Icon NO_ICON = new Icon() {
-        @Override
-        public void paintIcon(Component component, Graphics graphics, int x, int y) {
-        }
-
-        @Override
-        public int getIconWidth() {
-            return Icons.BLOCK.getIconWidth();
-        }
-
-        @Override
-        public int getIconHeight() {
-            return Icons.BLOCK.getIconHeight();
-        }
-    };
 
     /** A row of the list of kinds; {@code registry} is empty for All. */
     private record Kind(String registry, String label, Icon icon, int count) {
@@ -82,7 +64,7 @@ public final class ContentBrowser extends JPanel {
                     selected ? list.getSelectionBackground() : list.getBackground());
             label.setOpaque(true);
             label.setBackground(selected ? list.getSelectionBackground() : list.getBackground());
-            label.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
+            label.setBorder(UiMetrics.listRowPadding());
             return label;
         });
         this.kindList.addListSelectionListener(event -> {
@@ -104,7 +86,7 @@ public final class ContentBrowser extends JPanel {
         try {
             this.kinds.clear();
             int total = content.values().stream().mapToInt(List::size).sum();
-            this.kinds.addElement(new Kind(ALL, "All", NO_ICON, total));
+            this.kinds.addElement(new Kind(ALL, "All", Icons.NONE, total));
             content.forEach((registry, entries) -> {
                 ContentKinds.ContentKind kind = ContentKinds.of(registry);
                 this.kinds.addElement(new Kind(registry, kind.plural(), kind.icon(), entries.size()));

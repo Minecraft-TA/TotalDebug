@@ -21,9 +21,9 @@ class ScriptResultTreeTest {
             assertEquals(2, menu.getComponentCount());
             var copyValue = (JMenuItem) menu.getComponent(0);
             var copyType = (JMenuItem) menu.getComponent(1);
-            assertEquals("Copy value", copyValue.getText());
+            assertEquals("Copy Value", copyValue.getText());
             assertEquals('"' + value + '"', copyValue.getActionCommand());
-            assertEquals("Copy type", copyType.getText());
+            assertEquals("Copy Type", copyType.getText());
             assertEquals("java.lang.String", copyType.getActionCommand());
             tree.clearResult();
             assertEquals(0, tree.createContextMenu(tree.getSelectionPath()).getComponentCount());

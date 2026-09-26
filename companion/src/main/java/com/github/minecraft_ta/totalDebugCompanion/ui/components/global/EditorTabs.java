@@ -116,15 +116,15 @@ public class EditorTabs extends JTabbedPane {
         IEditorPanel editor = this.editors.get(index);
         JPopupMenu menu = new JPopupMenu();
         menu.add("Close").addActionListener(event -> closeMatching(candidate -> candidate == editor));
-        JMenuItem others = menu.add("Close others");
+        JMenuItem others = menu.add("Close Others");
         others.setEnabled(getTabCount() > 1);
         others.addActionListener(event -> closeMatching(candidate -> candidate != editor));
-        menu.add("Close all").addActionListener(event -> closeMatching(candidate -> true));
+        menu.add("Close All").addActionListener(event -> closeMatching(candidate -> true));
         String location = editor.getLocation().location();
         Action reveal = this.revealActionProvider == null ? null : this.revealActionProvider.apply(editor);
         if (!location.isBlank() || reveal != null) menu.addSeparator();
         if (!location.isBlank()) {
-            menu.add("Copy location").addActionListener(event -> Toolkit.getDefaultToolkit().getSystemClipboard()
+            menu.add("Copy Location").addActionListener(event -> Toolkit.getDefaultToolkit().getSystemClipboard()
                     .setContents(new StringSelection(location), null));
         }
         if (reveal != null) menu.add(reveal);

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigEdit;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
@@ -45,7 +46,7 @@ final class ConfigTextEditor {
         this.status = Objects.requireNonNull(status, "status");
         this.reload = Objects.requireNonNull(reload, "reload");
         this.text = new EditableTextPanel(FileTypeResolver.SYNTAX_STYLE_TOML, this::changed, () -> save(false));
-        this.save.setToolTipText("Check the text and write it to the file (Ctrl+S)");
+        this.save.setToolTipText(Tooltip.action("Save", "Ctrl+S").text("Checks the text and writes it to the file").html());
         this.save.addActionListener(event -> save(false));
         this.discard.setToolTipText("Drop the unsaved changes to the text");
         this.discard.addActionListener(event -> discard());

@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.SectionHeading;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
@@ -172,7 +174,7 @@ public class SettingsWindow extends JDialog {
         labelConstraints.gridx = 0;
         labelConstraints.gridy = row;
         labelConstraints.anchor = GridBagConstraints.LINE_START;
-        labelConstraints.insets = new Insets(4, 0, 4, 10);
+        labelConstraints.insets = new Insets(UiMetrics.FORM_ROW_GAP / 2, 0, UiMetrics.FORM_ROW_GAP / 2, UiMetrics.FORM_LABEL_GAP);
         form.add(new JLabel(label, SwingConstants.LEADING), labelConstraints);
 
         GridBagConstraints fieldConstraints = new GridBagConstraints();
@@ -180,7 +182,7 @@ public class SettingsWindow extends JDialog {
         fieldConstraints.gridy = row;
         fieldConstraints.weightx = 1;
         fieldConstraints.fill = GridBagConstraints.HORIZONTAL;
-        fieldConstraints.insets = new Insets(4, 0, 4, 0);
+        fieldConstraints.insets = new Insets(UiMetrics.FORM_ROW_GAP / 2, 0, UiMetrics.FORM_ROW_GAP / 2, 0);
         field.setPreferredSize(new Dimension(180, field.getPreferredSize().height));
         form.add(field, fieldConstraints);
     }
@@ -191,10 +193,10 @@ public class SettingsWindow extends JDialog {
         constraints.gridy = row;
         constraints.gridwidth = 2;
         constraints.anchor = GridBagConstraints.LINE_START;
+        constraints.fill = GridBagConstraints.HORIZONTAL;
+        constraints.weightx = 1;
         constraints.insets = new Insets(row == 0 ? 0 : 12, 0, 4, 0);
-        JLabel label = new JLabel(title);
-        label.putClientProperty("FlatLaf.styleClass", "h4");
-        form.add(label, constraints);
+        form.add(new SectionHeading(title, null, null), constraints);
     }
 
     private static void addWideRow(JPanel form, int row, Component field) {

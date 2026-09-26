@@ -38,8 +38,8 @@ class SourceResultMenusTest {
                     var literal = new SearchEverywhereSearch.TextResult("literal", new int[]{0});
                     model.addElement(literal);
                     JPopupMenu literalMenu = popup.createResultMenu(2);
-                    assertEquals("Find usages", ((JMenuItem) literalMenu.getComponent(0)).getText());
-                    assertEquals("Copy value", ((JMenuItem) literalMenu.getComponent(2)).getText());
+                    assertEquals("Find Usages", ((JMenuItem) literalMenu.getComponent(0)).getText());
+                    assertEquals("Copy Value", ((JMenuItem) literalMenu.getComponent(2)).getText());
                 } finally { popup.dispose(); }
             });
         }
