@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -185,20 +186,42 @@ public final class ConfigEdit {
         return trimmed(bounds.group(1)) + " to " + trimmed(bounds.group(2));
     }
 
+    /** Whether {@code bound} is exactly a type's own limit, which NeoForge writes for a side with no bound. */
     private static boolean unbounded(String bound, boolean upper) {
-        try {
-            double value = Double.parseDouble(bound);
-            // Only a type's own limit means no bound; a long or double range can have a finite bound beyond int.
-            return upper ? value == Integer.MAX_VALUE || value == Long.MAX_VALUE || value >= Float.MAX_VALUE
-                    : value == Integer.MIN_VALUE || value == Long.MIN_VALUE || value <= -Float.MAX_VALUE;
-        } catch (NumberFormatException notANumber) {
-            return false;
-        }
+        BigDecimal value = number(bound);
+        if (value == null) return false;
+        List<BigDecimal> limits = upper
+                ? List.of(BigDecimal.valueOf(Integer.MAX_VALUE), BigDecimal.valueOf(Long.MAX_VALUE), new BigDecimal(Double.toString(Double.MAX_VALUE)))
+                : List.of(BigDecimal.valueOf(Integer.MIN_VALUE), BigDecimal.valueOf(Long.MIN_VALUE), new BigDecimal(Double.toString(-Double.MAX_VALUE)));
+        return limits.stream().anyMatch(limit -> limit.compareTo(value) == 0);
     }
 
     /** Drops a floating-point value's empty fraction, so {@code 4000000.0} reads as {@code 4000000}. */
     private static String trimmed(String value) {
         return value.endsWith(".0") ? value.substring(0, value.length() - 2) : value;
+    }
+
+    /**
+     * Writes {@code text} into {@code file} in place, since NeoForge reloads a configuration only when the file itself
+     * is modified; a file moved over it would not be picked up. The original stays in a copy beside it until the text
+     * is written, and is put back when the write fails part way.
+     */
+    public static void writeInPlace(Path file, String text) throws IOException {
+        Path original = file.resolveSibling(file.getFileName() + ".totaldebug-original");
+        Files.copy(file, original, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            Files.writeString(file, text, StandardCharsets.UTF_8);
+        } catch (IOException failure) {
+            try {
+                Files.copy(original, file, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException restore) {
+                failure.addSuppressed(restore);
+                throw new IOException(failure.getMessage() + "; the previous text is kept in " + original.getFileName(), failure);
+            }
+            Files.deleteIfExists(original);
+            throw failure;
+        }
+        Files.delete(original);
     }
 
     /** A TOML basic string. */
@@ -240,8 +263,9 @@ public final class ConfigEdit {
         }
         Map<String, String> savedLiterals;
         try {
+            ConfigValues.parse(saved, "The file on disk");
             savedLiterals = TomlText.of(saved).literals();
-        } catch (IllegalArgumentException notToml) {
+        } catch (IOException | IllegalArgumentException notToml) {
             // Its values cannot be compared, so the change could not be recorded to be reverted.
             throw new IllegalArgumentException("The file on disk is not valid TOML; repair it in another editor", notToml);
         }
@@ -361,7 +385,7 @@ public final class ConfigEdit {
         if (!before.equals(after) || !Objects.equals(written, PackCatalog.ConfigSetting.display(ConfigValues.value(literal)))) {
             throw new IOException(name + " was left as it is: writing " + key + " would change other settings");
         }
-        Files.writeString(file, updated, StandardCharsets.UTF_8);
+        writeInPlace(file, updated);
         return previous;
     }
 }

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +14,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FluidTexturesTest {
@@ -33,7 +35,9 @@ class FluidTexturesTest {
                     {"schemaVersion":1,"fluids":{"minecraft:water":{"stillTexture":"minecraft:block/water_still",
                     "tint":"FF3F76E4","lightLevel":0,"lighterThanAir":false},
                     "example:goo":{"stillTexture":"example:block/goo_still",
-                    "tint":"FFFFFFFF","lightLevel":15,"lighterThanAir":false}}}
+                    "tint":"FFFFFFFF","lightLevel":15,"lighterThanAir":false},
+                    "example:slime":{"stillTexture":"example:block/slime_still",
+                    "tint":"FFFFFFFF","lightLevel":0,"lighterThanAir":false}}}
                     """.getBytes(StandardCharsets.UTF_8));
             zip.putNextEntry(new ZipEntry("layers/0/assets/minecraft/textures/block/water_still.png"));
             zip.write(png.toByteArray());
@@ -43,6 +47,10 @@ class FluidTexturesTest {
             zip.write(png.toByteArray());
             zip.putNextEntry(new ZipEntry("layers/0/assets/example/textures/block/goo_still.png.mcmeta"));
             zip.write("{\"animation\":{\"frames\":[1,0]}}".getBytes(StandardCharsets.UTF_8));
+            zip.putNextEntry(new ZipEntry("layers/0/assets/example/textures/block/slime_still.png"));
+            zip.write(png.toByteArray());
+            zip.putNextEntry(new ZipEntry("layers/0/assets/example/textures/block/slime_still.png.mcmeta"));
+            zip.write("{\"animation\":{\"width\":3}}".getBytes(StandardCharsets.UTF_8));
         }
 
         FluidTextures textures = FluidTextures.open(archive);
@@ -55,5 +63,7 @@ class FluidTexturesTest {
         assertEquals(2, goo.getHeight());
         assertEquals(0xFF000000, goo.getRGB(1, 1), "the frame list starts with the second, black frame");
         assertTrue(textures.texture("minecraft:lava").isEmpty());
+        assertThrows(IOException.class, () -> textures.texture("example:slime"),
+                "a frame width that does not divide the texture is reported, not thrown past the icon service");
     }
 }

@@ -2,8 +2,9 @@ package com.github.minecraft_ta.totalDebugCompanion.ui;
 
 import com.formdev.flatlaf.util.UIScale;
 
-import javax.swing.BorderFactory;
 import javax.swing.border.Border;
+import javax.swing.border.EmptyBorder;
+import java.awt.Component;
 import java.awt.Insets;
 
 /** Application-wide logical dimensions that every theme and component must preserve. Spacing follows the UI scale. */
@@ -24,14 +25,35 @@ public final class UiMetrics {
     private UiMetrics() {
     }
 
-    /** Empty space around content, after the UI scale; plain borders and insets do not follow it. */
+    /** Empty space around content that follows the UI scale, also when it changes while the component exists. */
     private static Border padding(int top, int left, int bottom, int right) {
-        return BorderFactory.createEmptyBorder(UIScale.scale(top), UIScale.scale(left), UIScale.scale(bottom),
-                UIScale.scale(right));
+        return new ScaledPadding(top, left, bottom, right);
     }
 
+    /** A button's margin; FlatLaf's button border scales it, so it stays in unscaled pixels. */
     private static Insets margin(int top, int left, int bottom, int right) {
-        return new Insets(UIScale.scale(top), UIScale.scale(left), UIScale.scale(bottom), UIScale.scale(right));
+        return new Insets(top, left, bottom, right);
+    }
+
+    /**
+     * An empty border whose insets are scaled when they are read. Not a UIResource, so a theme change keeps it; a plain
+     * EmptyBorder would keep the scale it was made with.
+     */
+    private static final class ScaledPadding extends EmptyBorder {
+        ScaledPadding(int top, int left, int bottom, int right) {
+            super(top, left, bottom, right);
+        }
+
+        @Override
+        public Insets getBorderInsets(Component component, Insets insets) {
+            insets.set(UIScale.scale(this.top), UIScale.scale(this.left), UIScale.scale(this.bottom), UIScale.scale(this.right));
+            return insets;
+        }
+
+        @Override
+        public Insets getBorderInsets() {
+            return getBorderInsets(null, new Insets(0, 0, 0, 0));
+        }
     }
 
     /** Around a filter bar or toolbar at the top of a view. */

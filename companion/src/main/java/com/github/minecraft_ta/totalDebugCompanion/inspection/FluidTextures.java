@@ -81,6 +81,9 @@ final class FluidTextures {
             if (metadata != null) {
                 try (InputStream input = zip.getInputStream(metadata)) {
                     animation = TextureAnimation.read(input.readAllBytes(), image.getWidth(), image.getHeight());
+                } catch (RuntimeException invalid) {
+                    // The game does not show a texture with broken metadata either.
+                    throw new IOException("Invalid animation metadata for " + appearance.stillTexture(), invalid);
                 }
             }
             return Optional.of(tinted(animation.map(declared -> firstFrame(image, declared)).orElse(image), appearance.tint()));
