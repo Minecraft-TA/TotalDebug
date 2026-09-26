@@ -23,6 +23,9 @@ import java.util.zip.ZipFile;
  */
 final class FluidTextures {
     private static final long MAX_PIXELS = 16L * 1024 * 1024;
+    /** The limits the game applies when it writes the snapshot. */
+    private static final int MAX_TEXTURE_BYTES = 16 * 1024 * 1024;
+    private static final int MAX_METADATA_BYTES = 1024 * 1024;
     static final String APPEARANCES = "layers/0/totaldebug/fluid-appearances.json";
 
     private record Appearance(String stillTexture, int tint) {
@@ -73,14 +76,15 @@ final class FluidTextures {
             }
             BufferedImage image;
             try (InputStream input = zip.getInputStream(entry)) {
-                image = TextureImages.decode(input.readAllBytes(), MAX_PIXELS);
+                image = TextureImages.decode(bounded(input, MAX_TEXTURE_BYTES, entry.getName()), MAX_PIXELS);
             }
             if (image == null) return Optional.empty();
             ZipEntry metadata = zip.getEntry(entry.getName() + ".mcmeta");
             Optional<TextureAnimation> animation = Optional.empty();
             if (metadata != null) {
                 try (InputStream input = zip.getInputStream(metadata)) {
-                    animation = TextureAnimation.read(input.readAllBytes(), image.getWidth(), image.getHeight());
+                    animation = TextureAnimation.read(bounded(input, MAX_METADATA_BYTES, metadata.getName()),
+                            image.getWidth(), image.getHeight());
                 } catch (RuntimeException invalid) {
                     // The game does not show a texture with broken metadata either.
                     throw new IOException("Invalid animation metadata for " + appearance.stillTexture(), invalid);
@@ -88,6 +92,13 @@ final class FluidTextures {
             }
             return Optional.of(tinted(animation.map(declared -> firstFrame(image, declared)).orElse(image), appearance.tint()));
         }
+    }
+
+    /** An entry's bytes, read up to {@code limit}; a larger entry is refused before it fills memory. */
+    private static byte[] bounded(InputStream input, int limit, String name) throws IOException {
+        byte[] bytes = input.readNBytes(limit + 1);
+        if (bytes.length > limit) throw new IOException(name + " is larger than " + limit + " bytes");
+        return bytes;
     }
 
     /** The frame an animation shows first, as its metadata declares its size and order. */

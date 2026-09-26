@@ -174,10 +174,15 @@ class ConfigEditTest {
     void aWriteInPlaceLeavesNoCopyOfTheOriginalBehind() throws Exception {
         Path file = Files.writeString(this.directory.resolve("test.toml"), "speed = 1\n");
 
+        Path earlier = Files.writeString(this.directory.resolve("test.toml.totaldebug-original"), "left by an earlier write");
+
         ConfigEdit.writeInPlace(file, "speed = 2\n");
 
         assertEquals("speed = 2\n", Files.readString(file));
-        assertFalse(Files.exists(this.directory.resolve("test.toml.totaldebug-original")));
+        assertEquals("left by an earlier write", Files.readString(earlier), "an existing copy is never overwritten");
+        try (var files = Files.list(this.directory)) {
+            assertEquals(2, files.count(), "the write's own copy is gone");
+        }
     }
 
     @Test

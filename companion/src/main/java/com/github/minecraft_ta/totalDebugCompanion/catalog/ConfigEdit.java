@@ -207,7 +207,8 @@ public final class ConfigEdit {
      * is written, and is put back when the write fails part way.
      */
     public static void writeInPlace(Path file, String text) throws IOException {
-        Path original = file.resolveSibling(file.getFileName() + ".totaldebug-original");
+        // A fresh name, so a copy left by an earlier interrupted write, or any other file, is never overwritten.
+        Path original = Files.createTempFile(file.toAbsolutePath().getParent(), file.getFileName() + ".", ".totaldebug-original");
         Files.copy(file, original, StandardCopyOption.REPLACE_EXISTING);
         try {
             Files.writeString(file, text, StandardCharsets.UTF_8);
