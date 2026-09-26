@@ -62,6 +62,10 @@ public final class ConfigGameValues {
     public CompletableFuture<String> set(ChangeRecord.Setting target, String fileLiteral, String literal) {
         Predicate<SetConfigValueMessage> send = this.game;
         if (send == null) return CompletableFuture.failedFuture(new IOException("Trying a value in the game needs the game running"));
+        if (target.file().getParent() != null && target.file().getParent().getFileName().toString().equals("defaultconfigs")) {
+            return CompletableFuture.failedFuture(new IOException(
+                    "The defaults for new worlds are not loaded in the game; try the value in the open world's file"));
+        }
         Path world = serverConfigWorld(target.file());
         if (world == null) return send(send, target, fileLiteral, literal);
         // Looking at the world's lock reads a file, so it stays off the caller's thread.

@@ -26,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -124,6 +125,24 @@ class ConfigPanelTest {
         });
         awaitOnSwing(() -> "FAST".equals(table.row(2).value()));
         assertTrue(Files.readString(file).contains("\tmode = \"FAST\"\n"));
+    }
+
+    @Test
+    void aRevertAmongSeveralReportsWhyItFailedInsteadOfShowingIt() throws Exception {
+        Path file = Files.createDirectories(this.directory.resolve("config")).resolve("testmod-common.toml");
+        Files.writeString(file, "[widgets]\n\tspeed = 12\n");
+        List<String> shown = new ArrayList<>();
+        ConfigWriter writer = new ConfigWriter(new ConfigChanges(this.directory, ChangeRecord.inMemory()), shown::add, () -> { });
+        PackCatalog.ConfigSetting speed = FILE.settings().getFirst();
+
+        assertEquals("", writer.revert(new ConfigWriter.Target("testmod", "testmod-common.toml", file,
+                PackCatalog.ConfigType.COMMON, speed), "12", "9").get(5, TimeUnit.SECONDS));
+        assertTrue(Files.readString(file).contains("\tspeed = 9\n"));
+        String failure = writer.revert(new ConfigWriter.Target("testmod", "testmod-common.toml", file.resolveSibling("gone.toml"),
+                PackCatalog.ConfigType.COMMON, speed), "12", "9").get(5, TimeUnit.SECONDS);
+        assertTrue(failure.startsWith(speed.name() + ": "), failure);
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(List.of(), shown, "Revert All shows one status for all of its reverts");
     }
 
     @Test

@@ -24,8 +24,10 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.Subject
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -33,6 +35,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
+import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
@@ -43,7 +46,9 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.event.ActionEvent;
 import java.awt.event.HierarchyEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
@@ -230,6 +235,11 @@ public final class ChangesPanel extends JPanel {
             }
         });
         ContextMenus.installTable(this.keyTable, this::keyMenu);
+        revertOnDelete(this.keyTable, () -> {
+            List<KeyChange> selected = new ArrayList<>();
+            for (int viewRow : this.keyTable.getSelectedRows()) selected.add(this.keyModel.shown.get(viewRow));
+            if (!selected.isEmpty()) report(revert(selected));
+        });
         this.keyTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
@@ -264,6 +274,19 @@ public final class ChangesPanel extends JPanel {
             }
         });
         ContextMenus.installTable(this.resourceTable, this::resourceMenu);
+        revertOnDelete(this.resourceTable, () -> {
+            List<ResourceChange> selected = new ArrayList<>();
+            for (int viewRow : this.resourceTable.getSelectedRows()) selected.add(this.resourceModel.shown.get(viewRow));
+            if (selected.isEmpty()) return;
+            // Reverting a file Companion added deletes it, which the menu names; a key press asks first.
+            long added = selected.stream().filter(change -> change.change().original().isEmpty()).count();
+            if (added > 0 && JOptionPane.showConfirmDialog(this, added == 1 ? "Delete the file Companion added?"
+                    : "Delete the " + added + " files Companion added?", "Revert and Delete", JOptionPane.OK_CANCEL_OPTION)
+                    != JOptionPane.OK_OPTION) {
+                return;
+            }
+            report(revertResources(selected));
+        });
         this.resourceTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
@@ -290,6 +313,22 @@ public final class ChangesPanel extends JPanel {
             }
         });
         ContextMenus.installTable(this.gameTable, this::gameMenu);
+        revertOnDelete(this.gameTable, () -> {
+            List<GameChange> selected = new ArrayList<>();
+            for (int viewRow : this.gameTable.getSelectedRows()) selected.add(this.gameModel.shown.get(viewRow));
+            if (!selected.isEmpty()) report(revertInGame(selected));
+        });
+    }
+
+    /** Reverts the selected rows of {@code table} with Delete, the removal key the menus name beside Revert. */
+    private static void revertOnDelete(JTable table, Runnable revert) {
+        table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "revertChanges");
+        table.getActionMap().put("revertChanges", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                revert.run();
+            }
+        });
     }
 
     private JPopupMenu gameMenu(int row) {
@@ -298,11 +337,11 @@ public final class ChangesPanel extends JPanel {
         for (int viewRow : this.gameTable.getSelectedRows()) selected.add(this.gameModel.shown.get(viewRow));
         JPopupMenu menu = new JPopupMenu();
         if (selected.size() > 1) {
-            menu.add(ContextMenus.action("Revert " + selected.size(), null, null, () -> report(revertInGame(selected))));
+            menu.add(ContextMenus.action("Revert " + selected.size(), null, "DELETE", () -> report(revertInGame(selected))));
             return menu;
         }
         GameChange change = this.gameModel.shown.get(row);
-        menu.add(ContextMenus.action("Revert", null, null, () -> report(revertInGame(List.of(change)))));
+        menu.add(ContextMenus.action("Revert", null, "DELETE", () -> report(revertInGame(List.of(change)))));
         return menu;
     }
 
@@ -341,12 +380,12 @@ public final class ChangesPanel extends JPanel {
         for (int viewRow : this.resourceTable.getSelectedRows()) selected.add(this.resourceModel.shown.get(viewRow));
         JPopupMenu menu = new JPopupMenu();
         if (selected.size() > 1) {
-            menu.add(ContextMenus.action("Revert " + selected.size(), null, null, () -> report(revertResources(selected))));
+            menu.add(ContextMenus.action("Revert " + selected.size(), null, "DELETE", () -> report(revertResources(selected))));
             return menu;
         }
         ResourceChange change = this.resourceModel.shown.get(row);
         menu.add(ContextMenus.action("Open", null, null, () -> openResource(change)));
-        menu.add(ContextMenus.action(change.change().original().isEmpty() ? "Revert and Delete" : "Revert", null, null,
+        menu.add(ContextMenus.action(change.change().original().isEmpty() ? "Revert and Delete" : "Revert", null, "DELETE",
                 () -> report(revertResources(List.of(change)))));
         return menu;
     }
@@ -382,11 +421,11 @@ public final class ChangesPanel extends JPanel {
         for (int viewRow : this.keyTable.getSelectedRows()) selected.add(this.keyModel.shown.get(viewRow));
         JPopupMenu menu = new JPopupMenu();
         if (selected.size() > 1) {
-            menu.add(ContextMenus.action("Revert " + selected.size(), null, null, () -> report(revert(selected))));
+            menu.add(ContextMenus.action("Revert " + selected.size(), null, "DELETE", () -> report(revert(selected))));
             return menu;
         }
         KeyChange change = this.keyModel.shown.get(row);
-        menu.add(ContextMenus.action("Revert to " + this.bindings.display(change.original()), null, null,
+        menu.add(ContextMenus.action("Revert to " + this.bindings.display(change.original()), null, "DELETE",
                 () -> report(revert(List.of(change)))));
         menu.add(ContextMenus.action("Show in Key Bindings", null, null,
                 () -> this.navigator.accept(new NavigationTarget.KeyBindings(change.name()))));
@@ -639,9 +678,15 @@ public final class ChangesPanel extends JPanel {
         });
         CompletableFuture<String> inGame = revertInGame(this.game);
         // Memory first: a file written back replaces the game's memory, while a late in-memory revert would outlast it.
-        inGame.whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() ->
-                files.forEach((target, change) -> this.writer.edit(target, change.current(), change.original()))));
-        List<CompletableFuture<String>> reverts = List.of(revert(this.keys), revertResources(this.resources), inGame);
+        CompletableFuture<String> settings = inGame.thenCompose(ignored -> {
+            List<CompletableFuture<String>> writes = new ArrayList<>();
+            files.forEach((target, change) -> writes.add(this.writer.revert(target, change.current(), change.original())));
+            return CompletableFuture.allOf(writes.toArray(CompletableFuture[]::new)).thenApply(done -> {
+                List<String> failed = writes.stream().map(CompletableFuture::join).filter(failure -> !failure.isEmpty()).toList();
+                return failed.isEmpty() ? "" : "Not reverted: " + String.join("; ", failed);
+            });
+        });
+        List<CompletableFuture<String>> reverts = List.of(revert(this.keys), revertResources(this.resources), inGame, settings);
         // One status once every kind is done, so a later success never hides an earlier failure.
         report(CompletableFuture.allOf(reverts.toArray(CompletableFuture[]::new)).thenApply(ignored -> String.join("; ",
                 reverts.stream().map(CompletableFuture::join).filter(failure -> !failure.isEmpty()).toList())));

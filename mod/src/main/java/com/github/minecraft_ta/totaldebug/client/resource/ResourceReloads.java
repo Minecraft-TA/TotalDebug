@@ -114,7 +114,10 @@ public final class ResourceReloads {
             for (String id : packs.getAvailableIds()) {
                 if (!disabled.contains(id) && !selected.contains(id)) selected.add(id);
             }
-            if (!managedPack.isEmpty() && selected.contains(managedPack)) placeOnTop(selected, managedPack, fixedAtTop(packs));
+            // Writing into the managed pack asks for it, even where the world had disabled it.
+            if (!managedPack.isEmpty() && packs.getAvailableIds().contains(managedPack)) {
+                placeOnTop(selected, managedPack, fixedAtTop(packs));
+            }
             return server.reloadResources(selected);
         }, server).thenCompose(reload -> reload);
     }

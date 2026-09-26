@@ -71,6 +71,19 @@ class ConfigGameValuesTest {
     }
 
     @Test
+    void theDefaultsForNewWorldsAreNotTried(@TempDir Path directory) throws Exception {
+        ConfigGameValues values = new ConfigGameValues(ChangeRecord.inMemory());
+        List<SetConfigValuePayload> sent = new ArrayList<>();
+        values.gameConnected(message -> sent.add(message.payload()));
+        Path file = directory.resolve("defaultconfigs/testmod-server.toml");
+
+        Throwable failure = values.set(new ChangeRecord.Setting("testmod", "testmod-server.toml", file, "speed"), "1", "2")
+                .handle((ignored, thrown) -> thrown).get(5, TimeUnit.SECONDS);
+        assertTrue(failure.getMessage().contains("new worlds"), failure.getMessage());
+        assertTrue(sent.isEmpty(), "the game would change the open world's configuration");
+    }
+
+    @Test
     void aRefusedValueIsNotRecorded() {
         ChangeRecord record = ChangeRecord.inMemory();
         ConfigGameValues values = new ConfigGameValues(record);

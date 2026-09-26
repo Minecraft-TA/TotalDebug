@@ -251,11 +251,11 @@ final class ConfigSettingsTable extends JTable {
         Row row = this.model.shown.get(viewRow);
         JPopupMenu menu = new JPopupMenu();
         if (row.setting() != null) {
-            Action edit = ContextMenus.action("Edit Value", null, "Enter", () -> edit(viewRow));
+            Action edit = ContextMenus.action("Edit Value", null, "ENTER", () -> edit(viewRow));
             edit.setEnabled(this.model.isCellEditable(viewRow, 1));
             menu.add(edit);
             if (this.tried != null) {
-                Action tryValue = ContextMenus.action("Try Value in Game\u2026", null, "Ctrl+Enter", () -> tryInGame(viewRow));
+                Action tryValue = ContextMenus.action("Try Value in Game\u2026", null, "ctrl ENTER", () -> tryInGame(viewRow));
                 tryValue.setEnabled(this.model.isCellEditable(viewRow, 1));
                 menu.add(tryValue);
             }
