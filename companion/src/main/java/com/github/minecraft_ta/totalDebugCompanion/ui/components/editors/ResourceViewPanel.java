@@ -1,11 +1,16 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourcePaths;
+import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
+import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 
+import java.nio.file.Path;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.beans.PropertyChangeListener;
@@ -29,14 +34,18 @@ public final class ResourceViewPanel extends JPanel {
     private final NavigationService navigation;
     private final ContentSource source;
     private final ResourceFileType fileType;
+    private final ResourceEdits edits;
     private String metadata = "";
 
     private CompletableFuture<LoadedResource> loadTask;
     private Component activeView;
     private boolean disposed;
 
-    public ResourceViewPanel(ContentSource source, ResourceFileType fileType, NavigationService navigation) {
+    /** {@code edits} writes text resources of the pack into the managed pack, or is null where they stay read-only. */
+    public ResourceViewPanel(ContentSource source, ResourceFileType fileType, NavigationService navigation,
+                             ResourceEdits edits) {
         super(new BorderLayout());
+        this.edits = edits;
         this.navigation = navigation;
         this.source = source;
         this.fileType = fileType;
@@ -78,11 +87,28 @@ public final class ResourceViewPanel extends JPanel {
 
     private void showContent(LoadedResource content) {
         Component view = switch (content) {
-            case LoadedResource.Text text -> new TextFileViewPanel(text, this.fileType, this::setMetadata);
+            case LoadedResource.Text text -> textView(text);
             case LoadedResource.Image image -> new ImageViewPanel(image, this::setMetadata);
         };
         if (view instanceof AbstractTextViewPanel text) text.installNavigationHistoryMenu(navigation);
+        if (view instanceof ResourceTextEditor editor) editor.textPanel().installNavigationHistoryMenu(navigation);
         replaceActiveView(view);
+    }
+
+    /** An editor for a text resource of the pack, otherwise the read-only text. */
+    private Component textView(LoadedResource.Text text) {
+        String path = this.edits == null ? null : ResourcePaths.of(this.source).orElse(null);
+        if (path == null) return new TextFileViewPanel(text, this.fileType, this::setMetadata);
+        setMetadata(this.fileType.description());
+        String origin = this.source instanceof ArchiveEntrySource entry
+                ? entry.archivePath().getFileName().toString() : this.source.displayName();
+        Path pack = this.source instanceof LocalFileSource file ? this.edits.packOf(file.path()).orElse(null) : null;
+        return new ResourceTextEditor(path, origin, pack, text, this.edits);
+    }
+
+    /** Whether the tab can close: an edited text has no unsaved changes, or they were discarded after asking. */
+    public boolean canClose() {
+        return !(this.activeView instanceof ResourceTextEditor editor) || editor.confirmLeave();
     }
 
     private void showCenteredMessage(String message, Runnable retry) {
@@ -125,18 +151,22 @@ public final class ResourceViewPanel extends JPanel {
 
     @Override
     public boolean requestFocusInWindow() {
+        if (this.activeView instanceof ResourceTextEditor editor) return editor.textPanel().requestFocusInWindow();
         return this.activeView instanceof AbstractTextViewPanel textView
                 ? textView.requestFocusInWindow() : super.requestFocusInWindow();
     }
 
     @Override
     public boolean requestFocusInWindow(FocusEvent.Cause cause) {
+        if (this.activeView instanceof ResourceTextEditor editor) return editor.textPanel().requestFocusInWindow(cause);
         return this.activeView instanceof AbstractTextViewPanel textView
                 ? textView.requestFocusInWindow(cause) : super.requestFocusInWindow(cause);
     }
 
     private void disposeActiveView() {
-        if (this.activeView instanceof AbstractTextViewPanel textView) {
+        if (this.activeView instanceof ResourceTextEditor editor) {
+            editor.dispose();
+        } else if (this.activeView instanceof AbstractTextViewPanel textView) {
             textView.dispose();
         } else if (this.activeView instanceof ImageViewPanel imageView) {
             imageView.dispose();

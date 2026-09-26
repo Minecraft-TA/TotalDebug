@@ -107,6 +107,33 @@ final class ConfigWriter {
         this.changes.refresh();
     }
 
+    /** The value tried in the running game for a setting, as TOML writes it, or null. */
+    String tried(Target target) {
+        return this.changes.gameValues().tried(setting(target));
+    }
+
+    /**
+     * Puts {@code literal} into the running game's memory for a setting whose file holds {@code fileLiteral}, without
+     * writing the file, and shows what the game uses now.
+     */
+    void tryInGame(Target target, String fileLiteral, String literal) {
+        this.changes.gameValues().set(setting(target), fileLiteral, literal).whenComplete((current, failure) ->
+                SwingUtilities.invokeLater(() -> {
+                    if (failure != null) {
+                        Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
+                        this.status.accept(target.setting().name() + " not tried: " + cause.getMessage());
+                        return;
+                    }
+                    this.status.accept(target.setting().name() + " tried in the game, which uses " + current
+                            + " until it reads the file again");
+                    this.written.run();
+                }));
+    }
+
+    private static ChangeRecord.Setting setting(Target target) {
+        return new ChangeRecord.Setting(target.modId(), target.fileName(), target.file(), target.setting().path());
+    }
+
     /** Writes {@code after} in place of {@code before}, the value shown when the edit was made. */
     void edit(Target target, String before, String after) {
         write(new SettingStep(target, before, after), false, this::done, () -> { }, null);

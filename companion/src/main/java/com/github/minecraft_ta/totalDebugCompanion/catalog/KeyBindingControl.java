@@ -127,7 +127,7 @@ public final class KeyBindingControl {
     }
 
     private Result recorded(String name, KeyBindings.Assignment shown, Result done) {
-        this.record.changed(new ChangeRecord.KeyBinding(name), (done.previous() == null ? shown : done.previous()).encode(),
+        this.record.changed(new ChangeRecord.KeyBinding(name), ChangeRecord.Level.PACK, (done.previous() == null ? shown : done.previous()).encode(),
                 done.current().encode());
         return done;
     }
@@ -150,7 +150,7 @@ public final class KeyBindingControl {
 
     /** The value a binding had before Companion first changed it, or null when Companion did not change it. */
     public KeyBindings.Assignment original(String name) {
-        String original = this.record.original(new ChangeRecord.KeyBinding(name));
+        String original = this.record.original(new ChangeRecord.KeyBinding(name), ChangeRecord.Level.PACK);
         return original == null ? null : KeyBindings.Assignment.decode(original);
     }
 

@@ -6,17 +6,10 @@ import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.nio.channels.OverlappingFileLockException;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -74,6 +67,7 @@ public final class ConfigChanges {
 
     private final Path workspace;
     private final ChangeRecord record;
+    private final ConfigGameValues gameValues;
     private final Map<Key, Pending> pending = new ConcurrentHashMap<>();
     /** One write at a time for the project, so writes to the same file never interleave. */
     private final ExecutorService writes = Executors.newSingleThreadExecutor(task ->
@@ -86,6 +80,7 @@ public final class ConfigChanges {
     public ConfigChanges(Path workspace, ChangeRecord record) {
         this.workspace = workspace;
         this.record = Objects.requireNonNull(record, "record");
+        this.gameValues = new ConfigGameValues(record);
     }
 
     public ChangeRecord record() {
@@ -99,6 +94,11 @@ public final class ConfigChanges {
         } catch (RejectedExecutionException closed) {
             return CompletableFuture.failedFuture(new IOException("The project is closing; the change was not written"));
         }
+    }
+
+    /** Values tried in the running game's memory without writing their file. */
+    public ConfigGameValues gameValues() {
+        return this.gameValues;
     }
 
     /**
@@ -147,6 +147,7 @@ public final class ConfigChanges {
     public void gameDisconnected() {
         this.connected = false;
         if (!gameLockHeld()) this.pending.clear();
+        this.gameValues.gameDisconnected();
     }
 
     /** Whether a game runs in the instance, connected or not. Blocking; it looks at the game's lock. */
@@ -172,12 +173,21 @@ public final class ConfigChanges {
      */
     public Effect edited(ChangeRecord.Setting target, PackCatalog.ConfigType type, PackCatalog.Restart restart,
                          String previous, String written) {
-        this.record.changed(target, previous, written);
+        this.record.changed(target, ChangeRecord.Level.PACK, previous, written);
         Key key = new Key(target.file(), target.setting());
         Pending earlier = this.pending.get(key);
         Location location = location(target.file());
         Path world = location == Location.WORLD ? world(key.file()) : null;
         Effect effect = effect(type, restart, location, world);
+        // The game read the written file, which replaces every value tried in its memory for that file.
+        if (effect == Effect.NOW) {
+            for (ChangeRecord.Change change : this.record.changes()) {
+                if (change.level() == ChangeRecord.Level.GAME && change.target() instanceof ChangeRecord.Setting tried
+                        && tried.file().equals(target.file())) {
+                    this.record.dropped(tried, ChangeRecord.Level.GAME);
+                }
+            }
+        }
         if (!effect.pending()) {
             this.pending.remove(key);
         } else if (earlier != null && earlier.applied().equals(written)) {
@@ -185,7 +195,7 @@ public final class ConfigChanges {
             this.pending.remove(key);
             return Effect.NOW;
         } else {
-            Path openWorld = effect == Effect.REJOIN ? (world != null ? world : openWorld()) : null;
+            Path openWorld = effect == Effect.REJOIN ? (world != null ? world : Worlds.open(this.workspace)) : null;
             this.pending.put(key, new Pending(effect, openWorld, earlier == null ? previous : earlier.applied()));
         }
         return effect;
@@ -197,8 +207,8 @@ public final class ConfigChanges {
         if (type == PackCatalog.ConfigType.STARTUP || restart == PackCatalog.Restart.GAME || !watchesFiles()) {
             return Effect.RESTART;
         }
-        if (location == Location.WORLD && !open(world)) return Effect.WORLD_OPENS;
-        if (restart == PackCatalog.Restart.WORLD) return openWorld() == null ? Effect.NOW : Effect.REJOIN;
+        if (location == Location.WORLD && !Worlds.isOpen(world)) return Effect.WORLD_OPENS;
+        if (restart == PackCatalog.Restart.WORLD) return Worlds.open(this.workspace) == null ? Effect.NOW : Effect.REJOIN;
         return Effect.NOW;
     }
 
@@ -224,7 +234,7 @@ public final class ConfigChanges {
         }
         List<Key> applied = new ArrayList<>();
         this.pending.forEach((key, entry) -> {
-            if (entry.effect() == Effect.REJOIN && (entry.world() == null || !open(entry.world()))) applied.add(key);
+            if (entry.effect() == Effect.REJOIN && (entry.world() == null || !Worlds.isOpen(entry.world()))) applied.add(key);
         });
         applied.forEach(this.pending::remove);
     }
@@ -237,46 +247,6 @@ public final class ConfigChanges {
             if (saves.equals(world.getParent())) return file.startsWith(world.resolve("serverconfig")) ? world : null;
         }
         return null;
-    }
-
-    /** The world the game has open, found by its held session lock, or null. */
-    private Path openWorld() {
-        if (this.workspace == null) return null;
-        try (DirectoryStream<Path> saves = Files.newDirectoryStream(this.workspace.resolve("saves"), Files::isDirectory)) {
-            for (Path world : saves) {
-                if (open(world)) return world;
-            }
-        } catch (IOException noSaves) {
-            // Without saves no world is open.
-        }
-        return null;
-    }
-
-    /**
-     * Whether a game holds the world's {@code session.lock}. Windows refuses to read a locked file, so looking never
-     * takes the lock there; elsewhere the lock is taken and released at once.
-     */
-    static boolean open(Path world) {
-        if (world == null) return false;
-        Path lock = world.resolve("session.lock");
-        if (!Files.isRegularFile(lock)) return false;
-        // Reading one byte is enough: Windows refuses any read of a locked file, however large it is.
-        try (InputStream input = Files.newInputStream(lock)) {
-            input.read();
-        } catch (IOException locked) {
-            return true;
-        }
-        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows")) return false;
-        try (FileChannel channel = FileChannel.open(lock, StandardOpenOption.WRITE)) {
-            FileLock held = channel.tryLock();
-            if (held == null) return true;
-            held.release();
-            return false;
-        } catch (OverlappingFileLockException ownLock) {
-            return true;
-        } catch (IOException unreadable) {
-            return false;
-        }
     }
 
     /** Whether NeoForge reloads changed configuration files; {@code config/fml.toml} can turn that off. */

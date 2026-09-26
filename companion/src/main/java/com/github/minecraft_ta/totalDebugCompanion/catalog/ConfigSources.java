@@ -94,7 +94,7 @@ public final class ConfigSources {
                 Source source = new Source(world.getFileName().toString(), path);
                 worlds.add(source);
                 modified.put(source, Files.getLastModifiedTime(path));
-                if (ConfigChanges.open(world)) open.add(source);
+                if (Worlds.isOpen(world)) open.add(source);
             }
         } catch (IOException noSaves) {
             // A pack that never created a world has no server configuration yet.

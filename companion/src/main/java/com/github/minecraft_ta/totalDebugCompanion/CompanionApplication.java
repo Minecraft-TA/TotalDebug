@@ -26,8 +26,11 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ConfigValueResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
@@ -191,6 +194,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                         if (current != null) {
                             current.configChanges().gameDisconnected();
                             current.keyBindings().gameDisconnected();
+                            current.resources().gameDisconnected();
                         }
                         if (reconnect != null)
                             updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
@@ -209,6 +213,24 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 public void keyBindingResult(KeyBindingResultMessage message) {
                     ProjectScope scope = current;
                     if (scope != null) scope.keyBindings().answered(message.payload());
+                }
+
+                @Override
+                public void packStack(PackStackMessage message) {
+                    ProjectScope scope = current;
+                    if (scope != null) scope.resources().packStack(message.payload());
+                }
+
+                @Override
+                public void configValueResult(ConfigValueResultMessage message) {
+                    ProjectScope scope = current;
+                    if (scope != null) scope.configChanges().gameValues().answered(message.payload());
+                }
+
+                @Override
+                public void reloadResult(ReloadResultMessage message) {
+                    ProjectScope scope = current;
+                    if (scope != null) scope.resources().answered(message.payload());
                 }
 
                 @Override
@@ -577,6 +599,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 current.configChanges().gameConnected();
                 CompanionSession connected = session;
                 current.keyBindings().gameConnected(connected::send);
+                current.resources().gameConnected(connected::send);
+                current.configChanges().gameValues().gameConnected(connected::send);
             }
             if (reconnect != null && reconnect.project == current) {
                 var completed = reconnect;

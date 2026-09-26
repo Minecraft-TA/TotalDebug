@@ -135,6 +135,13 @@ final class ConfigPanel extends JPanel {
             Path path = selectedPath();
             return path == null ? null : this.writer.original(path, row.setting().path());
         });
+        this.table.setTrying((row, literal) -> {
+            ConfigWriter.Target target = target(row);
+            if (target != null) this.writer.tryInGame(target, row.literal(), literal);
+        }, row -> {
+            ConfigWriter.Target target = target(row);
+            return target == null ? null : this.writer.tried(target);
+        });
         this.writer.bindUndo(this.table);
         TypeToFilter.install(this.table, this.filter);
         TypeToFilter.forwardTyping(this.fileList, () -> this.filter);
@@ -416,6 +423,13 @@ final class ConfigPanel extends JPanel {
         String text = this.problem.isEmpty() ? this.status : this.problem;
         this.notice.setText(text);
         this.notice.setVisible(!text.isEmpty());
+    }
+
+    /** Where a setting row of the shown file is written, or null without a file. */
+    private ConfigWriter.Target target(ConfigSettingsTable.Row row) {
+        Path path = selectedPath();
+        PackCatalog.ConfigFile file = selectedFile();
+        return path == null || file == null ? null : new ConfigWriter.Target(this.modId, file.fileName(), path, file.type(), row.setting());
     }
 
     /** Writes an edit made in the table. */

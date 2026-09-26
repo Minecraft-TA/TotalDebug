@@ -162,6 +162,21 @@ class ConfigChangesTest {
     }
 
     @Test
+    void aReloadedFileEndsEveryValueTriedFromIt() {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ConfigChanges changes = new ConfigChanges(this.directory, record);
+        changes.gameConnected();
+        Path other = this.directory.resolve("config/othermod-common.toml");
+        record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", config(), "size"), ChangeRecord.Level.GAME, "1", "5");
+        record.changed(new ChangeRecord.Setting("othermod", "othermod-common.toml", other, "size"), ChangeRecord.Level.GAME, "1", "5");
+
+        assertEquals(ConfigChanges.Effect.NOW, edit(changes, config(), PackCatalog.Restart.NONE, "1", "2"));
+        assertEquals(List.of(other), record.changes().stream().filter(change -> change.level() == ChangeRecord.Level.GAME)
+                .map(change -> ((ChangeRecord.Setting) change.target()).file()).toList(),
+                "NeoForge reloads the whole file, so a value tried for another of its settings has ended too");
+    }
+
+    @Test
     void editsWaitingForARestartOutlastAReconnectToTheSameGame() throws Exception {
         ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
         try (GameLock ignored = GameLock.hold(InstancePaths.forGame(this.directory).gameLock())) {
@@ -203,13 +218,13 @@ class ConfigChangesTest {
 
         try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.WRITE);
              FileLock ignored = channel.lock()) {
-            assertTrue(ConfigChanges.open(world));
+            assertTrue(Worlds.isOpen(world));
             assertEquals(ConfigChanges.Effect.NOW, edit(changes, file, PackCatalog.Restart.NONE, "1", "2"));
             assertEquals(ConfigChanges.Effect.REJOIN, edit(changes, file, PackCatalog.Restart.WORLD, "2", "3"));
             changes.refresh();
             assertEquals(ConfigChanges.Effect.REJOIN, changes.pending(file, "speed"));
         }
-        assertFalse(ConfigChanges.open(world));
+        assertFalse(Worlds.isOpen(world));
         changes.refresh();
         assertNull(changes.pending(file, "speed"));
     }

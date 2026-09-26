@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.storage;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.SetOverlayPayload;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import com.google.gson.JsonArray;
@@ -21,16 +22,37 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiPredicate;
 
 /**
- * What Companion changed in the pack, kept per instance in {@code changes.json} (see docs/MODPACK.md). An entry holds a
- * target's value from before Companion first changed it and the value written last. Writing the original value back
- * removes the entry, so the record lists only changes still in effect. Targets are configuration settings and key
- * bindings.
+ * What Companion changed in the pack, kept per instance in {@code changes.json} (see docs/MODPACK.md and
+ * docs/RESOURCE_EDITING.md). An entry holds a target's value from before Companion first changed it at a level and the
+ * value written last. Writing the original value back removes the entry, so the record lists only changes still in
+ * effect. Targets are configuration settings, key bindings and resources.
  */
 public final class ChangeRecord implements AutoCloseable {
-    private static final int FORMAT = 1;
+    private static final int FORMAT = 2;
+
+    /** Where a change was written. */
+    public enum Level {
+        /** The running game's memory, until it closes. */
+        GAME("game"),
+        /** Files of the pack outside mod files: configuration, {@code options.txt}, the managed packs. */
+        PACK("pack");
+
+        private final String id;
+
+        Level(String id) {
+            this.id = id;
+        }
+
+        static Level of(String id) {
+            for (Level level : values()) {
+                if (level.id.equals(id)) return level;
+            }
+            throw new IllegalArgumentException("Unknown change level " + id);
+        }
+    }
 
     /** Something Companion writes to. */
-    public sealed interface Target permits Setting, KeyBinding {
+    public sealed interface Target permits Setting, KeyBinding, Resource {
     }
 
     /** A setting of a configuration file; {@code file} is where it was written, such as one world's server file. */
@@ -53,10 +75,30 @@ public final class ChangeRecord implements AutoCloseable {
         }
     }
 
+    /**
+     * A resource by its path in a pack, such as {@code assets/ns/models/block/slab.json}; {@code location} is the pack
+     * folder it was written to, or null in the running game's memory. Its values are the SHA-256 of the
+     * content, or empty when there was none; {@link ResourceOriginals} keeps original contents.
+     */
+    public record Resource(String path, Path location) implements Target {
+        public Resource {
+            Objects.requireNonNull(path, "path");
+            if (!SetOverlayPayload.isPackPath(path)) throw new IllegalArgumentException("Not a resource path: " + path);
+            if (location != null) location = location.toAbsolutePath().normalize();
+        }
+
+        /** Whether the resource is client assets rather than server data. */
+        public boolean assets() {
+            return this.path.startsWith("assets/");
+        }
+    }
+
     /** A change still in effect: {@code original} is the value before the first change, {@code current} the last written. */
-    public record Change(Target target, String original, String current, Instant firstChanged, Instant lastChanged) {
+    public record Change(Target target, Level level, String original, String current, Instant firstChanged,
+                         Instant lastChanged) {
         public Change {
             Objects.requireNonNull(target, "target");
+            Objects.requireNonNull(level, "level");
             Objects.requireNonNull(original, "original");
             Objects.requireNonNull(current, "current");
             Objects.requireNonNull(firstChanged, "firstChanged");
@@ -64,11 +106,14 @@ public final class ChangeRecord implements AutoCloseable {
         }
     }
 
+    private record Key(Target target, Level level) {
+    }
+
     private final JsonStateWriter writer;
     private final Clock clock;
     /** The game directory the record's files are stored relative to, or null for a record that is not saved. */
     private final Path gameDirectory;
-    private final Map<Target, Change> changes = new LinkedHashMap<>();
+    private final Map<Key, Change> changes = new LinkedHashMap<>();
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
     private ChangeRecord(JsonStateWriter writer, Clock clock, Path gameDirectory) {
@@ -97,7 +142,8 @@ public final class ChangeRecord implements AutoCloseable {
         try {
             JsonObject json = JsonFiles.read(paths.changes());
             if (JsonFiles.integer(json, "format") != FORMAT) {
-                throw new IOException("Unsupported change record format: " + paths.changes());
+                throw new IOException("Unsupported change record format " + JsonFiles.integer(json, "format")
+                        + " in " + paths.changes() + "; this Companion reads format " + FORMAT);
             }
             for (JsonElement element : JsonFiles.array(json, "changes")) {
                 JsonObject entry = element.getAsJsonObject();
@@ -114,11 +160,21 @@ public final class ChangeRecord implements AutoCloseable {
                                 JsonFiles.string(entry, "setting"));
                     }
                     case "keyBinding" -> new KeyBinding(JsonFiles.string(entry, "name"));
+                    case "resource" -> {
+                        Path location = entry.has("location") ? inInstance(game, JsonFiles.string(entry, "location")) : null;
+                        if (entry.has("location") && location == null) {
+                            System.err.println("Leaving out a change of " + JsonFiles.string(entry, "path") + " in "
+                                    + JsonFiles.string(entry, "location") + ": it is not a pack of this instance");
+                            yield null;
+                        }
+                        yield new Resource(JsonFiles.string(entry, "path"), location);
+                    }
                     default -> throw new IllegalArgumentException("Unknown change kind " + JsonFiles.string(entry, "kind"));
                 };
                 if (target == null) continue;
-                record.changes.put(target, new Change(target, JsonFiles.string(entry, "original"),
-                        JsonFiles.string(entry, "current"), Instant.parse(JsonFiles.string(entry, "firstChanged")),
+                Level level = Level.of(JsonFiles.string(entry, "level"));
+                record.changes.put(new Key(target, level), new Change(target, level, value(entry, "original"),
+                        value(entry, "current"), Instant.parse(JsonFiles.string(entry, "firstChanged")),
                         Instant.parse(JsonFiles.string(entry, "lastChanged"))));
             }
             return record;
@@ -128,20 +184,34 @@ public final class ChangeRecord implements AutoCloseable {
         }
     }
 
-    /** Records that {@code target} changed from {@code previous} to {@code written}. */
-    public void changed(Target target, String previous, String written) {
-        if (this.gameDirectory != null && target instanceof Setting setting
-                && !setting.file().toAbsolutePath().normalize().startsWith(this.gameDirectory)) {
-            throw new IllegalArgumentException(setting.file() + " is not a file of this instance");
+    /** A value of an entry, which is empty for a resource that did not exist. */
+    private static String value(JsonObject entry, String key) {
+        JsonElement value = entry.get(key);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+            throw new IllegalArgumentException("Expected string: " + key);
+        }
+        return value.getAsString();
+    }
+
+    /** Records that {@code target} changed at {@code level} from {@code previous} to {@code written}. */
+    public void changed(Target target, Level level, String previous, String written) {
+        Path file = switch (target) {
+            case Setting setting -> setting.file();
+            case Resource resource -> resource.location();
+            case KeyBinding ignored -> null;
+        };
+        if (this.gameDirectory != null && file != null && !file.startsWith(this.gameDirectory)) {
+            throw new IllegalArgumentException(file + " is not in this instance");
         }
         synchronized (this) {
-            Change earlier = this.changes.get(target);
+            Key key = new Key(target, level);
+            Change earlier = this.changes.get(key);
             String original = earlier == null ? previous : earlier.original();
             if (original.equals(written)) {
-                this.changes.remove(target);
+                this.changes.remove(key);
             } else {
                 Instant now = this.clock.instant();
-                this.changes.put(target, new Change(target, original, written,
+                this.changes.put(key, new Change(target, level, original, written,
                         earlier == null ? now : earlier.firstChanged(), now));
             }
             scheduleSave();
@@ -150,19 +220,40 @@ public final class ChangeRecord implements AutoCloseable {
     }
 
     /**
-     * Drops the change of {@code target} when the file holds its original value again, such as after an edit made
-     * outside Companion. {@code sameValue} compares as the target's file does, such as {@code "a"} and {@code 'a'} in
-     * TOML.
+     * Drops the change of {@code target} at {@code level} when it holds its original value again, such as after an
+     * edit made outside Companion. {@code sameValue} compares as the target's file does, such as {@code "a"} and
+     * {@code 'a'} in TOML.
      */
-    public void observed(Target target, String literal, BiPredicate<String, String> sameValue) {
+    public void observed(Target target, Level level, String value, BiPredicate<String, String> sameValue) {
         boolean dropped;
         synchronized (this) {
-            Change change = this.changes.get(target);
-            dropped = change != null && sameValue.test(change.original(), literal);
+            Key key = new Key(target, level);
+            Change change = this.changes.get(key);
+            dropped = change != null && sameValue.test(change.original(), value);
             if (dropped) {
-                this.changes.remove(target);
+                this.changes.remove(key);
                 scheduleSave();
             }
+        }
+        if (dropped) this.listeners.forEach(Runnable::run);
+    }
+
+    /** Drops the change of {@code target} at {@code level}, such as a value tried in the game once it reads the file again. */
+    public void dropped(Target target, Level level) {
+        boolean dropped;
+        synchronized (this) {
+            dropped = this.changes.remove(new Key(target, level)) != null;
+            if (dropped) scheduleSave();
+        }
+        if (dropped) this.listeners.forEach(Runnable::run);
+    }
+
+    /** Drops every change at {@code level}, such as the game's memory when the game closes. */
+    public void ended(Level level) {
+        boolean dropped;
+        synchronized (this) {
+            dropped = this.changes.keySet().removeIf(key -> key.level() == level);
+            if (dropped) scheduleSave();
         }
         if (dropped) this.listeners.forEach(Runnable::run);
     }
@@ -171,17 +262,23 @@ public final class ChangeRecord implements AutoCloseable {
     public synchronized String original(Path file, String setting) {
         Path normalized = file.toAbsolutePath().normalize();
         for (Change change : this.changes.values()) {
-            if (change.target() instanceof Setting target && target.file().equals(normalized) && target.setting().equals(setting)) {
+            if (change.level() == Level.PACK && change.target() instanceof Setting target
+                    && target.file().equals(normalized) && target.setting().equals(setting)) {
                 return change.original();
             }
         }
         return null;
     }
 
-    /** The value {@code target} had before Companion first changed it, or null when it is unchanged. */
-    public synchronized String original(Target target) {
-        Change change = this.changes.get(target);
+    /** The value {@code target} had before Companion first changed it at {@code level}, or null when it is unchanged. */
+    public synchronized String original(Target target, Level level) {
+        Change change = this.changes.get(new Key(target, level));
         return change == null ? null : change.original();
+    }
+
+    /** The change of {@code target} at {@code level} still in effect, or null. */
+    public synchronized Change change(Target target, Level level) {
+        return this.changes.get(new Key(target, level));
     }
 
     /** Changes still in effect, the most recent first. */
@@ -205,6 +302,8 @@ public final class ChangeRecord implements AutoCloseable {
         if (this.writer == null) return;
         JsonArray entries = new JsonArray();
         for (Change change : this.changes.values()) {
+            // The game's memory ends with the game, so it is not kept across Companion restarts.
+            if (change.level() == Level.GAME) continue;
             JsonObject entry = new JsonObject();
             switch (change.target()) {
                 case Setting setting -> {
@@ -218,7 +317,13 @@ public final class ChangeRecord implements AutoCloseable {
                     entry.addProperty("kind", "keyBinding");
                     entry.addProperty("name", binding.name());
                 }
+                case Resource resource -> {
+                    entry.addProperty("kind", "resource");
+                    entry.addProperty("path", resource.path());
+                    if (resource.location() != null) entry.addProperty("location", stored(resource.location()));
+                }
             }
+            entry.addProperty("level", change.level().id);
             entry.addProperty("original", change.original());
             entry.addProperty("current", change.current());
             entry.addProperty("firstChanged", change.firstChanged().toString());

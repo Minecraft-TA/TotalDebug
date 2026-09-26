@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 import com.github.minecraft_ta.totaldebug.client.catalog.KeyBindingOwners;
+import com.github.minecraft_ta.totaldebug.resource.GameOverlay;
 import com.mojang.logging.LogUtils;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.network.TotalDebugNetwork;
@@ -54,6 +55,7 @@ public final class TotalDebug {
         this.serverScripts = new ServerScriptService(this.tickTaskScheduler);
         this.network = new TotalDebugNetwork(Objects.requireNonNull(modEventBus, "modEventBus"));
         if (FMLEnvironment.dist == Dist.CLIENT) KeyBindingOwners.install();
+        modEventBus.addListener(GameOverlay::addPackFinders);
         TotalDebugConfig.register(modContainer);
 
         LOGGER.info("Initializing TotalDebug {}", this.version);

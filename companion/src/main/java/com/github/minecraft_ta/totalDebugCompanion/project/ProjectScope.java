@@ -9,12 +9,14 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationState;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.LocalModSources;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.storage.GameLock;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import java.io.IOException;
@@ -52,6 +54,9 @@ public final class ProjectScope implements AutoCloseable {
     private final KeyBindingControl keyBindings;
     /** Puts the instance's key bindings on keys, in the running game or in options.txt. */
     public KeyBindingControl keyBindings() { return keyBindings; }
+    private final ResourceEdits resources;
+    /** Writes edited resources into the packs Companion manages and reloads them in the running game. */
+    public ResourceEdits resources() { return resources; }
     private final List<PendingNavigation> pending = new ArrayList<>();
     private volatile Phase phase = Phase.ACTIVE;
     private volatile RuntimeBinding runtime;
@@ -69,6 +74,8 @@ public final class ProjectScope implements AutoCloseable {
         Path gameLock = InstancePaths.forGame(profile.workspaceDirectory()).gameLock();
         this.keyBindings = new KeyBindingControl(profile.workspaceDirectory().resolve("options.txt"), changes,
                 () -> GameLock.held(gameLock), this.configChanges.writes());
+        this.resources = new ResourceEdits(profile.workspaceDirectory(), changes, new ResourceOriginals(paths().originals()),
+                this.configChanges.writes(), () -> GameLock.held(gameLock));
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {

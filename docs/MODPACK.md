@@ -1,6 +1,6 @@
 # The Modpack tree
 
-Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Content, Configuration, Key bindings and Changes; the change record holds configuration settings and key bindings. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
+Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Content, Configuration, Key bindings and Changes; the change record holds configuration settings, key bindings and resources. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
 
 ## Purpose
 
@@ -18,10 +18,10 @@ A pack-wide view belongs under Modpack, not under one of its mods. Views about o
 |---|---|---|---|
 | Overview | Minecraft, loader and Java versions, memory settings, mod count, catalog state; later the differences between two captures of the pack | Catalog, launcher instance | Built in |
 | Mods | Installed mods and other namespaces, later disabled mods | Catalog, runtime modules | Built in |
-| Content | Every registered block, item, entity type, fluid and sound event with the mod that registered it, by kind; later biomes, enchantments, tags, recipes and loot tables from the open world | Catalog | Built in |
+| Content | Every registered block, item, entity type, fluid and sound event with the mod that registered it, by kind; later tags, recipes, loot tables, biomes and enchantments, read from the current world | Catalog | Built in |
 | Configuration | Every setting of every mod, modified ones by default; later `defaultconfigs` and configuration files NeoForge does not manage | Catalog, `config/`, worlds' `serverconfig/` | Built in |
-| Resource packs | Order, enabled packs, which files each pack overrides, the pack Companion manages | `resourcepacks/`, `options.txt`, captured pack stack | Built in |
-| Worlds | Server configuration and datapacks of each world, which world is open | `saves/` | Built in |
+| Resources | Every namespace joined as the game uses it: vanilla, the mods and the enabled packs in the game's order, each file with the copy that wins and what it overrides; each mod's Resources tab is the same view filtered to that mod | Mod files, `resourcepacks/`, captured pack stack | Built in |
+| Resource packs | Enabled packs in the order the game applies them, then the rest of `resourcepacks/`, and the pack Companion manages | `resourcepacks/`, `options.txt`, captured pack stack | Built in |
 | Key bindings | Every binding with its key, default, context and mod; collisions split into those on the same key press, modifier overlaps and equal keys in contexts that never meet; searchable by text, by key such as `ctrl+g`, or by pressing the key; keys are set in the running game, or in `options.txt` while it is closed, one binding or a selection at a time | Captured key mappings, contexts and key names, `options.txt` | Built in |
 | Game options | The rest of `options.txt` | `options.txt` | Built in |
 | Logs | `latest.log` and crash reports, linked to the classes and mods they name | `logs/`, `crash-reports/` | Built in |
@@ -34,6 +34,15 @@ A pack-wide view belongs under Modpack, not under one of its mods. Views about o
 The owner follows the dividing rule in [EXTENSIBILITY.md](EXTENSIBILITY.md): vanilla and NeoForge concepts every pack has are built in; a row that exists because of one mod is an extension.
 
 Each pack-wide row that also exists per mod, such as Key bindings or Content, shows the same table as the mod's own tab, with a Mod column added.
+
+## The current world
+
+Companion shows one world: the one the game has open, or the one played last while none is open. Choosing among other worlds is deferred until it has a clear design. Decided on 2026-09-26.
+
+- **Pack content read from the world:** tags, recipes, loot tables, biomes and enchantments belong to a world in the game's terms, but they are the pack's content. They are listed under Content, read from the current world, not presented as world content.
+- **World state:** a **World** root beside Modpack holds what is really the world's own: its overview (seed, time, weather, difficulty, spawn), game rules and datapacks. Later: loaded chunks and the tickets that keep them loaded, players and saved data.
+- **Server configuration** stays under Configuration, with the current world's file first.
+- **Writes:** a data change is saved in the current world's datapack, and says so.
 
 ## Content kinds
 
@@ -66,8 +75,8 @@ Built-in rows use the same point. Until the extension API exists, built-in rows 
 
 Changes becomes the one record of what Companion wrote, replacing per-view undo history as the lasting source:
 
-- **Entry:** what changed (a setting, a key binding, a resource, a texture), the level it was written at (the running game's memory, the managed pack, a mod JAR), when, the value it replaced and the value written.
-- **Revert:** writes the replaced value back at the same level. A JAR entry reverts from its backup.
+- **Entry:** what changed (a setting, a key binding, a resource, a texture), the level it was written at (the running game's memory or the pack's files), when, the value it replaced and the value written. See [RESOURCE_EDITING.md](RESOURCE_EDITING.md#change-record).
+- **Revert:** writes the replaced value back at the same level.
 - **Storage:** kept per instance in `total-debug/changes.json`, so it survives restarts of Companion and the game.
 - **Views read from it:** the configuration table marks values edited by the user from this record, and the game's pending restarts are derived from it.
 
@@ -79,7 +88,10 @@ Editing a configuration file as text records one entry per setting it changed.
 |---|---|
 | Configuration editing | Modpack root, Mods, Configuration |
 | Editing configuration files as text | Changes |
-| Layered writes and text resources | Resource packs, Worlds |
+| Layered writes and text resources | Changes gains resources and what was tried in the game |
+| Resource packs | Resource packs |
+| Resources across the pack | Resources |
+| The current world | World root: overview, game rules, datapacks |
 | Texture editing | Resource packs gain the managed pack's textures |
 | Catalog and program insights | Mixins, Game options, Logs, Overview with update differences |
 | Extension API for Companion | Shader packs, Pack scripts, Global datapacks |

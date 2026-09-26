@@ -20,6 +20,14 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.SetOverlayMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.SetConfigValueMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ConfigValueResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.ConfigValueResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.KeyBindingResultPayload;
@@ -116,10 +124,16 @@ public final class CompanionAppClient implements AutoCloseable {
             scriptId
     );
     private volatile Runnable sessionClosedHandler = () -> { };
+    private volatile Runnable sessionOpenedHandler = () -> { };
     private volatile BiConsumer<String, Map<String, String>> packCatalogHandler = (inventoryId, modules) -> { };
     private volatile Consumer<SetKeyBindingMessage> keyBindingHandler = message -> send(new KeyBindingResultMessage(
             new KeyBindingResultPayload(message.payload().requestId(), message.payload().name(), "", "", "", "",
                     "The game is not ready to change key bindings yet")));
+    private volatile Consumer<ReloadMessage> reloadHandler = message -> send(new ReloadResultMessage(
+            new ReloadResultPayload(message.payload().requestId(), 0, List.of(), "The game is not ready to reload resources yet")));
+    private volatile Consumer<SetOverlayMessage> overlayHandler = message -> { };
+    private volatile Consumer<SetConfigValueMessage> configValueHandler = message -> send(new ConfigValueResultMessage(
+            new ConfigValueResultPayload(message.payload().requestId(), "", "", "The game is not ready to set configuration values yet")));
     private volatile RuntimeInventoryPublisher.PublishedInventory publishedInventory;
     private volatile Consumer<CompanionStartupProgress> progressListener = progress -> { };
     private volatile boolean closing;
@@ -242,6 +256,11 @@ public final class CompanionAppClient implements AutoCloseable {
         this.sessionClosedHandler = Objects.requireNonNull(handler, "handler");
     }
 
+    /** Runs after each completed handshake, on the transport's thread. */
+    public void setSessionOpenedHandler(Runnable handler) {
+        this.sessionOpenedHandler = Objects.requireNonNull(handler, "handler");
+    }
+
     /** Receives each available runtime inventory, with the module containing each mod, whenever Companion has it. */
     public void setPackCatalogHandler(BiConsumer<String, Map<String, String>> handler) {
         this.packCatalogHandler = Objects.requireNonNull(handler, "handler");
@@ -257,6 +276,33 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     public void sendKeyBindingResult(KeyBindingResultMessage message) {
+        send(message);
+    }
+
+    /** Receives Companion's requests to reload resources; runs on the connection thread. */
+    public void setReloadHandler(Consumer<ReloadMessage> handler) {
+        this.reloadHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    public void sendReloadResult(ReloadResultMessage message) {
+        send(message);
+    }
+
+    public void sendPackStack(PackStackMessage message) {
+        send(message);
+    }
+
+    /** Receives resources Companion tries in the game; runs on the connection thread, in message order. */
+    public void setOverlayHandler(Consumer<SetOverlayMessage> handler) {
+        this.overlayHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    /** Receives configuration values Companion sets in the game's memory; runs on the connection thread. */
+    public void setConfigValueHandler(Consumer<SetConfigValueMessage> handler) {
+        this.configValueHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    public void sendConfigValueResult(ConfigValueResultMessage message) {
         send(message);
     }
 
@@ -419,6 +465,27 @@ public final class CompanionAppClient implements AutoCloseable {
             }
             this.keyBindingHandler.accept(message);
         });
+        transport.getMessageBus().listenAlways(ReloadMessage.class, message -> {
+            if (!attempt.authenticated()) {
+                failSession(attempt, "Companion sent a reload request before authentication", null);
+                return;
+            }
+            this.reloadHandler.accept(message);
+        });
+        transport.getMessageBus().listenAlways(SetOverlayMessage.class, message -> {
+            if (!attempt.authenticated()) {
+                failSession(attempt, "Companion sent a resource before authentication", null);
+                return;
+            }
+            this.overlayHandler.accept(message);
+        });
+        transport.getMessageBus().listenAlways(SetConfigValueMessage.class, message -> {
+            if (!attempt.authenticated()) {
+                failSession(attempt, "Companion sent a configuration value before authentication", null);
+                return;
+            }
+            this.configValueHandler.accept(message);
+        });
         transport.getMessageBus().listenAlways(StopScriptMessage.class, message -> {
             if (!attempt.authenticated()) {
                 failSession(attempt, "Companion sent a stop-script request before authentication", null);
@@ -460,6 +527,7 @@ public final class CompanionAppClient implements AutoCloseable {
         sendServerManifest();
         ResourceSnapshotMessage snapshot = this.resourceSnapshot;
         if (snapshot != null) send(snapshot);
+        this.sessionOpenedHandler.run();
         startRuntimeInventoryPreparation(false);
     }
 

@@ -4,7 +4,9 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -36,10 +38,13 @@ class ChangesPanelTest {
         PackCatalogService catalog = new PackCatalogService(paths);
         catalog.accept(CatalogFixtures.INVENTORY, paths.catalog(), Runnable::run);
         ChangeRecord record = ChangeRecord.inMemory();
-        record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", file, "widgets.speed"), "9", "12");
+        record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", file, "widgets.speed"),
+                ChangeRecord.Level.PACK, "9", "12");
         ChangesPanel[] panel = new ChangesPanel[1];
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(this.directory, record),
                 new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false, Runnable::run),
+                new ResourceEdits(this.directory, record, new ResourceOriginals(this.directory.resolve("originals")),
+                        Runnable::run, () -> false),
                 target -> { }));
         ConfigSettingsTable table = panel[0].settingsTable();
         try {
@@ -48,7 +53,7 @@ class ChangesPanelTest {
                 assertEquals(List.of("Test Mod", "testmod-common.toml", "widgets.speed"),
                         List.of(table.row(0).name(), table.row(1).name(), table.row(2).name()));
                 assertEquals("12", table.row(2).value());
-                String tooltip = ConfigSettingsTable.tooltip(table.row(2), null, "9");
+                String tooltip = ConfigSettingsTable.tooltip(table.row(2), null, "9", null);
                 assertTrue(tooltip.contains("Before your edit"), tooltip);
             });
 
