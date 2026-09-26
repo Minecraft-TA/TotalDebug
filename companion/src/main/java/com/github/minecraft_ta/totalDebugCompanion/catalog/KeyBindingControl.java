@@ -16,6 +16,8 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -42,16 +44,21 @@ public final class KeyBindingControl {
     private final Path options;
     private final ChangeRecord record;
     private final BooleanSupplier gameRunning;
+    private final Executor writes;
     private final AtomicInteger requests = new AtomicInteger();
     private final Map<Integer, CompletableFuture<KeyBindingResultPayload>> waiting = new ConcurrentHashMap<>();
     /** Sends a message to the connected game, or is null while no game is connected. */
     private volatile Predicate<SetKeyBindingMessage> game;
 
-    /** {@code options} is the game's {@code options.txt}; {@code gameRunning} tells whether a game runs there. */
-    public KeyBindingControl(Path options, ChangeRecord record, BooleanSupplier gameRunning) {
+    /**
+     * {@code options} is the game's {@code options.txt}; {@code gameRunning} tells whether a game runs there, and
+     * {@code writes} runs the project's writes, which it finishes before its change record closes.
+     */
+    public KeyBindingControl(Path options, ChangeRecord record, BooleanSupplier gameRunning, Executor writes) {
         this.options = Objects.requireNonNull(options, "options");
         this.record = Objects.requireNonNull(record, "record");
         this.gameRunning = Objects.requireNonNull(gameRunning, "gameRunning");
+        this.writes = Objects.requireNonNull(writes, "writes");
     }
 
     /** The game's {@code options.txt}, where the keys are saved. */
@@ -81,17 +88,11 @@ public final class KeyBindingControl {
     public CompletableFuture<Result> set(String name, KeyBindings.Assignment shown, KeyBindings.Assignment assignment) {
         Predicate<SetKeyBindingMessage> send = this.game;
         if (send == null) {
-            return CompletableFuture.supplyAsync(() -> {
-                if (this.gameRunning.getAsBoolean()) {
-                    throw new CompletionException(new IOException(
-                            "The game is running but not connected to Companion; connect it to change keys"));
-                }
-                try {
-                    return recorded(name, shown, new Result(writeOptions(name, assignment), assignment, false));
-                } catch (IOException exception) {
-                    throw new CompletionException(exception);
-                }
-            });
+            try {
+                return CompletableFuture.supplyAsync(() -> writeOffline(name, shown, assignment), this.writes);
+            } catch (RejectedExecutionException closed) {
+                return CompletableFuture.failedFuture(new IOException("The project is closing; the key was not changed"));
+            }
         }
         int id = this.requests.incrementAndGet();
         CompletableFuture<KeyBindingResultPayload> answer = new CompletableFuture<>();
@@ -110,6 +111,19 @@ public final class KeyBindingControl {
         CompletableFuture.delayedExecutor(ANSWER_SECONDS, TimeUnit.SECONDS).execute(() -> waited.completeExceptionally(
                 new IOException("The game has not answered yet; the change is recorded if the game applies it")));
         return waited;
+    }
+
+    /** Writes the binding into {@code options.txt}, which only a closed game reads again. */
+    private Result writeOffline(String name, KeyBindings.Assignment shown, KeyBindings.Assignment assignment) {
+        if (this.gameRunning.getAsBoolean()) {
+            throw new CompletionException(new IOException(
+                    "The game is running but not connected to Companion; connect it to change keys"));
+        }
+        try {
+            return recorded(name, shown, new Result(writeOptions(name, assignment), assignment, false));
+        } catch (IOException exception) {
+            throw new CompletionException(exception);
+        }
     }
 
     private Result recorded(String name, KeyBindings.Assignment shown, Result done) {

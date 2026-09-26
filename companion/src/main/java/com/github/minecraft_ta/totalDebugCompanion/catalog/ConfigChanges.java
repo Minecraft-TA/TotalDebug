@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -34,7 +35,6 @@ import java.util.function.Supplier;
  * changed it.
  */
 public final class ConfigChanges {
-    private static final long CLOSE_SECONDS = 30;
 
     /** When an edit takes effect. */
     public enum Effect {
@@ -78,7 +78,7 @@ public final class ConfigChanges {
     private final ExecutorService writes = Executors.newSingleThreadExecutor(task ->
             Thread.ofPlatform().daemon().name("Configuration writes").unstarted(task));
     private volatile boolean connected;
-    /** The game process the pending edits wait in, or 0 before a game connected. */
+    /** The game process the pending edits wait in, or 0 while it is unknown. */
     private long gameProcess;
 
     /** {@code workspace} is the game directory, and {@code record} keeps every edit. */
@@ -101,18 +101,28 @@ public final class ConfigChanges {
     }
 
     /**
-     * Stops taking writes and finishes those already taken, so every file written is also recorded before the change
-     * record closes.
+     * The project's writes to the game's files, one at a time, which the project finishes before its change record
+     * closes. Refuses work once the project closes.
+     */
+    public Executor writes() {
+        return this.writes;
+    }
+
+    /**
+     * Stops taking writes and waits until those already taken have finished, so every file written is also recorded
+     * before the change record closes. An interruption does not cut the wait short; it is kept for the caller.
      */
     public void close() {
         this.writes.shutdown();
-        try {
-            if (!this.writes.awaitTermination(CLOSE_SECONDS, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("Configuration writes did not finish within " + CLOSE_SECONDS + " seconds");
+        boolean interrupted = false;
+        while (true) {
+            try {
+                if (this.writes.awaitTermination(1, TimeUnit.MINUTES)) break;
+            } catch (InterruptedException interruption) {
+                interrupted = true;
             }
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
         }
+        if (interrupted) Thread.currentThread().interrupt();
     }
 
     public void gameConnected() {
@@ -124,7 +134,8 @@ public final class ConfigChanges {
      * every file when it started.
      */
     public synchronized void gameProcess(long processId) {
-        if (processId != this.gameProcess) this.pending.clear();
+        // The first game seen may be the one the edits wait in; only a known, different process has restarted.
+        if (this.gameProcess != 0 && processId != this.gameProcess) this.pending.clear();
         this.gameProcess = processId;
     }
 

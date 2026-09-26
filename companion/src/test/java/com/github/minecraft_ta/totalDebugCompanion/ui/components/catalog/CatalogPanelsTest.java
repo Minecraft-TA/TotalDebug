@@ -93,7 +93,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()),
-                        new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(), () -> false), opened::add);
+                        new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(), () -> false, Runnable::run), opened::add);
                 try {
                     assertEquals("Test Mod", panel.title());
                     assertTrue(labels(panel).contains("1.2.3"), labels(panel)::toString);
@@ -129,7 +129,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()),
-                        new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(), () -> false), target -> { });
+                        new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(), () -> false, Runnable::run), target -> { });
                 try {
                     List<FactSection> sections = panel.sections(catalog.index().orElseThrow().mod("testmod").orElseThrow());
                     assertEquals(List.of("Mod", "Dependencies"), sections.stream().map(FactSection::title).toList());
@@ -150,7 +150,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 ModPanel panel = new ModPanel("absent", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()),
-                        new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(), () -> false), target -> { });
+                        new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(), () -> false, Runnable::run), target -> { });
                 try {
                     assertTrue(labels(panel).contains("absent is not an installed mod"), labels(panel)::toString);
                     assertEquals(1, panel.tabs().getTabCount(), "Only the Overview has something to show");

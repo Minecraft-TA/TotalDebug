@@ -12,6 +12,7 @@ import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -47,6 +48,82 @@ class ConfigChangesTest {
         ExecutionException refused = assertThrows(ExecutionException.class,
                 () -> changes.write(() -> "late").get(5, TimeUnit.SECONDS));
         assertEquals("The project is closing; the change was not written", refused.getCause().getMessage());
+    }
+
+    @Test
+    void closingWaitsThroughAnInterruptionAndKeepsItForTheCaller() throws Exception {
+        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CompletableFuture<String> taken = changes.write(() -> {
+            started.countDown();
+            try {
+                release.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            return "written";
+        });
+        assertTrue(started.await(5, TimeUnit.SECONDS));
+        boolean[] interruptedAfter = new boolean[1];
+        Thread closer = new Thread(() -> {
+            changes.close();
+            interruptedAfter[0] = Thread.currentThread().isInterrupted();
+        });
+
+        closer.start();
+        closer.interrupt();
+        closer.join(200);
+        assertTrue(closer.isAlive(), "an interruption does not end the wait while a write runs");
+        release.countDown();
+        closer.join(5_000);
+
+        assertEquals("written", taken.getNow(null));
+        assertTrue(interruptedAfter[0], "the interruption is kept for the caller");
+    }
+
+    @Test
+    void anOfflineKeyChangeTakenBeforeClosingIsWrittenAndRecorded() throws Exception {
+        Path options = this.directory.resolve("options.txt");
+        Files.writeString(options, "key_key.jump:key.keyboard.space\n");
+        ChangeRecord record = ChangeRecord.inMemory();
+        ConfigChanges changes = new ConfigChanges(this.directory, record);
+        KeyBindingControl keys = new KeyBindingControl(options, record, () -> false, changes.writes());
+        CountDownLatch release = new CountDownLatch(1);
+        changes.write(() -> {
+            try {
+                release.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        });
+        CompletableFuture<KeyBindingControl.Result> key = keys.set("key.jump",
+                new KeyBindings.Assignment("key.keyboard.space", "NONE"), new KeyBindings.Assignment("key.keyboard.g", "NONE"));
+
+        CompletableFuture<Void> closing = CompletableFuture.runAsync(changes::close);
+        release.countDown();
+        closing.get(10, TimeUnit.SECONDS);
+
+        assertTrue(key.isDone());
+        assertEquals(List.of("key_key.jump:key.keyboard.g"), Files.readAllLines(options));
+        assertEquals(new KeyBindings.Assignment("key.keyboard.space", "NONE"), keys.original("key.jump"),
+                "the key change is recorded before the record could close");
+    }
+
+    @Test
+    void theFirstGameToConnectKeepsTheEditsMadeWhileItRan() throws Exception {
+        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
+        try (GameLock ignored = GameLock.hold(InstancePaths.forGame(this.directory).gameLock())) {
+            edit(changes, config(), PackCatalog.Restart.GAME, "1", "2");
+            assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"));
+
+            changes.gameConnected();
+            changes.gameProcess(42);
+
+            assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"),
+                    "the game that runs now is the one the edit waits in");
+        }
     }
 
     @Test
