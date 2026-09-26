@@ -462,6 +462,7 @@ class ItemRenderBackendTest {
         writeText(pack, "assets/test/models/item/separate.json", """
                 {
                   "loader": "neoforge:separate_transforms",
+                  "gui_light": "front",
                   "base": {
                     "parent": "minecraft:item/generated",
                     "textures": { "layer0": "test:item/red" }

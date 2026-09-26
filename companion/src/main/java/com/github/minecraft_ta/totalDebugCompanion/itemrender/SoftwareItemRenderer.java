@@ -42,7 +42,8 @@ final class SoftwareItemRenderer {
     BufferedImage render(ItemRenderRequest request) throws IOException {
         ResolvedModel model = this.models.resolve(request.modelId());
         BufferedImage result = new BufferedImage(request.size(), request.size(), BufferedImage.TYPE_INT_ARGB);
-        if (model.kind() == ItemModelRepository.ModelKind.GENERATED
+        // The flat path draws at full brightness, which only front light gives.
+        if (model.kind() == ItemModelRepository.ModelKind.GENERATED && model.guiLight() == GuiLight.FRONT
                 && model.guiTransform().isIdentity() && model.rootTransform().isIdentity()) {
             renderFlatGenerated(model, request, result);
             return result;
@@ -164,7 +165,9 @@ final class SoftwareItemRenderer {
                     GuiLight.FRONT, light);
         }
         if (model.hasTexture("cover") && (!container.coverIsMask() || base != null)) {
-            TextureRegion cover = this.models.fluidMask(model.resolveTexture("cover"));
+            // A cover that is not a mask is drawn as it is, animated or not.
+            TextureRegion cover = container.coverIsMask() ? this.models.fluidMask(model.resolveTexture("cover"))
+                    : this.models.texture(model.resolveTexture("cover"));
             addGeneratedLayer(triangles, container.coverIsMask() ? base : cover, cover, request.tintColor(2),
                     request.size(), transform,
                     rootTransform.compose(ModelTransform.scale(1, 1, 1.004).around(new Vec3(0.5, 0.5, 0.5))),
@@ -257,6 +260,17 @@ final class SoftwareItemRenderer {
             Vec3 normal = transformed[1].subtract(transformed[0])
                     .cross(transformed[2].subtract(transformed[0]))
                     .normalize();
+            Vec3 local = face.vertices().get(0).position();
+            Vec3 localNormal = face.vertices().get(1).position().subtract(local)
+                    .cross(face.vertices().get(2).position().subtract(local)).normalize();
+            Vec3 outward = applyGuiTransform(objTransform.apply(local.add(localNormal)), transform).subtract(transformed[0]);
+            if (normal.dot(outward) < 0) {
+                normal = normal.scale(-1);
+            }
+            // Items render with back faces culled, like element faces.
+            if (normal.z() <= 0) {
+                continue;
+            }
             ExtraFaceData light = face.emissive()
                     ? new ExtraFaceData(0xFFFFFFFF, 15, 15, false)
                     : ExtraFaceData.DEFAULT;
