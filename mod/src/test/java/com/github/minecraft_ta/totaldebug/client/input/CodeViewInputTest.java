@@ -1,37 +1,32 @@
 package com.github.minecraft_ta.totaldebug.client.input;
 
+import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CodeViewInputTest {
     @Test
-    void emptyScreenResolverFallsBackToTheContainerSlot() {
-        AtomicBoolean containerLookupCalled = new AtomicBoolean();
+    void theSlotUnderTheMouseComesBeforeTheRecipeViewer() {
+        Optional<String> resolved = CodeViewInput.slotFirst(() -> Optional.of("slot"), () -> {
+            throw new AssertionError("a recipe viewer must not claim a slot that holds a stack");
+        });
 
-        CodeViewInput.resolveHoveredItem(
-                (screen, mouseX, mouseY) -> Optional.empty(),
-                null,
-                10,
-                20,
-                () -> {
-                    containerLookupCalled.set(true);
-                    return Optional.empty();
-                }
-        );
+        assertEquals(Optional.of("slot"), resolved);
+    }
 
-        assertTrue(containerLookupCalled.get());
+    @Test
+    void withoutASlotTheRecipeViewerIsAsked() {
+        assertEquals(Optional.of("viewer"), CodeViewInput.slotFirst(Optional::empty, () -> Optional.of("viewer")));
     }
 
     @Test
     void screenResolverLifecycleRequiresTheSameInstalledInstance() {
         var input = new CodeViewInput(subject -> {
-        }, target -> {
-        });
+        }, new KeptStacks());
         ScreenItemStackResolver installed = (screen, mouseX, mouseY) -> Optional.empty();
         ScreenItemStackResolver other = (screen, mouseX, mouseY) -> Optional.empty();
 

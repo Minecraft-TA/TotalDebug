@@ -20,10 +20,11 @@ final class ServerScriptTargets implements ScriptTargetResolver {
     }
 
     @Override
-    public ScriptTarget resolve(SubjectRef.InWorld subject) {
+    public ScriptTarget resolve(SubjectRef.Occurrence subject) {
         return switch (subject) {
             case SubjectRef.Block block -> ScriptTargetResolver.block(level(block.dimension()), block);
             case SubjectRef.Entity entity -> entity(entity);
+            case SubjectRef.Stack stack -> throw new IllegalStateException("A selected stack is read on the client");
         };
     }
 

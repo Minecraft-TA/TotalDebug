@@ -45,14 +45,12 @@ import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Desktop;
-import java.awt.FlowLayout;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -186,7 +184,7 @@ public final class ModPanel extends JPanel {
             this.browseCode.setVisible(false);
             String unavailable = CatalogMessages.unavailable(state);
             showOverview(message(this.index == null && !unavailable.isEmpty() ? unavailable
-                    : this.modId + " is not an installed mod"), null);
+                    : this.modId + " is not an installed mod"));
             for (ModTab tab : ModTab.values()) {
                 if (tab != ModTab.OVERVIEW) setTab(tab, 0);
             }
@@ -199,6 +197,10 @@ public final class ModPanel extends JPanel {
         List<JComponent> subtitle = new ArrayList<>();
         subtitle.add(SubjectHeader.text(this.summary.id()));
         if (!this.summary.version().isEmpty()) subtitle.add(SubjectHeader.text(this.summary.version()));
+        if (mod != null) {
+            url(subtitle, "Website", mod.urls().get("display"));
+            url(subtitle, "Issues", mod.urls().get("issues"));
+        }
         this.header.setSubtitle(subtitle);
         List<ModLogoIcons.Source> logo = ModLogoIcons.sources(this.summary);
         if (!logo.isEmpty()) loadLogo(logo);
@@ -209,7 +211,7 @@ public final class ModPanel extends JPanel {
         this.browseCode.setVisible(!this.summary.moduleId().isEmpty() && hasModule(this.summary.moduleId()));
 
         String unavailable = this.summary.captured() ? "" : CatalogMessages.unavailable(state);
-        showOverview(overviewContent(mod, unavailable), footer(mod));
+        showOverview(overviewContent(mod, unavailable));
         this.content.setContent(this.index == null || !this.summary.captured() ? Map.of() : this.index.content(this.summary.id()));
         setTab(ModTab.CONTENT, this.content.count());
         setTab(ModTab.CONFIGURATION, configFiles.size());
@@ -257,27 +259,13 @@ public final class ModPanel extends JPanel {
         }
         List<FactSection> sections = sections(mod);
         if (!sections.isEmpty()) {
-            FactsPanel facts = new FactsPanel(sections, this.icons, new FactsPanel.Actions() {
-                @Override
-                public void open(FactLink link) {
-                    ModPanel.this.navigator.accept(SubjectLinks.target(link));
-                }
-
-                @Override
-                public void openData(String section, String label) {
-                }
-            }, new HashSet<>());
+            FactsPanel facts = new FactsPanel(sections, this.icons,
+                    link -> ModPanel.this.navigator.accept(SubjectLinks.target(link)));
             facts.setAlignmentX(Component.LEFT_ALIGNMENT);
             content.add(facts);
         }
-        if (mod != null && !mod.urls().isEmpty()) {
-            JPanel links = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
-            links.setBorder(UiMetrics.pagePadding(0, 8));
-            links.setAlignmentX(Component.LEFT_ALIGNMENT);
-            addUrl(links, "Website", mod.urls().get("display"));
-            addUrl(links, "Issues", mod.urls().get("issues"));
-            content.add(links);
-        }
+        JComponent files = files(mod);
+        if (files != null) content.add(new PageSection("Files", files));
         return content;
     }
 
@@ -313,34 +301,37 @@ public final class ModPanel extends JPanel {
         return sections;
     }
 
-    private JComponent footer(PackCatalog.Mod mod) {
-        JPanel footer = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 4));
-        footer.setBorder(BorderFactory.createEmptyBorder(4, 0, 8, 0));
+    /** The mod's own file, which opens its classes, and its configuration files, which open on their tab; null for none. */
+    private JComponent files(PackCatalog.Mod mod) {
+        List<PageSection.LinkRow> rows = new ArrayList<>();
         List<Path> codeFiles = mod != null && "file".equalsIgnoreCase(mod.file().getScheme())
                 ? List.of(Path.of(mod.file())) : this.summary.files();
+        List<LinkLabel> code = new ArrayList<>();
         for (Path file : codeFiles) {
-            footer.add(new LinkLabel(file.getFileName().toString(), Icons.JAR_FILE,
+            code.add(new LinkLabel(file.getFileName().toString(), Icons.JAR_FILE,
                     Tooltip.of("Browse Code").detail(Tooltip.shortPath(file)).html(), () -> {
                 if (!this.summary.moduleId().isEmpty() && hasModule(this.summary.moduleId())) {
                     this.navigator.accept(new NavigationTarget.RuntimeModuleNode(this.summary.moduleId()));
                 }
             }));
         }
+        if (!code.isEmpty()) rows.add(new PageSection.LinkRow("Mod file", code));
+        List<LinkLabel> configs = new ArrayList<>();
         if (mod != null) {
             for (PackCatalog.ConfigFile config : mod.configs()) {
-                footer.add(new LinkLabel(config.fileName(), Icons.CONFIG_FILE, "Configuration " + config.fileName(), () -> {
+                configs.add(new LinkLabel(config.fileName(), Icons.CONFIG_FILE, "Configuration " + config.fileName(), () -> {
                     this.configs.select(config.fileName());
                     this.tabs.setSelectedComponent(this.tabContent.get(ModTab.CONFIGURATION));
                 }));
             }
         }
-        return footer.getComponentCount() == 0 ? null : footer;
+        if (!configs.isEmpty()) rows.add(new PageSection.LinkRow("Configuration", configs));
+        return rows.isEmpty() ? null : PageSection.linkRows(rows);
     }
 
-    private void showOverview(JComponent content, JComponent footer) {
+    private void showOverview(JComponent content) {
         this.overview.removeAll();
         this.overview.add(content, BorderLayout.NORTH);
-        if (footer != null) this.overview.add(footer, BorderLayout.SOUTH);
         this.overview.revalidate();
         this.overview.repaint();
     }
@@ -412,9 +403,9 @@ public final class ModPanel extends JPanel {
         }
     }
 
-    private static void addUrl(JPanel links, String label, String url) {
+    private static void url(List<JComponent> parts, String label, String url) {
         if (url == null || url.isBlank()) return;
-        links.add(new LinkLabel(label, Icons.WEB, url, () -> {
+        parts.add(new LinkLabel(label, Icons.WEB, url, () -> {
             try {
                 Desktop.getDesktop().browse(URI.create(url));
             } catch (IOException | RuntimeException ignored) {

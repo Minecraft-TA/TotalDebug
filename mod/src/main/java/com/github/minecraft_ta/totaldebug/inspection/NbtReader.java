@@ -5,7 +5,7 @@ import com.github.minecraft_ta.totaldebug.script.ScriptTarget;
 import net.minecraft.nbt.CompoundTag;
 
 /**
- * Built-in reader for the data a block entity or entity would save. Saving an unopened loot container writes its
+ * Built-in reader for the data a block entity, entity or stack would save. Saving an unopened loot container writes its
  * loot table reference without generating the loot.
  */
 public final class NbtReader {
@@ -22,6 +22,8 @@ public final class NbtReader {
             }
             case ScriptTarget.LiveEntity entity -> facts.section("NBT")
                     .nbt("Entity", entity.entity().saveWithoutId(new CompoundTag()));
+            case ScriptTarget.SelectedStack selected -> facts.section("NBT")
+                    .nbt("Stack", selected.stack().save(selected.level().registryAccess()));
         }
     }
 }

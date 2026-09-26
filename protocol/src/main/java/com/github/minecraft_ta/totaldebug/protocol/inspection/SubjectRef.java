@@ -6,7 +6,8 @@ import java.util.regex.Pattern;
 
 /**
  * Names an inspected thing by where it is found, never by a retained object. Its text form is used on the wire and
- * for copying, e.g. {@code block minecraft:overworld 12 64 -3}, {@code entity <uuid>}, {@code mod mekanism},
+ * for copying, e.g. {@code block minecraft:overworld 12 64 -3}, {@code entity <uuid>},
+ * {@code stack 7}, {@code mod mekanism},
  * {@code definition item mekanism:energy_tablet} or {@code definition mekanism:chemical mekanism:hydrogen}.
  */
 public sealed interface SubjectRef {
@@ -38,6 +39,16 @@ public sealed interface SubjectRef {
                     throw new IllegalArgumentException("Invalid entity UUID: " + parts[1], exception);
                 }
             }
+            case "stack" -> {
+                if (parts.length != 2) {
+                    throw new IllegalArgumentException("Expected: stack <selection>");
+                }
+                try {
+                    return new Stack(Long.parseLong(parts[1]));
+                } catch (NumberFormatException exception) {
+                    throw new IllegalArgumentException("Invalid stack selection: " + parts[1], exception);
+                }
+            }
             case "mod" -> {
                 if (parts.length != 2) {
                     throw new IllegalArgumentException("Expected: mod <mod id>");
@@ -54,13 +65,13 @@ public sealed interface SubjectRef {
         }
     }
 
-    /** Parses a subject that game-side code can resolve in a loaded world. */
-    static InWorld parseWorld(String text) {
+    /** Parses a subject that game-side code can resolve: a block, an entity or a selected stack. */
+    static Occurrence parseOccurrence(String text) {
         SubjectRef subject = parse(text);
-        if (subject instanceof InWorld world) {
-            return world;
+        if (subject instanceof Occurrence occurrence) {
+            return occurrence;
         }
-        throw new IllegalArgumentException(subject.format() + " names a mod or definition, not a block or entity in the world");
+        throw new IllegalArgumentException(subject.format() + " names a mod or definition, not something in the game");
     }
 
     private static int coordinate(String text) {
@@ -71,12 +82,12 @@ public sealed interface SubjectRef {
         }
     }
 
-    /** A subject that exists in a loaded world and is resolved by the game. */
-    sealed interface InWorld extends SubjectRef permits Block, Entity {
+    /** Something in the game, which the game resolves: a block, an entity or a selected stack. */
+    sealed interface Occurrence extends SubjectRef permits Block, Entity, Stack {
     }
 
     /** A block position in a dimension. */
-    record Block(String dimension, int x, int y, int z) implements InWorld {
+    record Block(String dimension, int x, int y, int z) implements Occurrence {
         private static final int MAX_HORIZONTAL = 30_000_000;
         private static final int MAX_VERTICAL = 4_096;
 
@@ -98,7 +109,7 @@ public sealed interface SubjectRef {
     }
 
     /** An entity in any loaded dimension. */
-    record Entity(UUID uuid) implements InWorld {
+    record Entity(UUID uuid) implements Occurrence {
         public Entity {
             Objects.requireNonNull(uuid, "uuid");
         }
@@ -106,6 +117,23 @@ public sealed interface SubjectRef {
         @Override
         public String format() {
             return "entity " + this.uuid;
+        }
+    }
+
+    /**
+     * A stack selected in a screen, as the client kept it when it was selected: {@code selection} names the kept copy.
+     * It is read on the client and shows the stack as it was, wherever the stack was shown.
+     */
+    record Stack(long selection) implements Occurrence {
+        public Stack {
+            if (selection < 1) {
+                throw new IllegalArgumentException("Invalid stack selection: " + selection);
+            }
+        }
+
+        @Override
+        public String format() {
+            return "stack " + this.selection;
         }
     }
 

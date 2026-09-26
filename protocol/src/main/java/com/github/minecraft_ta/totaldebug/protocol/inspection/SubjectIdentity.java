@@ -23,7 +23,8 @@ public record SubjectIdentity(
 
     public enum Kind {
         BLOCK,
-        ENTITY
+        ENTITY,
+        ITEM
     }
 
     public SubjectIdentity {
@@ -38,9 +39,28 @@ public record SubjectIdentity(
         iconItem = bounded(iconItem, "iconItem");
     }
 
-    /** The name shown for the subject: its display name, or its registry id when it has none. */
+    /**
+     * The name shown for the subject: its display name, or when the side that resolved it has no translation for it,
+     * a name made of the registry path, such as Basic Energy Cube for {@code mekanism:basic_energy_cube}.
+     */
     public String title() {
-        return this.displayName.isBlank() ? this.registryId : this.displayName;
+        int separator = this.registryId.indexOf(':');
+        String path = this.registryId.substring(separator + 1);
+        String prefix = switch (this.kind) {
+            case BLOCK -> "block.";
+            case ENTITY -> "entity.";
+            case ITEM -> "item.";
+        };
+        String translationKey = prefix
+                + (separator < 0 ? "minecraft" : this.registryId.substring(0, separator)) + "." + path.replace('/', '.');
+        if (!this.displayName.isBlank() && !this.displayName.equals(translationKey)) return this.displayName;
+        StringBuilder title = new StringBuilder();
+        for (String word : path.split("[_/]+")) {
+            if (word.isEmpty()) continue;
+            if (!title.isEmpty()) title.append(' ');
+            title.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return title.isEmpty() ? this.registryId : title.toString();
     }
 
     public record ClassLink(String label, String binaryName) {

@@ -159,16 +159,16 @@ public final class KeyBindingsPanel extends JPanel {
         for (JCheckBox toggle : List.of(this.changedOnly, this.collisionsOnly, this.unboundOnly)) {
             toggle.addActionListener(event -> applyFilter());
         }
-        JPanel search = new JPanel(new BorderLayout(4, 0));
-        search.add(this.filter, BorderLayout.CENTER);
-        search.add(this.pressToSearch, BorderLayout.EAST);
+        // Inside the field, like IntelliJ's search options.
+        this.pressToSearch.setMargin(UiMetrics.compactButtonMargin());
+        this.filter.putClientProperty("JTextField.trailingComponent", this.pressToSearch);
         JPanel toggles = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         toggles.add(this.changedOnly);
         toggles.add(this.collisionsOnly);
         toggles.add(this.unboundOnly);
         JPanel bar = new JPanel(new BorderLayout(10, 0));
         bar.setBorder(UiMetrics.barPadding());
-        bar.add(search, BorderLayout.CENTER);
+        bar.add(this.filter, BorderLayout.CENTER);
         bar.add(toggles, BorderLayout.EAST);
         ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
         this.notice.setBorder(UiMetrics.noticePadding());

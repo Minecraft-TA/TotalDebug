@@ -38,11 +38,20 @@ class SubjectRefTest {
     }
 
     @Test
-    void worldSubjectsRejectModsAndDefinitions() {
-        assertEquals(new SubjectRef.Block("minecraft:overworld", 1, 2, 3), SubjectRef.parseWorld("block minecraft:overworld 1 2 3"));
+    void stackTextRoundTrips() {
+        assertEquals(new SubjectRef.Stack(7), SubjectRef.parse("stack 7"));
+        assertEquals("stack 7", new SubjectRef.Stack(7).format());
+        assertEquals(new SubjectRef.Stack(7), SubjectRef.parseOccurrence("stack 7"));
+        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("stack 0"));
+        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("stack seven"));
+    }
+
+    @Test
+    void occurrencesRejectModsAndDefinitions() {
+        assertEquals(new SubjectRef.Block("minecraft:overworld", 1, 2, 3), SubjectRef.parseOccurrence("block minecraft:overworld 1 2 3"));
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-                () -> SubjectRef.parseWorld("definition item minecraft:stone"));
-        assertEquals("definition item minecraft:stone names a mod or definition, not a block or entity in the world",
+                () -> SubjectRef.parseOccurrence("definition item minecraft:stone"));
+        assertEquals("definition item minecraft:stone names a mod or definition, not something in the game",
                 failure.getMessage());
     }
 

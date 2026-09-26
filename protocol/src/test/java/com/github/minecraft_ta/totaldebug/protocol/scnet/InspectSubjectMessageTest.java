@@ -45,19 +45,14 @@ class InspectSubjectMessageTest {
     }
 
     @Test
-    void rejectsAnInvalidSubjectOrTooManyClasses() {
+    void rejectsSomethingNotInTheGameOrTooManyClasses() {
         assertThrows(IllegalArgumentException.class, () -> new InspectSubjectPayload(
                 "game-session", "block nowhere", FURNACE, "", Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new InspectSubjectPayload(
+                "game-session", "definition item minecraft:furnace", FURNACE, "", Map.of()));
         assertThrows(IllegalArgumentException.class, () -> new SubjectIdentity(SubjectIdentity.Kind.ENTITY,
                 "minecraft:pig", "", "",
                 Collections.nCopies(SubjectIdentity.MAX_CLASSES + 1, new ClassLink("Entity", "X")), ""));
-    }
-
-    @Test
-    void titleFallsBackToTheRegistryId() {
-        assertEquals("Furnace", FURNACE.title());
-        assertEquals("mod:thing",
-                new SubjectIdentity(SubjectIdentity.Kind.BLOCK, "mod:thing", "", "", List.of(), "").title());
     }
 
     @Test

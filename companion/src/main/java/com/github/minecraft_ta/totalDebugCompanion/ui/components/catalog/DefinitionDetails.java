@@ -1,85 +1,80 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
-import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderResourceRoot;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ModelAppearance;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
-import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
-import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
-import com.github.minecraft_ta.totalDebugCompanion.navigation.SubjectLinks;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.FactsPanel;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.ItemTabIcon;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
-import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
+import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
-import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.SwingConstants;
-import java.awt.Cursor;
-import java.awt.FlowLayout;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.GridLayout;
-import java.awt.Insets;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.nio.file.Files;
-import java.util.Set;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JTabbedPane;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
-import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.FlowLayout;
+import java.awt.GridLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * A registered block, item or entity type as the captured pack catalog describes it, with the textures it is drawn
- * with and the files that define it.
+ * What the captured catalog and the resource snapshot say about one registered block, item or entity type: its title,
+ * icon and class, the entries it links to and its further facts, and its Appearance and Files sections, which load in
+ * the background. {@code changed} runs on the event thread whenever the catalog changes.
  */
-public final class DefinitionPanel extends JPanel {
+public final class DefinitionDetails {
+    /** What the details are read from, and where their links lead. */
+    public record Services(PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources, ItemIconService icons,
+                           Consumer<NavigationTarget> navigator) {
+        public Services {
+            Objects.requireNonNull(catalog, "catalog");
+            Objects.requireNonNull(sources, "sources");
+            Objects.requireNonNull(icons, "icons");
+            Objects.requireNonNull(navigator, "navigator");
+        }
+    }
+
     private final SubjectRef.Definition subject;
-    private final PackCatalogService catalog;
-    private final Supplier<RuntimeSourceCatalog> sources;
-    private final ItemIconService icons;
-    private final Consumer<NavigationTarget> navigator;
+    private final Services services;
+    private final Runnable changed;
     private final Runnable removeCatalogListener;
     private final Runnable removeIconListener;
-    private final SubjectHeader header = new SubjectHeader();
-    private final ItemTabIcon tabIcon;
-    private final JPanel overview = new JPanel(new BorderLayout());
     private final JPanel extras = new JPanel();
+    private PackCatalogService.State state;
     private CatalogIndex index;
     private CatalogIndex.Entry entry;
     private long generation;
@@ -88,141 +83,101 @@ public final class DefinitionPanel extends JPanel {
     private List<ModResources.Resource> matched = List.of();
     private List<ModResources.Resource> owned = List.of();
     private CompletableFuture<?> resourceLoad = CompletableFuture.completedFuture(null);
+    private int labelWidth;
     private boolean disposed;
 
-    public DefinitionPanel(SubjectRef.Definition subject, PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources,
-                           ItemIconService icons, Consumer<NavigationTarget> navigator) {
-        super(new BorderLayout());
+    public DefinitionDetails(SubjectRef.Definition subject, Services services, Runnable changed) {
         this.subject = Objects.requireNonNull(subject, "subject");
-        this.tabIcon = new ItemTabIcon(ContentKinds.of(subject.registry()).icon());
-        this.catalog = Objects.requireNonNull(catalog, "catalog");
-        this.sources = Objects.requireNonNull(sources, "sources");
-        this.icons = Objects.requireNonNull(icons, "icons");
-        this.navigator = Objects.requireNonNull(navigator, "navigator");
-        add(this.header, BorderLayout.NORTH);
+        this.services = Objects.requireNonNull(services, "services");
+        this.changed = Objects.requireNonNull(changed, "changed");
         this.extras.setLayout(new BoxLayout(this.extras, BoxLayout.Y_AXIS));
-        JPanel page = new JPanel(new BorderLayout());
-        page.add(this.overview, BorderLayout.NORTH);
-        page.add(this.extras, BorderLayout.CENTER);
-        JScrollPane scroll = new JScrollPane(page);
-        scroll.setBorder(BorderFactory.createEmptyBorder());
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
-        add(scroll, BorderLayout.CENTER);
-        this.removeCatalogListener = catalog.addListener(this::rebuild);
-        this.removeIconListener = icons.addListener(() -> {
-            loadIcon();
-            loadAppearance();
-        });
-        rebuild();
+        this.removeCatalogListener = services.catalog().addListener(this::reload);
+        this.removeIconListener = services.icons().addListener(this::loadAppearance);
+        read();
+        loadAppearance();
+        loadResources();
     }
 
     public SubjectRef.Definition subject() {
         return this.subject;
     }
 
+    /** The catalog's title for the definition, or its id when the catalog does not have it. */
     public String title() {
         return this.entry == null ? this.subject.id() : this.entry.title();
     }
 
-    public ItemTabIcon tabIcon() {
-        return this.tabIcon;
+    /** Why the catalog cannot describe the definition, or empty when it does. */
+    public String unavailable() {
+        if (this.entry != null) return "";
+        String unavailable = CatalogMessages.unavailable(this.state);
+        return unavailable.isEmpty() ? this.subject.id() + " is not in the captured catalog" : unavailable;
     }
 
-    void rebuild() {
-        if (this.disposed) return;
-        PackCatalogService.State state = this.catalog.state();
-        this.index = state instanceof PackCatalogService.Ready ready ? ready.index() : null;
-        this.entry = this.index == null ? null : this.index.entry(this.subject).orElse(null);
-        this.header.setTitle(title());
+    /** The name of the mod owning the definition, or its namespace. */
+    public String modName() {
         String namespace = this.subject.namespace();
-        List<JComponent> subtitle = new ArrayList<>();
-        subtitle.add(SubjectHeader.text(ContentKinds.of(this.subject.registry()).singular()));
-        subtitle.add(SubjectHeader.text(this.subject.id()));
-        String owner = this.index == null ? namespace : this.index.ownerName(namespace);
-        subtitle.add(new LinkLabel(owner, Icons.MOD, "mod " + namespace,
-                () -> this.navigator.accept(new NavigationTarget.ModPage(namespace))));
-        this.header.setSubtitle(subtitle);
-        this.overview.removeAll();
-        if (this.entry == null) {
-            String unavailable = CatalogMessages.unavailable(state);
-            this.overview.add(message(unavailable.isEmpty() ? this.subject.id() + " is not in the captured catalog" : unavailable),
-                    BorderLayout.NORTH);
-        } else {
-            FactsPanel facts = new FactsPanel(sections(), this.icons, new FactsPanel.Actions() {
-                @Override
-                public void open(FactLink link) {
-                    DefinitionPanel.this.navigator.accept(SubjectLinks.target(link));
-                }
+        return this.index == null ? namespace : this.index.ownerName(namespace);
+    }
 
-                @Override
-                public void openData(String section, String label) {
-                }
-            }, new HashSet<>());
-            this.overview.add(facts, BorderLayout.NORTH);
-        }
-        this.overview.revalidate();
-        this.overview.repaint();
-        loadIcon();
-        loadAppearance();
-        loadResources();
-        if (SwingUtilities.getAncestorOfClass(EditorTabs.class, this) instanceof EditorTabs editorTabs) {
-            editorTabs.refreshEditorTitles();
-        }
+    /** The item drawn for the definition, when the catalog names one. */
+    public Optional<CatalogIndex.ItemIcon> icon() {
+        return this.index == null || this.entry == null || this.entry.iconItem().isEmpty()
+                ? Optional.empty() : this.index.itemIcon(this.entry.iconItem());
+    }
+
+    /** The class the catalog records for the definition, linked to its source. */
+    public Optional<Fact> classFact() {
+        if (this.index == null) return Optional.empty();
+        return this.index.definition(this.subject).map(PackCatalog.RegistryEntry::className)
+                .filter(name -> !name.isEmpty())
+                .map(name -> Fact.text("Class", name.substring(name.lastIndexOf('.') + 1)).withLink(FactLink.toClass(name)));
     }
 
     /**
-     * What the catalog records about the definition: its mod and class, the entries it links to, and its further
-     * facts, each named after its key.
+     * The entries the definition links to, each linked to its page when its registry was captured and named by its id
+     * otherwise, followed by its further facts named after their keys.
      */
-    List<FactSection> sections() {
+    public List<Fact> related() {
         List<Fact> facts = new ArrayList<>();
-        facts.add(Fact.text("ID", this.subject.id()));
-        String namespace = this.subject.namespace();
-        this.index.mod(namespace).ifPresent(mod ->
-                facts.add(Fact.text("Mod", mod.title()).withLink(FactLink.toSubject(new SubjectRef.Mod(mod.id())))));
-        this.index.definition(this.subject).ifPresent(entry -> {
-            classFact(facts, entry.className());
-            for (PackCatalog.Link link : entry.links()) related(facts, link);
-            new TreeMap<>(entry.facts()).forEach((key, value) -> facts.add(Fact.text(ContentKinds.label(key), value)));
+        if (this.index == null) return facts;
+        this.index.definition(this.subject).ifPresent(definition -> {
+            for (PackCatalog.Link link : definition.links()) {
+                String label = ContentKinds.label(link.relation());
+                SubjectRef.Definition related = new SubjectRef.Definition(link.registry(), link.id());
+                facts.add(this.index.entry(related)
+                        .map(entry -> Fact.text(label, entry.title()).withLink(FactLink.toSubject(related)))
+                        .orElse(Fact.text(label, link.id())));
+            }
+            new TreeMap<>(definition.facts()).forEach((key, value) -> facts.add(Fact.text(ContentKinds.label(key), value)));
         });
-        return List.of(new FactSection(ContentKinds.of(this.subject.registry()).singular(), facts, facts.size()));
+        return facts;
     }
 
-    private static void classFact(List<Fact> facts, String className) {
-        if (className.isEmpty()) return;
-        facts.add(Fact.text("Class", className.substring(className.lastIndexOf('.') + 1))
-                .withLink(FactLink.toClass(className)));
+    /** The Appearance and Files sections, kept current as they load. */
+    public JComponent extras() {
+        return this.extras;
     }
 
-    /** A related entry, linked to its page when its registry was captured and named by its id otherwise. */
-    private void related(List<Fact> facts, PackCatalog.Link link) {
-        String label = ContentKinds.label(link.relation());
-        SubjectRef.Definition related = new SubjectRef.Definition(link.registry(), link.id());
-        facts.add(this.index.entry(related)
-                .map(entry -> Fact.text(label, entry.title()).withLink(FactLink.toSubject(related)))
-                .orElse(Fact.text(label, link.id())));
+    /** Lines the Files rows up with a label column of {@code width} above them. */
+    public void alignLabels(int width) {
+        if (width == this.labelWidth) return;
+        this.labelWidth = width;
+        showExtras();
     }
 
-    private void loadIcon() {
+    private void read() {
+        this.state = this.services.catalog().state();
+        this.index = this.state instanceof PackCatalogService.Ready ready ? ready.index() : null;
+        this.entry = this.index == null ? null : this.index.entry(this.subject).orElse(null);
+    }
+
+    private void reload() {
         if (this.disposed) return;
-        Optional<CatalogIndex.ItemIcon> icon = this.index == null || this.entry == null || this.entry.iconItem().isEmpty()
-                ? Optional.empty() : this.index.itemIcon(this.entry.iconItem());
-        if (icon.isEmpty()) {
-            this.header.setIcon(ContentKinds.of(this.subject.registry()).icon());
-            return;
-        }
-        this.icons.render(icon.get().model(), icon.get().tints(), SubjectHeader.ICON_SIZE)
-                .thenAccept(image -> SwingUtilities.invokeLater(() -> {
-                    if (this.disposed) return;
-                    this.header.setIcon(image.<Icon>map(ImageIcon::new).orElse(ContentKinds.of(this.subject.registry()).icon()));
-                }));
-        this.icons.render(icon.get().model(), icon.get().tints(), this.tabIcon.size())
-                .thenAccept(image -> SwingUtilities.invokeLater(() -> {
-                    if (this.disposed) return;
-                    this.tabIcon.setImage(image.orElse(null));
-                    Component tabs = SwingUtilities.getAncestorOfClass(JTabbedPane.class, this);
-                    if (tabs != null) tabs.repaint();
-                }));
+        read();
+        loadAppearance();
+        loadResources();
+        this.changed.run();
     }
 
     /**
@@ -238,10 +193,10 @@ public final class DefinitionPanel extends JPanel {
             switch (this.subject.registry()) {
                 case RegistryIds.BLOCK -> {
                     blockId = this.subject.id();
-                    String item = this.index.definition(this.subject).map(entry -> entry.link("item")).orElse("");
-                    if (!item.isEmpty()) itemModel = this.icons.itemIcon(item).model();
+                    String item = this.index.definition(this.subject).map(definition -> definition.link("item")).orElse("");
+                    if (!item.isEmpty()) itemModel = this.services.icons().itemIcon(item).model();
                 }
-                case RegistryIds.ITEM -> itemModel = this.icons.itemIcon(this.subject.id()).model();
+                case RegistryIds.ITEM -> itemModel = this.services.icons().itemIcon(this.subject.id()).model();
                 default -> {
                 }
             }
@@ -251,7 +206,7 @@ public final class DefinitionPanel extends JPanel {
             showExtras();
             return;
         }
-        this.icons.appearance(blockId, itemModel).thenAccept(found -> SwingUtilities.invokeLater(() -> {
+        this.services.icons().appearance(blockId, itemModel).thenAccept(found -> SwingUtilities.invokeLater(() -> {
             if (this.disposed || current != this.appearanceGeneration) return;
             this.appearance = found.orElse(null);
             showExtras();
@@ -261,7 +216,7 @@ public final class DefinitionPanel extends JPanel {
     /** Data files of the owning mod named like the definition, such as its loot table and recipes. */
     private void loadResources() {
         long current = ++this.generation;
-        Optional<ModSummary> owner = ModSummary.resolve(this.subject.namespace(), this.index, this.sources.get());
+        Optional<ModSummary> owner = ModSummary.resolve(this.subject.namespace(), this.index, this.services.sources().get());
         String path = this.subject.id().substring(this.subject.id().indexOf(':') + 1);
         String name = path.substring(path.lastIndexOf('/') + 1);
         if (owner.isEmpty() || owner.get().files().isEmpty()) {
@@ -290,10 +245,10 @@ public final class DefinitionPanel extends JPanel {
     private void showExtras() {
         this.extras.removeAll();
         if (this.appearance != null && !this.appearance.textures().isEmpty()) {
-            this.extras.add(new PageSection("Appearance", appearanceBody(this.appearance)));
+            this.extras.add(aligned(new PageSection("Appearance", appearanceBody(this.appearance))));
         }
         List<FileLink> files = files();
-        if (!files.isEmpty()) this.extras.add(new PageSection("Files", filesBody(files)));
+        if (!files.isEmpty()) this.extras.add(aligned(new PageSection("Files", filesBody(files))));
         this.extras.add(Box.createVerticalGlue());
         this.extras.revalidate();
         this.extras.repaint();
@@ -316,7 +271,7 @@ public final class DefinitionPanel extends JPanel {
                 @Override
                 public void mouseClicked(MouseEvent event) {
                     if (SwingUtilities.isLeftMouseButton(event)) {
-                        DefinitionPanel.this.navigator.accept(target(texture.resourcePath(), texture.root()));
+                        DefinitionDetails.this.services.navigator().accept(target(texture.resourcePath(), texture.root()));
                     }
                 }
             });
@@ -360,27 +315,13 @@ public final class DefinitionPanel extends JPanel {
     }
 
     private JComponent filesBody(List<FileLink> files) {
-        JPanel body = new JPanel(new GridBagLayout());
-        for (int row = 0; row < files.size(); row++) {
-            FileLink file = files.get(row);
-            JLabel role = new JLabel(file.role());
-            ThemeColors.keepForeground(role, ThemeColors::secondaryText);
-            GridBagConstraints constraints = new GridBagConstraints();
-            constraints.gridy = row;
-            constraints.anchor = GridBagConstraints.WEST;
-            constraints.insets = new Insets(3, 0, 3, 12);
-            body.add(role, constraints);
-            constraints.gridx = 1;
-            constraints.insets = new Insets(3, 0, 3, 0);
+        List<PageSection.LinkRow> rows = new ArrayList<>();
+        for (FileLink file : files) {
             String name = file.path().substring(file.path().lastIndexOf('/') + 1);
-            body.add(new LinkLabel(file.path(), FileTypeResolver.resolve(name).icon(), file.path(),
-                    () -> this.navigator.accept(file.target())), constraints);
+            rows.add(new PageSection.LinkRow(file.role(), List.of(new LinkLabel(file.path(),
+                    FileTypeResolver.resolve(name).icon(), file.path(), () -> this.services.navigator().accept(file.target())))));
         }
-        GridBagConstraints filler = new GridBagConstraints();
-        filler.gridx = 2;
-        filler.weightx = 1;
-        body.add(Box.createHorizontalGlue(), filler);
-        return body;
+        return PageSection.linkRows(rows, this.labelWidth);
     }
 
     /** The resource path below its namespace, such as {@code models/block/framed_slab.json}. */
@@ -408,14 +349,13 @@ public final class DefinitionPanel extends JPanel {
                 .toList();
     }
 
-    private static JLabel message(String text) {
-        JLabel label = new JLabel(text);
-        label.setBorder(UiMetrics.messagePadding());
-        return label;
+    private static <T extends JComponent> T aligned(T component) {
+        component.setAlignmentX(JComponent.LEFT_ALIGNMENT);
+        return component;
     }
 
-    /** The listing of this page's resources that runs or ran last; mod files stay open while it runs. */
-    CompletableFuture<?> resourceLoad() {
+    /** The listing of the definition's resources that runs or ran last; mod files stay open while it runs. */
+    public CompletableFuture<?> resourceLoad() {
         return this.resourceLoad;
     }
 

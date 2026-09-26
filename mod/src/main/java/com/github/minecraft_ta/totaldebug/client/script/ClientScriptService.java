@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.client.script;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
+import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.network.ForwardedCompanionPayload;
 import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
@@ -35,6 +36,7 @@ public final class ClientScriptService implements AutoCloseable {
     private final TickTaskScheduler tickTasks;
     private final ServerScriptTransport serverTransport;
     private final Supplier<String> gameSession;
+    private final KeptStacks stacks;
     private final ForwardedExecutionResultAssembler forwardedResults = new ForwardedExecutionResultAssembler();
     private final Map<Integer, Run> activeRuns = new ConcurrentHashMap<>();
     private final Map<Integer, Run> executions = new ConcurrentHashMap<>();
@@ -44,13 +46,15 @@ public final class ClientScriptService implements AutoCloseable {
     public ClientScriptService(
             CompanionAppClient companionApp,
             TickTaskScheduler tickTasks,
-            Supplier<String> gameSession
+            Supplier<String> gameSession,
+            KeptStacks stacks
     ) {
         this(
                 Objects.requireNonNull(companionApp, "companionApp")::sendExecutionResult,
                 tickTasks,
                 new ServerScriptTransport.NeoForge(),
-                gameSession
+                gameSession,
+                stacks
         );
     }
 
@@ -58,8 +62,10 @@ public final class ClientScriptService implements AutoCloseable {
             ExecutionResultSink resultSink,
             TickTaskScheduler tickTasks,
             ServerScriptTransport serverTransport,
-            Supplier<String> gameSession
+            Supplier<String> gameSession,
+            KeptStacks stacks
     ) {
+        this.stacks = Objects.requireNonNull(stacks, "stacks");
         this.resultSink = Objects.requireNonNull(resultSink, "resultSink");
         this.tickTasks = Objects.requireNonNull(tickTasks, "tickTasks");
         this.serverTransport = Objects.requireNonNull(serverTransport, "serverTransport");
@@ -75,7 +81,7 @@ public final class ClientScriptService implements AutoCloseable {
             sendUntrackedResult(message.scriptId(), ExecutionStatus.COMPILATION_FAILED, exception.getMessage());
             return;
         }
-        SubjectRef.InWorld subject = null;
+        SubjectRef.Occurrence subject = null;
         if (!message.subject().isEmpty()) {
             if (!message.subjectSessionId().equals(this.gameSession.get())) {
                 sendUntrackedResult(message.scriptId(), ExecutionStatus.RUN_EXCEPTION,
@@ -83,7 +89,7 @@ public final class ClientScriptService implements AutoCloseable {
                 return;
             }
             try {
-                subject = SubjectRef.parseWorld(message.subject());
+                subject = SubjectRef.parseOccurrence(message.subject());
             } catch (IllegalArgumentException exception) {
                 sendUntrackedResult(message.scriptId(), ExecutionStatus.COMPILATION_FAILED,
                         "Invalid script target: " + exception.getMessage());
@@ -130,7 +136,7 @@ public final class ClientScriptService implements AutoCloseable {
         }
     }
 
-    private void runOnClient(RunScriptMessage message, ScriptExecutionEnvironment environment, SubjectRef.InWorld subject) {
+    private void runOnClient(RunScriptMessage message, ScriptExecutionEnvironment environment, SubjectRef.Occurrence subject) {
         ScriptRunner activeRunner;
         try {
             activeRunner = runner();
@@ -221,7 +227,7 @@ public final class ClientScriptService implements AutoCloseable {
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(TickDomain.CLIENT, phase, task),
                 (scriptId, result) -> acceptResult(scriptId, result, ExecutionSide.CLIENT),
-                new ClientScriptTargets()
+                new ClientScriptTargets(this.stacks)
         );
         return this.runner;
     }

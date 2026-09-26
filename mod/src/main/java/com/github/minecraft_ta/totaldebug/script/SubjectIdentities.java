@@ -7,6 +7,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -24,15 +25,16 @@ public final class SubjectIdentities {
         return switch (target) {
             case ScriptTarget.PlacedBlock block -> block(block.state(), block.blockEntity());
             case ScriptTarget.LiveEntity entity -> entity(entity.entity());
+            case ScriptTarget.SelectedStack selected -> stack(selected.stack());
         };
     }
 
     public static SubjectIdentity block(BlockState state, BlockEntity blockEntity) {
         ResourceLocation id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         List<ClassLink> classes = new ArrayList<>();
-        classes.add(new ClassLink("Block", state.getBlock().getClass().getName()));
+        classes.add(new ClassLink("Class", state.getBlock().getClass().getName()));
         if (blockEntity != null) {
-            classes.add(new ClassLink("Block entity", blockEntity.getClass().getName()));
+            classes.add(new ClassLink("Block entity class", blockEntity.getClass().getName()));
         }
         return new SubjectIdentity(
                 SubjectIdentity.Kind.BLOCK,
@@ -52,8 +54,20 @@ public final class SubjectIdentities {
                 id.toString(),
                 Fact.clip(entity.getName().getString()),
                 modName(id.getNamespace()),
-                List.of(new ClassLink("Entity", entity.getClass().getName())),
+                List.of(new ClassLink("Class", entity.getClass().getName())),
                 egg == null ? "" : itemId(egg)
+        );
+    }
+
+    public static SubjectIdentity stack(ItemStack stack) {
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        return new SubjectIdentity(
+                SubjectIdentity.Kind.ITEM,
+                id.toString(),
+                Fact.clip(stack.getHoverName().getString()),
+                modName(id.getNamespace()),
+                List.of(new ClassLink("Class", stack.getItem().getClass().getName())),
+                itemId(stack.getItem())
         );
     }
 

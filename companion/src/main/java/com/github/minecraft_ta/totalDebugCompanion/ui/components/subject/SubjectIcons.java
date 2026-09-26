@@ -14,7 +14,7 @@ public final class SubjectIcons {
     public static Icon tab(ModTab tab) {
         return switch (tab) {
             case OVERVIEW -> Icons.MOD;
-            case CONTENT -> Icons.BLOCK;
+            case CONTENT -> Icons.CONTENT;
             case CONFIGURATION -> Icons.CONFIG_FILE;
             case KEY_BINDINGS -> Icons.KEYBOARD;
             case RESOURCES -> Icons.RESOURCES_ROOT;
@@ -34,6 +34,7 @@ public final class SubjectIcons {
             case SubjectRef.Definition definition -> ContentKinds.of(definition.registry()).icon();
             case SubjectRef.Block ignored -> Icons.BLOCK;
             case SubjectRef.Entity ignored -> Icons.ENTITY;
+            case SubjectRef.Stack ignored -> Icons.ITEM;
         };
     }
 }

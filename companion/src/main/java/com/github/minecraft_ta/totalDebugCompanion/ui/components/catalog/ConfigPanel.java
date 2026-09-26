@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.SegmentedToggle;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ThinSplitPane;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
@@ -18,7 +19,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import javax.swing.BorderFactory;
-import javax.swing.ButtonGroup;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
@@ -30,7 +30,6 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
-import javax.swing.JToggleButton;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
@@ -88,8 +87,8 @@ final class ConfigPanel extends JPanel {
     private final JComboBox<ConfigSources.Source> source = new JComboBox<>(this.sourceModel);
     private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
     private final JCheckBox modifiedOnly = new JCheckBox("Modified");
-    private final JToggleButton settingsMode = new JToggleButton("Settings");
-    private final JToggleButton textMode = new JToggleButton("File");
+    private final SegmentedToggle<String> mode = new SegmentedToggle<>(List.of(SETTINGS_CARD, TEXT_CARD),
+            card -> card.equals(TEXT_CARD) ? "File" : "Settings");
     private final JButton open = new JButton("Open", Icons.JUMP_TO_SOURCE);
     private final JLabel notice = new JLabel();
     private final ConfigSettingsTable table = new ConfigSettingsTable();
@@ -219,17 +218,10 @@ final class ConfigPanel extends JPanel {
         });
         this.modifiedOnly.addActionListener(event -> applyFilter());
         this.modifiedOnly.setToolTipText("Only settings that differ from their default");
-        this.settingsMode.setToolTipText("Settings with their values, defaults and accepted values");
-        this.textMode.setToolTipText("The file's text");
+        this.mode.setToolTipText(SETTINGS_CARD, "Settings with their values, defaults and accepted values");
+        this.mode.setToolTipText(TEXT_CARD, "The file's text");
 
-        ButtonGroup modes = new ButtonGroup();
-        modes.add(this.settingsMode);
-        modes.add(this.textMode);
-        this.settingsMode.setSelected(true);
-        for (JToggleButton mode : List.of(this.settingsMode, this.textMode)) {
-            mode.putClientProperty("JButton.buttonType", "tab");
-            mode.addActionListener(event -> showCard());
-        }
+        this.mode.onChange(card -> showCard());
         this.source.setToolTipText("World whose server configuration is shown");
         this.source.addActionListener(event -> {
             if (this.updating) return;
@@ -256,8 +248,7 @@ final class ConfigPanel extends JPanel {
         left.add(this.modifiedOnly, BorderLayout.EAST);
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         right.add(this.source);
-        right.add(this.settingsMode);
-        right.add(this.textMode);
+        right.add(this.mode);
         right.add(this.textEditor.saveButton());
         right.add(this.textEditor.discardButton());
         right.add(this.open);
@@ -402,7 +393,7 @@ final class ConfigPanel extends JPanel {
                 new ConfigWriter.FileTarget(this.modId, file.fileName(), path, file.type()), file.settings()));
         // Unsaved text stays; saving compares it with the file and asks when the file changed meanwhile.
         this.textEditor.load(fileText);
-        this.textMode.setEnabled(!fileText.isEmpty() || this.textEditor.modified());
+        this.mode.setEnabled(TEXT_CARD, !fileText.isEmpty() || this.textEditor.modified());
         boolean empty = file.settings().isEmpty() && (values == null || values.settings().isEmpty());
         this.message.setText(empty && problem.isEmpty() ? "This file has no settings." : "");
         this.table.show(ConfigSettingsTable.rows(file, values), !file.settings().isEmpty(),
@@ -453,19 +444,20 @@ final class ConfigPanel extends JPanel {
 
     private void applyFilter() {
         this.table.filter(this.filter.getText(), this.modifiedOnly.isSelected() && this.modifiedOnly.isVisible());
-        if (this.settingsMode.isSelected()) showCard();
+        if (this.mode.selected().equals(SETTINGS_CARD)) showCard();
     }
 
     private void showCard() {
         CardLayout layout = (CardLayout) this.cards.getLayout();
-        if (this.textMode.isSelected() && this.textMode.isEnabled()) {
+        boolean text = this.mode.selected().equals(TEXT_CARD) && this.mode.isEnabled(TEXT_CARD);
+        if (text) {
             layout.show(this.cards, TEXT_CARD);
         } else if (this.table.isEmpty() && !this.message.getText().isEmpty()) {
             layout.show(this.cards, MESSAGE_CARD);
         } else {
             layout.show(this.cards, SETTINGS_CARD);
         }
-        boolean settings = !this.textMode.isSelected() || !this.textMode.isEnabled();
+        boolean settings = !text;
         this.filter.setVisible(settings);
         PackCatalog.ConfigFile file = selectedFile();
         this.modifiedOnly.setVisible(settings && file != null && !file.settings().isEmpty());

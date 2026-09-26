@@ -33,13 +33,24 @@ class LiveUpdateTest {
     }
 
     @Test
+    void aStackThatGainsOrLosesATransferChangesShape() {
+        Fact inGrid = Fact.stack("Slot 0", "minecraft:coal", 1, "Coal");
+        Fact inSideRow = inGrid.withTransfer(new Fact.Transfer(true, false));
+
+        assertFalse(FactsPanel.sameShape(new FactSection("Items", List.of(inGrid), 1),
+                new FactSection("Items", List.of(inSideRow), 1)), "a stack with a transfer sits in a side row");
+        assertFalse(FactsPanel.sameShape(new FactSection("Items", List.of(inSideRow), 1),
+                new FactSection("Items", List.of(inGrid), 1)));
+    }
+
+    @Test
     void sameShapeUpdatesInPlaceAndMarksOnlyChangedValues() throws Exception {
         try (ItemIconService icons = new ItemIconService()) {
             SwingUtilities.invokeAndWait(() -> {
                 FactsPanel panel = new FactsPanel(read(10, "true", 5), icons);
                 FactsPanel.AmountRow bar = first(panel, FactsPanel.AmountRow.class);
 
-                assertTrue(panel.update(read(25, "true", 5)));
+                assertTrue(panel.update(FactsPanel.parts(read(25, "true", 5))));
 
                 assertSame(bar, first(panel, FactsPanel.AmountRow.class));
                 assertEquals("25 / 100 FE 25%", bar.text());
@@ -48,7 +59,7 @@ class LiveUpdateTest {
                         .orElseThrow();
                 assertFalse(lit.isOpaque(), "an unchanged value is not marked");
 
-                assertTrue(panel.update(read(25, "false", 6)));
+                assertTrue(panel.update(FactsPanel.parts(read(25, "false", 6))));
                 assertFalse(bar.changed());
                 JLabel data = labels(panel).stream().filter(label -> label.getText().startsWith("1 key,")).findFirst()
                         .orElseThrow();
@@ -66,7 +77,7 @@ class LiveUpdateTest {
                 List<FactSection> grown = List.of(read(10, "true", 5).get(0), new FactSection("NBT", List.of(
                         Fact.data("Block entity", burnTime(5)), Fact.data("Second", burnTime(6))), 2));
 
-                assertTrue(panel.update(grown));
+                assertTrue(panel.update(FactsPanel.parts(grown)));
 
                 assertSame(bar, first(panel, FactsPanel.AmountRow.class));
                 assertTrue(labels(panel).stream().anyMatch(label -> label.getText().equals("Second")));
@@ -89,7 +100,7 @@ class LiveUpdateTest {
                 List<FactSection> grown = new ArrayList<>(read(10, "true", 5));
                 grown.add(new FactSection("Fluids", List.of(Fact.fluid("Tank 0", "", 0, 1_000, "")), 1));
 
-                assertFalse(panel.update(grown));
+                assertFalse(panel.update(FactsPanel.parts(grown)));
             });
         }
     }

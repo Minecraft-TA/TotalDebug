@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ContentBrowser;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ResourceBrowser;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.SubjectPanel;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totalDebugCompanion.testui.OffscreenPopupFactory;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
@@ -546,6 +547,13 @@ final class UiScenarioDriver {
             case PACK_CONFIGURATION -> context.once("pack-configuration", () -> navigate(new NavigationTarget.PackConfiguration()));
             case KEY_BINDINGS -> context.once("key-bindings", () -> navigate(new NavigationTarget.KeyBindings("")));
             case CONTENT -> context.once("content", () -> navigate(new NavigationTarget.Content("")));
+            case INSPECTION -> {
+                context.once("inspection", () -> navigate(new NavigationTarget.Inspection(InspectionSample.SUBJECT)));
+                SubjectPanel panel = findComponent(mainWindow, SubjectPanel.class);
+                if (panel != null) {
+                    context.once("inspection-read", () -> panel.session().present(InspectionSample.read(), null, text -> text));
+                }
+            }
             case MOD_CONFIGURATION -> context.once("mod-configuration", () ->
                     navigate(new NavigationTarget.ModPage("testmod", ModTab.CONFIGURATION, "")));
             case MOD_RESOURCES -> context.once("mod-resources", () ->
@@ -610,6 +618,7 @@ final class UiScenarioDriver {
             }
             case DEFINITION_PAGE -> mainWindow.getEditorTabs().getSelectedEditor() instanceof DefinitionView view
                     && "Widget Block".equals(view.getTitle());
+            case INSPECTION -> context.completedActions.contains("inspection-read");
             case TAB_MENU -> visibleMenuPopup() != null && mainWindow.getEditorTabs().getSelectedIndex()
                     == mainWindow.getEditorTabs().getTabCount() - 1;
             case TAB_REVEAL -> {

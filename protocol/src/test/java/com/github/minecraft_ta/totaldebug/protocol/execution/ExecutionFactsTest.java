@@ -71,7 +71,7 @@ class ExecutionFactsTest {
         assertEquals("{Count:7}", NbtData.snbt(carried.tag()));
         assertEquals(List.of(new FactData.Omission("Items", 3)), carried.omissions());
         assertThrows(IllegalArgumentException.class, () -> new Fact(Fact.Kind.TEXT, "a", "", "", 0, 0, "",
-                FactData.of(nbt, List.of()), null));
+                FactData.of(nbt, List.of()), null, null));
         assertThrows(IllegalArgumentException.class, () -> new Fact(Fact.Kind.DATA, "a", "", "", 0, 0, ""));
     }
 
@@ -87,6 +87,18 @@ class ExecutionFactsTest {
         assertEquals(handler, decoded.facts().getFirst().facts().getFirst());
         assertThrows(IllegalArgumentException.class, () -> FactLink.toClass(" "));
         assertEquals(new FactLink(FactLink.Kind.SUBJECT, "mod mekanism"), FactLink.toSubject(new SubjectRef.Mod("mekanism")));
+    }
+
+    @Test
+    void slotsReachedThroughASideSurviveTheWireCodec() {
+        Fact top = Fact.stack("Top", "minecraft:raw_iron", 5, "Raw Iron").withTransfer(new Fact.Transfer(true, null));
+        ExecutionResult result = ExecutionResult.completed("", null)
+                .withFacts(List.of(new FactSection("Items", List.of(top), 1)));
+
+        ExecutionResult decoded = ExecutionResultCodec.decode(ExecutionResultCodec.encode(result).json());
+
+        assertEquals(top, decoded.facts().getFirst().facts().getFirst());
+        assertThrows(IllegalArgumentException.class, () -> Fact.text("Top", "Coal").withTransfer(new Fact.Transfer(true, true)));
     }
 
     @Test

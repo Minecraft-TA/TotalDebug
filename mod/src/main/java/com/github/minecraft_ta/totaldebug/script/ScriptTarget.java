@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.script;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -13,7 +14,7 @@ import java.util.Objects;
  * most specific object comes first in a captured result.
  */
 public sealed interface ScriptTarget {
-    SubjectRef.InWorld subject();
+    SubjectRef.Occurrence subject();
 
     Level level();
 
@@ -23,6 +24,15 @@ public sealed interface ScriptTarget {
         public PlacedBlock {
             Objects.requireNonNull(state, "state");
             Objects.requireNonNull(pos, "pos");
+            Objects.requireNonNull(subject, "subject");
+            Objects.requireNonNull(level, "level");
+        }
+    }
+
+    /** A stack selected in a screen, as it was when selected; the client keeps it. */
+    record SelectedStack(ItemStack stack, SubjectRef.Stack subject, Level level) implements ScriptTarget {
+        public SelectedStack {
+            Objects.requireNonNull(stack, "stack");
             Objects.requireNonNull(subject, "subject");
             Objects.requireNonNull(level, "level");
         }

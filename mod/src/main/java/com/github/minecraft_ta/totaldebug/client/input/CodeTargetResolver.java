@@ -1,17 +1,15 @@
 package com.github.minecraft_ta.totaldebug.client.input;
 
 import com.github.minecraft_ta.totaldebug.client.inspection.ItemIcons;
+import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.script.SubjectIdentities;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
-import net.minecraft.world.level.block.EntityBlock;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -24,7 +22,7 @@ final class CodeTargetResolver {
     private CodeTargetResolver() {
     }
 
-    static Optional<WorldSubject> resolveWorldTarget(Minecraft minecraft) {
+    static Optional<Selection> resolveWorldTarget(Minecraft minecraft) {
         ClientLevel level = minecraft.level;
         if (level == null) {
             return Optional.empty();
@@ -55,17 +53,17 @@ final class CodeTargetResolver {
         return Optional.empty();
     }
 
-    private static WorldSubject block(ClientLevel level, String dimension, BlockPos position) {
+    private static Selection block(ClientLevel level, String dimension, BlockPos position) {
         BlockState state = level.getBlockState(position);
-        return new WorldSubject(
+        return new Selection(
                 new SubjectRef.Block(dimension, position.getX(), position.getY(), position.getZ()),
                 SubjectIdentities.block(state, level.getBlockEntity(position)),
                 ItemIcons.of(new ItemStack(state.getBlock().asItem()))
         );
     }
 
-    private static WorldSubject entity(Entity entity) {
-        return new WorldSubject(
+    private static Selection entity(Entity entity) {
+        return new Selection(
                 new SubjectRef.Entity(entity.getUUID()),
                 SubjectIdentities.entity(entity),
                 spawnEgg(entity).flatMap(ItemIcons::of)
@@ -77,28 +75,8 @@ final class CodeTargetResolver {
         return egg == null ? Optional.empty() : Optional.of(new ItemStack(egg));
     }
 
-    static Optional<Class<?>> resolveItemTarget(Minecraft minecraft, ItemStack itemStack) {
-        var level = minecraft.level;
-        if (level == null || itemStack.isEmpty()) {
-            return Optional.empty();
-        }
-
-        if (itemStack.getItem() instanceof SpawnEggItem spawnEgg) {
-            Entity entity = spawnEgg.getType(itemStack).create(level);
-            return entity == null ? Optional.empty() : Optional.of(entity.getClass());
-        }
-
-        if (itemStack.getItem() instanceof BlockItem blockItem) {
-            var block = blockItem.getBlock();
-            if (block instanceof EntityBlock entityBlock) {
-                BlockEntity blockEntity = entityBlock.newBlockEntity(BlockPos.ZERO, block.defaultBlockState());
-                if (blockEntity != null) {
-                    return Optional.of(blockEntity.getClass());
-                }
-            }
-            return Optional.of(block.getClass());
-        }
-
-        return Optional.of(itemStack.getItem().getClass());
+    /** A stack shown in a screen, kept as it is now so its page shows this very stack. */
+    static Selection stack(KeptStacks kept, ItemStack stack) {
+        return new Selection(new SubjectRef.Stack(kept.keep(stack)), SubjectIdentities.stack(stack), ItemIcons.of(stack));
     }
 }

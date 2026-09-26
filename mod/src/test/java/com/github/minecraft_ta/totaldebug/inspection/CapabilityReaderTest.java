@@ -10,18 +10,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CapabilityReaderTest {
     @Test
-    void capabilitiesWithoutAContextAreQueriedWhenNoSideIsSelected() {
+    void capabilitiesWithoutAContextOrWithASideAreQueriedAndOthersAreSkipped() {
         Class<?> voidContext = EntityCapability.createVoid(
                 ResourceLocation.fromNamespaceAndPath("total_debug", "test_void"), Object.class).contextClass();
 
-        assertTrue(CapabilityReader.queryable(voidContext, null));
-        assertFalse(CapabilityReader.queryable(voidContext, Direction.NORTH));
-    }
-
-    @Test
-    void sidedCapabilitiesAreQueriedForAnySideAndOthersAreSkipped() {
-        assertTrue(CapabilityReader.queryable(Direction.class, null));
-        assertTrue(CapabilityReader.queryable(Direction.class, Direction.UP));
-        assertFalse(CapabilityReader.queryable(String.class, null));
+        assertTrue(CapabilityReader.queryable(voidContext));
+        assertTrue(CapabilityReader.queryable(Direction.class));
+        assertFalse(CapabilityReader.queryable(String.class));
     }
 }

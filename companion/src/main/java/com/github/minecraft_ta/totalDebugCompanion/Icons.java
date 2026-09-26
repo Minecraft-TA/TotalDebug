@@ -68,6 +68,7 @@ public class Icons {
     public static final FlatSVGIcon BLOCK = new FlatSVGIcon("icons/block.svg");
     public static final FlatSVGIcon ITEM = new FlatSVGIcon("icons/item.svg");
     public static final FlatSVGIcon ENTITY = new FlatSVGIcon("icons/entity.svg");
+    public static final FlatSVGIcon CONTENT = new FlatSVGIcon("icons/content.svg");
     public static final FlatSVGIcon FLUID = new FlatSVGIcon("icons/fluid.svg");
     public static final FlatSVGIcon SOUND = new FlatSVGIcon("icons/sound.svg");
     /** Draws nothing at the size of a row icon, keeping a row without an icon level with those that have one. */

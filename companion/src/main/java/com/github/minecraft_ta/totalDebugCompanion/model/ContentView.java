@@ -33,7 +33,7 @@ public final class ContentView implements IEditorPanel {
 
     @Override
     public Icon getIcon() {
-        return Icons.BLOCK;
+        return Icons.CONTENT;
     }
 
     @Override

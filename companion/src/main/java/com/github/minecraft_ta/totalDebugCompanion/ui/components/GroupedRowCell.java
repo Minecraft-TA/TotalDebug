@@ -18,7 +18,8 @@ import java.awt.Rectangle;
 /**
  * The first cell of a table whose rows are grouped under collapsible headings (docs/UI_GUIDE.md): the row indented by
  * its depth, the tree's chevron on a heading, its text with secondary text beside it, and a bar at the left edge for a
- * changed row. A row that is not a heading leaves the chevron's room empty, so the text of every level lines up.
+ * changed row. A row that is not a heading leaves the chevron's room empty, so the text of every level lines up. The
+ * table's speed search marks matches in the text.
  */
 public final class GroupedRowCell extends JPanel {
     private static final int START = 6;
@@ -43,7 +44,7 @@ public final class GroupedRowCell extends JPanel {
         Color foreground = selected ? table.getSelectionForeground() : ThemeColors.text();
         this.bar = bar;
         this.label.configure(text, collapsed == null ? Icons.NONE : chevron(collapsed), table.getFont(), selected,
-                foreground, background);
+                foreground, background, table);
         this.label.setOpaque(false);
         setBackground(background);
         setBorder(BorderFactory.createEmptyBorder(0, indent(depth), 0, 6));

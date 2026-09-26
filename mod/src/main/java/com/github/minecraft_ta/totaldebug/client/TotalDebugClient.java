@@ -9,7 +9,8 @@ import com.github.minecraft_ta.totaldebug.client.decompile.ClientCodeOpenService
 import com.github.minecraft_ta.totaldebug.client.input.CodeViewInput;
 import com.github.minecraft_ta.totaldebug.client.inspection.ItemIcons;
 import com.github.minecraft_ta.totaldebug.client.inspection.ResourceSnapshots;
-import com.github.minecraft_ta.totaldebug.client.input.WorldSubject;
+import com.github.minecraft_ta.totaldebug.client.input.Selection;
+import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
@@ -39,6 +40,7 @@ public final class TotalDebugClient {
     private final ClientCodeOpenService codeOpen;
     private final CodeViewOperation codeView;
     private final CodeViewInput codeViewInput;
+    private final KeptStacks keptStacks = new KeptStacks();
     private final ClientScriptService scripts;
     private final ResourceSnapshots resources;
     private final PackCatalogPublisher catalogs;
@@ -91,7 +93,7 @@ public final class TotalDebugClient {
                 companionApp.sendKeyBindingResult(new KeyBindingResultMessage(KeyBindingEdits.apply(message.payload())))));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
-            public void inspect(WorldSubject subject) {
+            public void inspect(Selection subject) {
                 TotalDebugClient.this.codeOpen.inspect(new InspectSubjectPayload(
                         gameSession(),
                         subject.subject().format(),
@@ -103,17 +105,13 @@ public final class TotalDebugClient {
             }
 
             @Override
-            public void openClass(Class<?> targetClass) {
-                TotalDebugClient.this.codeOpen.openClass(targetClass);
-            }
-
-            @Override
             public void focusCompanion() {
                 TotalDebugClient.this.codeOpen.focusCompanion();
             }
         });
-        this.codeViewInput = new CodeViewInput(this.codeView::inspectOrFocus, this::openOrFocus);
-        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks(), () -> this.gameSessionId);
+        this.codeViewInput = new CodeViewInput(this.codeView::inspectOrFocus, this.keptStacks);
+        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks(), () -> this.gameSessionId,
+                this.keptStacks);
         TotalDebug.get().network().installForwardedCompanionReceiver(this.scripts::handleForwardedPayload);
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);
@@ -159,10 +157,6 @@ public final class TotalDebugClient {
      */
     public void resourcesReloaded() {
         this.companionApp.announceInventory();
-    }
-
-    public void openOrFocus(Optional<Class<?>> targetClass) {
-        this.codeView.openOrFocus(targetClass);
     }
 
     public void openClass(Class<?> targetClass) {

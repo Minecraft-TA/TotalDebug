@@ -6,9 +6,12 @@ import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import java.util.Objects;
 import java.util.Optional;
 
-/** A block or entity selected in the world, described from the client's copy. */
-public record WorldSubject(SubjectRef subject, SubjectIdentity identity, Optional<ItemIcons.Icon> icon) {
-    public WorldSubject {
+/**
+ * What the inspect key selected, described from the client's copy: something in the game, such as a block, an entity or
+ * a stack in a slot, or an item's definition when the item is shown in no slot, such as in a recipe viewer.
+ */
+public record Selection(SubjectRef subject, SubjectIdentity identity, Optional<ItemIcons.Icon> icon) {
+    public Selection {
         Objects.requireNonNull(subject, "subject");
         Objects.requireNonNull(identity, "identity");
         Objects.requireNonNull(icon, "icon");

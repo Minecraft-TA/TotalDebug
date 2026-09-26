@@ -8,7 +8,8 @@ import java.util.Objects;
  *     <li>{@code TEXT}: {@code label} and {@code value}.</li>
  *     <li>{@code BAR}: {@code amount} of {@code capacity} in {@code unit}, such as stored energy.</li>
  *     <li>{@code STACK}: {@code amount} items of registry {@code id} named {@code value}; an empty slot has an empty
- *     id.</li>
+ *     id. A slot as automation reaches it through a side carries a {@code transfer}, and the slots of one side share
+ *     their {@code label}, such as {@code Top}.</li>
  *     <li>{@code FLUID}: {@code amount} of {@code capacity} millibuckets of fluid {@code id} named {@code value}.</li>
  *     <li>{@code PROBLEM}: reading {@code label} failed with the message {@code value}; facts reported before the
  *     failure remain.</li>
@@ -25,7 +26,8 @@ public record Fact(
         long capacity,
         String unit,
         FactData data,
-        FactLink link
+        FactLink link,
+        Transfer transfer
 ) {
     public static final int MAX_TEXT_LENGTH = 256;
 
@@ -36,6 +38,14 @@ public record Fact(
         FLUID,
         PROBLEM,
         DATA
+    }
+
+    /**
+     * What automation can do with a slot through a side: whether it takes more of what the slot holds, and whether it
+     * gives some. Either is null when the slot's state cannot tell: an empty slot holds nothing to try, and a full one
+     * takes no more whatever its rules.
+     */
+    public record Transfer(Boolean takes, Boolean gives) {
     }
 
     public Fact {
@@ -50,16 +60,25 @@ public record Fact(
         if ((kind == Kind.DATA) != (data != null)) {
             throw new IllegalArgumentException("Data facts, and only they, carry data");
         }
+        if (transfer != null && kind != Kind.STACK) {
+            throw new IllegalArgumentException("Only stack facts carry a transfer");
+        }
     }
 
     public Fact(Kind kind, String label, String value, String id, long amount, long capacity, String unit) {
-        this(kind, label, value, id, amount, capacity, unit, null, null);
+        this(kind, label, value, id, amount, capacity, unit, null, null, null);
     }
 
     /** This fact leading to {@code target} when clicked. */
     public Fact withLink(FactLink target) {
         return new Fact(this.kind, this.label, this.value, this.id, this.amount, this.capacity, this.unit, this.data,
-                target);
+                target, this.transfer);
+    }
+
+    /** This slot as automation reaches it through a side. */
+    public Fact withTransfer(Transfer through) {
+        return new Fact(this.kind, this.label, this.value, this.id, this.amount, this.capacity, this.unit, this.data,
+                this.link, through);
     }
 
     public static Fact text(String label, String value) {
@@ -83,7 +102,7 @@ public record Fact(
     }
 
     public static Fact data(String label, FactData data) {
-        return new Fact(Kind.DATA, label, "", "", 0, 0, "", Objects.requireNonNull(data, "data"), null);
+        return new Fact(Kind.DATA, label, "", "", 0, 0, "", Objects.requireNonNull(data, "data"), null, null);
     }
 
     /** Shortens text to the transport limit; decoding rejects anything longer. */

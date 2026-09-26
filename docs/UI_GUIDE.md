@@ -53,7 +53,7 @@ Ids, file names and key syntax keep their own case inside either style: Find Usa
 
 ## Type and color
 
-- **One emphasis.** The title of a page or window uses FlatLaf's `h3` style class. Everything else is regular text: section headings, form groups, list names, dialog titles inside the window. Emphasis between items comes from color, position and muted secondary text, not weight. Drawn item counts on slots, which copy Minecraft, are the only bold text.
+- **One emphasis.** The title of a page or window uses FlatLaf's `h3` style class. Everything else is regular text: section headings, form groups, list names, dialog titles inside the window. Emphasis between items comes from color, position and muted secondary text, not weight. Drawn item counts on slots, which copy Minecraft, and the initials of a monogram tile are the only bold text.
 - **Colors come from roles**, never literals: [`ThemeColors`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/theme/ThemeColors.java) for text, secondary, muted, accent, link, error, warning and success, [`EditorPalette`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/theme/EditorPalette.java) for code-like values. Components keep a role across theme changes with `ThemeColors.keepForeground`.
 - **Secondary is not disabled.** Information people read (context, counts, defaults, paths) uses `secondaryText`; `mutedText` is for placeholders and unavailable things.
 - **Values look like code of their kind:** numbers, booleans and strings in the editor's literal colors, strings quoted; the same value keeps its color while edited.
@@ -79,7 +79,7 @@ The Project tree on the left, editor tabs in the middle, the status bar at the b
 
 ### Page anatomy
 
-1. **Header** ([`SubjectHeader`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/subject/SubjectHeader.java)): a 64 px icon or preview, the `h3` title, one identifying line of muted parts and links (kind, id, owning mod), and page-level controls at the right.
+1. **Header** ([`SubjectHeader`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/subject/SubjectHeader.java)): a 64 px preview, the `h3` title, one identifying line of muted parts and links (kind, id, owning mod, the mod's website; for something in the world its position and dimension), and page-level controls at the right. Without a preview the header shows a tile: a mod's initials (`MonogramIcon`) or its kind's icon (`PlateIcon`).
 2. **Tabs** with the view's name and a muted count, set with [`TabTitles.setCounted`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/TabTitles.java). A tab with nothing to show is hidden, not disabled.
 3. **Tab content** following one of the view patterns below.
 
@@ -89,8 +89,10 @@ The Project tree on the left, editor tabs in the middle, the status bar at the b
   - Sections with a chevron, a regular title and a rule ([`SectionHeading`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/SectionHeading.java)).
   - Each section holds a grid of muted labels and values; links show their type icon.
   - A section collapses only from its chevron.
+  - A section a project script reported names the script at the right of its heading, as a link that opens it.
+  - The files behind the subject come last, in a Files section of roles and links (`PageSection.linkRows`).
 - **Browser:**
-  - **Filter bar:** the filter field fills the width. At its right come, in order, the filter check boxes, the view switch, then page actions.
+  - **Filter bar:** the filter field fills the width; an option of the filter itself, such as searching by pressing a key, is a toggle inside the field. At its right come, in order, the filter check boxes, the view switch, then page actions.
   - **Table or list** below the bar.
   - **Empty or failed state:** replaces the table in the same place.
 - **Two-pane browser:**
@@ -137,7 +139,7 @@ A component's own inner padding, such as a text field's or an editor's, and a ga
 |---|---|---|
 | Command in a toolbar or filter bar | Icon-only toolbar button, [`FlatIconButton`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/FlatIconButton.java); its toggle variant for a mode that stays on | Run, Zoom In, Press to Search |
 | Page-level command | Text button with its icon, Title Case | Browse Code, Open, Save, Discard |
-| Switching between views of the same content | Segmented toggle, `JButton.buttonType` `tab` | Settings / File, Tree / SNBT |
+| Switching between views of the same content | Segmented toggle, [`SegmentedToggle`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/SegmentedToggle.java) | Settings / File, Tree / SNBT, Server / Client |
 | Narrowing what a list shows | Check box, sentence case | Modified, Changed, Collisions, Not bound |
 | Submitting or leaving a form or dialog | Default bordered button; the safe choice is the default | Close, Done, Cancel |
 

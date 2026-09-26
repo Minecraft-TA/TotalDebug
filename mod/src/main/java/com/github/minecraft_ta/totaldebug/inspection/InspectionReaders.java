@@ -2,7 +2,6 @@ package com.github.minecraft_ta.totaldebug.inspection;
 
 import com.github.minecraft_ta.totaldebug.script.ScriptFacts;
 import com.github.minecraft_ta.totaldebug.script.ScriptTarget;
-import net.minecraft.core.Direction;
 
 /**
  * The built-in readers an inspection runs. Each reads independently: a failing reader reports a problem in its
@@ -12,10 +11,13 @@ public final class InspectionReaders {
     private InspectionReaders() {
     }
 
-    /** Reads {@code target} as seen from {@code side}, or through its unsided handlers when {@code side} is null. */
-    public static void read(ScriptTarget target, Direction side, ScriptFacts facts) {
-        StorageReader.read(target, side, facts);
-        facts.guarded("Capabilities", () -> CapabilityReader.read(target, side, facts));
+    public static void read(ScriptTarget target, ScriptFacts facts) {
+        facts.guarded("Stack", () -> StackReader.read(target, facts));
+        facts.guarded("Entity state", () -> EntityReader.read(target, facts));
+        facts.guarded("Block state", () -> BlockStateReader.read(target, facts));
+        StorageReader.read(target, facts);
+        SideReader.read(target, facts);
+        facts.guarded("Capabilities", () -> CapabilityReader.read(target, facts));
         facts.guarded("NBT", () -> NbtReader.read(target, facts));
     }
 }
