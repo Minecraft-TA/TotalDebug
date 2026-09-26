@@ -12,6 +12,8 @@ total-debug/
     Example.tdscript
   state.json
   changes.json
+  originals/
+    <sha256>
   cache/
     runtime/
       .lock
@@ -35,7 +37,8 @@ Files are created when needed; an empty instance does not need every directory.
 
 - `scripts` contains authored methodless Java scripts. It is created when the first script is saved, not when a project is opened. Opening and closing with default state does not create `state.json`.
 - `state.json` holds watches, breakpoint definitions, mute/exception choices and the last 50 distinct evaluator inputs with imports and execution side. The [project scope](../companion/README.md#ownership) owns instance state and flushes it before retiring the project. One instance-state owner writes the whole file. Breakpoint resolution is partitioned by runtime signature.
-- `changes.json` records what Companion changed in the pack and is still in effect: for each configuration setting the mod, file and setting, for each key binding its name, and for both the value before the first change, the value written last and when. It is user data, written by one owner like `state.json`, and only once something changed. See [the Modpack tree](MODPACK.md#the-change-record).
+- `changes.json` records what Companion changed in the pack and is still in effect, format 2: for each configuration setting the mod, file and setting, for each key binding its name, for each resource its pack path and the managed pack it was written to, and for all of them the level, the value before the first change, the value written last and when. A resource's values are SHA-256 hashes of its content, empty for none. Changes in the running game's memory are not saved. It is user data, written by one owner like `state.json`, and only once something changed. A file of another format is reported, not read. See [the Modpack tree](MODPACK.md#the-change-record) and [resource editing](RESOURCE_EDITING.md#change-record).
+- `originals` holds the contents Companion replaced in the managed packs, named by their SHA-256, so a resource change reverts after restarts. It is user data like `changes.json`.
 - The one replaceable inventory describes the Java runtime, production mode, ordered physical class sources, logical origins and module ownership. Minecraft owns this file; Companion never writes a local scan into it. Game and Companion use the same Java record, JSON format and validator.
 - `catalog.json` is the pack catalog: installed mods with their versions, dependencies, configuration files and original mod files, plus the entries of the registries it lists (blocks, items, entity types, fluids and sound events) in one shape per registry, how items are drawn where that is not their conventional model, every key binding with its default key, context and registering mod, the conflicts between key contexts, and the names the keyboard layout gives keys. Minecraft owns it like the inventory: it captures the catalog on the client thread after resources load, writes it once per inventory id and language, and announces it to Companion. Companion reads the saved file only when its inventory id matches `inventory.json`.
 - `inspection-previews` holds immutable archives of the winning models, textures and atlases that Companion uses to draw item icons. The game keeps the newest archive; Companion restores it when a project opens, so icons remain available offline.

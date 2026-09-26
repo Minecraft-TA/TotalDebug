@@ -121,6 +121,13 @@ public final class PackConfigurationPanel extends JPanel {
             ConfigWriter.Target target = this.targets.get(row.path());
             return target == null ? null : this.writer.original(target.file(), target.setting().path());
         });
+        this.table.setTrying((row, literal) -> {
+            ConfigWriter.Target target = this.targets.get(row.path());
+            if (target != null) this.writer.tryInGame(target, row.literal(), literal);
+        }, row -> {
+            ConfigWriter.Target target = this.targets.get(row.path());
+            return target == null ? null : this.writer.tried(target);
+        });
         this.table.setSectionTooltip(this::sectionTooltip);
         this.table.addMouseListener(new MouseAdapter() {
             @Override

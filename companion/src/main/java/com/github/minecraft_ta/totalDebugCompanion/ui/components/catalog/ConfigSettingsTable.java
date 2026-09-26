@@ -67,7 +67,8 @@ import java.util.regex.Pattern;
  * differs from its default is marked at the row's edge with the default beside it, sections collapse from their
  * chevron, and a row's tooltip holds its description. A value is edited in place: double-click, Enter or F2 opens a
  * field, or a list of the accepted values, and a value the setting does not accept is refused before it is written.
- * Several settings, or a whole section, are reset or reverted together from the menu of the selection.
+ * Several settings, or a whole section, are reset or reverted together from the menu of the selection. Try Value in
+ * Game opens the same field, but the value goes into the running game's memory instead of the file.
  */
 final class ConfigSettingsTable extends JTable {
     private static final Pattern NUMBER = Pattern.compile("-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?");
@@ -118,6 +119,12 @@ final class ConfigSettingsTable extends JTable {
     private Function<Row, ConfigChanges.Effect> pending = row -> null;
     /** The value a setting had before it was first edited while Companion runs, as the file writes it, or null. */
     private Function<Row, String> original = row -> null;
+    /** Receives a value to try in the running game, or is null where values cannot be tried. */
+    private BiConsumer<Row, String> tried;
+    /** The value tried in the game for a setting, as TOML writes it, or null. */
+    private Function<Row, String> triedValue = row -> null;
+    /** Whether the open field tries its value in the game instead of writing it. */
+    private boolean trying;
     /** A section row's own tooltip, or null for its key and comment. */
     private Function<Row, String> sectionTooltip = row -> null;
 
@@ -187,6 +194,15 @@ final class ConfigSettingsTable extends JTable {
         this.original = Objects.requireNonNull(original, "original");
     }
 
+    /**
+     * Offers Try Value in Game: {@code tried} receives an accepted value to try, and {@code triedValue} tells the value
+     * tried for a setting, or null.
+     */
+    void setTrying(BiConsumer<Row, String> tried, Function<Row, String> triedValue) {
+        this.tried = Objects.requireNonNull(tried, "tried");
+        this.triedValue = Objects.requireNonNull(triedValue, "triedValue");
+    }
+
     void setSectionTooltip(Function<Row, String> sectionTooltip) {
         this.sectionTooltip = Objects.requireNonNull(sectionTooltip, "sectionTooltip");
     }
@@ -198,7 +214,21 @@ final class ConfigSettingsTable extends JTable {
 
     /** Opens the value of a setting row for editing, when the file allows it. */
     boolean edit(int viewRow) {
-        if (!this.model.isCellEditable(viewRow, 1) || !editCellAt(viewRow, 1)) return false;
+        return openField(viewRow, false);
+    }
+
+    /** Opens the value of a setting row to try a value in the running game. */
+    boolean tryInGame(int viewRow) {
+        return this.tried != null && openField(viewRow, true);
+    }
+
+    private boolean openField(int viewRow, boolean trying) {
+        if (isEditing()) getCellEditor().cancelCellEditing();
+        this.trying = trying;
+        if (!this.model.isCellEditable(viewRow, 1) || !editCellAt(viewRow, 1)) {
+            this.trying = false;
+            return false;
+        }
         setRowSelectionInterval(viewRow, viewRow);
         Component component = getEditorComponent();
         if (component != null) component.requestFocusInWindow();
@@ -215,6 +245,11 @@ final class ConfigSettingsTable extends JTable {
             Action edit = ContextMenus.action("Edit Value", null, "Enter", () -> edit(viewRow));
             edit.setEnabled(this.model.isCellEditable(viewRow, 1));
             menu.add(edit);
+            if (this.tried != null) {
+                Action tryValue = ContextMenus.action("Try Value in Game\u2026", null, null, () -> tryInGame(viewRow));
+                tryValue.setEnabled(this.model.isCellEditable(viewRow, 1));
+                menu.add(tryValue);
+            }
             Action reset = ContextMenus.action("Reset to Default", null, null, () -> reset(row));
             reset.setEnabled(this.model.isCellEditable(viewRow, 1) && row.modified());
             menu.add(reset);
@@ -302,8 +337,8 @@ final class ConfigSettingsTable extends JTable {
         if (row < 0) return null;
         Row entry = this.model.shown.get(row);
         String own = entry.setting() == null ? this.sectionTooltip.apply(entry) : null;
-        if (own != null || entry.setting() == null) return own != null ? own : tooltip(entry, null, null);
-        return tooltip(entry, this.pending.apply(entry), before(entry));
+        if (own != null || entry.setting() == null) return own != null ? own : tooltip(entry, null, null, null);
+        return tooltip(entry, this.pending.apply(entry), before(entry), this.triedValue.apply(entry));
     }
 
     /** Clicking a section selects it for reading; only its chevron collapses it. */
@@ -374,8 +409,9 @@ final class ConfigSettingsTable extends JTable {
      * accepts and what must restart after a change. {@code before} is the value the setting had before it was edited,
      * and {@code pending} what the game waits for before using the edit.
      */
-    static String tooltip(Row row, ConfigChanges.Effect pending, String before) {
+    static String tooltip(Row row, ConfigChanges.Effect pending, String before, String tried) {
         Tooltip tooltip = Tooltip.of("").detail(row.setting() == null ? row.path() : row.setting().path()).text(row.comment());
+        if (tried != null) tooltip.fact("Tried in the game", tried, color(row.kind()));
         if (before != null) tooltip.fact("Before your edit", literal(row.kind(), before), color(row.kind()));
         if (pending != null) tooltip.fact("Edited value", pending.description());
         PackCatalog.ConfigSetting setting = row.setting();
@@ -647,13 +683,17 @@ final class ConfigSettingsTable extends JTable {
                 return false;
             }
             ConfigSettingsTable.this.refused.accept("");
+            boolean trying = ConfigSettingsTable.this.trying;
+            ConfigSettingsTable.this.trying = false;
             fireEditingStopped();
-            if (!literal.equals(editing.literal())) ConfigSettingsTable.this.edited.accept(editing, literal);
+            if (trying) ConfigSettingsTable.this.tried.accept(editing, literal);
+            else if (!literal.equals(editing.literal())) ConfigSettingsTable.this.edited.accept(editing, literal);
             return true;
         }
 
         @Override
         public void cancelCellEditing() {
+            ConfigSettingsTable.this.trying = false;
             ConfigSettingsTable.this.refused.accept("");
             super.cancelCellEditing();
         }

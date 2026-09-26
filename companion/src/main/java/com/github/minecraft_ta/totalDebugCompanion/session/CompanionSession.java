@@ -12,6 +12,9 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ConfigValueResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
@@ -59,6 +62,12 @@ public final class CompanionSession implements AutoCloseable {
         default void packCatalog(PackCatalogMessage message) { }
 
         default void keyBindingResult(KeyBindingResultMessage message) { }
+
+        default void packStack(PackStackMessage message) { }
+
+        default void reloadResult(ReloadResultMessage message) { }
+
+        default void configValueResult(ConfigValueResultMessage message) { }
 
         default void focusWindow() { }
 
@@ -221,6 +230,9 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageBus().listenAlways(ResourceSnapshotMessage.class, this.listener::resourceSnapshot);
         this.server.getMessageBus().listenAlways(PackCatalogMessage.class, this.listener::packCatalog);
         this.server.getMessageBus().listenAlways(KeyBindingResultMessage.class, this.listener::keyBindingResult);
+        this.server.getMessageBus().listenAlways(PackStackMessage.class, this.listener::packStack);
+        this.server.getMessageBus().listenAlways(ReloadResultMessage.class, this.listener::reloadResult);
+        this.server.getMessageBus().listenAlways(ConfigValueResultMessage.class, this.listener::configValueResult);
         this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->
                 SwingUtilities.invokeLater(this.listener::focusWindow));
         this.server.addConnectionListener(new IConnectionListener() {

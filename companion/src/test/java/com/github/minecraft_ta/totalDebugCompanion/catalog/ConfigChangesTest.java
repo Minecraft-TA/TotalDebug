@@ -203,13 +203,13 @@ class ConfigChangesTest {
 
         try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.WRITE);
              FileLock ignored = channel.lock()) {
-            assertTrue(ConfigChanges.open(world));
+            assertTrue(Worlds.isOpen(world));
             assertEquals(ConfigChanges.Effect.NOW, edit(changes, file, PackCatalog.Restart.NONE, "1", "2"));
             assertEquals(ConfigChanges.Effect.REJOIN, edit(changes, file, PackCatalog.Restart.WORLD, "2", "3"));
             changes.refresh();
             assertEquals(ConfigChanges.Effect.REJOIN, changes.pending(file, "speed"));
         }
-        assertFalse(ConfigChanges.open(world));
+        assertFalse(Worlds.isOpen(world));
         changes.refresh();
         assertNull(changes.pending(file, "speed"));
     }

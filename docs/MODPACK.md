@@ -1,6 +1,6 @@
 # The Modpack tree
 
-Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Content, Configuration, Key bindings and Changes; the change record holds configuration settings and key bindings. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
+Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Content, Configuration, Key bindings and Changes; the change record holds configuration settings, key bindings and resources. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
 
 ## Purpose
 
@@ -66,8 +66,8 @@ Built-in rows use the same point. Until the extension API exists, built-in rows 
 
 Changes becomes the one record of what Companion wrote, replacing per-view undo history as the lasting source:
 
-- **Entry:** what changed (a setting, a key binding, a resource, a texture), the level it was written at (the running game's memory, the managed pack, a mod JAR), when, the value it replaced and the value written.
-- **Revert:** writes the replaced value back at the same level. A JAR entry reverts from its backup.
+- **Entry:** what changed (a setting, a key binding, a resource, a texture), the level it was written at (the running game's memory or the pack's files), when, the value it replaced and the value written. See [RESOURCE_EDITING.md](RESOURCE_EDITING.md#change-record).
+- **Revert:** writes the replaced value back at the same level.
 - **Storage:** kept per instance in `total-debug/changes.json`, so it survives restarts of Companion and the game.
 - **Views read from it:** the configuration table marks values edited by the user from this record, and the game's pending restarts are derived from it.
 

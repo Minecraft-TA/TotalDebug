@@ -69,11 +69,11 @@ class ConfigPanelTest {
         assertEquals(ConfigSettingsTable.ValueKind.CHOICE, rows.get(2).kind());
         assertEquals(ConfigSettingsTable.ValueKind.BOOLEAN, rows.get(3).kind());
         assertEquals("\"FAST\"", rows.get(2).literal());
-        String speed = ConfigSettingsTable.tooltip(rows.get(1), null, null);
+        String speed = ConfigSettingsTable.tooltip(rows.get(1), null, null, null);
         assertTrue(speed.contains("widgets.speed") && speed.contains("How fast widgets spin")
                 && speed.contains("Accepts 1 to 16") && speed.contains(">4</font>"), speed);
-        assertTrue(ConfigSettingsTable.tooltip(rows.get(2), null, null).contains("Takes effect after rejoining the world"));
-        String edited = ConfigSettingsTable.tooltip(rows.get(3), ConfigChanges.Effect.RESTART, "false");
+        assertTrue(ConfigSettingsTable.tooltip(rows.get(2), null, null, null).contains("Takes effect after rejoining the world"));
+        String edited = ConfigSettingsTable.tooltip(rows.get(3), ConfigChanges.Effect.RESTART, "false", null);
         assertTrue(edited.contains("takes effect after restarting the game") && edited.contains("Before your edit"), edited);
     }
 

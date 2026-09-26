@@ -11,11 +11,18 @@ import com.github.minecraft_ta.totaldebug.client.inspection.ItemIcons;
 import com.github.minecraft_ta.totaldebug.client.inspection.ResourceSnapshots;
 import com.github.minecraft_ta.totaldebug.client.input.Selection;
 import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
+import com.github.minecraft_ta.totaldebug.client.resource.PackStackPublisher;
+import com.github.minecraft_ta.totaldebug.client.resource.ResourceReloads;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ConfigValueResultMessage;
+import com.github.minecraft_ta.totaldebug.resource.ConfigValues;
+import com.github.minecraft_ta.totaldebug.resource.GameOverlay;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.network.ServerSourceRequestPayload;
 import com.github.minecraft_ta.totaldebug.storage.GameLock;
@@ -27,6 +34,7 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -44,6 +52,7 @@ public final class TotalDebugClient {
     private final ClientScriptService scripts;
     private final ResourceSnapshots resources;
     private final PackCatalogPublisher catalogs;
+    private final PackStackPublisher packStacks;
     private final AtomicReference<PackCatalogCapture> catalogCapture = new AtomicReference<>();
     private volatile boolean snapshotRequested;
     private volatile String gameSessionId;
@@ -83,7 +92,9 @@ public final class TotalDebugClient {
                 },
                 companionApp::sendPackCatalog
         );
+        this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
         companionApp.setPackCatalogHandler((inventoryId, modules) -> {
+            this.packStacks.republish();
             // Icons are drawn from the resource snapshot, which must follow the current packs even when the
             // saved catalog is reused.
             this.snapshotRequested = true;
@@ -91,6 +102,11 @@ public final class TotalDebugClient {
         });
         companionApp.setKeyBindingHandler(message -> Minecraft.getInstance().execute(() ->
                 companionApp.sendKeyBindingResult(new KeyBindingResultMessage(KeyBindingEdits.apply(message.payload())))));
+        companionApp.setReloadHandler(message -> Minecraft.getInstance().execute(() -> ResourceReloads.reload(message.payload(),
+                result -> companionApp.sendReloadResult(new ReloadResultMessage(result)))));
+        companionApp.setOverlayHandler(message -> GameOverlay.set(message.payload().path(), message.payload().content()));
+        companionApp.setConfigValueHandler(message -> Minecraft.getInstance().execute(() ->
+                companionApp.sendConfigValueResult(new ConfigValueResultMessage(ConfigValues.apply(message.payload())))));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(Selection subject) {
@@ -116,7 +132,15 @@ public final class TotalDebugClient {
         TotalDebug.get().network().installForwardedCompanionReceiver(this.scripts::handleForwardedPayload);
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);
-        companionApp.setSessionClosedHandler(this.scripts::close);
+        companionApp.setSessionClosedHandler(() -> {
+            this.scripts.close();
+            // What Companion tried in the game ends with it, so the game uses the packs' and files' own content again.
+            Set<String> tried = GameOverlay.clear();
+            Minecraft.getInstance().execute(() -> {
+                ConfigValues.restoreFiles();
+                if (!tried.isEmpty()) ResourceReloads.reloadAfterClearing(tried);
+            });
+        });
         companionApp.startDiscovery(() -> TotalDebugConfig.CLIENT.useCompanionApp.get());
     }
 
@@ -177,6 +201,7 @@ public final class TotalDebugClient {
         if (Minecraft.getInstance().getOverlay() != null) {
             return;
         }
+        this.packStacks.tick();
         PackCatalogCapture capture = this.catalogCapture.get();
         if (capture != null) {
             if (!capture.step() || !this.catalogCapture.compareAndSet(capture, null)) {
