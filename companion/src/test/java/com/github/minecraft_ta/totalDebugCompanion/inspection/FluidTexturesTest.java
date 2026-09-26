@@ -50,7 +50,7 @@ class FluidTexturesTest {
             zip.putNextEntry(new ZipEntry("layers/0/assets/example/textures/block/slime_still.png"));
             zip.write(png.toByteArray());
             zip.putNextEntry(new ZipEntry("layers/0/assets/example/textures/block/slime_still.png.mcmeta"));
-            zip.write("{\"animation\":{\"width\":3}}".getBytes(StandardCharsets.UTF_8));
+            zip.write("{\"animation\":{\"frames\":[999]}}".getBytes(StandardCharsets.UTF_8));
         }
 
         FluidTextures textures = FluidTextures.open(archive);
@@ -64,6 +64,6 @@ class FluidTexturesTest {
         assertEquals(0xFF000000, goo.getRGB(1, 1), "the frame list starts with the second, black frame");
         assertTrue(textures.texture("minecraft:lava").isEmpty());
         assertThrows(IOException.class, () -> textures.texture("example:slime"),
-                "a frame width that does not divide the texture is reported, not thrown past the icon service");
+                "a frame outside the texture is reported, not shown as another frame");
     }
 }

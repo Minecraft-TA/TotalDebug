@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureImages;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -85,12 +86,12 @@ final class FluidTextures {
                 try (InputStream input = zip.getInputStream(metadata)) {
                     animation = TextureAnimation.read(bounded(input, MAX_METADATA_BYTES, metadata.getName()),
                             image.getWidth(), image.getHeight());
-                } catch (RuntimeException invalid) {
-                    // The game does not show a texture with broken metadata either.
-                    throw new IOException("Invalid animation metadata for " + appearance.stillTexture(), invalid);
                 }
             }
             return Optional.of(tinted(animation.map(declared -> firstFrame(image, declared)).orElse(image), appearance.tint()));
+        } catch (RuntimeException invalid) {
+            // The game does not show a texture it cannot use either, such as one whose first frame is outside it.
+            throw new IOException("Unusable texture " + appearance.stillTexture() + ": " + invalid.getMessage(), invalid);
         }
     }
 
@@ -103,10 +104,8 @@ final class FluidTextures {
 
     /** The frame an animation shows first, as its metadata declares its size and order. */
     static BufferedImage firstFrame(BufferedImage image, TextureAnimation animation) {
-        int index = animation.frames().isEmpty() ? 0 : animation.frames().getFirst().index();
-        if (index < 0 || index >= animation.columns() * animation.rows()) index = 0;
-        return image.getSubimage(index % animation.columns() * animation.frameWidth(),
-                index / animation.columns() * animation.frameHeight(), animation.frameWidth(), animation.frameHeight());
+        Rectangle frame = animation.region(animation.frames().isEmpty() ? 0 : animation.frames().getFirst().index());
+        return image.getSubimage(frame.x, frame.y, frame.width, frame.height);
     }
 
     static BufferedImage tinted(BufferedImage source, int tint) {
