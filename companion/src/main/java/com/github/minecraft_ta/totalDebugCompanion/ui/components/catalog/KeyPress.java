@@ -101,13 +101,43 @@ final class KeyPress {
                 ? "key.keyboard." + label.toLowerCase(Locale.ROOT) : null;
     }
 
-    /** What the key is labeled with: the character it types, or its name while Ctrl or Alt changes that character. */
+    /**
+     * What the key is labeled with: the character it types, or its name while Ctrl or Alt changes that character.
+     * Shift types another character on the same key, such as ! on 1, so a shifted key is named by its own character.
+     */
     private static String label(KeyEvent event) {
         char typed = event.getKeyChar();
-        if (typed != KeyEvent.CHAR_UNDEFINED && !Character.isISOControl(typed) && !Character.isWhitespace(typed)) {
-            return String.valueOf(typed).toUpperCase(Locale.ROOT);
+        boolean printable = typed != KeyEvent.CHAR_UNDEFINED && !Character.isISOControl(typed) && !Character.isWhitespace(typed);
+        if (event.isShiftDown()) {
+            String unshifted = unshifted(event.getKeyCode());
+            if (unshifted != null) return unshifted;
         }
+        if (printable) return String.valueOf(typed).toUpperCase(Locale.ROOT);
         String text = KeyEvent.getKeyText(event.getKeyCode());
         return text.length() == 1 ? text.toUpperCase(Locale.ROOT) : null;
+    }
+
+    /** The character a key types without Shift, as its key code tells it, or null when the code does not. */
+    private static String unshifted(int code) {
+        if (code >= KeyEvent.VK_0 && code <= KeyEvent.VK_9 || code >= KeyEvent.VK_A && code <= KeyEvent.VK_Z) {
+            return String.valueOf((char) code);
+        }
+        return switch (code) {
+            case KeyEvent.VK_MINUS -> "-";
+            case KeyEvent.VK_EQUALS -> "=";
+            case KeyEvent.VK_PLUS -> "+";
+            case KeyEvent.VK_COMMA -> ",";
+            case KeyEvent.VK_PERIOD -> ".";
+            case KeyEvent.VK_SLASH -> "/";
+            case KeyEvent.VK_BACK_SLASH -> "\\";
+            case KeyEvent.VK_SEMICOLON -> ";";
+            case KeyEvent.VK_QUOTE -> "'";
+            case KeyEvent.VK_BACK_QUOTE -> "`";
+            case KeyEvent.VK_OPEN_BRACKET -> "[";
+            case KeyEvent.VK_CLOSE_BRACKET -> "]";
+            case KeyEvent.VK_NUMBER_SIGN -> "#";
+            case KeyEvent.VK_LESS -> "<";
+            default -> null;
+        };
     }
 }

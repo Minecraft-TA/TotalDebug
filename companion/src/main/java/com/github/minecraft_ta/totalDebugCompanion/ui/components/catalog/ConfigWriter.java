@@ -19,10 +19,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
@@ -81,10 +78,6 @@ final class ConfigWriter {
 
     private record Saved(Step step, String message) {
     }
-
-    /** One file write at a time across Companion, so writes to the same file never interleave. */
-    private static final ExecutorService WRITES = Executors.newSingleThreadExecutor(task ->
-            Thread.ofPlatform().daemon().name("Configuration writes").unstarted(task));
 
     private final ConfigChanges changes;
     private final Consumer<String> status;
@@ -169,7 +162,7 @@ final class ConfigWriter {
      * {@code failed} when a text step finds other text in the file than it was made against.
      */
     private void write(Step step, boolean overwrite, Consumer<Step> saved, Runnable failed, Runnable conflict) {
-        CompletableFuture.supplyAsync(() -> {
+        this.changes.write(() -> {
             try {
                 return switch (step) {
                     case SettingStep setting -> writeSetting(setting);
@@ -178,7 +171,7 @@ final class ConfigWriter {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }, WRITES).whenComplete((result, failure) -> SwingUtilities.invokeLater(() -> {
+        }).whenComplete((result, failure) -> SwingUtilities.invokeLater(() -> {
             if (failure != null) {
                 Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
                 if (cause instanceof ConflictException && conflict != null) {

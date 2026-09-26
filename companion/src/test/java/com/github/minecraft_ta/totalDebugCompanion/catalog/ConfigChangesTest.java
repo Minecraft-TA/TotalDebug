@@ -10,14 +10,42 @@ import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigChangesTest {
     @TempDir Path directory;
+
+    @Test
+    void closingFinishesTheWritesAlreadyTakenAndRefusesLaterOnes() throws Exception {
+        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
+        CountDownLatch release = new CountDownLatch(1);
+        CompletableFuture<String> taken = changes.write(() -> {
+            try {
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            return "written";
+        });
+
+        CompletableFuture<Void> closing = CompletableFuture.runAsync(changes::close);
+        release.countDown();
+        closing.get(10, TimeUnit.SECONDS);
+
+        assertEquals("written", taken.getNow(null), "a write taken before closing is finished, and so recorded");
+        ExecutionException refused = assertThrows(ExecutionException.class,
+                () -> changes.write(() -> "late").get(5, TimeUnit.SECONDS));
+        assertEquals("The project is closing; the change was not written", refused.getCause().getMessage());
+    }
 
     @Test
     void aClosedGameUsesEditsWhenItStarts() {

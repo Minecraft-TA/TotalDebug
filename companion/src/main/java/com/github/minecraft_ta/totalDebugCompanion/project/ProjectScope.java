@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.LocalModSources;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totaldebug.storage.GameLock;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import java.io.IOException;
 import java.net.URI;
@@ -65,7 +66,9 @@ public final class ProjectScope implements AutoCloseable {
         this.catalog = new PackCatalogService(paths());
         this.changes = Objects.requireNonNull(changes);
         this.configChanges = new ConfigChanges(profile.workspaceDirectory(), changes);
-        this.keyBindings = new KeyBindingControl(profile.workspaceDirectory().resolve("options.txt"), changes);
+        Path gameLock = InstancePaths.forGame(profile.workspaceDirectory()).gameLock();
+        this.keyBindings = new KeyBindingControl(profile.workspaceDirectory().resolve("options.txt"), changes,
+                () -> GameLock.held(gameLock));
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {
@@ -148,7 +151,8 @@ public final class ProjectScope implements AutoCloseable {
             closed = true;
             pending.clear();
         }
-        try { closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
+        // Writes still queued finish first, so each is recorded before the change record closes.
+        try { configChanges.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
     }
 
     public String loadBreakpointScript(String name) {

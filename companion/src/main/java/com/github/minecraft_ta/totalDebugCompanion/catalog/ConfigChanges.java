@@ -16,7 +16,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * When configuration edits take effect in the game, and the edits the running game has not applied yet. NeoForge
@@ -26,6 +32,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * changed it.
  */
 public final class ConfigChanges {
+    private static final long CLOSE_SECONDS = 30;
+
     /** When an edit takes effect. */
     public enum Effect {
         NOW("the game reloaded it"),
@@ -64,6 +72,9 @@ public final class ConfigChanges {
     private final Path workspace;
     private final ChangeRecord record;
     private final Map<Key, Pending> pending = new ConcurrentHashMap<>();
+    /** One write at a time for the project, so writes to the same file never interleave. */
+    private final ExecutorService writes = Executors.newSingleThreadExecutor(task ->
+            Thread.ofPlatform().daemon().name("Configuration writes").unstarted(task));
     private volatile boolean gameRunning;
 
     /** {@code workspace} is the game directory, and {@code record} keeps every edit. */
@@ -74,6 +85,30 @@ public final class ConfigChanges {
 
     public ChangeRecord record() {
         return this.record;
+    }
+
+    /** Runs {@code write} after the project's earlier writes; refused once the project closes. */
+    public <T> CompletableFuture<T> write(Supplier<T> write) {
+        try {
+            return CompletableFuture.supplyAsync(write, this.writes);
+        } catch (RejectedExecutionException closed) {
+            return CompletableFuture.failedFuture(new IOException("The project is closing; the change was not written"));
+        }
+    }
+
+    /**
+     * Stops taking writes and finishes those already taken, so every file written is also recorded before the change
+     * record closes.
+     */
+    public void close() {
+        this.writes.shutdown();
+        try {
+            if (!this.writes.awaitTermination(CLOSE_SECONDS, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Configuration writes did not finish within " + CLOSE_SECONDS + " seconds");
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public void gameConnected() {

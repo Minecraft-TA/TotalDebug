@@ -28,7 +28,7 @@ class KeyBindingControlTest {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "version:3955\nkey_key.jump:key.keyboard.space\nsoundCategory_master:1.0\n");
         ChangeRecord record = ChangeRecord.inMemory();
-        KeyBindingControl control = new KeyBindingControl(options, record);
+        KeyBindingControl control = new KeyBindingControl(options, record, () -> false);
         KeyBindings.Assignment space = new KeyBindings.Assignment("key.keyboard.space", "NONE");
 
         KeyBindingControl.Result jump = control.set("key.jump", space, new KeyBindings.Assignment("key.keyboard.g", "CONTROL"))
@@ -50,10 +50,45 @@ class KeyBindingControlTest {
     }
 
     @Test
+    void aGameRunningWithoutAConnectionKeepsItsOptions() throws Exception {
+        Path options = this.directory.resolve("options.txt");
+        Files.writeString(options, "key_key.jump:key.keyboard.space\n");
+        KeyBindingControl control = new KeyBindingControl(options, ChangeRecord.inMemory(), () -> true);
+
+        var refused = control.set("key.jump", new KeyBindings.Assignment("key.keyboard.space", "NONE"),
+                new KeyBindings.Assignment("key.keyboard.g", "NONE"));
+
+        ExecutionException failure = assertThrows(ExecutionException.class, () -> refused.get(5, TimeUnit.SECONDS));
+        assertEquals("The game is running but not connected to Companion; connect it to change keys",
+                failure.getCause().getMessage());
+        assertEquals("key_key.jump:key.keyboard.space\n", Files.readString(options), "the running game would undo it");
+        assertNull(control.original("key.jump"));
+    }
+
+    @Test
+    void anAnswerAfterTheCallerStoppedWaitingIsStillRecorded() throws Exception {
+        KeyBindingControl control = new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(),
+                () -> true);
+        List<SetKeyBindingMessage> sent = new ArrayList<>();
+        control.gameConnected(message -> {
+            sent.add(message);
+            return true;
+        });
+
+        control.set("key.jump", new KeyBindings.Assignment("key.keyboard.space", "NONE"),
+                new KeyBindings.Assignment("key.keyboard.g", "NONE")).cancel(true);
+        control.answered(new KeyBindingResultPayload(sent.getFirst().payload().requestId(), "key.jump",
+                "key.keyboard.space", "NONE", "key.keyboard.g", "NONE", ""));
+
+        assertEquals(new KeyBindings.Assignment("key.keyboard.space", "NONE"), control.original("key.jump"),
+                "the game changed the binding, so Revert must know its key before");
+    }
+
+    @Test
     void bindingsChangedTogetherAllStayInOptions() throws Exception {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "version:3955\n");
-        KeyBindingControl control = new KeyBindingControl(options, ChangeRecord.inMemory());
+        KeyBindingControl control = new KeyBindingControl(options, ChangeRecord.inMemory(), () -> false);
         List<KeyBindingControl.Change> changes = new ArrayList<>();
         for (int number = 1; number <= 9; number++) {
             changes.add(new KeyBindingControl.Change("key.hotbar." + number,
@@ -67,7 +102,7 @@ class KeyBindingControlTest {
     @Test
     void aRunningGameChangesTheBindingItselfAndAnswers() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        KeyBindingControl control = new KeyBindingControl(this.directory.resolve("options.txt"), record);
+        KeyBindingControl control = new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false);
         List<SetKeyBindingMessage> sent = new ArrayList<>();
         control.gameConnected(message -> {
             sent.add(message);

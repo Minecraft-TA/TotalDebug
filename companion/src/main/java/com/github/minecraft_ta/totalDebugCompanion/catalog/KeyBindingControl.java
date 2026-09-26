@@ -18,13 +18,15 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 /**
  * Puts key bindings on keys. While the game is connected it changes the binding itself, like its controls screen, and
  * saves {@code options.txt}; otherwise Companion writes the binding's line in {@code options.txt}, which the game
  * reads when it starts. Writing that file while the game runs would be undone the next time the game saves its
- * options. Every change is entered in the change record.
+ * options, so a game running without a connection is asked to connect first. Every change is entered in the change
+ * record, also one the game applies after Companion stopped waiting for its answer.
  */
 public final class KeyBindingControl {
     private static final long ANSWER_SECONDS = 5;
@@ -39,15 +41,17 @@ public final class KeyBindingControl {
 
     private final Path options;
     private final ChangeRecord record;
+    private final BooleanSupplier gameRunning;
     private final AtomicInteger requests = new AtomicInteger();
     private final Map<Integer, CompletableFuture<KeyBindingResultPayload>> waiting = new ConcurrentHashMap<>();
     /** Sends a message to the connected game, or is null while no game is connected. */
     private volatile Predicate<SetKeyBindingMessage> game;
 
-    /** {@code options} is the game's {@code options.txt}. */
-    public KeyBindingControl(Path options, ChangeRecord record) {
+    /** {@code options} is the game's {@code options.txt}; {@code gameRunning} tells whether a game runs there. */
+    public KeyBindingControl(Path options, ChangeRecord record, BooleanSupplier gameRunning) {
         this.options = Objects.requireNonNull(options, "options");
         this.record = Objects.requireNonNull(record, "record");
+        this.gameRunning = Objects.requireNonNull(gameRunning, "gameRunning");
     }
 
     /** The game's {@code options.txt}, where the keys are saved. */
@@ -76,35 +80,42 @@ public final class KeyBindingControl {
     /** Puts the binding {@code name} on {@code assignment}; {@code shown} is the key it had when the edit was made. */
     public CompletableFuture<Result> set(String name, KeyBindings.Assignment shown, KeyBindings.Assignment assignment) {
         Predicate<SetKeyBindingMessage> send = this.game;
-        CompletableFuture<Result> result;
         if (send == null) {
-            result = CompletableFuture.supplyAsync(() -> {
+            return CompletableFuture.supplyAsync(() -> {
+                if (this.gameRunning.getAsBoolean()) {
+                    throw new CompletionException(new IOException(
+                            "The game is running but not connected to Companion; connect it to change keys"));
+                }
                 try {
-                    return new Result(writeOptions(name, assignment), assignment, false);
+                    return recorded(name, shown, new Result(writeOptions(name, assignment), assignment, false));
                 } catch (IOException exception) {
                     throw new CompletionException(exception);
                 }
             });
-        } else {
-            int id = this.requests.incrementAndGet();
-            CompletableFuture<KeyBindingResultPayload> answer = new CompletableFuture<>();
-            this.waiting.put(id, answer);
-            if (!send.test(new SetKeyBindingMessage(id, name, assignment.key(), assignment.modifier()))) {
-                this.waiting.remove(id);
-                return CompletableFuture.failedFuture(new IOException("The game is not connected"));
-            }
-            result = answer.orTimeout(ANSWER_SECONDS, TimeUnit.SECONDS).whenComplete((ignored, failure) -> this.waiting.remove(id))
-                    .thenApply(payload -> {
-                        if (!payload.error().isEmpty()) throw new CompletionException(new IOException(payload.error()));
-                        return new Result(new KeyBindings.Assignment(payload.previousKey(), payload.previousModifier()),
-                                new KeyBindings.Assignment(payload.key(), payload.modifier()), true);
-                    });
         }
-        return result.thenApply(done -> {
-            this.record.changed(new ChangeRecord.KeyBinding(name), (done.previous() == null ? shown : done.previous()).encode(),
-                    done.current().encode());
-            return done;
+        int id = this.requests.incrementAndGet();
+        CompletableFuture<KeyBindingResultPayload> answer = new CompletableFuture<>();
+        this.waiting.put(id, answer);
+        // The change is recorded when the game answers, however late; the caller only waits a while for it.
+        CompletableFuture<Result> applied = answer.thenApply(payload -> {
+            if (!payload.error().isEmpty()) throw new CompletionException(new IOException(payload.error()));
+            return recorded(name, shown, new Result(new KeyBindings.Assignment(payload.previousKey(), payload.previousModifier()),
+                    new KeyBindings.Assignment(payload.key(), payload.modifier()), true));
         });
+        if (!send.test(new SetKeyBindingMessage(id, name, assignment.key(), assignment.modifier()))) {
+            this.waiting.remove(id);
+            return CompletableFuture.failedFuture(new IOException("The game is not connected"));
+        }
+        CompletableFuture<Result> waited = applied.copy();
+        CompletableFuture.delayedExecutor(ANSWER_SECONDS, TimeUnit.SECONDS).execute(() -> waited.completeExceptionally(
+                new IOException("The game has not answered yet; the change is recorded if the game applies it")));
+        return waited;
+    }
+
+    private Result recorded(String name, KeyBindings.Assignment shown, Result done) {
+        this.record.changed(new ChangeRecord.KeyBinding(name), (done.previous() == null ? shown : done.previous()).encode(),
+                done.current().encode());
+        return done;
     }
 
     /**
