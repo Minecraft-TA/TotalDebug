@@ -156,6 +156,7 @@ public final class TotalDebugClient {
      * translated names and the snapshot the winning resources, so both are brought up to date.
      */
     public void resourcesReloaded() {
+        this.catalogs.recapture();
         this.companionApp.announceInventory();
     }
 

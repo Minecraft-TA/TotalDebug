@@ -70,6 +70,22 @@ class PackCatalogPublisherTest {
     }
 
     @Test
+    void reloadedResourcesCaptureAgainForTheSameInventoryAndLanguage() throws Exception {
+        Path file = this.directory.resolve("catalog.json");
+        catalog("inventory", "en_us").write(file);
+        PackCatalogPublisher publisher = publisher(file);
+        publisher.recapture();
+        publisher.request("inventory", Map.of());
+        assertEquals(PackCatalogMessage.AVAILABLE, next().state(), "before any request, the saved catalog is still reused");
+
+        publisher.recapture();
+        publisher.request("inventory", Map.of());
+
+        assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        awaitCaptures(1);
+    }
+
+    @Test
     void reportsAFailedCaptureAndRetriesOnTheNextRequest() throws Exception {
         PackCatalogPublisher publisher = publisher(this.directory.resolve("catalog.json"));
 
