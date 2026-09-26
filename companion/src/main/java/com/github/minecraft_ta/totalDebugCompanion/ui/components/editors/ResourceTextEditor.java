@@ -58,6 +58,10 @@ final class ResourceTextEditor extends JPanel {
     private final String openedText;
     /** Stops following the change record. */
     private final Runnable stopListening;
+    /** Stops following the game's packs. */
+    private final Runnable stopFollowingPacks;
+    /** The text a save under way writes, or null. */
+    private String saving;
     /** The managed pack the opened file lies in, which stays the target, or null to save into the current world's. */
     private final Path opened;
     /** The text the pack supplies: the managed pack's copy, or the opened file's. */
@@ -118,9 +122,16 @@ final class ResourceTextEditor extends JPanel {
         showState("");
         changed();
         this.seen = recorded();
-        readCopies();
+        readCopies(false);
         // A revert on the Changes page changes what the game uses.
         this.stopListening = edits.record().addListener(() -> SwingUtilities.invokeLater(this::recordChanged));
+        // Another world opening changes the current world's datapack a data file is shown from and saved into.
+        this.stopFollowingPacks = edits.addStackListener(() -> SwingUtilities.invokeLater(this::packsChanged));
+    }
+
+    /** Reads the copies again when the tab follows the current world, which may have changed. */
+    private void packsChanged() {
+        if (!this.disposed && this.opened == null && !this.busy) readCopies(false);
     }
 
     /** Reads the copies again when this resource's entry in the change record changed. */
@@ -130,7 +141,7 @@ final class ResourceTextEditor extends JPanel {
         if (Objects.equals(now, this.seen)) return;
         this.seen = now;
         // A write of this editor shows its own result when it completes.
-        if (!this.busy) readCopies();
+        if (!this.busy) readCopies(true);
     }
 
     /** This resource's entry in the change record for its managed pack, or null while it has none or the pack is not known. */
@@ -142,8 +153,11 @@ final class ResourceTextEditor extends JPanel {
         return this.text;
     }
 
-    /** Shows the managed pack's copy instead of the opened file's, and names a pack that overrides the managed one. */
-    private void readCopies() {
+    /**
+     * Shows the managed pack's copy instead of the opened file's, and names a pack that overrides the managed one.
+     * {@code changed} tells that the file itself changed, such as by a revert, which ends what the notice said about it.
+     */
+    private void readCopies(boolean changed) {
         int started = this.writes;
         int read = ++this.reads;
         CompletableFuture.supplyAsync(() -> {
@@ -165,6 +179,7 @@ final class ResourceTextEditor extends JPanel {
             }
             showPack(found.pack());
             this.seen = found.recorded();
+            if (changed) showNotice("", ThemeColors::secondaryText);
             // Without a managed copy, such as after a revert, the pack supplies the opened file's text again, unless the
             // opened file was the managed copy: then nothing is left, and the shown text is unsaved.
             this.managed = found.managed() != null;
@@ -179,7 +194,7 @@ final class ResourceTextEditor extends JPanel {
             }
             changed();
             // A save or revert that came after the record was looked at is read again.
-            if (!Objects.equals(recorded(), this.seen)) readCopies();
+            if (!Objects.equals(recorded(), this.seen)) readCopies(true);
         }));
     }
 
@@ -240,9 +255,11 @@ final class ResourceTextEditor extends JPanel {
         this.busy = true;
         changed();
         this.state.setText("Reloading in the game");
-        this.edits.save(this.path, this.opened, edited.getBytes(StandardCharsets.UTF_8)).whenComplete((saved, failure) ->
-                SwingUtilities.invokeLater(() -> {
+        this.saving = edited;
+        this.edits.save(this.path, this.opened != null ? this.opened : this.pack, edited.getBytes(StandardCharsets.UTF_8))
+                .whenComplete((saved, failure) -> SwingUtilities.invokeLater(() -> {
                     this.busy = false;
+                    this.saving = null;
                     if (this.disposed) return;
                     if (failure != null) {
                         showState("");
@@ -284,7 +301,8 @@ final class ResourceTextEditor extends JPanel {
 
     /** Whether the text can be left: it has no unsaved changes, or they were discarded after asking. */
     boolean confirmLeave() {
-        if (this.text.text().equals(this.packText)) return true;
+        // A save under way is written whether or not the tab stays open.
+        if (this.text.text().equals(this.packText) || this.text.text().equals(this.saving)) return true;
         String name = this.path.substring(this.path.lastIndexOf('/') + 1);
         Object[] options = {"Discard", "Cancel"};
         int choice = JOptionPane.showOptionDialog(this, "The text of " + name + " has unsaved changes.",
@@ -310,6 +328,7 @@ final class ResourceTextEditor extends JPanel {
     void dispose() {
         this.disposed = true;
         this.stopListening.run();
+        this.stopFollowingPacks.run();
         this.text.dispose();
     }
 }

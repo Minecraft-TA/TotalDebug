@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -78,6 +79,8 @@ public final class ResourceEdits {
     private final Map<Integer, CompletableFuture<ReloadResultPayload>> waiting = new ConcurrentHashMap<>();
     private volatile Predicate<AbstractMessage> game;
     private volatile PackStackPayload stack;
+    /** Run whenever the game names its packs again, such as after another world opened. */
+    private final List<Runnable> stackListeners = new CopyOnWriteArrayList<>();
     private Batch running;
     private Batch next;
 
@@ -115,6 +118,13 @@ public final class ResourceEdits {
     /** Takes the game's enabled packs. */
     public void packStack(PackStackPayload stack) {
         this.stack = stack;
+        this.stackListeners.forEach(Runnable::run);
+    }
+
+    /** Runs {@code listener} whenever the game names its packs again, on the thread that received them; returns its removal. */
+    public Runnable addStackListener(Runnable listener) {
+        this.stackListeners.add(listener);
+        return () -> this.stackListeners.remove(listener);
     }
 
     /** Takes the game's answer to a reload. */
@@ -224,6 +234,8 @@ public final class ResourceEdits {
         }
         return write(() -> {
             try {
+                // Reverted already, such as twice from the Changes page before it refreshed.
+                if (!change.equals(this.record.change(target))) return target.location();
                 Path file = target.location().resolve(target.path());
                 String held = ResourceOriginals.hash(Files.isRegularFile(file) ? Files.readAllBytes(file) : null);
                 if (!held.equals(change.current()) && !held.equals(change.original())) {

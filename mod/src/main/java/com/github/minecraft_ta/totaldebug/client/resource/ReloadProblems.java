@@ -24,20 +24,20 @@ import java.util.Set;
 final class ReloadProblems extends AbstractAppender implements AutoCloseable {
     private static final int MAX_PROBLEMS = 64;
 
-    /** The watched path each name identifies. */
-    private final Map<String, String> names;
+    /** The watched paths each name identifies; one id, such as {@code ns:gear}, can stand for several kinds of file. */
+    private final Map<String, List<String>> names;
     private final Set<ReloadResultPayload.Problem> problems = new LinkedHashSet<>();
 
-    private ReloadProblems(Map<String, String> names) {
+    private ReloadProblems(Map<String, List<String>> names) {
         super("TotalDebugReloadProblems", null, null, true, Property.EMPTY_ARRAY);
         this.names = names;
     }
 
     /** Starts collecting problems about {@code paths}; closing stops it. */
     static ReloadProblems open(List<String> paths) {
-        Map<String, String> names = new LinkedHashMap<>();
+        Map<String, List<String>> names = new LinkedHashMap<>();
         for (String path : paths) {
-            for (String name : names(path)) names.putIfAbsent(name, path);
+            for (String name : names(path)) names.computeIfAbsent(name, ignored -> new ArrayList<>()).add(path);
         }
         ReloadProblems collector = new ReloadProblems(names);
         collector.start();
@@ -72,11 +72,13 @@ final class ReloadProblems extends AbstractAppender implements AutoCloseable {
         Throwable thrown = event.getThrown();
         String detail = thrown == null ? "" : thrown.toString();
         String text = (message + " " + detail).toLowerCase(Locale.ROOT);
-        for (Map.Entry<String, String> name : this.names.entrySet()) {
+        for (Map.Entry<String, List<String>> name : this.names.entrySet()) {
             if (!mentions(text, name.getKey())) continue;
             synchronized (this.problems) {
-                if (this.problems.size() < MAX_PROBLEMS) {
-                    this.problems.add(new ReloadResultPayload.Problem(name.getValue(), detail.isEmpty() ? message : message + ": " + detail));
+                for (String path : name.getValue()) {
+                    if (this.problems.size() < MAX_PROBLEMS) {
+                        this.problems.add(new ReloadResultPayload.Problem(path, detail.isEmpty() ? message : message + ": " + detail));
+                    }
                 }
             }
             return;

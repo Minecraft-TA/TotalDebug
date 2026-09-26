@@ -94,6 +94,19 @@ class ResourceEditsTest {
     }
 
     @Test
+    void revertingTwiceRevertsOnce() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        edits.packStack(STACK);
+        edits.save(LANG, bytes("{\"a\":\"saved\"}")).get(5, TimeUnit.SECONDS);
+        ChangeRecord.Change change = record.changes().getFirst();
+
+        edits.revert(change).get(5, TimeUnit.SECONDS);
+        edits.revert(change).get(5, TimeUnit.SECONDS);
+        assertEquals(0, record.size(), "the second revert finds nothing left to put back");
+    }
+
+    @Test
     void aFileRestoredOutsideCompanionEndsItsChange() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
