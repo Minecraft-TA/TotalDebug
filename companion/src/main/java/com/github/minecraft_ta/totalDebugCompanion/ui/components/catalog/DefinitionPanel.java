@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.PlateIcon;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
@@ -35,10 +36,7 @@ import javax.swing.BoxLayout;
 import javax.swing.SwingConstants;
 import java.awt.Cursor;
 import java.awt.FlowLayout;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
 import java.awt.GridLayout;
-import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.nio.file.Files;
@@ -148,16 +146,8 @@ public final class DefinitionPanel extends JPanel {
             this.overview.add(message(unavailable.isEmpty() ? this.subject.id() + " is not in the captured catalog" : unavailable),
                     BorderLayout.NORTH);
         } else {
-            FactsPanel facts = new FactsPanel(sections(), this.icons, new FactsPanel.Actions() {
-                @Override
-                public void open(FactLink link) {
-                    DefinitionPanel.this.navigator.accept(SubjectLinks.target(link));
-                }
-
-                @Override
-                public void openData(String section, String label) {
-                }
-            }, new HashSet<>());
+            FactsPanel facts = new FactsPanel(sections(), this.icons,
+                    link -> DefinitionPanel.this.navigator.accept(SubjectLinks.target(link)));
             this.overview.add(facts, BorderLayout.NORTH);
         }
         this.overview.revalidate();
@@ -208,13 +198,13 @@ public final class DefinitionPanel extends JPanel {
         Optional<CatalogIndex.ItemIcon> icon = this.index == null || this.entry == null || this.entry.iconItem().isEmpty()
                 ? Optional.empty() : this.index.itemIcon(this.entry.iconItem());
         if (icon.isEmpty()) {
-            this.header.setIcon(ContentKinds.of(this.subject.registry()).icon());
+            this.header.setIcon(new PlateIcon(ContentKinds.of(this.subject.registry()).icon(), SubjectHeader.ICON_SIZE));
             return;
         }
         this.icons.render(icon.get().model(), icon.get().tints(), SubjectHeader.ICON_SIZE)
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                     if (this.disposed) return;
-                    this.header.setIcon(image.<Icon>map(ImageIcon::new).orElse(ContentKinds.of(this.subject.registry()).icon()));
+                    this.header.setIcon(image.<Icon>map(ImageIcon::new).orElse(new PlateIcon(ContentKinds.of(this.subject.registry()).icon(), SubjectHeader.ICON_SIZE)));
                 }));
         this.icons.render(icon.get().model(), icon.get().tints(), this.tabIcon.size())
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
@@ -360,27 +350,13 @@ public final class DefinitionPanel extends JPanel {
     }
 
     private JComponent filesBody(List<FileLink> files) {
-        JPanel body = new JPanel(new GridBagLayout());
-        for (int row = 0; row < files.size(); row++) {
-            FileLink file = files.get(row);
-            JLabel role = new JLabel(file.role());
-            ThemeColors.keepForeground(role, ThemeColors::secondaryText);
-            GridBagConstraints constraints = new GridBagConstraints();
-            constraints.gridy = row;
-            constraints.anchor = GridBagConstraints.WEST;
-            constraints.insets = new Insets(3, 0, 3, 12);
-            body.add(role, constraints);
-            constraints.gridx = 1;
-            constraints.insets = new Insets(3, 0, 3, 0);
+        List<PageSection.LinkRow> rows = new ArrayList<>();
+        for (FileLink file : files) {
             String name = file.path().substring(file.path().lastIndexOf('/') + 1);
-            body.add(new LinkLabel(file.path(), FileTypeResolver.resolve(name).icon(), file.path(),
-                    () -> this.navigator.accept(file.target())), constraints);
+            rows.add(new PageSection.LinkRow(file.role(), List.of(new LinkLabel(file.path(),
+                    FileTypeResolver.resolve(name).icon(), file.path(), () -> this.navigator.accept(file.target())))));
         }
-        GridBagConstraints filler = new GridBagConstraints();
-        filler.gridx = 2;
-        filler.weightx = 1;
-        body.add(Box.createHorizontalGlue(), filler);
-        return body;
+        return PageSection.linkRows(rows);
     }
 
     /** The resource path below its namespace, such as {@code models/block/framed_slab.json}. */

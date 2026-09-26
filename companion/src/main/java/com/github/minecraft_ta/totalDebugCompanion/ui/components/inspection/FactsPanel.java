@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.SectionHeading;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -43,6 +44,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.font.TextAttribute;
 import java.awt.image.BufferedImage;
+import java.nio.file.Path;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -55,10 +57,11 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Presents the fact sections of one script result under collapsible headings, with one label column aligned across
- * all sections: slot grids, bars with their amounts, colored values, links to classes, and a summary of each data
- * fact. A newer read updates sections of the same shape in place, marking changed values, and rebuilds only the
- * sections whose shape changed.
+ * Presents the fact sections of one or more script results under collapsible headings, with one label column aligned
+ * across all sections: slot grids, bars with their amounts, colored values, links to classes, and a summary of each
+ * data fact. The slots a side of a block exposes form a row of their own, each marked with what it takes and gives.
+ * A section a project script reported names the script on its heading. A newer read updates sections of the same
+ * shape in place, marking changed values, and rebuilds only the sections whose shape changed.
  */
 public final class FactsPanel extends JPanel {
     static final int SLOT_COLUMNS = 9;
@@ -66,42 +69,64 @@ public final class FactsPanel extends JPanel {
     private static final int SLOT_SIZE = ICON_SIZE + 8;
     private static final int MIN_LABEL_WIDTH = 96;
     private static final int MAX_LABEL_WIDTH = 240;
-    private static final Pattern NUMBER = Pattern.compile("[+-]?\\d[\\d,.]*(?:[eE][+-]?\\d+)?[bBsSlLfFdD%]?");
+    private static final Pattern NUMBER = Pattern.compile("[+-]?(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?[bBsSlLfFdD%]?");
 
     /** What clicking a fact does, decided by the panel's owner. */
     public interface Actions {
-        Actions NONE = new Actions() {
-            @Override public void open(FactLink link) { }
-
-            @Override public void openData(String section, String label) { }
-        };
+        Actions NONE = link -> { };
 
         void open(FactLink link);
 
-        /** Shows the data fact {@code label} of section {@code section} in the data view. */
-        void openData(String section, String label);
+        /** Shows the data fact named {@code name}, its section's name and its label, in the data view. */
+        default void openData(String name) {
+        }
+
+        default void openScript(Path script) {
+        }
+    }
+
+    /** A project script that reported a section; the section's heading names the script and opens it. */
+    public record Origin(String name, Path script) {
+        public Origin {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(script, "script");
+        }
+    }
+
+    /** A section, with the script that reported it or null for the page's own. */
+    public record Part(FactSection section, Origin origin) {
+        public Part {
+            Objects.requireNonNull(section, "section");
+        }
+
+        /** Names the section among all parts; data facts are named by it too. */
+        public String key() {
+            return this.origin == null ? this.section.title() : this.origin.name() + " › " + this.section.title();
+        }
     }
 
     private final ItemIconService icons;
     private final Actions actions;
     private final Set<String> collapsed;
     private final List<SectionView> views = new ArrayList<>();
-    private List<FactSection> sections;
 
     public FactsPanel(List<FactSection> sections, ItemIconService icons) {
-        this(sections, icons, Actions.NONE, new HashSet<>());
+        this(sections, icons, Actions.NONE);
     }
 
-    /** {@code collapsed} holds the titles of collapsed sections; the owner keeps it across rebuilt panels. */
-    public FactsPanel(List<FactSection> sections, ItemIconService icons, Actions actions, Set<String> collapsed) {
+    public FactsPanel(List<FactSection> sections, ItemIconService icons, Actions actions) {
+        this(parts(sections), icons, actions, new HashSet<>());
+    }
+
+    /** {@code collapsed} holds the keys of collapsed sections; the owner keeps it across rebuilt panels. */
+    public FactsPanel(List<Part> parts, ItemIconService icons, Actions actions, Set<String> collapsed) {
         this.icons = Objects.requireNonNull(icons, "icons");
         this.actions = Objects.requireNonNull(actions, "actions");
         this.collapsed = Objects.requireNonNull(collapsed, "collapsed");
-        this.sections = List.copyOf(sections);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(UiMetrics.pagePadding(4, 8));
-        for (FactSection section : sections) {
-            SectionView view = new SectionView(section);
+        for (Part part : parts) {
+            SectionView view = new SectionView(part);
             this.views.add(view);
             add(view);
         }
@@ -110,28 +135,22 @@ public final class FactsPanel extends JPanel {
         reloadIcons();
     }
 
+    /** Sections that are the page's own. */
+    public static List<Part> parts(List<FactSection> sections) {
+        return sections.stream().map(section -> new Part(section, null)).toList();
+    }
+
     /**
      * Applies a newer read. Sections with the same shape update in place; a section whose facts changed shape is
      * rebuilt on its own. Returns false when the sections themselves differ and the panel must be rebuilt.
      */
-    public boolean update(List<FactSection> next) {
-        if (!titles(this.sections).equals(titles(next))) {
+    public boolean update(List<Part> next) {
+        if (!this.views.stream().map(view -> view.key).toList().equals(next.stream().map(Part::key).toList())) {
             return false;
         }
         for (int index = 0; index < next.size(); index++) {
-            FactSection before = this.sections.get(index);
-            FactSection after = next.get(index);
-            if (sameShape(before, after)) {
-                this.views.get(index).update(before, after);
-            } else {
-                SectionView rebuilt = new SectionView(after);
-                remove(index);
-                add(rebuilt, index);
-                this.views.set(index, rebuilt);
-                rebuilt.reloadIcons();
-            }
+            if (!this.views.get(index).update(next.get(index))) rebuild(index, next.get(index));
         }
-        this.sections = List.copyOf(next);
         alignLabels();
         revalidate();
         repaint();
@@ -143,8 +162,12 @@ public final class FactsPanel extends JPanel {
         this.views.forEach(SectionView::reloadIcons);
     }
 
-    private static List<String> titles(List<FactSection> sections) {
-        return sections.stream().map(FactSection::title).toList();
+    private void rebuild(int index, Part part) {
+        SectionView rebuilt = new SectionView(part);
+        remove(index);
+        add(rebuilt, index);
+        this.views.set(index, rebuilt);
+        rebuilt.reloadIcons();
     }
 
     static boolean sameShape(FactSection before, FactSection after) {
@@ -221,22 +244,24 @@ public final class FactsPanel extends JPanel {
 
     /** One section: its heading, which collapses it, and its rows. */
     private final class SectionView extends JPanel {
-        private final String title;
+        private final String key;
+        private Part part;
         private final JPanel body = new JPanel(new GridBagLayout());
         private final List<JLabel> labels = new ArrayList<>();
         private final List<SlotCell> slots = new ArrayList<>();
         private final List<JComponent> values = new ArrayList<>();
         private SectionHeading heading;
 
-        private SectionView(FactSection section) {
+        private SectionView(Part part) {
             super(new BorderLayout());
-            this.title = section.title();
+            this.key = part.key();
+            this.part = part;
             setAlignmentX(Component.LEFT_ALIGNMENT);
             setBorder(BorderFactory.createEmptyBorder(8, 0, 4, 0));
-            add(header(section), BorderLayout.NORTH);
+            add(header(part.section()), BorderLayout.NORTH);
             this.body.setBorder(UiMetrics.sectionBodyPadding());
             add(this.body, BorderLayout.CENTER);
-            build(section);
+            build(part.section());
             showCollapsed();
         }
 
@@ -245,15 +270,36 @@ public final class FactsPanel extends JPanel {
             return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
         }
 
-        private JComponent header(FactSection section) {
-            JLabel omitted = null;
-            if (section.omittedFacts() > 0) {
-                omitted = new JLabel(section.omittedFacts() + " more not shown");
-                ThemeColors.keepForeground(omitted, ThemeColors::mutedText);
+        /** Updates the rows in place when the newer read has the same shape; returns false when it must be rebuilt. */
+        private boolean update(Part next) {
+            if (!Objects.equals(this.part.origin(), next.origin()) || !sameShape(this.part.section(), next.section())) {
+                return false;
             }
-            this.heading = new SectionHeading(section.title(), omitted, () -> {
-                if (!FactsPanel.this.collapsed.remove(SectionView.this.title)) {
-                    FactsPanel.this.collapsed.add(SectionView.this.title);
+            updateRows(this.part.section(), next.section());
+            this.part = next;
+            return true;
+        }
+
+        private JComponent header(FactSection section) {
+            JPanel trailing = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+            if (section.omittedFacts() > 0) {
+                JLabel omitted = new JLabel(section.omittedFacts() + " more not shown");
+                ThemeColors.keepForeground(omitted, ThemeColors::mutedText);
+                trailing.add(omitted);
+            }
+            Origin origin = this.part.origin();
+            if (origin != null) {
+                String name = origin.name().equals(section.title()) ? "" : origin.name();
+                LinkLabel script = new LinkLabel(name, Icons.SCRIPT_FILE,
+                        Tooltip.of("Open Script").detail(Tooltip.shortPath(origin.script())).html(),
+                        () -> FactsPanel.this.actions.openScript(origin.script()));
+                script.getAccessibleContext().setAccessibleName("Open Script " + origin.name());
+                trailing.add(script);
+            }
+            this.heading = new SectionHeading(section.title(),
+                    trailing.getComponentCount() == 0 ? null : trailing, () -> {
+                if (!FactsPanel.this.collapsed.remove(this.key)) {
+                    FactsPanel.this.collapsed.add(this.key);
                 }
                 showCollapsed();
             });
@@ -261,37 +307,59 @@ public final class FactsPanel extends JPanel {
         }
 
         private void showCollapsed() {
-            boolean collapsed = FactsPanel.this.collapsed.contains(this.title);
+            boolean collapsed = FactsPanel.this.collapsed.contains(this.key);
             this.heading.setCollapsed(collapsed);
             this.body.setVisible(!collapsed);
             revalidate();
         }
 
+        /**
+         * The contents' slots first as one grid, then the other rows in order; the slots of one side, which share its
+         * label, form one row. Slot cells are kept in fact order, as updates find them.
+         */
         private void build(FactSection section) {
             int row = 0;
-            List<Fact> stacks = section.facts().stream().filter(fact -> fact.kind() == Fact.Kind.STACK).toList();
-            if (!stacks.isEmpty()) {
-                JPanel grid = new JPanel(new GridLayout(0, Math.min(SLOT_COLUMNS, stacks.size()), 2, 2));
-                for (Fact stack : stacks) {
-                    SlotCell cell = new SlotCell(stack);
-                    this.slots.add(cell);
-                    grid.add(cell);
-                }
-                JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-                wrapper.add(grid);
-                addRow(row++, "", wrapper);
-            }
+            List<SlotCell> contents = new ArrayList<>();
             for (Fact fact : section.facts()) {
-                if (fact.kind() == Fact.Kind.STACK) continue;
-                JComponent value = value(section, fact);
-                this.values.add(value);
-                addRow(row++, fact.label(), value);
+                if (fact.kind() != Fact.Kind.STACK) continue;
+                SlotCell cell = new SlotCell(fact);
+                this.slots.add(cell);
+                if (fact.transfer() == null) contents.add(cell);
+            }
+            if (!contents.isEmpty()) addRow(row++, "", slotGrid(contents));
+            List<Fact> facts = section.facts();
+            int slot = 0;
+            for (int index = 0; index < facts.size(); index++) {
+                Fact fact = facts.get(index);
+                if (fact.kind() != Fact.Kind.STACK) {
+                    JComponent value = value(fact);
+                    this.values.add(value);
+                    addRow(row++, fact.label(), value);
+                    continue;
+                }
+                SlotCell cell = this.slots.get(slot++);
+                if (fact.transfer() == null) continue;
+                List<SlotCell> side = new ArrayList<>(List.of(cell));
+                while (index + 1 < facts.size() && facts.get(index + 1).transfer() != null
+                        && facts.get(index + 1).label().equals(fact.label())) {
+                    index++;
+                    side.add(this.slots.get(slot++));
+                }
+                addRow(row++, fact.label(), slotGrid(side));
             }
             GridBagConstraints filler = new GridBagConstraints();
             filler.gridy = row;
             filler.gridx = 2;
             filler.weightx = 1;
             this.body.add(Box.createHorizontalGlue(), filler);
+        }
+
+        private static JComponent slotGrid(List<SlotCell> cells) {
+            JPanel grid = new JPanel(new GridLayout(0, Math.min(SLOT_COLUMNS, cells.size()), 2, 2));
+            cells.forEach(grid::add);
+            JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            wrapper.add(grid);
+            return wrapper;
         }
 
         private void addRow(int row, String text, JComponent value) {
@@ -310,13 +378,13 @@ public final class FactsPanel extends JPanel {
             this.body.add(value, constraints);
         }
 
-        private JComponent value(FactSection section, Fact fact) {
+        private JComponent value(Fact fact) {
             return switch (fact.kind()) {
                 case BAR, FLUID -> new AmountRow(fact);
-                case DATA -> new DataRow(section.title(), fact);
+                case DATA -> new DataRow(this.key, fact);
                 case PROBLEM -> {
-                    JLabel problem = new JLabel(fact.value(), Icons.ERROR, JLabel.LEADING);
-                    problem.setToolTipText(Tooltip.of("").text(fact.value()).html());
+                    JLabel problem = new JLabel("", Icons.ERROR, JLabel.LEADING);
+                    showProblem(problem, fact.value());
                     ThemeColors.keepForeground(problem, ThemeColors::error);
                     yield problem;
                 }
@@ -324,7 +392,7 @@ public final class FactsPanel extends JPanel {
             };
         }
 
-        private void update(FactSection before, FactSection after) {
+        private void updateRows(FactSection before, FactSection after) {
             int slot = 0;
             int value = 0;
             for (int index = 0; index < after.facts().size(); index++) {
@@ -339,10 +407,7 @@ public final class FactsPanel extends JPanel {
                     case ValueLabel label -> label.set(next, changed);
                     case AmountRow amount -> amount.set(next, changed);
                     case DataRow data -> data.set(next, changed);
-                    case JLabel problem -> {
-                        problem.setText(next.value());
-                        problem.setToolTipText(Tooltip.of("").text(next.value()).html());
-                    }
+                    case JLabel problem -> showProblem(problem, next.value());
                     default -> {
                     }
                 }
@@ -357,6 +422,23 @@ public final class FactsPanel extends JPanel {
         }
     }
 
+    /** A problem's first line, with all of it in the tooltip. */
+    private static void showProblem(JLabel label, String problem) {
+        label.setText(problem.lines().findFirst().orElse(""));
+        label.setToolTipText(problem.lines().count() > 1 ? Tooltip.of("").code(problem).html()
+                : Tooltip.of("").text(problem).html());
+    }
+
+    /** ↓ takes more, ↑ gives, ↕ both, × neither, or nothing where the slot's state cannot tell. */
+    static String transferMark(Fact.Transfer transfer) {
+        if (transfer == null || transfer.gives() == null) return "";
+        boolean takes = Boolean.TRUE.equals(transfer.takes());
+        if (takes && transfer.gives()) return "↕";
+        if (takes) return "↓";
+        if (transfer.gives()) return "↑";
+        return transfer.takes() == null ? "" : "×";
+    }
+
     /** Where a linked value leads: a class's source or another subject to inspect. */
     private static String linkTooltip(FactLink link) {
         return switch (link.kind()) {
@@ -365,7 +447,10 @@ public final class FactsPanel extends JPanel {
         };
     }
 
-    /** A text value colored by what it is; a linked value opens its target when clicked. */
+    /**
+     * A text value colored by what it is; a linked value opens its target when clicked. A value of several lines shows
+     * its first, with all of them in the tooltip.
+     */
     final class ValueLabel extends JLabel {
         private Fact fact;
         private boolean hovered;
@@ -396,12 +481,14 @@ public final class FactsPanel extends JPanel {
 
         private void set(Fact next, boolean changed) {
             this.fact = next;
-            setText(next.value());
+            boolean lines = next.value().lines().count() > 1;
+            setText(lines ? next.value().lines().findFirst().orElse("") : next.value());
             setOpaque(changed);
             boolean linked = next.link() != null;
             setIcon(linked ? SubjectIcons.link(next.link()) : null);
             setCursor(linked ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) : Cursor.getDefaultCursor());
             setToolTipText(linked ? linkTooltip(next.link())
+                    : lines ? Tooltip.of("").code(next.value()).html()
                     : next.value().length() > 40 ? Tooltip.of("").text(next.value()).html() : null);
             hover(this.hovered);
         }
@@ -494,7 +581,7 @@ public final class FactsPanel extends JPanel {
     private final class DataRow extends JPanel {
         private final JLabel summary = new JLabel();
 
-        private DataRow(String section, Fact fact) {
+        private DataRow(String sectionKey, Fact fact) {
             super(new FlowLayout(FlowLayout.LEFT, 0, 0));
             this.summary.setBackground(ChangeMarks.tint());
             ThemeColors.keepForeground(this.summary, ThemeColors::text);
@@ -504,7 +591,7 @@ public final class FactsPanel extends JPanel {
             open.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseClicked(MouseEvent event) {
-                    FactsPanel.this.actions.openData(section, fact.label());
+                    FactsPanel.this.actions.openData(sectionKey + " › " + fact.label());
                 }
             });
             add(this.summary);
@@ -520,7 +607,10 @@ public final class FactsPanel extends JPanel {
         }
     }
 
-    /** One inventory slot: its item icon with the stack count, or an empty frame. */
+    /**
+     * One inventory slot: its item icon with the stack count, or an empty frame. A slot a side exposes is marked with
+     * what it does: ↓ takes more, ↑ gives, ↕ both, × neither; the tooltip says what its state cannot tell.
+     */
     private final class SlotCell extends JComponent {
         private Fact stack;
         private BufferedImage icon;
@@ -548,10 +638,17 @@ public final class FactsPanel extends JPanel {
         }
 
         private void describe() {
-            setToolTipText(this.stack.id().isEmpty()
-                    ? Tooltip.of("Empty").detail(this.stack.label()).html()
-                    : Tooltip.of(this.stack.value() + " ×" + this.stack.amount())
-                    .detail(this.stack.id()).detail(this.stack.label()).html());
+            Tooltip tooltip = this.stack.id().isEmpty()
+                    ? Tooltip.of("Empty").detail(this.stack.label())
+                    : Tooltip.of(this.stack.value() + " ×" + this.stack.amount()).detail(this.stack.id()).detail(this.stack.label());
+            Fact.Transfer transfer = this.stack.transfer();
+            if (transfer != null && !this.stack.id().isEmpty()) {
+                tooltip.fact("Takes more", transfer.takes() == null ? "Cannot tell while full" : transfer.takes() ? "Yes" : "No")
+                        .fact("Gives", transfer.gives() ? "Yes" : "No");
+            } else if (transfer != null) {
+                tooltip.text("An empty slot cannot tell what it takes");
+            }
+            setToolTipText(tooltip.html());
         }
 
         private void load() {
@@ -595,6 +692,7 @@ public final class FactsPanel extends JPanel {
                 if (this.stack.amount() > 1) {
                     paintCount(g);
                 }
+                paintTransfer(g);
             } finally {
                 g.dispose();
             }
@@ -608,6 +706,15 @@ public final class FactsPanel extends JPanel {
             g.setFont(getFont().deriveFont(Font.BOLD));
             int width = g.getFontMetrics().stringWidth(initials);
             g.drawString(initials, (getWidth() - width) / 2, inset + ICON_SIZE / 2 + g.getFontMetrics().getAscent() / 2);
+        }
+
+        /** The mark of what the slot does through its side, in the top left corner. */
+        private void paintTransfer(Graphics2D g) {
+            String mark = transferMark(this.stack.transfer());
+            if (mark.isEmpty()) return;
+            g.setFont(getFont().deriveFont(getFont().getSize2D() - 1));
+            g.setColor(ThemeColors.secondaryText());
+            g.drawString(mark, 3, g.getFontMetrics().getAscent());
         }
 
         private void paintCount(Graphics2D g) {

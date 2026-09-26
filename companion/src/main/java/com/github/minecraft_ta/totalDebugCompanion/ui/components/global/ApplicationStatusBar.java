@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import javax.swing.SwingUtilities;
 import com.github.minecraft_ta.totalDebugCompanion.ui.CopyValue;
 import javax.swing.JCheckBox;
@@ -280,17 +281,21 @@ public final class ApplicationStatusBar extends JPanel {
                 case FAILED -> Icons.ERROR;
                 default -> Icons.INFORMATION;
             });
-            taskState.setText(switch (status.phase()) {
+            String state = switch (status.phase()) {
                 case READY -> status.sourceKind() == IndexIdentity.Kind.LOCAL ? "Local index ready" : "Runtime index ready";
                 case FAILED -> "Index failed";
                 default -> status.detail();
-            });
-            taskState.setToolTipText("Show Index Status");
+            };
+            // A ready index is the normal state: the check mark says it, and text appears only while indexing or failed.
+            boolean ready = status.phase() == RuntimeIndexService.Phase.READY;
+            taskState.setText(ready ? "" : state);
+            taskState.setToolTipText(Tooltip.of(state).detail("Show Index Status").html());
+            taskState.getAccessibleContext().setAccessibleName(state);
             var metrics = status.metrics();
-            taskDetails.setText(metrics == null ? taskState.getText() : String.format(Locale.ROOT,
+            taskDetails.setText(metrics == null ? state : String.format(Locale.ROOT,
                     "%s %,d classes in %.1f s", metrics.rebuilt() ? "Indexed" : "Loaded", metrics.classes(), metrics.elapsedNanos() / 1_000_000_000.0));
             taskFailure.setVisible(status.phase() == RuntimeIndexService.Phase.FAILED
-                    || status.phase() == RuntimeIndexService.Phase.READY && !status.detail().equals(taskState.getText()));
+                    || ready && !status.detail().equals(state));
             if (taskFailure.isVisible()) PopupElements.wrappedText(taskFailure, status.failure() == null ? status.detail() : status.failure().toString(), 320);
             retry.setToolTipText(status.phase() == RuntimeIndexService.Phase.FAILED ? "Retry Indexing" : "Rebuild Index");
             retry.getAccessibleContext().setAccessibleName(retry.getToolTipText());

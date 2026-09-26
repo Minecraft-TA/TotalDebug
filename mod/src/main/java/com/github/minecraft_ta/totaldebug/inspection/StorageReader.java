@@ -13,64 +13,126 @@ import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.storage.loot.LootTable;
+import net.neoforged.neoforge.capabilities.BlockCapability;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
+import java.util.List;
 import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 
 /**
- * Built-in reader for what a block or entity exposes through NeoForge's item, fluid and energy capabilities. It only
- * reads: no transfer is simulated, no chunk is loaded and containers whose loot is not generated yet are not read,
- * because reading their slots would generate it. A side of {@code null} reads the unsided handler, which may differ
- * from what automation sees on any particular face. Each part is read independently, so one failing handler does not
- * hide the others.
+ * Built-in reader for what a block or entity holds, through NeoForge's item, fluid and energy capabilities, read
+ * without a side. A block that only exposes a handler through its faces is read through the face exposing the most.
+ * When a block's faces expose its slots differently, the slots are shown per side as {@link SideReader} groups them.
+ * No chunk is loaded and containers whose loot is not generated yet are not read, because reading their slots would
+ * generate it. Each part is read independently, so one failing handler does not hide the others.
  */
 public final class StorageReader {
     public static final int MAX_SLOTS = 96;
     public static final int MAX_TANKS = 32;
 
+    /** A block's handler and the face it was read through, which is null for the handler without a side. */
+    record Found<T>(T handler, Direction face) {
+    }
+
     private StorageReader() {
     }
 
-    public static void read(ScriptTarget target, Direction side, ScriptFacts facts) {
+    public static void read(ScriptTarget target, ScriptFacts facts) {
         switch (target) {
-            case ScriptTarget.PlacedBlock block -> readBlock(block, side, facts);
-            case ScriptTarget.LiveEntity entity -> readEntity(entity.entity(), side, facts);
+            case ScriptTarget.PlacedBlock block -> readBlock(block, facts);
+            case ScriptTarget.LiveEntity entity -> readEntity(entity.entity(), facts);
         }
     }
 
-    private static void readBlock(ScriptTarget.PlacedBlock block, Direction side, ScriptFacts facts) {
-        Level level = block.level();
-        BlockPos pos = block.pos();
-        BlockState state = block.state();
+    private static void readBlock(ScriptTarget.PlacedBlock block, ScriptFacts facts) {
         facts.guarded("Items", () -> {
-            String otherHalf = otherChestHalfUnreadable(level, pos, state);
+            String otherHalf = otherChestHalfUnreadable(block.level(), block.pos(), block.state());
             if (otherHalf != null) {
                 facts.section("Items").text("Contents", otherHalf);
                 return;
             }
-            items(block.blockEntity(), () -> level.getCapability(Capabilities.ItemHandler.BLOCK, pos, state,
-                    block.blockEntity(), side), facts);
+            String pending = pendingLoot(block.blockEntity());
+            if (pending != null) {
+                facts.section("Items").text("Contents", pending);
+                return;
+            }
+            Found<IItemHandler> found = contents(block, Capabilities.ItemHandler.BLOCK, IItemHandler::getSlots);
+            List<SideReader.Group<List<SideReader.Slot>>> sides = SideReader.items(block);
+            if (sides.size() == 1) {
+                items(block.blockEntity(), () -> through(block, "Items", found, facts), facts);
+                return;
+            }
+            // The slots without a side are the contents, shown in their group; contents read through a face come first.
+            if (found.face() != null) {
+                items(block.blockEntity(), () -> through(block, "Items", found, facts), facts);
+            } else if (found.handler().getSlots() > MAX_SLOTS) {
+                facts.section("Items").text("Slots", found.handler().getSlots() + " (first " + MAX_SLOTS + " shown)");
+            }
+            for (SideReader.Group<List<SideReader.Slot>> group : sides) {
+                SideReader.writeItems(group, facts.section("Items"));
+            }
         });
-        facts.guarded("Fluids", () -> fluids(level.getCapability(Capabilities.FluidHandler.BLOCK, pos, state,
-                block.blockEntity(), side), facts));
-        facts.guarded("Energy", () -> energy(level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, state,
-                block.blockEntity(), side), facts));
-        facts.guarded("Block state", () -> {
-            if (!state.getValues().isEmpty()) {
-                ScriptFacts.Section properties = facts.section("Block state");
-                state.getValues().forEach((property, value) -> properties.text(property.getName(), value));
+        facts.guarded("Fluids", () -> fluids(through(block, "Fluids",
+                contents(block, Capabilities.FluidHandler.BLOCK, IFluidHandler::getTanks), facts), facts));
+        facts.guarded("Energy", () -> energy(through(block, "Energy",
+                contents(block, Capabilities.EnergyStorage.BLOCK, IEnergyStorage::getMaxEnergyStored), facts), facts));
+    }
+
+    private static void readEntity(Entity entity, ScriptFacts facts) {
+        facts.guarded("Items", () -> items(entity, () -> entity.getCapability(Capabilities.ItemHandler.ENTITY), facts));
+        facts.guarded("Fluids", () -> fluids(entity.getCapability(Capabilities.FluidHandler.ENTITY, null), facts));
+        facts.guarded("Energy", () -> {
+            IEnergyStorage storage = entity.getCapability(Capabilities.EnergyStorage.ENTITY, null);
+            energy(storage, facts);
+            if (storage != null) {
+                facts.section("Energy")
+                        .text("Accepts energy", storage.canReceive() ? "Yes" : "No")
+                        .text("Provides energy", storage.canExtract() ? "Yes" : "No");
             }
         });
     }
 
-    private static void readEntity(Entity entity, Direction side, ScriptFacts facts) {
-        facts.guarded("Items", () -> items(entity, () -> side == null
-                ? entity.getCapability(Capabilities.ItemHandler.ENTITY)
-                : entity.getCapability(Capabilities.ItemHandler.ENTITY_AUTOMATION, side), facts));
-        facts.guarded("Fluids", () -> fluids(entity.getCapability(Capabilities.FluidHandler.ENTITY, side), facts));
-        facts.guarded("Energy", () -> energy(entity.getCapability(Capabilities.EnergyStorage.ENTITY, side), facts));
+    /**
+     * The block's handler without a side, or when it has none, the handler of the face whose {@code size} is largest.
+     * The handler is null when no face exposes one either.
+     */
+    static <T> Found<T> contents(ScriptTarget.PlacedBlock block, BlockCapability<T, Direction> capability,
+                                 ToIntFunction<T> size) {
+        T unsided = handler(block, capability, null);
+        if (unsided != null) return new Found<>(unsided, null);
+        Found<T> best = new Found<>(null, null);
+        for (Direction face : Direction.values()) {
+            T handler = handler(block, capability, face);
+            if (handler != null && (best.handler() == null || size.applyAsInt(handler) > size.applyAsInt(best.handler()))) {
+                best = new Found<>(handler, face);
+            }
+        }
+        return best;
+    }
+
+    /** The block's handler through {@code face}; a double chest whose other half is not loaded has no item handler. */
+    static <T> T handler(ScriptTarget.PlacedBlock block, BlockCapability<T, Direction> capability, Direction face) {
+        if (capability == Capabilities.ItemHandler.BLOCK && otherChestHalfUnloaded(block.level(), block.pos(), block.state())) {
+            return null;
+        }
+        return capability.getCapability(block.level(), block.pos(), block.state(), block.blockEntity(), face);
+    }
+
+    /** Why the block's items must not be read, or null when they may be. */
+    static String unreadableItems(ScriptTarget.PlacedBlock block) {
+        String pending = pendingLoot(block.blockEntity());
+        return pending != null ? pending : otherChestHalfUnreadable(block.level(), block.pos(), block.state());
+    }
+
+    /** The found handler, noting the face it was read through when it is not the handler without a side. */
+    private static <T> T through(ScriptTarget.PlacedBlock block, String section, Found<T> found, ScriptFacts facts) {
+        if (found.handler() != null && found.face() != null) {
+            facts.section(section).text("Read through", Faces.name(found.face(), Faces.facing(block.state())));
+        }
+        return found.handler();
     }
 
     /**
@@ -115,10 +177,7 @@ public final class StorageReader {
         if (storage == null) {
             return;
         }
-        facts.section("Energy")
-                .bar("Stored", storage.getEnergyStored(), storage.getMaxEnergyStored(), "FE")
-                .text("Accepts energy", storage.canReceive() ? "Yes" : "No")
-                .text("Provides energy", storage.canExtract() ? "Yes" : "No");
+        facts.section("Energy").bar("Stored", storage.getEnergyStored(), storage.getMaxEnergyStored(), "FE");
     }
 
     /**
@@ -134,6 +193,12 @@ public final class StorageReader {
         return lootTable == null ? null : notRead(lootTable);
     }
 
+    /** Whether the block is half of a double chest whose other half is not loaded. */
+    private static boolean otherChestHalfUnloaded(Level level, BlockPos pos, BlockState state) {
+        return state.getBlock() instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE
+                && !level.isLoaded(pos.relative(ChestBlock.getConnectedDirection(state)));
+    }
+
     /**
      * Why a double chest's item handler must not be looked up, or null. Resolving it combines both halves: an unloaded
      * other half would be loaded, and its pending loot generated on access.
@@ -142,10 +207,10 @@ public final class StorageReader {
         if (!(state.getBlock() instanceof ChestBlock) || state.getValue(ChestBlock.TYPE) == ChestType.SINGLE) {
             return null;
         }
-        BlockPos other = pos.relative(ChestBlock.getConnectedDirection(state));
-        if (!level.isLoaded(other)) {
+        if (otherChestHalfUnloaded(level, pos, state)) {
             return "Not read: the other chest half is not loaded";
         }
+        BlockPos other = pos.relative(ChestBlock.getConnectedDirection(state));
         if (!(level.getBlockEntity(other) instanceof RandomizableContainer container)
                 || container.getLootTable() == null) {
             return null;

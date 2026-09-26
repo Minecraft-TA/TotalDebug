@@ -39,6 +39,34 @@ class FactsPanelTest {
     }
 
     @Test
+    void theSlotsOfASideFormARowOfTheirOwnMarkedWithWhatTheyDo() throws Exception {
+        Fact.Transfer takesAndGives = new Fact.Transfer(true, true);
+        List<FactSection> sections = List.of(new FactSection("Items", List.of(
+                Fact.stack("Without a side", "minecraft:coal", 8, "Coal").withTransfer(takesAndGives),
+                Fact.stack("Without a side", "minecraft:raw_iron", 2, "Raw Iron").withTransfer(takesAndGives),
+                Fact.stack("Top", "minecraft:raw_iron", 2, "Raw Iron").withTransfer(takesAndGives),
+                Fact.text("Bottom", "Not exposed")), 4));
+        List<String> labels = new ArrayList<>();
+        try (ItemIconService icons = new ItemIconService()) {
+            SwingUtilities.invokeAndWait(() -> collect(new FactsPanel(sections, icons), labels, new ArrayList<>()));
+        }
+
+        assertEquals(List.of("Items", "Without a side", "Top", "Bottom", "Not exposed"),
+                labels.stream().filter(text -> text != null && !text.isEmpty()).toList());
+    }
+
+    @Test
+    void aSlotIsMarkedOnlyWithWhatItsStateCanTell() {
+        assertEquals("↕", FactsPanel.transferMark(new Fact.Transfer(true, true)));
+        assertEquals("↓", FactsPanel.transferMark(new Fact.Transfer(true, false)));
+        assertEquals("↑", FactsPanel.transferMark(new Fact.Transfer(null, true)));
+        assertEquals("×", FactsPanel.transferMark(new Fact.Transfer(false, false)));
+        assertEquals("", FactsPanel.transferMark(new Fact.Transfer(null, false)));
+        assertEquals("", FactsPanel.transferMark(new Fact.Transfer(null, null)));
+        assertEquals("", FactsPanel.transferMark(null));
+    }
+
+    @Test
     void formatsAmountsWithAndWithoutCapacity() {
         Locale previous = Locale.getDefault();
         Locale.setDefault(Locale.US);
@@ -58,8 +86,8 @@ class FactsPanelTest {
 
     @Test
     void suggestsAToolNameFromTheRegistryPath() {
-        assertEquals("BasicEnergyCubeTool", ToolsPanel.suggestedName("mekanism:basic_energy_cube"));
-        assertEquals("Tool2x2DoorTool", ToolsPanel.suggestedName("example:2x2_door"));
+        assertEquals("BasicEnergyCubeTool", ToolsMenu.suggestedName("mekanism:basic_energy_cube"));
+        assertEquals("Tool2x2DoorTool", ToolsMenu.suggestedName("example:2x2_door"));
     }
 
     private static void collect(Container container, List<String> labels, List<String> bars) {

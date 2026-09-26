@@ -96,10 +96,16 @@ public final class ScriptFacts {
 
         /** Reports a class by its simple name; Companion opens its source when the value is clicked. */
         public Section classLink(String label, Class<?> type) {
+            return classLink(label, type, "");
+        }
+
+        /** Reports a class by its simple name followed by {@code detail}, such as where it applies, unless empty. */
+        public Section classLink(String label, Class<?> type, String detail) {
             String name = type.getName();
             String simple = type.getSimpleName().isEmpty() ? name.substring(name.lastIndexOf('.') + 1)
                     : type.getSimpleName();
-            add(Fact.text(Fact.clip(label), Fact.clip(simple)).withLink(FactLink.toClass(name)));
+            String value = detail.isEmpty() ? simple : simple + ", " + detail;
+            add(Fact.text(Fact.clip(label), Fact.clip(value)).withLink(FactLink.toClass(name)));
             return this;
         }
 
@@ -110,17 +116,30 @@ public final class ScriptFacts {
 
         /** Reports a slot's contents; an empty stack is shown as an empty slot. */
         public Section stack(String label, ItemStack stack) {
+            add(stackFact(label, stack));
+            return this;
+        }
+
+        /**
+         * Reports a slot as automation reaches it through the side named {@code label}, such as {@code Top}: whether it
+         * takes more of what it holds and whether it gives some, either null when the slot's state cannot tell.
+         * Consecutive slots with the same label are shown as one row.
+         */
+        public Section slot(String label, ItemStack stack, Boolean takes, Boolean gives) {
+            add(stackFact(label, stack).withTransfer(new Fact.Transfer(takes, gives)));
+            return this;
+        }
+
+        private static Fact stackFact(String label, ItemStack stack) {
             if (stack == null || stack.isEmpty()) {
-                add(Fact.stack(Fact.clip(label), "", 0, ""));
-                return this;
+                return Fact.stack(Fact.clip(label), "", 0, "");
             }
-            add(Fact.stack(
+            return Fact.stack(
                     Fact.clip(label),
                     BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(),
                     stack.getCount(),
                     Fact.clip(stack.getHoverName().getString())
-            ));
-            return this;
+            );
         }
 
         /** Reports a tank's contents and capacity in millibuckets. */

@@ -58,7 +58,8 @@ enum UiRenderScenario {
     DEFINITION_PAGE("definition-page", "Block definition page with its files"),
     PACK_CONFIGURATION("pack-configuration", "Every modified setting of the pack under its mod and file"),
     KEY_BINDINGS("key-bindings", "The pack's key bindings with a changed key that collides"),
-    CONTENT("content", "The pack's registered content with every kind listed together");
+    CONTENT("content", "The pack's registered content with every kind listed together"),
+    INSPECTION("inspection", "A block read from the game with storage that differs by face");
 
     private final String id;
     private final String description;

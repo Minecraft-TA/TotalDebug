@@ -1,7 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.GroupedRowCell;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.SegmentedToggle;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
@@ -17,8 +20,6 @@ import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
-import javax.swing.ButtonGroup;
-import javax.swing.Icon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -26,15 +27,14 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
-import javax.swing.JToggleButton;
 import javax.swing.JViewport;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
@@ -71,10 +71,9 @@ import java.util.concurrent.ForkJoinPool;
 final class DataView extends JPanel {
     private static final String TREE_CARD = "tree";
     private static final String TEXT_CARD = "text";
-    private static final int INDENT = 16;
 
-    private final JToggleButton treeMode = new JToggleButton("Tree");
-    private final JToggleButton textMode = new JToggleButton("SNBT");
+    private final SegmentedToggle<String> mode = new SegmentedToggle<>(List.of(TREE_CARD, TEXT_CARD),
+            card -> card.equals(TREE_CARD) ? "Tree" : "SNBT");
     private final RowsModel model = new RowsModel();
     private final JTable table = new JTable(this.model);
     private final JScrollPane tableScroll = new JScrollPane(this.table);
@@ -99,18 +98,10 @@ final class DataView extends JPanel {
     DataView(Executor decoder) {
         super(new BorderLayout());
         this.decoder = decoder;
-        ButtonGroup modes = new ButtonGroup();
-        modes.add(this.treeMode);
-        modes.add(this.textMode);
-        this.treeMode.setSelected(true);
-        for (JToggleButton mode : List.of(this.treeMode, this.textMode)) {
-            mode.putClientProperty("JButton.buttonType", "tab");
-            mode.addActionListener(event -> showMode());
-        }
+        this.mode.onChange(card -> showMode());
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         bar.setBorder(UiMetrics.barPadding());
-        bar.add(this.treeMode);
-        bar.add(this.textMode);
+        bar.add(this.mode);
         add(bar, BorderLayout.NORTH);
 
         configureTable();
@@ -163,13 +154,14 @@ final class DataView extends JPanel {
         this.roots = List.copyOf(decoded);
         this.entries = null;
         showRows();
-        if (this.textMode.isSelected()) showText();
+        if (textShown()) showText();
         this.search.contentChanged();
     }
 
     /** Shows the tree and selects the root named {@code name}, as reported by {@link DataRows.Root#name()}. */
     void reveal(String name) {
-        this.treeMode.doClick();
+        this.mode.select(TREE_CARD);
+        showMode();
         for (int index = 0; index < this.rows.size(); index++) {
             if (this.rows.get(index).depth() == 0 && this.rows.get(index).name().equals(name)) {
                 select(index);
@@ -261,9 +253,13 @@ final class DataView extends JPanel {
         this.table.scrollRectToVisible(this.table.getCellRect(row, 0, true));
     }
 
+    private boolean textShown() {
+        return this.mode.selected().equals(TEXT_CARD);
+    }
+
     private void showMode() {
-        ((CardLayout) this.cards.getLayout()).show(this.cards, this.textMode.isSelected() ? TEXT_CARD : TREE_CARD);
-        if (this.textMode.isSelected()) showText();
+        ((CardLayout) this.cards.getLayout()).show(this.cards, this.mode.selected());
+        if (textShown()) showText();
     }
 
     /** Shows the root holding the selection, or the first root, as indented SNBT. */
@@ -308,10 +304,11 @@ final class DataView extends JPanel {
             @Override
             public void mouseClicked(MouseEvent event) {
                 int row = DataView.this.table.rowAtPoint(event.getPoint());
-                if (row < 0 || event.getButton() != MouseEvent.BUTTON1) return;
-                boolean onChevron = DataView.this.table.columnAtPoint(event.getPoint()) == 0
-                        && event.getX() < chevronRight(DataView.this.rows.get(row));
-                if (onChevron || event.getClickCount() == 2) toggle(row);
+                if (row < 0 || event.getButton() != MouseEvent.BUTTON1
+                        || DataView.this.table.columnAtPoint(event.getPoint()) != 0) return;
+                if (GroupedRowCell.onChevron(DataView.this.table, row, DataView.this.rows.get(row).depth(), event.getX())) {
+                    toggle(row);
+                }
             }
         });
         bindKey(KeyEvent.VK_RIGHT, "expandEntry", () -> {
@@ -341,10 +338,6 @@ final class DataView extends JPanel {
         this.table.getActionMap().put(name, new AbstractAction() {
             @Override public void actionPerformed(ActionEvent event) { action.run(); }
         });
-    }
-
-    private static int chevronRight(DataRows.Row row) {
-        return 4 + (row.depth() + 1) * INDENT;
     }
 
     /** Copy actions for a row. Entries that were not transferred completely offer no value to copy. */
@@ -499,24 +492,16 @@ final class DataView extends JPanel {
         }
     }
 
-    private final class KeyRenderer extends RowRenderer {
+    /** Keys indented under the entries holding them; only an entry with contents has a chevron. */
+    private final class KeyRenderer implements TableCellRenderer {
+        private final GroupedRowCell cell = new GroupedRowCell();
+
         @Override
-        void configure(DataRows.Row row, boolean selected) {
-            Icon chevron = row.expandable()
-                    ? UIManager.getIcon(row.expanded() ? "Tree.expandedIcon" : "Tree.collapsedIcon") : null;
-            setIcon(chevron);
-            setIconTextGap(4);
-            int indent = 4 + row.depth() * INDENT + (chevron == null ? INDENT : 0);
-            setBorder(BorderFactory.createEmptyBorder(0, indent, 0, 6));
-            setText(row.name());
-            Font font = DataView.this.table.getFont();
-            setFont(font);
-            if (row.kind() != DataRows.Kind.ENTRY) {
-                setIcon(row.kind() == DataRows.Kind.OMITTED ? null : Icons.ERROR);
-                setForeground(muted(selected));
-            } else if (!selected && row.depth() > 0) {
-                setForeground(row.name().startsWith("[") ? ThemeColors.mutedText() : ThemeManager.palette().field());
-            }
+        public Component getTableCellRendererComponent(
+                JTable table, Object value, boolean selected, boolean focused, int row, int column) {
+            DataRows.Row entry = (DataRows.Row) value;
+            return this.cell.configure(table, PrimarySecondaryText.primary(entry.name()), entry.depth(),
+                    entry.expandable() ? !entry.expanded() : null, selected, null);
         }
     }
 
@@ -525,7 +510,7 @@ final class DataView extends JPanel {
         void configure(DataRows.Row row, boolean selected) {
             setText(row.type());
             setForeground(muted(selected));
-            setFont(DataView.this.table.getFont().deriveFont(DataView.this.table.getFont().getSize2D() - 1f));
+            setFont(DataView.this.table.getFont());
         }
     }
 

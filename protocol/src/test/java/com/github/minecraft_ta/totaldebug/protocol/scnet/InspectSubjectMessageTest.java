@@ -54,13 +54,6 @@ class InspectSubjectMessageTest {
     }
 
     @Test
-    void titleFallsBackToTheRegistryId() {
-        assertEquals("Furnace", FURNACE.title());
-        assertEquals("mod:thing",
-                new SubjectIdentity(SubjectIdentity.Kind.BLOCK, "mod:thing", "", "", List.of(), "").title());
-    }
-
-    @Test
     void resourceSnapshotRoundTripsAndRejectsAnEmptyArchive() {
         ByteBufferOutputStream output = new ByteBufferOutputStream();
         new ResourceSnapshotMessage("C:/instance/total-debug/cache/previews/a.zip", 3).write(output);

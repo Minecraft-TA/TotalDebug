@@ -32,7 +32,7 @@ public final class ContentKinds {
             if (kind.registry().equals(registry)) return kind;
         }
         String name = label(registry.substring(registry.indexOf(':') + 1));
-        return new ContentKind(registry, name, name, Icons.BLOCK);
+        return new ContentKind(registry, name, name, Icons.CONTENT);
     }
 
     /** A stable key of the catalog as a label, such as Spawn egg for {@code spawn_egg}. */

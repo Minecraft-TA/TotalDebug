@@ -1,9 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
+import com.github.minecraft_ta.totalDebugCompanion.inspection.InspectionSession;
+import com.github.minecraft_ta.totalDebugCompanion.inspection.InspectionTool;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
-import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
@@ -23,6 +24,7 @@ import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.event.MouseEvent;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +52,7 @@ class InspectionPanelTest {
             ExecutionResult partial = ExecutionResult.failed("", null, "java.lang.IllegalStateException: broken")
                     .withFacts(ITEMS);
 
-            panel.present(Side.SERVER, partial, null, text -> text);
+            panel.session().present(partial, null, text -> text);
 
             assertFalse(problemCard(panel).isVisible(), "facts are hidden behind the problem");
             assertTrue(labels(panel).stream().anyMatch(text -> text.equals("Items")), labels(panel)::toString);
@@ -62,13 +64,13 @@ class InspectionPanelTest {
     @Test
     void aFailedRefreshKeepsThePreviousReadAndMarksItStale() throws Exception {
         withPanel(panel -> {
-            panel.present(Side.SERVER, ExecutionResult.failed("", null, "The chunk is not loaded"), null, t -> t);
+            panel.session().present(ExecutionResult.failed("", null, "The chunk is not loaded"), null, t -> t);
             assertTrue(problemCard(panel).isVisible(), "without an earlier read the problem is shown");
 
-            panel.present(Side.SERVER, completed(ITEMS), null, text -> text);
+            panel.session().present(completed(ITEMS), null, text -> text);
             assertFalse(problemCard(panel).isVisible());
 
-            panel.present(Side.SERVER, ExecutionResult.failed("", null, "The chunk is not loaded"), null, t -> t);
+            panel.session().present(ExecutionResult.failed("", null, "The chunk is not loaded"), null, t -> t);
 
             assertFalse(problemCard(panel).isVisible(), "the previous read stays on screen");
             assertTrue(labels(panel).contains("Showing the previous read. This one failed: The chunk is not loaded"),
@@ -80,7 +82,7 @@ class InspectionPanelTest {
     @Test
     void aReplacedBlockUpdatesTheHeaderAndSaysWhatItWas() throws Exception {
         withPanel(panel -> {
-            panel.present(Side.SERVER, completed(ITEMS).withIdentity(CHEST), null, text -> text);
+            panel.session().present(completed(ITEMS).withIdentity(CHEST), null, text -> text);
 
             assertEquals("Chest", panel.title());
             List<String> labels = labels(panel);
@@ -94,7 +96,7 @@ class InspectionPanelTest {
     @Test
     void theSameBlockKeepsItsHeaderWithoutANotice() throws Exception {
         withPanel(panel -> {
-            panel.present(Side.SERVER, completed(ITEMS).withIdentity(FURNACE), null, text -> text);
+            panel.session().present(completed(ITEMS).withIdentity(FURNACE), null, text -> text);
 
             assertEquals("Furnace", panel.title());
             assertFalse(labels(panel).stream().anyMatch(text -> text.startsWith("Replaced")),
@@ -103,48 +105,49 @@ class InspectionPanelTest {
     }
 
     @Test
-    void theIdentitySectionNamesWhereTheSubjectIsAndLinksItsDefinitionModAndClasses() {
-        FactSection section = InspectionPanel.identitySection(CHEST,
-                SubjectRef.parseWorld("block minecraft:overworld 12 64 -3"));
+    void theIdentitySectionLinksTheDefinitionAndTheClasses() {
+        FactSection section = InspectionPanel.identitySection(CHEST);
 
         assertEquals("Block", section.title());
         assertEquals(List.of(
                 Fact.text("ID", "minecraft:chest")
                         .withLink(FactLink.toSubject(new SubjectRef.Definition(RegistryIds.BLOCK, "minecraft:chest"))),
-                Fact.text("Mod", "Minecraft").withLink(FactLink.toSubject(new SubjectRef.Mod("minecraft"))),
-                Fact.text("Position", "12, 64, -3 in minecraft:overworld"),
                 Fact.text("Block", "ChestBlock")
                         .withLink(FactLink.toClass("net.minecraft.world.level.block.ChestBlock"))
         ), section.facts());
     }
 
     @Test
-    void theHeaderLinksTheSubjectsModAndDefinition() throws Exception {
+    void theHeaderSaysWhereTheSubjectIsAndLinksItsMod() throws Exception {
         List<NavigationTarget> opened = new ArrayList<>();
         withPanel(opened::add, panel -> {
             List<String> labels = labels(panel);
-            assertTrue(labels.containsAll(List.of("Furnace", "minecraft:furnace", "Minecraft")),
+            assertTrue(labels.containsAll(List.of("Furnace", "12, 64, -3", "minecraft:overworld", "Minecraft")),
                     labels::toString);
             for (LinkLabel link : links(panel)) {
                 link.dispatchEvent(new MouseEvent(link, MouseEvent.MOUSE_CLICKED, 0, 0, 1, 1, 1, false, MouseEvent.BUTTON1));
             }
         });
-        assertEquals(List.of(new NavigationTarget.ModPage("minecraft"),
-                new NavigationTarget.Definition(new SubjectRef.Definition(RegistryIds.BLOCK, "minecraft:furnace"))),
-                opened);
+        assertEquals(List.of(new NavigationTarget.ModPage("minecraft")), opened);
     }
 
     @Test
-    void theUnsidedQueryIsNotPresentedAsAllSides() {
-        assertEquals("Side: None", InspectionPanel.sideLabel(""));
-        assertEquals("Side: North", InspectionPanel.sideLabel("NORTH"));
-    }
+    void aToolsSectionsFollowTheBuiltInOnesAndItsStatusOnlyShowsWhenThereIsSomethingToSay() {
+        InspectionTool tool = new InspectionTool(Path.of("tools", "FurnaceTool.tdscript"), "FurnaceTool", "",
+                List.of("minecraft:furnace"));
+        FactSection burn = new FactSection("Burning", List.of(Fact.text("Lit", "true")), 1);
+        String failure = "boom" + System.lineSeparator() + "at Tool.run";
 
-    @Test
-    void theReadRunsTheIsolatedReadersForTheSelectedSide() {
-        assertTrue(InspectionPanel.readerSource("").contains("InspectionReaders.read(target(), null, facts());"));
-        assertTrue(InspectionPanel.readerSource("NORTH")
-                .contains("InspectionReaders.read(target(), Direction.NORTH, facts());"));
+        List<FactsPanel.Part> finished = ToolsMenu.parts(List.of(
+                new InspectionSession.ToolRead(tool, false, List.of(burn), "", "")), "");
+        List<FactsPanel.Part> failed = ToolsMenu.parts(List.of(
+                new InspectionSession.ToolRead(tool, false, List.of(), "", failure)), "");
+
+        FactsPanel.Origin origin = new FactsPanel.Origin("FurnaceTool", tool.path());
+        assertEquals(List.of(new FactsPanel.Part(burn, origin)), finished);
+        assertEquals("FurnaceTool › Burning", finished.getFirst().key());
+        assertEquals(List.of(new FactsPanel.Part(new FactSection("FurnaceTool",
+                List.of(Fact.problem("Status", failure)), 1), origin)), failed);
     }
 
     private static ExecutionResult completed(List<FactSection> facts) {

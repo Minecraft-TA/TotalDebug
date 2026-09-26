@@ -186,7 +186,9 @@ final class ModTreeItems {
             this.index = index;
             this.resourceCount = resourceCount(summary);
             setPresentation(PrimarySecondaryText.primary(summary.title()));
-            setIcon(ModLogoIcons.icon(summary, UiMetrics.previewPixels(UiMetrics.ROW_ICON_SIZE)));
+            // A namespace no mod or module owns, such as c for shared tags, is not a mod.
+            boolean namespace = summary.mod() == null && summary.moduleId().isEmpty();
+            setIcon(namespace ? Icons.PACKAGE : ModLogoIcons.icon(summary, UiMetrics.previewPixels(UiMetrics.ROW_ICON_SIZE)));
             setSortPriority(PLATFORM.contains(summary.id()) ? 0 : 10);
         }
 
