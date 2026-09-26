@@ -74,6 +74,10 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         runButton.setToolTipText("Run on Client");
         runServerButton.setToolTipText("Run on Server");
         stopButton.setToolTipText("Stop Execution");
+        // Swing does not name an icon-only button after its tooltip.
+        runButton.getAccessibleContext().setAccessibleName("Run on Client");
+        runServerButton.getAccessibleContext().setAccessibleName("Run on Server");
+        stopButton.getAccessibleContext().setAccessibleName("Stop Execution");
         stopButton.setEnabled(false);
     }
     private final JComboBox<ScriptExecutionEnvironment> executionEnvironmentComboBox = new JComboBox<>(ScriptExecutionEnvironment.values());

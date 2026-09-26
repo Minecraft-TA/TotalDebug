@@ -7,12 +7,15 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -96,7 +99,7 @@ public final class ConfigEdit {
                     throw new IllegalArgumentException("Enter a TOML array, such as [\"a\", \"b\"]");
                 }
                 if (!(value instanceof List<?> list)) throw new IllegalArgumentException("Enter a TOML array, such as [\"a\", \"b\"]");
-                checkElements(current, list);
+                checkElements(current, setting, list);
                 yield text;
             }
             case OTHER -> throw new IllegalArgumentException("Edit this value in the file");
@@ -104,14 +107,26 @@ public final class ConfigEdit {
     }
 
     /**
-     * A list keeps the kind of its elements: NeoForge checks every element and resets a list holding another kind. The
-     * current elements tell the kind; an empty list tells none.
+     * A list keeps the kind its elements share: NeoForge checks every element and resets a list holding one it refuses.
+     * The kind is known when every element of the current value and of the default is of one kind. A mixed or empty
+     * list tells none, and the game checks its elements when it loads the file.
      */
-    private static void checkElements(String current, List<?> list) {
-        if (!(ConfigValues.value(current) instanceof List<?> previous) || previous.isEmpty()) return;
-        String kind = elementKind(previous.getFirst());
+    private static void checkElements(String current, PackCatalog.ConfigSetting setting, List<?> list) {
+        Set<String> kinds = new HashSet<>();
+        for (Object element : elements(current)) kinds.add(elementKind(element));
+        if (setting != null) for (Object element : elements(setting.defaultValue())) kinds.add(elementKind(element));
+        if (kinds.size() != 1) return;
+        String kind = kinds.iterator().next();
         for (Object element : list) {
             if (!elementKind(element).equals(kind)) throw new IllegalArgumentException("Write every element as " + kind);
+        }
+    }
+
+    private static List<?> elements(String literal) {
+        try {
+            return ConfigValues.value(literal) instanceof List<?> list ? list : List.of();
+        } catch (IllegalArgumentException notAValue) {
+            return List.of();
         }
     }
 
@@ -171,18 +186,52 @@ public final class ConfigEdit {
         return trimmed(bounds.group(1)) + " to " + trimmed(bounds.group(2));
     }
 
+    /** Whether {@code bound} is exactly a type's own limit, which NeoForge writes for a side with no bound. */
     private static boolean unbounded(String bound, boolean upper) {
-        try {
-            double value = Double.parseDouble(bound);
-            return upper ? value >= Integer.MAX_VALUE : value <= Integer.MIN_VALUE;
-        } catch (NumberFormatException notANumber) {
-            return false;
-        }
+        BigDecimal value = number(bound);
+        if (value == null) return false;
+        List<BigDecimal> limits = upper
+                ? List.of(BigDecimal.valueOf(Integer.MAX_VALUE), BigDecimal.valueOf(Long.MAX_VALUE), new BigDecimal(Double.toString(Double.MAX_VALUE)))
+                : List.of(BigDecimal.valueOf(Integer.MIN_VALUE), BigDecimal.valueOf(Long.MIN_VALUE), new BigDecimal(Double.toString(-Double.MAX_VALUE)));
+        return limits.stream().anyMatch(limit -> limit.compareTo(value) == 0);
     }
 
     /** Drops a floating-point value's empty fraction, so {@code 4000000.0} reads as {@code 4000000}. */
     private static String trimmed(String value) {
         return value.endsWith(".0") ? value.substring(0, value.length() - 2) : value;
+    }
+
+    /**
+     * Writes {@code text} into {@code file} in place, since NeoForge reloads a configuration only when the file itself
+     * is modified; a file moved over it would not be picked up. The original stays in a copy beside it until the text
+     * is written, and is put back when the write fails part way.
+     */
+    public static void writeInPlace(Path file, String text) throws IOException {
+        // A fresh name, so a copy left by an earlier interrupted write, or any other file, is never overwritten.
+        Path original = Files.createTempFile(file.toAbsolutePath().getParent(), file.getFileName() + ".", ".totaldebug-original");
+        Files.copy(file, original, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            Files.writeString(file, text, StandardCharsets.UTF_8);
+        } catch (IOException failure) {
+            try {
+                Files.copy(original, file, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException restore) {
+                failure.addSuppressed(restore);
+                throw new IOException(failure.getMessage() + "; the previous text is kept in " + original.getFileName(), failure);
+            }
+            discard(original);
+            throw failure;
+        }
+        discard(original);
+    }
+
+    /** Removes the copy of an original; the file itself is already right, so failing to remove it changes nothing. */
+    private static void discard(Path original) {
+        try {
+            Files.deleteIfExists(original);
+        } catch (IOException leftBehind) {
+            // A stray copy beside the file does not undo the write, which must still be recorded.
+        }
     }
 
     /** A TOML basic string. */
@@ -224,10 +273,11 @@ public final class ConfigEdit {
         }
         Map<String, String> savedLiterals;
         try {
+            ConfigValues.parse(saved, "The file on disk");
             savedLiterals = TomlText.of(saved).literals();
-        } catch (IllegalArgumentException notToml) {
-            // A file that is not TOML yet is repaired as a whole; there are no values to compare.
-            savedLiterals = null;
+        } catch (IOException | IllegalArgumentException notToml) {
+            // Its values cannot be compared, so the change could not be recorded to be reverted.
+            throw new IllegalArgumentException("The file on disk is not valid TOML; repair it in another editor", notToml);
         }
         Map<String, PackCatalog.ConfigSetting> described = new HashMap<>();
         for (PackCatalog.ConfigSetting setting : settings) {
@@ -237,11 +287,9 @@ public final class ConfigEdit {
             }
         }
         // Every change is recorded to be reverted, and only a changed value can be.
-        if (savedLiterals != null) {
-            for (String key : savedLiterals.keySet()) {
-                if (!editedLiterals.containsKey(key)) {
-                    throw new IllegalArgumentException(key + " was removed; only values can be changed here");
-                }
+        for (String key : savedLiterals.keySet()) {
+            if (!editedLiterals.containsKey(key)) {
+                throw new IllegalArgumentException(key + " was removed; only values can be changed here");
             }
         }
         for (Map.Entry<String, String> entry : editedLiterals.entrySet()) {
@@ -249,7 +297,6 @@ public final class ConfigEdit {
             if (!settings.isEmpty() && !described.containsKey(key)) {
                 throw new IllegalArgumentException(key + " is not a setting of this file; NeoForge would remove it");
             }
-            if (savedLiterals == null) continue;
             String before = savedLiterals.get(key);
             if (before == null) throw new IllegalArgumentException(key + " was added; only values can be changed here");
             if (sameValue(before, entry.getValue())) continue;
@@ -283,7 +330,7 @@ public final class ConfigEdit {
     }
 
     /** Whether two literals stand for the same value, such as a list written over one or several lines. */
-    private static boolean sameValue(String first, String second) {
+    public static boolean sameValue(String first, String second) {
         if (first.equals(second)) return true;
         // Another kind is another value even when it prints the same, such as "true" and true.
         if (kind(first) != kind(second)) return false;
@@ -348,7 +395,7 @@ public final class ConfigEdit {
         if (!before.equals(after) || !Objects.equals(written, PackCatalog.ConfigSetting.display(ConfigValues.value(literal)))) {
             throw new IOException(name + " was left as it is: writing " + key + " would change other settings");
         }
-        Files.writeString(file, updated, StandardCharsets.UTF_8);
+        writeInPlace(file, updated);
         return previous;
     }
 }

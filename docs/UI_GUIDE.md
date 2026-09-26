@@ -116,9 +116,9 @@ The Project tree on the left, editor tabs in the middle, the status bar at the b
 | Line under a filter bar, such as a failure | 0, 10, 6, 10 | `noticePadding()` |
 | Table cell text | 0, 6, 0, 6 | `cellPadding()` |
 | List row | 4, 10, 4, 10 | `listRowPadding()` |
-| Page content: header, sections, notices | own top and bottom, 12 at both sides | `pagePadding(top, bottom)`, `PAGE_EDGE` |
+| Page content: header, sections, notices | own top and bottom, 12 at both sides | `pagePadding(top, bottom)` |
 | Body of a section under its heading | 4, 18, 0, 0 | `sectionBodyPadding()` |
-| Form: label to field, and between rows | 10 and 8 | `FORM_LABEL_GAP`, `FORM_ROW_GAP` |
+| Form: label to field, and between rows | 10 and 8 | `formLabelGap()`, `formRowGap()` |
 | Small icon button in a popup or beside a value | margin 2, 3, 2, 3 | `compactButtonMargin()` |
 | Status bar widget | margin 0, 6, 0, 6 | `statusWidgetMargin()` |
 | Indent per tree or group level | 16 | |

@@ -80,6 +80,7 @@ public final class DefinitionDetails {
     private long generation;
     private long appearanceGeneration;
     private ModelAppearance appearance;
+    private List<Icon> appearancePreviews = List.of();
     private List<ModResources.Resource> matched = List.of();
     private List<ModResources.Resource> owned = List.of();
     private CompletableFuture<?> resourceLoad = CompletableFuture.completedFuture(null);
@@ -206,11 +207,16 @@ public final class DefinitionDetails {
             showExtras();
             return;
         }
-        this.services.icons().appearance(blockId, itemModel).thenAccept(found -> SwingUtilities.invokeLater(() -> {
-            if (this.disposed || current != this.appearanceGeneration) return;
-            this.appearance = found.orElse(null);
-            showExtras();
-        }));
+        // Textures are scaled to thumbnails off the Swing thread; a texture can be large.
+        this.services.icons().appearance(blockId, itemModel).thenAcceptAsync(found -> {
+            List<Icon> previews = found.map(DefinitionDetails::previews).orElse(List.of());
+            SwingUtilities.invokeLater(() -> {
+                if (this.disposed || current != this.appearanceGeneration) return;
+                this.appearance = found.orElse(null);
+                this.appearancePreviews = previews;
+                showExtras();
+            });
+        });
     }
 
     /** Data files of the owning mod named like the definition, such as its loot table and recipes. */
@@ -241,6 +247,17 @@ public final class DefinitionDetails {
         }));
     }
 
+    /** A thumbnail for each of the appearance's textures, in order. Not on the Swing thread. */
+    private static List<Icon> previews(ModelAppearance appearance) {
+        int size = UiMetrics.previewPixels(UiMetrics.THUMBNAIL_SIZE);
+        List<Icon> previews = new ArrayList<>();
+        for (ModelAppearance.Texture texture : appearance.textures()) {
+            previews.add(texture.image() == null ? new CenteredIcon(Icons.IMAGE_FILE, size)
+                    : new ImageIcon(PixelImages.fit(texture.image(), size)));
+        }
+        return previews;
+    }
+
     /** Shows the Appearance and Files sections from what has loaded so far. */
     private void showExtras() {
         this.extras.removeAll();
@@ -257,10 +274,9 @@ public final class DefinitionDetails {
     private JComponent appearanceBody(ModelAppearance appearance) {
         JPanel body = new JPanel(new BorderLayout(0, 6));
         JPanel grid = new JPanel(new GridLayout(0, Math.min(6, appearance.textures().size()), 8, 8));
-        int size = UiMetrics.previewPixels(UiMetrics.THUMBNAIL_SIZE);
-        for (ModelAppearance.Texture texture : appearance.textures()) {
-            Icon preview = texture.image() == null ? new CenteredIcon(Icons.IMAGE_FILE, size)
-                    : new ImageIcon(PixelImages.fit(texture.image(), size));
+        for (int index = 0; index < appearance.textures().size(); index++) {
+            ModelAppearance.Texture texture = appearance.textures().get(index);
+            Icon preview = this.appearancePreviews.get(index);
             JLabel tile = new JLabel(String.join(", ", texture.variables()), preview, SwingConstants.CENTER);
             tile.setVerticalTextPosition(SwingConstants.BOTTOM);
             tile.setHorizontalTextPosition(SwingConstants.CENTER);

@@ -77,7 +77,9 @@ final class ItemModelRepository {
             throw new ItemRenderException(ItemRenderException.Kind.RESOURCE_ERROR,
                     "texture pixel limit", "Texture " + textureId + " exceeds the pixel limit");
         } catch (IOException unreadable) {
-            throw new IOException("Unreadable texture: " + textureId, unreadable);
+            // A damaged file is the pack's problem, not the renderer's.
+            throw new ItemRenderException(ItemRenderException.Kind.RESOURCE_ERROR, "unreadable PNG",
+                    "Texture " + textureId + " is not a readable PNG", unreadable);
         }
         if (decoded == null) {
             throw new ItemRenderException(

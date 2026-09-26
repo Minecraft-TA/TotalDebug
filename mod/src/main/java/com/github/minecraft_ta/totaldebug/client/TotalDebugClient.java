@@ -101,7 +101,8 @@ public final class TotalDebugClient {
                         subject.icon().map(ItemIcons.Icon::model).orElse(""),
                         subject.icon().map(ItemIcons.Icon::tints).orElse(Map.of())
                 ));
-                TotalDebugClient.this.resources.prepare();
+                // Icons are only drawn in Companion; with it turned off, the capture would never be read.
+                if (TotalDebugConfig.CLIENT.useCompanionApp.get()) TotalDebugClient.this.resources.prepare();
             }
 
             @Override
@@ -156,6 +157,7 @@ public final class TotalDebugClient {
      * translated names and the snapshot the winning resources, so both are brought up to date.
      */
     public void resourcesReloaded() {
+        this.catalogs.recapture();
         this.companionApp.announceInventory();
     }
 

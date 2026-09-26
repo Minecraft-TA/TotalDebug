@@ -204,7 +204,7 @@ final class ConfigWriter {
         String current = Files.readString(target.file(), StandardCharsets.UTF_8);
         if (!overwrite && !current.equals(step.before())) throw new ConflictException(target.file());
         List<ConfigEdit.TextChange> changed = ConfigEdit.changes(current, step.after(), step.settings());
-        Files.writeString(target.file(), step.after(), StandardCharsets.UTF_8);
+        ConfigEdit.writeInPlace(target.file(), step.after());
         List<ConfigChanges.Effect> effects = new ArrayList<>();
         for (ConfigEdit.TextChange change : changed) {
             effects.add(this.changes.edited(new ChangeRecord.Setting(target.modId(), target.fileName(), target.file(),

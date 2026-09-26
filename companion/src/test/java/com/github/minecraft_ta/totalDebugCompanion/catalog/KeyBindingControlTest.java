@@ -28,7 +28,7 @@ class KeyBindingControlTest {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "version:3955\nkey_key.jump:key.keyboard.space\nsoundCategory_master:1.0\n");
         ChangeRecord record = ChangeRecord.inMemory();
-        KeyBindingControl control = new KeyBindingControl(options, record, () -> false);
+        KeyBindingControl control = new KeyBindingControl(options, record, () -> false, Runnable::run);
         KeyBindings.Assignment space = new KeyBindings.Assignment("key.keyboard.space", "NONE");
 
         KeyBindingControl.Result jump = control.set("key.jump", space, new KeyBindings.Assignment("key.keyboard.g", "CONTROL"))
@@ -53,7 +53,7 @@ class KeyBindingControlTest {
     void aGameRunningWithoutAConnectionKeepsItsOptions() throws Exception {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "key_key.jump:key.keyboard.space\n");
-        KeyBindingControl control = new KeyBindingControl(options, ChangeRecord.inMemory(), () -> true);
+        KeyBindingControl control = new KeyBindingControl(options, ChangeRecord.inMemory(), () -> true, Runnable::run);
 
         var refused = control.set("key.jump", new KeyBindings.Assignment("key.keyboard.space", "NONE"),
                 new KeyBindings.Assignment("key.keyboard.g", "NONE"));
@@ -68,7 +68,7 @@ class KeyBindingControlTest {
     @Test
     void anAnswerAfterTheCallerStoppedWaitingIsStillRecorded() throws Exception {
         KeyBindingControl control = new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(),
-                () -> true);
+                () -> true, Runnable::run);
         List<SetKeyBindingMessage> sent = new ArrayList<>();
         control.gameConnected(message -> {
             sent.add(message);
@@ -88,7 +88,7 @@ class KeyBindingControlTest {
     void bindingsChangedTogetherAllStayInOptions() throws Exception {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "version:3955\n");
-        KeyBindingControl control = new KeyBindingControl(options, ChangeRecord.inMemory(), () -> false);
+        KeyBindingControl control = new KeyBindingControl(options, ChangeRecord.inMemory(), () -> false, Runnable::run);
         List<KeyBindingControl.Change> changes = new ArrayList<>();
         for (int number = 1; number <= 9; number++) {
             changes.add(new KeyBindingControl.Change("key.hotbar." + number,
@@ -102,7 +102,7 @@ class KeyBindingControlTest {
     @Test
     void aRunningGameChangesTheBindingItselfAndAnswers() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        KeyBindingControl control = new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false);
+        KeyBindingControl control = new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false, Runnable::run);
         List<SetKeyBindingMessage> sent = new ArrayList<>();
         control.gameConnected(message -> {
             sent.add(message);

@@ -111,7 +111,7 @@ public final class UiDevHarness {
     /** The test mod's catalog, with its configuration file holding one modified setting. */
     private static void installCatalogFixture(Path root) throws Exception {
         Path jar = CatalogFixtures.modJar(Files.createDirectories(root.resolve("catalog-fixture")));
-        Files.writeString(jar.resolveSibling("testmod-common.toml"), """
+        Files.writeString(Files.createDirectories(jar.resolveSibling("config")).resolve("testmod-common.toml"), """
                 #Widget behavior
                 [widgets]
                 	#How fast widgets spin

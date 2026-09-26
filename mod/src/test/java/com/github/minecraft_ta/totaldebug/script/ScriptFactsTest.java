@@ -81,6 +81,20 @@ class ScriptFactsTest {
     }
 
     @Test
+    void aReadThatFailsAfterFillingItsSectionStillReportsTheFailure() {
+        ScriptFacts facts = new ScriptFacts(text -> { });
+
+        facts.guarded("Items", () -> {
+            for (int index = 0; index < FactSection.MAX_FACTS; index++) facts.section("Items").text("Slot " + index, index);
+            throw new IllegalStateException("broken slot");
+        });
+
+        List<Fact> reported = facts.snapshot().getFirst().facts();
+        assertEquals(FactSection.MAX_FACTS, reported.size());
+        assertEquals(Fact.problem("Read failed", "IllegalStateException: broken slot"), reported.getLast());
+    }
+
+    @Test
     void aFailingGuardedReadKeepsEarlierFactsReportsTheProblemAndLetsLaterReadsRun() {
         List<String> log = new ArrayList<>();
         ScriptFacts facts = new ScriptFacts(log::add);

@@ -3,9 +3,11 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigEdit;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.EditableTextPanel;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
+import java.nio.charset.StandardCharsets;
 
 import javax.swing.JButton;
 import javax.swing.JOptionPane;
@@ -101,6 +103,11 @@ final class ConfigTextEditor {
         Document shown = this.document;
         if (shown == null || !this.text.modified()) return;
         String edited = this.text.text();
+        if (edited.getBytes(StandardCharsets.UTF_8).length > ConfigValues.MAX_FILE_BYTES) {
+            // A larger file could not be read again here.
+            this.status.accept("The text is larger than " + ConfigValues.MAX_FILE_BYTES / 1024 / 1024 + " MB");
+            return;
+        }
         try {
             ConfigEdit.checkText(this.text.savedText(), edited, shown.settings());
         } catch (IllegalArgumentException problem) {

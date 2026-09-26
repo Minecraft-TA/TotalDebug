@@ -29,7 +29,7 @@ class PackConfigurationPanelTest {
     @Test
     void listsModifiedSettingsUnderTheirModFileAndSectionThenAll() throws Exception {
         Path jar = CatalogFixtures.modJar(this.directory);
-        Path file = jar.resolveSibling("testmod-common.toml");
+        Path file = Files.createDirectories(jar.resolveSibling("config")).resolve("testmod-common.toml");
         Files.writeString(file, """
                 [widgets]
                 \tspeed = 9

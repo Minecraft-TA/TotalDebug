@@ -58,6 +58,16 @@ class DataViewTest {
     }
 
     @Test
+    void aFullOmissionListLeavesNoPartComplete() throws IOException {
+        List<FactData.Omission> omissions = new ArrayList<>();
+        for (int index = 0; index < FactData.MAX_OMISSIONS; index++) omissions.add(new FactData.Omission("Items[" + index + "]", 1));
+
+        assertEquals(1, DataRows.omittedBelow(furnace(1, "", omissions), "note"),
+                "later omissions went unrecorded, so an untouched part may be partial too");
+        assertEquals(0, DataRows.omittedBelow(furnace(1, "", List.of()), "note"));
+    }
+
+    @Test
     void rootsStartExpandedAndNestedEntriesCollapsed() throws IOException {
         List<DataRows.Row> rows = DataRows.visible(decoded(furnace(2, "say \"hi\"", List.of())), Set.of());
 

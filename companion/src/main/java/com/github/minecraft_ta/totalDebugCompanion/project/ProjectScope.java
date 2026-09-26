@@ -68,7 +68,7 @@ public final class ProjectScope implements AutoCloseable {
         this.configChanges = new ConfigChanges(profile.workspaceDirectory(), changes);
         Path gameLock = InstancePaths.forGame(profile.workspaceDirectory()).gameLock();
         this.keyBindings = new KeyBindingControl(profile.workspaceDirectory().resolve("options.txt"), changes,
-                () -> GameLock.held(gameLock));
+                () -> GameLock.held(gameLock), this.configChanges.writes());
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {

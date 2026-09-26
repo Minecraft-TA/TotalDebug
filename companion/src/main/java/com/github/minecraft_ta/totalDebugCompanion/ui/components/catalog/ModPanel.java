@@ -178,6 +178,8 @@ public final class ModPanel extends JPanel {
         this.summary = ModSummary.resolve(this.modId, this.index, this.sources.get()).orElse(null);
         this.listIcons.clear();
         if (this.summary == null) {
+            // A load started while the mod was installed must not bring its tabs back.
+            this.resourceGeneration++;
             this.header.setTitle(this.modId);
             this.header.setIcon(new MonogramIcon(this.modId, SubjectHeader.ICON_SIZE));
             this.header.setSubtitle(List.of(SubjectHeader.text(this.modId)));
@@ -362,7 +364,7 @@ public final class ModPanel extends JPanel {
 
     private void loadLogo(List<ModLogoIcons.Source> logo) {
         CompletableFuture.supplyAsync(() -> readLogo(logo)).thenAccept(image -> SwingUtilities.invokeLater(() -> {
-            if (!this.disposed && image != null) this.header.setIcon(image);
+            if (!this.disposed && this.summary != null && image != null) this.header.setIcon(image);
         }));
     }
 

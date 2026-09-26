@@ -13,6 +13,7 @@ import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEvery
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -32,6 +33,7 @@ public final class CatalogSearch {
     private final String[] names;
     private final String[] ids;
     private List<ModResources.Resource> resources;
+    private List<Path> directories;
     /** Where the game keeps its keys, or null without a game directory. */
     private final Path options;
 
@@ -135,23 +137,34 @@ public final class CatalogSearch {
         return parts.length < 3 ? "" : parts[1];
     }
 
-    /** Every mod file's resources, listed once per catalog. Blocking; on the search worker. */
+    /**
+     * Every mod file's resources. Archives are listed once per catalog; a development mod's directory is listed each
+     * time, since files change inside it. Blocking; on the search worker.
+     */
     private synchronized List<ModResources.Resource> resources() {
         if (this.resources == null) {
             List<Path> files = new ArrayList<>();
             for (PackCatalog.Mod mod : this.index.mods()) {
                 for (Path file : this.index.resourceFiles(mod.id())) if (!files.contains(file)) files.add(file);
             }
-            List<ModResources.Resource> listed = new ArrayList<>();
-            for (Path file : files) {
-                try {
-                    listed.addAll(ModResources.list(file));
-                } catch (IOException unreadable) {
-                    // An unreadable mod file contributes no resources; its page reports why.
-                }
-            }
-            this.resources = List.copyOf(listed);
+            this.directories = files.stream().filter(Files::isDirectory).toList();
+            this.resources = List.copyOf(listed(files.stream().filter(file -> !Files.isDirectory(file)).toList()));
         }
-        return this.resources;
+        if (this.directories.isEmpty()) return this.resources;
+        List<ModResources.Resource> all = new ArrayList<>(this.resources);
+        all.addAll(listed(this.directories));
+        return all;
+    }
+
+    private static List<ModResources.Resource> listed(List<Path> files) {
+        List<ModResources.Resource> listed = new ArrayList<>();
+        for (Path file : files) {
+            try {
+                listed.addAll(ModResources.list(file));
+            } catch (IOException unreadable) {
+                // An unreadable mod file contributes no resources; its page reports why.
+            }
+        }
+        return listed;
     }
 }

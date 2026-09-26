@@ -38,6 +38,7 @@ public final class PackCatalogPublisher implements AutoCloseable {
     private String requestedLanguage;
     private PackCatalogMessage state;
     private long generation;
+    private boolean stale;
 
     public PackCatalogPublisher(Path file, Supplier<String> language, CaptureStarter captures,
                                 Consumer<PackCatalogMessage> send) {
@@ -51,6 +52,17 @@ public final class PackCatalogPublisher implements AutoCloseable {
      * Called whenever Companion has the given inventory; repeats the current state for the same inventory and
      * language. Names are translated, so a language change captures again.
      */
+    /**
+     * Captures again on the next request, also for the same inventory and language: the game's resources changed, and
+     * the catalog's names come from them. Nothing happens before the first request, so a saved catalog is still reused
+     * when the game starts.
+     */
+    public synchronized void recapture() {
+        if (this.inventoryId == null) return;
+        this.inventoryId = null;
+        this.stale = true;
+    }
+
     public synchronized void request(String inventoryId, Map<String, String> moduleByModId) {
         Objects.requireNonNull(inventoryId, "inventoryId");
         String language = this.language.get();
@@ -68,17 +80,22 @@ public final class PackCatalogPublisher implements AutoCloseable {
         this.state = null;
         long current = ++this.generation;
         Map<String, String> modules = Map.copyOf(moduleByModId);
-        this.worker.execute(() -> prepare(current, inventoryId, language, modules));
+        boolean reuse = !this.stale;
+        this.stale = false;
+        this.worker.execute(() -> prepare(current, inventoryId, language, modules, reuse));
     }
 
-    private void prepare(long generation, String inventoryId, String language, Map<String, String> modules) {
-        if (Files.isRegularFile(this.file)) {
+    private void prepare(long generation, String inventoryId, String language, Map<String, String> modules,
+                         boolean reuse) {
+        if (reuse && Files.isRegularFile(this.file)) {
             try {
-                if (PackCatalog.readHeader(this.file).matches(inventoryId, language)) {
+                // Read in full: a file whose header matches but whose body is damaged is captured again.
+                PackCatalog saved = PackCatalog.read(this.file);
+                if (saved.inventoryId().equals(inventoryId) && saved.language().equals(language)) {
                     publish(generation, PackCatalogMessage.available(inventoryId, this.file.toString()));
                     return;
                 }
-            } catch (IOException exception) {
+            } catch (IOException | RuntimeException exception) {
                 TotalDebug.LOGGER.info("Recapturing the pack catalog: {}", exception.getMessage());
             }
         }

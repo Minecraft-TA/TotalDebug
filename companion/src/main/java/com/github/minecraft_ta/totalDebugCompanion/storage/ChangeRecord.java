@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiPredicate;
 
 /**
  * What Companion changed in the pack, kept per instance in {@code changes.json} (see docs/MODPACK.md). An entry holds a
@@ -101,11 +102,21 @@ public final class ChangeRecord implements AutoCloseable {
             for (JsonElement element : JsonFiles.array(json, "changes")) {
                 JsonObject entry = element.getAsJsonObject();
                 Target target = switch (JsonFiles.string(entry, "kind")) {
-                    case "setting" -> new Setting(JsonFiles.string(entry, "modId"), JsonFiles.string(entry, "fileName"),
-                            game.resolve(JsonFiles.string(entry, "file")).normalize(), JsonFiles.string(entry, "setting"));
+                    case "setting" -> {
+                        Path file = inInstance(game, JsonFiles.string(entry, "file"));
+                        if (file == null) {
+                            // A path outside the instance names another instance's file, such as the original of a copy.
+                            System.err.println("Leaving out a change of " + JsonFiles.string(entry, "file")
+                                    + ": it is not a file of this instance");
+                            yield null;
+                        }
+                        yield new Setting(JsonFiles.string(entry, "modId"), JsonFiles.string(entry, "fileName"), file,
+                                JsonFiles.string(entry, "setting"));
+                    }
                     case "keyBinding" -> new KeyBinding(JsonFiles.string(entry, "name"));
                     default -> throw new IllegalArgumentException("Unknown change kind " + JsonFiles.string(entry, "kind"));
                 };
+                if (target == null) continue;
                 record.changes.put(target, new Change(target, JsonFiles.string(entry, "original"),
                         JsonFiles.string(entry, "current"), Instant.parse(JsonFiles.string(entry, "firstChanged")),
                         Instant.parse(JsonFiles.string(entry, "lastChanged"))));
@@ -119,6 +130,10 @@ public final class ChangeRecord implements AutoCloseable {
 
     /** Records that {@code target} changed from {@code previous} to {@code written}. */
     public void changed(Target target, String previous, String written) {
+        if (this.gameDirectory != null && target instanceof Setting setting
+                && !setting.file().toAbsolutePath().normalize().startsWith(this.gameDirectory)) {
+            throw new IllegalArgumentException(setting.file() + " is not a file of this instance");
+        }
         synchronized (this) {
             Change earlier = this.changes.get(target);
             String original = earlier == null ? previous : earlier.original();
@@ -136,13 +151,14 @@ public final class ChangeRecord implements AutoCloseable {
 
     /**
      * Drops the change of {@code target} when the file holds its original value again, such as after an edit made
-     * outside Companion.
+     * outside Companion. {@code sameValue} compares as the target's file does, such as {@code "a"} and {@code 'a'} in
+     * TOML.
      */
-    public void observed(Target target, String literal) {
+    public void observed(Target target, String literal, BiPredicate<String, String> sameValue) {
         boolean dropped;
         synchronized (this) {
             Change change = this.changes.get(target);
-            dropped = change != null && change.original().equals(literal);
+            dropped = change != null && sameValue.test(change.original(), literal);
             if (dropped) {
                 this.changes.remove(target);
                 scheduleSave();
@@ -215,11 +231,17 @@ public final class ChangeRecord implements AutoCloseable {
         this.writer.schedule(json);
     }
 
-    /** A file as the record stores it: relative to the game directory with forward slashes, when it is inside it. */
+    /** A file as the record stores it: relative to the game directory, with forward slashes. */
     private String stored(Path file) {
-        Path normalized = file.toAbsolutePath().normalize();
-        if (!normalized.startsWith(this.gameDirectory)) return normalized.toString();
-        return this.gameDirectory.relativize(normalized).toString().replace('\\', '/');
+        return this.gameDirectory.relativize(file.toAbsolutePath().normalize()).toString().replace('\\', '/');
+    }
+
+    /** The instance's file a stored path names, or null for an absolute path or one leading out of the instance. */
+    private static Path inInstance(Path game, String stored) {
+        Path relative = Path.of(stored);
+        if (relative.isAbsolute()) return null;
+        Path file = game.resolve(relative).normalize();
+        return file.startsWith(game) ? file : null;
     }
 
     public void saveNow() throws IOException {

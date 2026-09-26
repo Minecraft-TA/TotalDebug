@@ -160,6 +160,32 @@ class ConfigEditTest {
     }
 
     @Test
+    void onlyATypesOwnLimitReadsAsNoBound() {
+        assertEquals("0 to 1000000000000", ConfigEdit.readableRange("0 ~ 1000000000000"));
+        assertEquals("at least 0", ConfigEdit.readableRange("0 ~ 9223372036854775807"));
+        assertEquals("at least 0", ConfigEdit.readableRange("0 ~ 2147483647"));
+        assertEquals("at most 5", ConfigEdit.readableRange("-9223372036854775808 ~ 5"));
+        assertEquals("0 to 9223372036854775806", ConfigEdit.readableRange("0 ~ 9223372036854775806"));
+        assertEquals("0 to 1e100", ConfigEdit.readableRange("0 ~ 1e100"));
+        assertEquals("at least 0", ConfigEdit.readableRange("0 ~ 1.7976931348623157E308"));
+    }
+
+    @Test
+    void aWriteInPlaceLeavesNoCopyOfTheOriginalBehind() throws Exception {
+        Path file = Files.writeString(this.directory.resolve("test.toml"), "speed = 1\n");
+
+        Path earlier = Files.writeString(this.directory.resolve("test.toml.totaldebug-original"), "left by an earlier write");
+
+        ConfigEdit.writeInPlace(file, "speed = 2\n");
+
+        assertEquals("speed = 2\n", Files.readString(file));
+        assertEquals("left by an earlier write", Files.readString(earlier), "an existing copy is never overwritten");
+        try (var files = Files.list(this.directory)) {
+            assertEquals(2, files.count(), "the write's own copy is gone");
+        }
+    }
+
+    @Test
     void aValueOfAnotherKindIsAChangeEvenWhenItPrintsTheSame() {
         String saved = "name = \"true\"\ncount = \"4\"\n";
 
@@ -170,13 +196,16 @@ class ConfigEditTest {
     }
 
     @Test
-    void aListKeepsTheKindOfItsElements() {
-        assertEquals("[\"a\", \"b\"]", ConfigEdit.literal("[\"a\"]", null, "[\"a\", \"b\"]"));
+    void aListKeepsTheKindAllItsElementsAndItsDefaultShare() {
+        PackCatalog.ConfigSetting names = new PackCatalog.ConfigSetting("names", "", "[\"x\"]", "", List.of(),
+                PackCatalog.Restart.NONE);
+        assertEquals("[\"a\", \"b\"]", ConfigEdit.literal("[\"a\"]", names, "[\"a\", \"b\"]"));
         assertEquals("Write every element as a quoted string", assertThrows(IllegalArgumentException.class,
-                () -> ConfigEdit.literal("[\"a\"]", null, "[1]")).getMessage());
-        assertEquals("[1]", ConfigEdit.literal("[]", null, "[1]"), "an empty list tells no kind");
-        assertEquals("names: Write every element as a quoted string", assertThrows(IllegalArgumentException.class,
-                () -> ConfigEdit.checkText("names = [\"a\"]\n", "names = [1]\n", List.of())).getMessage());
+                () -> ConfigEdit.literal("[\"a\"]", names, "[1]")).getMessage());
+        assertEquals("Write every element as a quoted string", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.literal("[]", names, "[1]")).getMessage(), "an empty list takes the kind of its default");
+        assertEquals("[1, \"b\"]", ConfigEdit.literal("[1, \"a\"]", null, "[1, \"b\"]"), "a mixed list tells no kind");
+        assertEquals("[1]", ConfigEdit.literal("[]", null, "[1]"), "an empty list without a default tells none");
     }
 
     @Test
@@ -187,7 +216,12 @@ class ConfigEditTest {
                 () -> ConfigEdit.checkText(saved, saved + "c = 3\n", List.of())).getMessage());
         assertEquals("b was removed; only values can be changed here", assertThrows(IllegalArgumentException.class,
                 () -> ConfigEdit.checkText(saved, "a = 1\n", List.of())).getMessage());
-        ConfigEdit.checkText("a = [1\n", "a = [1]\n", List.of());
+        assertEquals("The file on disk is not valid TOML; repair it in another editor", assertThrows(
+                IllegalArgumentException.class, () -> ConfigEdit.checkText("v = nope\n", "v = 3\n", List.of())).getMessage(),
+                "a value that is not TOML could not be written back on revert");
+        assertEquals("The file on disk is not valid TOML; repair it in another editor", assertThrows(
+                IllegalArgumentException.class, () -> ConfigEdit.checkText("a = [1\n", "a = [1]\n", List.of())).getMessage(),
+                "a save that cannot be compared could not be reverted");
     }
 
     private static PackCatalog.ConfigSetting setting(String range, List<String> allowed) {

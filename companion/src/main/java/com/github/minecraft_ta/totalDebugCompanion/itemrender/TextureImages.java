@@ -9,9 +9,9 @@ import java.io.IOException;
 import java.util.Iterator;
 
 /** Decodes texture images with a pixel limit checked before any pixels are allocated. */
-final class TextureImages {
+public final class TextureImages {
     /** The image declares more pixels than the limit allows. */
-    static final class TooLarge extends IOException {
+    public static final class TooLarge extends IOException {
         TooLarge(long pixels, long limit) {
             super("The image has " + pixels + " pixels, more than the limit of " + limit);
         }
@@ -24,7 +24,7 @@ final class TextureImages {
      * Decodes {@code bytes}, or returns null when the reader finds no image. A compressed file can declare a huge
      * size, so the declared width and height are checked first.
      */
-    static BufferedImage decode(byte[] bytes, long maxPixels) throws IOException {
+    public static BufferedImage decode(byte[] bytes, long maxPixels) throws IOException {
         try (var input = new MemoryCacheImageInputStream(new ByteArrayInputStream(bytes))) {
             Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
             if (!readers.hasNext()) throw new IOException("No image reader recognises the data");

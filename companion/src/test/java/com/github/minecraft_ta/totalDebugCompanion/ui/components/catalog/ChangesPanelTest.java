@@ -25,7 +25,7 @@ class ChangesPanelTest {
     @Test
     void listsRecordedChangesUntilTheFileHoldsTheOriginalAgain() throws Exception {
         Path jar = CatalogFixtures.modJar(this.directory);
-        Path file = jar.resolveSibling("testmod-common.toml");
+        Path file = Files.createDirectories(jar.resolveSibling("config")).resolve("testmod-common.toml");
         Files.writeString(file, """
                 [widgets]
                 \tspeed = 12
@@ -39,7 +39,7 @@ class ChangesPanelTest {
         record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", file, "widgets.speed"), "9", "12");
         ChangesPanel[] panel = new ChangesPanel[1];
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(this.directory, record),
-                new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false),
+                new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false, Runnable::run),
                 target -> { }));
         ConfigSettingsTable table = panel[0].settingsTable();
         try {

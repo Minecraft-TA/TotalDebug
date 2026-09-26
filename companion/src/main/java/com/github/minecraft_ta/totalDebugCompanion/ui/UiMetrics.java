@@ -2,11 +2,12 @@ package com.github.minecraft_ta.totalDebugCompanion.ui;
 
 import com.formdev.flatlaf.util.UIScale;
 
-import javax.swing.BorderFactory;
 import javax.swing.border.Border;
+import javax.swing.border.EmptyBorder;
+import java.awt.Component;
 import java.awt.Insets;
 
-/** Application-wide logical dimensions that every theme and component must preserve. */
+/** Application-wide logical dimensions that every theme and component must preserve. Spacing follows the UI scale. */
 public final class UiMetrics {
     public static final int TREE_ROW_HEIGHT = 24;
     public static final int TAB_HEIGHT = 30;
@@ -24,56 +25,93 @@ public final class UiMetrics {
     private UiMetrics() {
     }
 
+    /** Empty space around content that follows the UI scale, also when it changes while the component exists. */
+    private static Border padding(int top, int left, int bottom, int right) {
+        return new ScaledPadding(top, left, bottom, right);
+    }
+
+    /** A button's margin; FlatLaf's button border scales it, so it stays in unscaled pixels. */
+    private static Insets margin(int top, int left, int bottom, int right) {
+        return new Insets(top, left, bottom, right);
+    }
+
+    /**
+     * An empty border whose insets are scaled when they are read. Not a UIResource, so a theme change keeps it; a plain
+     * EmptyBorder would keep the scale it was made with.
+     */
+    private static final class ScaledPadding extends EmptyBorder {
+        ScaledPadding(int top, int left, int bottom, int right) {
+            super(top, left, bottom, right);
+        }
+
+        @Override
+        public Insets getBorderInsets(Component component, Insets insets) {
+            insets.set(UIScale.scale(this.top), UIScale.scale(this.left), UIScale.scale(this.bottom), UIScale.scale(this.right));
+            return insets;
+        }
+
+        @Override
+        public Insets getBorderInsets() {
+            return getBorderInsets(null, new Insets(0, 0, 0, 0));
+        }
+    }
+
     /** Around a filter bar or toolbar at the top of a view. */
     public static Border barPadding() {
-        return BorderFactory.createEmptyBorder(6, 8, 6, 8);
+        return padding(6, 8, 6, 8);
     }
 
     /** Around an empty or failed message shown in place of a view's content. */
     public static Border messagePadding() {
-        return BorderFactory.createEmptyBorder(10, 12, 10, 12);
+        return padding(10, 12, 10, 12);
     }
 
     /** Around a line under a filter bar, such as a failure. */
     public static Border noticePadding() {
-        return BorderFactory.createEmptyBorder(0, 10, 6, 10);
+        return padding(0, 10, 6, 10);
     }
 
     /** Around a row of a list. */
     public static Border listRowPadding() {
-        return BorderFactory.createEmptyBorder(4, 10, 4, 10);
+        return padding(4, 10, 4, 10);
     }
 
     /** Content of a page keeps this distance from the page's left and right edges. */
-    public static final int PAGE_EDGE = 12;
-    /** Between a form's label and its field. */
-    public static final int FORM_LABEL_GAP = 10;
-    /** Between the rows of a form. */
-    public static final int FORM_ROW_GAP = 8;
+    private static final int PAGE_EDGE = 12;
+
+    /** Between a form's label and its field, after the UI scale. */
+    public static int formLabelGap() {
+        return UIScale.scale(10);
+    }
+
+    /** Between the rows of a form, after the UI scale. */
+    public static int formRowGap() {
+        return UIScale.scale(8);
+    }
 
     /** Around a block of page content, such as the header, a section or a notice, with its own space above and below. */
     public static Border pagePadding(int top, int bottom) {
-        return BorderFactory.createEmptyBorder(top, PAGE_EDGE, bottom, PAGE_EDGE);
+        return padding(top, PAGE_EDGE, bottom, PAGE_EDGE);
     }
 
     /** Around the body of a section, indented under its heading's chevron. */
     public static Border sectionBodyPadding() {
-        return BorderFactory.createEmptyBorder(4, 18, 0, 0);
+        return padding(4, 18, 0, 0);
     }
 
     /** Margin of a small icon button inside a popup or beside a value, such as Copy. */
     public static Insets compactButtonMargin() {
-        return new Insets(2, 3, 2, 3);
+        return margin(2, 3, 2, 3);
     }
 
     /** Margin of a widget in the status bar, whose height is fixed. */
     public static Insets statusWidgetMargin() {
-        return new Insets(0, 6, 0, 6);
+        return margin(0, 6, 0, 6);
     }
 
     /** Around the text of a table cell. */
     public static Border cellPadding() {
-        return BorderFactory.createEmptyBorder(0, 6, 0, 6);
+        return padding(0, 6, 0, 6);
     }
 
     /**

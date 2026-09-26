@@ -1,9 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureAnimation;
+import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureImages;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import javax.imageio.ImageIO;
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,6 +23,10 @@ import java.util.zip.ZipFile;
  * opaque, so a translucent texture such as water keeps its colour on a light panel.
  */
 final class FluidTextures {
+    private static final long MAX_PIXELS = 16L * 1024 * 1024;
+    /** The limits the game applies when it writes the snapshot. */
+    private static final int MAX_TEXTURE_BYTES = 16 * 1024 * 1024;
+    private static final int MAX_METADATA_BYTES = 1024 * 1024;
     static final String APPEARANCES = "layers/0/totaldebug/fluid-appearances.json";
 
     private record Appearance(String stillTexture, int tint) {
@@ -71,16 +77,35 @@ final class FluidTextures {
             }
             BufferedImage image;
             try (InputStream input = zip.getInputStream(entry)) {
-                image = ImageIO.read(input);
+                image = TextureImages.decode(bounded(input, MAX_TEXTURE_BYTES, entry.getName()), MAX_PIXELS);
             }
-            return image == null ? Optional.empty() : Optional.of(tinted(firstFrame(image), appearance.tint()));
+            if (image == null) return Optional.empty();
+            ZipEntry metadata = zip.getEntry(entry.getName() + ".mcmeta");
+            Optional<TextureAnimation> animation = Optional.empty();
+            if (metadata != null) {
+                try (InputStream input = zip.getInputStream(metadata)) {
+                    animation = TextureAnimation.read(bounded(input, MAX_METADATA_BYTES, metadata.getName()),
+                            image.getWidth(), image.getHeight());
+                }
+            }
+            return Optional.of(tinted(animation.map(declared -> firstFrame(image, declared)).orElse(image), appearance.tint()));
+        } catch (RuntimeException invalid) {
+            // The game does not show a texture it cannot use either, such as one whose first frame is outside it.
+            throw new IOException("Unusable texture " + appearance.stillTexture() + ": " + invalid.getMessage(), invalid);
         }
     }
 
-    /** Animated textures stack square frames vertically. */
-    static BufferedImage firstFrame(BufferedImage image) {
-        int size = Math.min(image.getWidth(), image.getHeight());
-        return image.getSubimage(0, 0, image.getWidth(), size);
+    /** An entry's bytes, read up to {@code limit}; a larger entry is refused before it fills memory. */
+    private static byte[] bounded(InputStream input, int limit, String name) throws IOException {
+        byte[] bytes = input.readNBytes(limit + 1);
+        if (bytes.length > limit) throw new IOException(name + " is larger than " + limit + " bytes");
+        return bytes;
+    }
+
+    /** The frame an animation shows first, as its metadata declares its size and order. */
+    static BufferedImage firstFrame(BufferedImage image, TextureAnimation animation) {
+        Rectangle frame = animation.region(animation.frames().isEmpty() ? 0 : animation.frames().getFirst().index());
+        return image.getSubimage(frame.x, frame.y, frame.width, frame.height);
     }
 
     static BufferedImage tinted(BufferedImage source, int tint) {

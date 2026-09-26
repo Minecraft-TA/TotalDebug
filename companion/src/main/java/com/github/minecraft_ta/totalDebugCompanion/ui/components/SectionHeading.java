@@ -19,6 +19,7 @@ import java.awt.event.MouseEvent;
  */
 public final class SectionHeading extends JPanel {
     private final JLabel title = new JLabel();
+    private final JLabel chevron = new JLabel();
     private boolean collapsible;
     private boolean collapsed;
 
@@ -29,8 +30,11 @@ public final class SectionHeading extends JPanel {
     public SectionHeading(String title, JComponent trailing, Runnable toggle) {
         super(new BorderLayout(8, 0));
         this.title.setText(title);
-        this.title.setIconTextGap(4);
-        add(this.title, BorderLayout.WEST);
+        JPanel label = new JPanel(new BorderLayout(4, 0));
+        label.setOpaque(false);
+        label.add(this.chevron, BorderLayout.WEST);
+        label.add(this.title, BorderLayout.CENTER);
+        add(label, BorderLayout.WEST);
         JPanel rule = new JPanel(new GridBagLayout());
         GridBagConstraints fill = new GridBagConstraints();
         fill.weightx = 1;
@@ -40,8 +44,9 @@ public final class SectionHeading extends JPanel {
         if (trailing != null) add(trailing, BorderLayout.EAST);
         this.collapsible = toggle != null;
         if (this.collapsible) {
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            addMouseListener(new MouseAdapter() {
+            // Only the chevron collapses the section, so clicking its title or rule never hides content.
+            this.chevron.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            this.chevron.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseClicked(MouseEvent event) {
                     toggle.run();
@@ -60,10 +65,10 @@ public final class SectionHeading extends JPanel {
     @Override
     public void updateUI() {
         super.updateUI();
-        if (this.title != null) showChevron();
+        if (this.chevron != null) showChevron();
     }
 
     private void showChevron() {
-        this.title.setIcon(!this.collapsible ? null : UIManager.getIcon(this.collapsed ? "Tree.collapsedIcon" : "Tree.expandedIcon"));
+        this.chevron.setIcon(!this.collapsible ? null : UIManager.getIcon(this.collapsed ? "Tree.collapsedIcon" : "Tree.expandedIcon"));
     }
 }

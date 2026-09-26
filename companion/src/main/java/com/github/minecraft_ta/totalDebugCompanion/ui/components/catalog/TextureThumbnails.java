@@ -2,15 +2,14 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureAnimation;
+import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureImages;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.IconLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
 
-import javax.imageio.ImageIO;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import java.awt.Component;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -29,6 +28,8 @@ import java.util.zip.ZipFile;
  * keeps the mod archives it reads open only while previews are loading, so a mod's JAR can be replaced meanwhile.
  */
 final class TextureThumbnails {
+    /** Checked before decoding: a small file can declare a size whose pixels would not fit in memory. */
+    private static final long MAX_TEXTURE_PIXELS = 16L * 1024 * 1024;
     static final int MAX_TEXTURE_BYTES = 4 * 1024 * 1024;
 
     private final int size;
@@ -61,7 +62,7 @@ final class TextureThumbnails {
         this.pending.incrementAndGet();
         return CompletableFuture.supplyAsync(() -> {
             try {
-                BufferedImage image = ImageIO.read(new ByteArrayInputStream(read(texture)));
+                BufferedImage image = TextureImages.decode(read(texture), MAX_TEXTURE_PIXELS);
                 return image == null ? Optional.<Icon>empty()
                         : Optional.<Icon>of(new ImageIcon(PixelImages.fit(TextureAnimation.firstFrameOfStrip(image), this.size)));
             } catch (IOException | RuntimeException unreadable) {

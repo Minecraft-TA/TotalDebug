@@ -149,9 +149,10 @@ public final class SideReader {
                 empty++;
                 continue;
             }
+            // The largest amount, since handlers moving whole buckets or batches take and give nothing smaller.
             Boolean takes = fluid.getAmount() >= handler.getTankCapacity(tank) ? null
-                    : handler.fill(fluid.copyWithAmount(1), IFluidHandler.FluidAction.SIMULATE) > 0;
-            boolean gives = !handler.drain(fluid.copyWithAmount(1), IFluidHandler.FluidAction.SIMULATE).isEmpty();
+                    : handler.fill(fluid.copyWithAmount(Integer.MAX_VALUE), IFluidHandler.FluidAction.SIMULATE) > 0;
+            boolean gives = !handler.drain(fluid.copyWithAmount(Integer.MAX_VALUE), IFluidHandler.FluidAction.SIMULATE).isEmpty();
             tanks.add(fluid.getHoverName().getString() + ": " + access(takes, gives).toLowerCase(Locale.ROOT));
         }
         if (empty > 0) tanks.add(empty + (empty == 1 ? " empty tank" : " empty tanks"));
