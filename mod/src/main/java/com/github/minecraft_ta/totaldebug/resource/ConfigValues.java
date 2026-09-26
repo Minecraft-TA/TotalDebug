@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -57,7 +58,7 @@ public final class ConfigValues {
         Object value;
         try {
             CommentedConfig parsed = new TomlParser().parse("value = " + request.literal());
-            value = convert(parsed.get("value"), valueSpec.getDefault());
+            value = convert(parsed.get("value"), valueSpec.getDefault(), loaded.config().get(path));
         } catch (RuntimeException invalid) {
             return failed(request, request.literal() + " is not a TOML value: " + invalid.getMessage());
         }
@@ -92,7 +93,8 @@ public final class ConfigValues {
             }
             for (List<String> path : paths) {
                 if (!(spec.getSpec().get(path) instanceof ModConfigSpec.ValueSpec valueSpec)) continue;
-                Object value = file.contains(path) ? convert(file.get(path), valueSpec.getDefault()) : valueSpec.getDefault();
+                Object value = file.contains(path) ? convert(file.get(path), valueSpec.getDefault(), loaded.config().get(path))
+                        : valueSpec.getDefault();
                 loaded.config().set(path, value);
             }
             reloaded(config, spec, loaded);
@@ -106,7 +108,27 @@ public final class ConfigValues {
         container.ifPresent(mod -> mod.acceptEvent(new ModConfigEvent.Reloading(config)));
     }
 
-    /** Numbers take the type of the setting's default, as TOML does not say whether 12 is an int, long or double. */
+    /**
+     * A parsed value in the types the setting holds. Numbers take the type of the setting's default, as TOML does not say
+     * whether 12 is an int, long or double, and names become enum constants. A list's elements take the type of the
+     * default's elements, or of the current value's when the default is empty.
+     */
+    static Object convert(Object value, Object defaultValue, Object currentValue) {
+        if (value instanceof List<?> list) {
+            Object element = sampleElement(defaultValue);
+            if (element == null) element = sampleElement(currentValue);
+            if (element == null) return value;
+            List<Object> converted = new ArrayList<>(list.size());
+            for (Object item : list) converted.add(convert(item, element));
+            return converted;
+        }
+        return convert(value, defaultValue);
+    }
+
+    private static Object sampleElement(Object list) {
+        return list instanceof List<?> elements && !elements.isEmpty() ? elements.getFirst() : null;
+    }
+
     private static Object convert(Object value, Object defaultValue) {
         if (value instanceof Number number && defaultValue instanceof Number) {
             return switch (defaultValue) {

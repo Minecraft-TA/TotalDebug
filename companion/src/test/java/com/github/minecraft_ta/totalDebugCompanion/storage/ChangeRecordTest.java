@@ -149,6 +149,15 @@ class ChangeRecordTest {
     }
 
     @Test
+    void aResourceNameMayHoldDotsButNoPathSegmentLeavesThePack() {
+        new ChangeRecord.Resource("assets/example/models/item/version..json", null);
+        for (String path : List.of("assets/../config/a.json", "assets/a/./b.json", "assets//b.json", "config/a.json",
+                "assets\\a\\b.json")) {
+            assertThrows(IllegalArgumentException.class, () -> new ChangeRecord.Resource(path, null), path);
+        }
+    }
+
+    @Test
     void anOlderFormatIsReportedInsteadOfRead() throws Exception {
         InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
         Files.createDirectories(paths.changes().getParent());

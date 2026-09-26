@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Protocol-24 payload asking the game to reload what edited resources need. {@code managedPack} is the id of the pack
+ * Protocol-27 payload asking the game to reload what edited resources need. {@code managedPack} is the id of the pack
  * Companion manages, such as {@code file/TotalDebug}, which the game enables at the top of its stacks before the
  * reload; empty for none. {@code watched} are the edited resource paths whose problems the answer reports.
  */

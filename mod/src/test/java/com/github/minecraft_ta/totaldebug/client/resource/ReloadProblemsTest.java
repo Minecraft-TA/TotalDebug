@@ -24,5 +24,7 @@ class ReloadProblemsTest {
         assertTrue(ReloadProblems.mentions("missing testmod:block/gear.", "testmod:block/gear"));
         assertFalse(ReloadProblems.mentions("unable to load model: testmod:block/gear_box", "testmod:block/gear"));
         assertFalse(ReloadProblems.mentions("testmod:block/gear/inner", "testmod:block/gear"));
+        assertFalse(ReloadProblems.mentions("unable to load model: othertestmod:block/gear", "testmod:block/gear"));
+        assertTrue(ReloadProblems.mentions("missing assets/testmod/models/block/gear.json", "testmod/models/block/gear.json"));
     }
 }

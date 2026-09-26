@@ -6,7 +6,7 @@ import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import java.util.Objects;
 
 /**
- * Protocol-24 payload setting a configuration value in the running game's memory, without writing its file.
+ * Protocol-27 payload setting a configuration value in the running game's memory, without writing its file.
  * {@code fileName} is the configuration's file name as NeoForge tracks it, such as {@code testmod-common.toml},
  * {@code setting} the dotted path of the value and {@code literal} the new value written as in TOML.
  */

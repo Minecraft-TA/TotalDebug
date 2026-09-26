@@ -20,6 +20,7 @@ import java.awt.Color;
 import java.awt.FlowLayout;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -57,8 +58,14 @@ final class ResourceTextEditor extends JPanel {
     private final JButton discard = new JButton("Discard", Icons.REVERT);
     private final JButton revertInGame = new JButton("Revert in Game", Icons.REVERT);
     private Supplier<Color> noticeColor = ThemeColors::secondaryText;
+    /** The text of the file that was opened, which the pack supplies while the managed pack holds no copy. */
+    private final String openedText;
+    /** Stops following the change record. */
+    private final Runnable stopListening;
     /** The text the pack supplies: the managed pack's copy, or the opened file's. */
     private String packText;
+    /** This resource's entries in the change record when the copies were last read. */
+    private List<ChangeRecord.Change> seen;
     /** The text tried in the game, or null. */
     private String triedText;
     /** The managed pack the text is saved in, or null for the current world's until it is known. */
@@ -81,6 +88,7 @@ final class ResourceTextEditor extends JPanel {
         this.origin = Objects.requireNonNull(origin, "origin");
         this.pack = pack;
         this.edits = Objects.requireNonNull(edits, "edits");
+        this.openedText = content.value();
         this.packText = content.value();
         this.text = new EditableTextPanel(content.syntaxStyle(), this::changed, this::save);
         this.text.load(content.value());
@@ -118,7 +126,27 @@ final class ResourceTextEditor extends JPanel {
         add(this.text, BorderLayout.CENTER);
         showState("");
         changed();
+        this.seen = recorded();
         readCopies();
+        // A revert on the Changes page, or a disconnect that ends a try, changes what the game uses.
+        this.stopListening = edits.record().addListener(() -> SwingUtilities.invokeLater(this::recordChanged));
+    }
+
+    /** Reads the copies again when this resource's entries in the change record changed. */
+    private void recordChanged() {
+        if (this.disposed) return;
+        List<ChangeRecord.Change> now = recorded();
+        if (now.equals(this.seen)) return;
+        this.seen = now;
+        // A write of this editor shows its own result when it completes.
+        if (!this.busy) readCopies();
+    }
+
+    /** This resource's entries in the change record: in its managed pack once that is known, and tried in the game. */
+    private List<ChangeRecord.Change> recorded() {
+        ChangeRecord record = this.edits.record();
+        return Arrays.asList(this.pack == null ? null : record.change(new ChangeRecord.Resource(this.path, this.pack),
+                ChangeRecord.Level.PACK), record.change(new ChangeRecord.Resource(this.path, null), ChangeRecord.Level.GAME));
     }
 
     EditableTextPanel textPanel() {
@@ -146,10 +174,12 @@ final class ResourceTextEditor extends JPanel {
             }
             this.pack = found.pack();
             this.packName = packName(found.pack());
-            if (found.managed() != null) {
-                this.packText = found.managed();
-                this.managed = true;
-            }
+            this.seen = recorded();
+            this.save.setToolTipText(Tooltip.action("Save", "Ctrl+S")
+                    .text("Checks the text, writes it into " + this.packName + " and reloads it in the game").html());
+            // Without a managed copy, such as after a revert, the pack supplies the opened file's text again.
+            this.managed = found.managed() != null;
+            this.packText = this.managed ? found.managed() : this.openedText;
             this.triedText = found.tried();
             if (!this.text.modified()) this.text.load(shown());
             else this.text.markSaved(shown());
@@ -315,6 +345,7 @@ final class ResourceTextEditor extends JPanel {
 
     void dispose() {
         this.disposed = true;
+        this.stopListening.run();
         this.text.dispose();
     }
 }

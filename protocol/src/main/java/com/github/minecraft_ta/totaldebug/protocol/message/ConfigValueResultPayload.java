@@ -6,7 +6,7 @@ import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import java.util.Objects;
 
 /**
- * Protocol-24 payload answering a {@link SetConfigValuePayload}: the value the game used before and uses now, as the
+ * Protocol-27 payload answering a {@link SetConfigValuePayload}: the value the game used before and uses now, as the
  * game prints them, or why it kept its value in {@code error}, which is empty on success.
  */
 public record ConfigValueResultPayload(int requestId, String previous, String current, String error) {

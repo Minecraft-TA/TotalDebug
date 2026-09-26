@@ -75,13 +75,20 @@ final class ReloadProblems extends AbstractAppender implements AutoCloseable {
         }
     }
 
-    /** Whether {@code text} names {@code name} whole, not as the start of a longer name such as {@code ns:gear_box}. */
+    /**
+     * Whether {@code text} names {@code name} whole: not as the start of a longer name such as {@code ns:gear_box}, nor as
+     * the end of one such as {@code otherns:block/gear}.
+     */
     static boolean mentions(String text, String name) {
         for (int index = text.indexOf(name); index >= 0; index = text.indexOf(name, index + 1)) {
             int end = index + name.length();
-            if (end == text.length()) return true;
-            char next = text.charAt(end);
-            if (!Character.isLetterOrDigit(next) && next != '_' && next != '/' && next != '-') return true;
+            // A namespace can follow a folder, as in assets/ns/..., but not end in letters of another namespace.
+            char before = index == 0 ? ' ' : text.charAt(index - 1);
+            boolean startsWhole = !Character.isLetterOrDigit(before) && before != '_' && before != '-' && before != '.';
+            // A sentence's full stop can follow a name, but a longer path cannot.
+            char after = end == text.length() ? ' ' : text.charAt(end);
+            boolean endsWhole = !Character.isLetterOrDigit(after) && after != '_' && after != '/' && after != '-';
+            if (startsWhole && endsWhole) return true;
         }
         return false;
     }

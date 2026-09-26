@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Protocol-24 payload answering a {@link ReloadPayload}: how long the reload took, the warnings and errors it logged
+ * Protocol-27 payload answering a {@link ReloadPayload}: how long the reload took, the warnings and errors it logged
  * that name a watched path, and why it did not run in {@code error}, which is empty on success.
  */
 public record ReloadResultPayload(int requestId, long millis, List<String> problems, String error) {

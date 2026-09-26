@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Protocol-24 payload describing the game's enabled packs, lowest first, so the last pack wins. Data packs are empty
+ * Protocol-27 payload describing the game's enabled packs, lowest first, so the last pack wins. Data packs are empty
  * while no singleplayer world is open. {@code resourceFormat} and {@code dataFormat} are the pack formats of this
  * Minecraft version.
  */

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.storage;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.SetOverlayPayload;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import com.google.gson.JsonArray;
@@ -82,9 +83,7 @@ public final class ChangeRecord implements AutoCloseable {
     public record Resource(String path, Path location) implements Target {
         public Resource {
             Objects.requireNonNull(path, "path");
-            if (!(path.startsWith("assets/") || path.startsWith("data/")) || path.contains("\\") || path.contains("..")) {
-                throw new IllegalArgumentException("Not a resource path: " + path);
-            }
+            if (!SetOverlayPayload.isPackPath(path)) throw new IllegalArgumentException("Not a resource path: " + path);
             if (location != null) location = location.toAbsolutePath().normalize();
         }
 

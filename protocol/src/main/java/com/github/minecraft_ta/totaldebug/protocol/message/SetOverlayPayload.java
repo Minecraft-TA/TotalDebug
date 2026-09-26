@@ -7,7 +7,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Protocol-24 payload putting one resource into the game's in-memory pack, or removing it when {@code content} is
+ * Protocol-27 payload putting one resource into the game's in-memory pack, or removing it when {@code content} is
  * null. {@code path} is the resource's path in a pack, such as {@code assets/ns/lang/en_us.json}. The game uses it
  * after the next reload, which Companion asks for separately.
  */
@@ -16,12 +16,23 @@ public record SetOverlayPayload(String path, byte[] content) {
 
     public SetOverlayPayload {
         Objects.requireNonNull(path, "path");
-        if (!(path.startsWith("assets/") || path.startsWith("data/")) || path.contains("..") || path.contains("\\")) {
-            throw new IllegalArgumentException("Not a resource path: " + path);
-        }
+        if (!isPackPath(path)) throw new IllegalArgumentException("Not a resource path: " + path);
         if (content != null && content.length > MAX_CONTENT_BYTES) {
             throw new IllegalArgumentException(path + " has " + content.length + " bytes; the limit is " + MAX_CONTENT_BYTES);
         }
+    }
+
+    /**
+     * Whether {@code path} is a file of a pack: under {@code assets/} or {@code data/}, with forward slashes and no empty,
+     * {@code .} or {@code ..} segment. A name such as {@code version..json} is allowed; only whole segments could leave
+     * the pack.
+     */
+    public static boolean isPackPath(String path) {
+        if (!(path.startsWith("assets/") || path.startsWith("data/")) || path.contains("\\")) return false;
+        for (String segment : path.split("/", -1)) {
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) return false;
+        }
+        return true;
     }
 
     public static SetOverlayPayload read(ByteBufferInputStream input) {
