@@ -251,7 +251,11 @@ public final class ResourceEdits {
         }
     }
 
-    /** Whether the managed pack still holds what Companion wrote for {@code change}. Blocking; it changes nothing. */
+    /**
+     * Whether the managed pack still holds what Companion wrote for {@code change}. A file back to its original outside
+     * Companion ends the change, checked again in the write queue so a save or revert under way is never undone.
+     * Blocking.
+     */
     public boolean holds(ChangeRecord.Change change) {
         if (!(change.target() instanceof ChangeRecord.Resource target)) return true;
         Path file = target.location().resolve(target.path());
@@ -261,7 +265,31 @@ public final class ResourceEdits {
         } catch (IOException unreadable) {
             return true;
         }
+        if (hash.equals(change.original())) {
+            write(() -> {
+                dropIfRestored(target, change);
+                return null;
+            });
+        }
         return hash.equals(change.current());
+    }
+
+    /** Ends {@code change} when its file holds the original again and the record still holds that change. */
+    private void dropIfRestored(ChangeRecord.Resource target, ChangeRecord.Change change) {
+        if (!change.equals(this.record.change(target))) return;
+        Path file = target.location().resolve(target.path());
+        try {
+            String hash = ResourceOriginals.hash(Files.isRegularFile(file) ? Files.readAllBytes(file) : null);
+            this.record.observed(target, hash, String::equals);
+        } catch (IOException unreadable) {
+            // An unreadable file keeps its change.
+        }
+    }
+
+    /** The problems a reload logged about {@code path}; saves merged into one reload each see only their own. */
+    private static List<String> problemsOf(ReloadResultPayload result, String path) {
+        return result.problems().stream().filter(problem -> problem.path().equals(path))
+                .map(ReloadResultPayload.Problem::message).toList();
     }
 
     private static ReloadPayload.Kind kind(String path) {
@@ -315,7 +343,7 @@ public final class ResourceEdits {
                         List.of(), message(failure));
             }
             return new Saved(result.error().isEmpty() ? ConfigChanges.Effect.NOW : assets ? ConfigChanges.Effect.GAME_STARTS
-                    : ConfigChanges.Effect.WORLD_OPENS, pack, result.problems(), result.error());
+                    : ConfigChanges.Effect.WORLD_OPENS, pack, problemsOf(result, path), result.error());
         });
     }
 

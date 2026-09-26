@@ -9,17 +9,22 @@ import java.util.Objects;
 
 /**
  * Protocol-27 payload answering a {@link ReloadPayload}: how long the reload took, the warnings and errors it logged
- * that name a watched path, and why it did not run in {@code error}, which is empty on success.
+ * about watched paths, and why it did not run in {@code error}, which is empty on success.
  */
-public record ReloadResultPayload(int requestId, long millis, List<String> problems, String error) {
+public record ReloadResultPayload(int requestId, long millis, List<Problem> problems, String error) {
     public static final int MAX_PROBLEMS = 64;
     public static final int MAX_PROBLEM_LENGTH = 2_000;
 
+    /** A logged warning or error, and the watched path it names. */
+    public record Problem(String path, String message) {
+        public Problem {
+            Objects.requireNonNull(path, "path");
+            message = message.length() > MAX_PROBLEM_LENGTH ? message.substring(0, MAX_PROBLEM_LENGTH) : message;
+        }
+    }
+
     public ReloadResultPayload {
-        problems = problems.stream()
-                .limit(MAX_PROBLEMS)
-                .map(problem -> problem.length() > MAX_PROBLEM_LENGTH ? problem.substring(0, MAX_PROBLEM_LENGTH) : problem)
-                .toList();
+        problems = problems.stream().limit(MAX_PROBLEMS).toList();
         Objects.requireNonNull(error, "error");
     }
 
@@ -28,8 +33,8 @@ public record ReloadResultPayload(int requestId, long millis, List<String> probl
         long millis = input.readLong();
         int count = input.readInt();
         if (count < 0 || count > MAX_PROBLEMS) throw new IllegalArgumentException("Invalid problem count: " + count);
-        List<String> problems = new ArrayList<>(count);
-        for (int index = 0; index < count; index++) problems.add(input.readString());
+        List<Problem> problems = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) problems.add(new Problem(input.readString(), input.readString()));
         return new ReloadResultPayload(requestId, millis, problems, input.readString());
     }
 
@@ -37,7 +42,10 @@ public record ReloadResultPayload(int requestId, long millis, List<String> probl
         output.writeInt(this.requestId);
         output.writeLong(this.millis);
         output.writeInt(this.problems.size());
-        for (String problem : this.problems) output.writeString(problem);
+        for (Problem problem : this.problems) {
+            output.writeString(problem.path());
+            output.writeString(problem.message());
+        }
         output.writeString(this.error);
     }
 }

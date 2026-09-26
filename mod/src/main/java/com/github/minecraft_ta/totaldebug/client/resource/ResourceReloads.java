@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.resource;
 
+import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import net.minecraft.client.Minecraft;
@@ -43,7 +44,7 @@ public final class ResourceReloads {
             reloads.add(attempt(() -> reloadResources(request.managedPack(), languageOnly, request.watched())));
         }
         CompletableFuture.allOf(reloads.toArray(CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
-            List<String> found = problems.problems();
+            List<ReloadResultPayload.Problem> found = problems.problems();
             problems.close();
             long millis = (System.nanoTime() - started) / 1_000_000;
             List<String> errors = new ArrayList<>();
@@ -97,6 +98,8 @@ public final class ResourceReloads {
         }
         if (languageOnly && !enabled && suppliedBy(managedPack, watched)) {
             minecraft.getLanguageManager().onResourceManagerReload(minecraft.getResourceManager());
+            // A full reload tells the catalog through its reload listener; this reload of the language alone does not.
+            TotalDebugClient.current().ifPresent(TotalDebugClient::resourcesReloaded);
             return CompletableFuture.completedFuture(null);
         }
         CompletableFuture<Void> reload = new CompletableFuture<>();

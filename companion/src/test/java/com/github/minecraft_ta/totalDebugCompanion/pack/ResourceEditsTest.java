@@ -94,6 +94,19 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aFileRestoredOutsideCompanionEndsItsChange() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        edits.packStack(STACK);
+        edits.save(LANG, bytes("{\"a\":\"saved\"}")).get(5, TimeUnit.SECONDS);
+        ChangeRecord.Change change = record.changes().getFirst();
+
+        Files.delete(this.directory.resolve("resourcepacks/TotalDebug").resolve(LANG));
+        assertFalse(edits.holds(change));
+        assertEquals(0, record.size(), "the pack holds its original again, none");
+    }
+
+    @Test
     void aRunningGameNotConnectedKeepsItsOptionsAndIsAskedToConnect() throws Exception {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "resourcePacks:[\"vanilla\"]\n");
@@ -176,9 +189,11 @@ class ResourceEditsTest {
         assertEquals(Set.of(ReloadPayload.Kind.RESOURCES), merged.kinds(), "a full reload covers the language");
         assertEquals(2, merged.watched().size());
 
-        edits.answered(new ReloadResultPayload(merged.requestId(), 900, List.of("Unable to load model testmod:block/gear"), ""));
+        edits.answered(new ReloadResultPayload(merged.requestId(), 900, List.of(new ReloadResultPayload.Problem(
+                "assets/testmod/models/block/gear.json", "Unable to load model testmod:block/gear")), ""));
         assertEquals(List.of("Unable to load model testmod:block/gear"), second.get(5, TimeUnit.SECONDS).problems());
         assertEquals(ConfigChanges.Effect.NOW, third.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(List.of(), third.get(5, TimeUnit.SECONDS).problems(), "the model's problem is not the language file's");
     }
 
     @Test

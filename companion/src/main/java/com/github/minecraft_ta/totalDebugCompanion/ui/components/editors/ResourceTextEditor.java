@@ -38,8 +38,11 @@ import java.util.regex.Pattern;
 final class ResourceTextEditor extends JPanel {
     private static final Pattern LINE = Pattern.compile("line (\\d+)");
 
-    /** The managed pack the text is saved in, its copy there or null, and a pack above it that supplies the file too, or null. */
-    private record Found(Path pack, String managed, String overriddenBy) {
+    /**
+     * The managed pack the text is saved in, its entry in the change record when the copy was read, its copy there or
+     * null, and a pack above it that supplies the file too, or null.
+     */
+    private record Found(Path pack, ChangeRecord.Change recorded, String managed, String overriddenBy) {
     }
 
     private final String path;
@@ -67,6 +70,8 @@ final class ResourceTextEditor extends JPanel {
     private String packName = "the TotalDebug pack";
     /** Counts writes, so the copies read when the tab opened never replace the text of a later write. */
     private int writes;
+    /** Counts reads of the copies; only the latest may show its result, since reads can finish out of order. */
+    private int reads;
     private boolean managed;
     private boolean busy;
     private boolean disposed;
@@ -140,22 +145,26 @@ final class ResourceTextEditor extends JPanel {
     /** Shows the managed pack's copy instead of the opened file's, and names a pack that overrides the managed one. */
     private void readCopies() {
         int started = this.writes;
+        int read = ++this.reads;
         CompletableFuture.supplyAsync(() -> {
             try {
                 // Without an opened pack, the current world's is looked up each time: the player can open another world.
                 Path pack = this.opened != null ? this.opened : this.edits.pack(this.path);
-                return new Found(pack, this.edits.managed(pack, this.path).map(ResourceTextEditor::text).orElse(null),
+                // The record is looked at before the file, so a change between the two is caught afterwards.
+                ChangeRecord.Change recorded = this.edits.record().change(new ChangeRecord.Resource(this.path, pack));
+                return new Found(pack, recorded, this.edits.managed(pack, this.path).map(ResourceTextEditor::text).orElse(null),
                         this.edits.overriddenBy(this.path).orElse(null));
             } catch (Exception exception) {
                 throw new CompletionException(exception);
             }
         }).whenComplete((found, failure) -> SwingUtilities.invokeLater(() -> {
-            if (this.disposed || this.writes != started) return;
+            if (this.disposed || this.writes != started || this.reads != read) return;
             if (failure != null) {
                 showNotice(message(failure), ThemeColors::error);
                 return;
             }
             showPack(found.pack());
+            this.seen = found.recorded();
             // Without a managed copy, such as after a revert, the pack supplies the opened file's text again, unless the
             // opened file was the managed copy: then nothing is left, and the shown text is unsaved.
             this.managed = found.managed() != null;
@@ -169,6 +178,8 @@ final class ResourceTextEditor extends JPanel {
                         ThemeColors::warning);
             }
             changed();
+            // A save or revert that came after the record was looked at is read again.
+            if (!Objects.equals(recorded(), this.seen)) readCopies();
         }));
     }
 

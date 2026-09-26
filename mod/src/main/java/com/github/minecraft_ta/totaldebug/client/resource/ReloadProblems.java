@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.resource;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
@@ -8,9 +9,11 @@ import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.Property;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -21,18 +24,21 @@ import java.util.Set;
 final class ReloadProblems extends AbstractAppender implements AutoCloseable {
     private static final int MAX_PROBLEMS = 64;
 
-    private final Set<String> names;
-    private final Set<String> problems = new LinkedHashSet<>();
+    /** The watched path each name identifies. */
+    private final Map<String, String> names;
+    private final Set<ReloadResultPayload.Problem> problems = new LinkedHashSet<>();
 
-    private ReloadProblems(Set<String> names) {
+    private ReloadProblems(Map<String, String> names) {
         super("TotalDebugReloadProblems", null, null, true, Property.EMPTY_ARRAY);
         this.names = names;
     }
 
     /** Starts collecting problems about {@code paths}; closing stops it. */
     static ReloadProblems open(List<String> paths) {
-        Set<String> names = new LinkedHashSet<>();
-        for (String path : paths) names.addAll(names(path));
+        Map<String, String> names = new LinkedHashMap<>();
+        for (String path : paths) {
+            for (String name : names(path)) names.putIfAbsent(name, path);
+        }
         ReloadProblems collector = new ReloadProblems(names);
         collector.start();
         if (LogManager.getContext(false) instanceof LoggerContext context) {
@@ -66,10 +72,12 @@ final class ReloadProblems extends AbstractAppender implements AutoCloseable {
         Throwable thrown = event.getThrown();
         String detail = thrown == null ? "" : thrown.toString();
         String text = (message + " " + detail).toLowerCase(Locale.ROOT);
-        for (String name : this.names) {
-            if (!mentions(text, name)) continue;
+        for (Map.Entry<String, String> name : this.names.entrySet()) {
+            if (!mentions(text, name.getKey())) continue;
             synchronized (this.problems) {
-                if (this.problems.size() < MAX_PROBLEMS) this.problems.add(detail.isEmpty() ? message : message + ": " + detail);
+                if (this.problems.size() < MAX_PROBLEMS) {
+                    this.problems.add(new ReloadResultPayload.Problem(name.getValue(), detail.isEmpty() ? message : message + ": " + detail));
+                }
             }
             return;
         }
@@ -93,7 +101,7 @@ final class ReloadProblems extends AbstractAppender implements AutoCloseable {
         return false;
     }
 
-    List<String> problems() {
+    List<ReloadResultPayload.Problem> problems() {
         synchronized (this.problems) {
             return new ArrayList<>(this.problems);
         }

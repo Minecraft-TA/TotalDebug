@@ -34,7 +34,8 @@ class ResourceProtocolCodecTest {
         readRequest.read(new ByteBufferInputStream(written(new ReloadMessage(request))));
         assertEquals(request, readRequest.payload());
 
-        ReloadResultPayload answer = new ReloadResultPayload(3, 1_250, List.of("Unable to parse testmod:block/slab"), "");
+        ReloadResultPayload answer = new ReloadResultPayload(3, 1_250, List.of(new ReloadResultPayload.Problem(
+                "assets/testmod/models/block/slab.json", "Unable to parse testmod:block/slab")), "");
         ReloadResultMessage readAnswer = new ReloadResultMessage();
         readAnswer.read(new ByteBufferInputStream(written(new ReloadResultMessage(answer))));
         assertEquals(answer, readAnswer.payload());
