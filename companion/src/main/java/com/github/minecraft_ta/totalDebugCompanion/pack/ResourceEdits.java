@@ -77,6 +77,8 @@ public final class ResourceEdits {
     private final ResourceOriginals originals;
     private final Executor writes;
     private final BooleanSupplier gameRunning;
+    /** Held while a try is entered and while a disconnect clears the tries, so neither outlives the other. */
+    private final Object connection = new Object();
     private final AtomicInteger requests = new AtomicInteger();
     private final Map<Integer, CompletableFuture<ReloadResultPayload>> waiting = new ConcurrentHashMap<>();
     /** Resources tried in the game's memory, by path. */
@@ -109,14 +111,16 @@ public final class ResourceEdits {
 
     /** The game closed: what was only in its memory has ended, and reloads it did not answer have failed. */
     public void gameDisconnected() {
-        this.game = null;
+        synchronized (this.connection) {
+            this.game = null;
+            this.tried.clear();
+            this.record.ended(ChangeRecord.Level.GAME);
+        }
         this.stack = null;
         for (CompletableFuture<ReloadResultPayload> request : this.waiting.values()) {
             request.completeExceptionally(new IOException("The game disconnected before it finished reloading"));
         }
         this.waiting.clear();
-        this.tried.clear();
-        this.record.ended(ChangeRecord.Level.GAME);
     }
 
     /** Takes the game's enabled packs. */
@@ -142,9 +146,24 @@ public final class ResourceEdits {
         return world.resolve("datapacks").resolve(PACK_NAME);
     }
 
-    /** The managed pack's copy of a resource, or empty when the pack does not hold it. Blocking. */
-    public Optional<byte[]> managed(String path) throws IOException {
-        Path file = pack(path).resolve(path);
+    /**
+     * The managed pack holding {@code file}, such as a data file of another world's TotalDebug datapack opened from the
+     * Changes page, or empty for a file outside the managed packs.
+     */
+    public Optional<Path> packOf(Path file) {
+        Path normalized = file.toAbsolutePath().normalize();
+        Path resources = this.workspace.resolve("resourcepacks").resolve(PACK_NAME);
+        if (normalized.startsWith(resources)) return Optional.of(resources);
+        Path saves = this.workspace.resolve("saves");
+        if (!normalized.startsWith(saves) || saves.relativize(normalized).getNameCount() < 4) return Optional.empty();
+        Path pack = saves.resolve(saves.relativize(normalized).subpath(0, 3));
+        return pack.getFileName().toString().equals(PACK_NAME) && pack.getParent().getFileName().toString().equals("datapacks")
+                ? Optional.of(pack) : Optional.empty();
+    }
+
+    /** The copy of a resource in {@code pack}, a managed pack, or empty when it does not hold it. Blocking. */
+    public Optional<byte[]> managed(Path pack, String path) throws IOException {
+        Path file = pack.resolve(path);
         return Files.isRegularFile(file) ? Optional.of(Files.readAllBytes(file)) : Optional.empty();
     }
 
@@ -169,14 +188,21 @@ public final class ResourceEdits {
             if (!path.startsWith("assets/") && Worlds.open(this.workspace) == null) {
                 throw new CompletionException(new IOException("Data is tried in an open world, and none is open"));
             }
-            if (!send.test(new SetOverlayMessage(new SetOverlayPayload(path, content)))) {
-                throw new CompletionException(new IOException("The game is not connected"));
+            synchronized (this.connection) {
+                // A game that disconnected meanwhile has dropped its tries; this one must not outlive them.
+                if (this.game != send || !send.test(new SetOverlayMessage(new SetOverlayPayload(path, content)))) {
+                    throw new CompletionException(new IOException("The game is not connected"));
+                }
+                byte[] previous = this.tried.put(path, content.clone());
+                this.record.changed(new ChangeRecord.Resource(path, null), ChangeRecord.Level.GAME,
+                        ResourceOriginals.hash(previous), ResourceOriginals.hash(content));
             }
-            byte[] previous = this.tried.put(path, content.clone());
-            this.record.changed(new ChangeRecord.Resource(path, null), ChangeRecord.Level.GAME,
-                    ResourceOriginals.hash(previous), ResourceOriginals.hash(content));
             return path;
-        }).thenCompose(ignored -> applyInGame(path));
+        }).thenCompose(ignored -> applyInGame(path)).thenApply(saved -> {
+            // A disconnect at any point ends the try, and the caller must not show it as still in the game.
+            if (!this.tried.containsKey(path)) throw new CompletionException(new IOException("The try ended before the game reloaded it"));
+            return saved;
+        });
     }
 
     /** Removes a resource from the game's in-memory pack; returns whether it held one. */
@@ -218,12 +244,20 @@ public final class ResourceEdits {
         }
     }
 
-    /** Writes {@code content} into the managed pack and makes the game use it. */
+    /** Writes {@code content} into the managed pack of the current world and makes the game use it. */
     public CompletableFuture<Saved> save(String path, byte[] content) {
+        return save(path, null, content);
+    }
+
+    /**
+     * Writes {@code content} into {@code into}, a managed pack, or into the current world's when it is null, and makes
+     * the game use it.
+     */
+    public CompletableFuture<Saved> save(String path, Path into, byte[] content) {
         Objects.requireNonNull(content, "content");
         return write(() -> {
             try {
-                Path pack = pack(path);
+                Path pack = into != null ? into : pack(path);
                 preparePack(pack, path.startsWith("assets/"));
                 Path file = pack.resolve(path);
                 byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
@@ -336,7 +370,8 @@ public final class ResourceEdits {
             if (assets) {
                 try {
                     enableOffline();
-                } catch (IOException exception) {
+                } catch (IOException | RuntimeException exception) {
+                    // The file is saved either way; a malformed options.txt only keeps the pack from being enabled.
                     return CompletableFuture.completedFuture(new Saved(ConfigChanges.Effect.GAME_STARTS, pack, List.of(),
                             "The TotalDebug pack could not be enabled in options.txt: " + exception.getMessage()));
                 }

@@ -211,6 +211,56 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aTryThatMeetsADisconnectIsNotKept() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        Thread[] disconnect = new Thread[1];
+        edits.gameConnected(message -> {
+            // The game goes away while the overlay is on its way; the disconnect arrives on the transport's thread.
+            if (disconnect[0] == null) disconnect[0] = Thread.ofPlatform().start(edits::gameDisconnected);
+            return true;
+        });
+
+        Throwable failure = edits.tryInGame(LANG, bytes("{}")).handle((ignored, thrown) -> thrown).join();
+        disconnect[0].join();
+        assertTrue(failure != null && failure.getMessage().contains("ended"), String.valueOf(failure));
+        assertTrue(edits.tried(LANG).isEmpty(), "the disconnect ends the try, whichever of them came first");
+        assertEquals(0, record.size());
+    }
+
+    @Test
+    void aFileOfAnotherWorldsPackIsSavedIntoThatPack() throws Exception {
+        Path older = world("Older");
+        world("Newer");
+        Files.setLastModifiedTime(older.resolve("level.dat"), FileTime.fromMillis(1_000));
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packStack(STACK);
+        Path olderPack = older.resolve("datapacks/TotalDebug");
+        String recipe = "data/testmod/recipe/gear.json";
+
+        assertEquals(olderPack, edits.packOf(olderPack.resolve(recipe)).orElseThrow());
+        assertEquals(this.directory.resolve("resourcepacks/TotalDebug"),
+                edits.packOf(this.directory.resolve("resourcepacks/TotalDebug").resolve(LANG)).orElseThrow());
+        assertTrue(edits.packOf(older.resolve("datapacks/Other").resolve(recipe)).isEmpty());
+        assertTrue(edits.packOf(this.directory.resolve("config/testmod.toml")).isEmpty());
+
+        ResourceEdits.Saved saved = edits.save(recipe, olderPack, bytes("{}")).get(5, TimeUnit.SECONDS);
+        assertEquals(olderPack, saved.pack(), "not the current world's pack");
+        assertTrue(Files.isRegularFile(olderPack.resolve(recipe)));
+    }
+
+    @Test
+    void aMalformedOptionsFileStillAcknowledgesTheSave() throws Exception {
+        Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:{\"not\":\"a list\"}\n");
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packStack(STACK);
+
+        ResourceEdits.Saved saved = edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
+        assertTrue(Files.isRegularFile(saved.pack().resolve(LANG)));
+        assertTrue(saved.reloadFailure().contains("could not be enabled"), saved.reloadFailure());
+    }
+
+    @Test
     void anOverridingPackAboveTheManagedOneIsNamed() throws Exception {
         Path above = this.directory.resolve("resourcepacks/Faithful");
         Files.createDirectories(above.resolve("assets/testmod/lang"));

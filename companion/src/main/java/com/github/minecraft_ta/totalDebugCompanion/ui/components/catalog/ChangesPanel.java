@@ -298,31 +298,35 @@ public final class ChangesPanel extends JPanel {
         for (int viewRow : this.gameTable.getSelectedRows()) selected.add(this.gameModel.shown.get(viewRow));
         JPopupMenu menu = new JPopupMenu();
         if (selected.size() > 1) {
-            menu.add(ContextMenus.action("Revert " + selected.size(), null, null, () -> revertInGame(selected)));
+            menu.add(ContextMenus.action("Revert " + selected.size(), null, null, () -> report(revertInGame(selected))));
             return menu;
         }
         GameChange change = this.gameModel.shown.get(row);
-        menu.add(ContextMenus.action("Revert", null, null, () -> revertInGame(List.of(change))));
+        menu.add(ContextMenus.action("Revert", null, null, () -> report(revertInGame(List.of(change)))));
         return menu;
     }
 
-    /** Puts back what the game used before the tries; only failures are reported. */
-    private void revertInGame(List<GameChange> reverted) {
+    /** Shows what {@code reverted} completes with, which is empty unless something failed. */
+    private void report(CompletableFuture<String> reverted) {
+        reverted.thenAccept(failure -> SwingUtilities.invokeLater(() -> setStatus(failure)));
+    }
+
+    /** Puts back what the game used before the tries; completes with what failed, or empty. */
+    private CompletableFuture<String> revertInGame(List<GameChange> reverted) {
         List<CompletableFuture<?>> requests = new ArrayList<>();
         for (GameChange change : reverted) {
             requests.add(change.change().target() instanceof ChangeRecord.Setting
                     ? this.configChanges.gameValues().revert(change.change())
                     : this.resourceEdits.revert(change.change()));
         }
-        CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).handle((ignored, failure) -> {
+        return CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).handle((ignored, failure) -> {
             List<String> failed = new ArrayList<>();
             for (int index = 0; index < requests.size(); index++) {
                 if (!requests.get(index).isCompletedExceptionally()) continue;
                 Throwable cause = requests.get(index).exceptionNow();
                 failed.add(reverted.get(index).name() + ": " + (cause.getCause() == null ? cause.getMessage() : cause.getCause().getMessage()));
             }
-            SwingUtilities.invokeLater(() -> setStatus(failed.isEmpty() ? "" : "Not reverted: " + String.join("; ", failed)));
-            return null;
+            return failed.isEmpty() ? "" : "Not reverted: " + String.join("; ", failed);
         });
     }
 
@@ -332,13 +336,13 @@ public final class ChangesPanel extends JPanel {
         for (int viewRow : this.resourceTable.getSelectedRows()) selected.add(this.resourceModel.shown.get(viewRow));
         JPopupMenu menu = new JPopupMenu();
         if (selected.size() > 1) {
-            menu.add(ContextMenus.action("Revert " + selected.size(), null, null, () -> revertResources(selected)));
+            menu.add(ContextMenus.action("Revert " + selected.size(), null, null, () -> report(revertResources(selected))));
             return menu;
         }
         ResourceChange change = this.resourceModel.shown.get(row);
         menu.add(ContextMenus.action("Open", null, null, () -> openResource(change)));
         menu.add(ContextMenus.action(change.change().original().isEmpty() ? "Revert and Delete" : "Revert", null, null,
-                () -> revertResources(List.of(change))));
+                () -> report(revertResources(List.of(change)))));
         return menu;
     }
 
@@ -347,11 +351,11 @@ public final class ChangesPanel extends JPanel {
         this.navigator.accept(new NavigationTarget.LocalFile(file));
     }
 
-    /** Puts back what the managed packs held before Companion changed them; only failures are reported. */
-    private void revertResources(List<ResourceChange> reverted) {
+    /** Puts back what the managed packs held before Companion changed them; completes with what failed, or empty. */
+    private CompletableFuture<String> revertResources(List<ResourceChange> reverted) {
         List<CompletableFuture<ResourceEdits.Saved>> requests = new ArrayList<>();
         for (ResourceChange change : reverted) requests.add(this.resourceEdits.revert(change.change()));
-        CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).handle((ignored, failure) -> {
+        return CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).handle((ignored, failure) -> {
             List<String> failed = new ArrayList<>();
             for (int index = 0; index < requests.size(); index++) {
                 CompletableFuture<ResourceEdits.Saved> request = requests.get(index);
@@ -363,9 +367,7 @@ public final class ChangesPanel extends JPanel {
                     failed.add(name + ": " + request.join().reloadFailure());
                 }
             }
-            SwingUtilities.invokeLater(() -> setStatus(failed.isEmpty() ? "" : "Not reverted or not reloaded: "
-                    + String.join("; ", failed)));
-            return null;
+            return failed.isEmpty() ? "" : "Not reverted or not reloaded: " + String.join("; ", failed);
         });
     }
 
@@ -375,12 +377,12 @@ public final class ChangesPanel extends JPanel {
         for (int viewRow : this.keyTable.getSelectedRows()) selected.add(this.keyModel.shown.get(viewRow));
         JPopupMenu menu = new JPopupMenu();
         if (selected.size() > 1) {
-            menu.add(ContextMenus.action("Revert " + selected.size(), null, null, () -> revert(selected)));
+            menu.add(ContextMenus.action("Revert " + selected.size(), null, null, () -> report(revert(selected))));
             return menu;
         }
         KeyChange change = this.keyModel.shown.get(row);
         menu.add(ContextMenus.action("Revert to " + this.bindings.display(change.original()), null, null,
-                () -> revert(List.of(change))));
+                () -> report(revert(List.of(change)))));
         menu.add(ContextMenus.action("Show in Key Bindings", null, null,
                 () -> this.navigator.accept(new NavigationTarget.KeyBindings(change.name()))));
         return menu;
@@ -606,16 +608,15 @@ public final class ChangesPanel extends JPanel {
         if (target != null) this.writer.edit(target, row.literal(), literal);
     }
 
-    /** Puts bindings back on the keys they had before Companion changed them; only changes that failed are reported. */
-    private void revert(List<KeyChange> reverted) {
+    /** Puts bindings back on the keys they had before Companion changed them; completes with what failed, or empty. */
+    private CompletableFuture<String> revert(List<KeyChange> reverted) {
         List<KeyBindingControl.Change> requests = new ArrayList<>();
         Map<String, String> names = new HashMap<>();
         for (KeyChange change : reverted) {
             requests.add(new KeyBindingControl.Change(change.name(), change.current(), change.original()));
             names.put(change.name(), change.action());
         }
-        this.keyControl.setAll(requests).thenAccept(failed ->
-                SwingUtilities.invokeLater(() -> setStatus(KeyBindingsPanel.notChanged(failed, names))));
+        return this.keyControl.setAll(requests).thenApply(failed -> KeyBindingsPanel.notChanged(failed, names));
     }
 
     /** Writes every original value back, after asking. */
@@ -630,9 +631,11 @@ public final class ChangesPanel extends JPanel {
             ConfigWriter.Target target = this.targets.get(entry.getKey());
             if (target != null) this.writer.edit(target, entry.getValue().current(), entry.getValue().original());
         }
-        revert(this.keys);
-        revertResources(this.resources);
-        revertInGame(this.game);
+        List<CompletableFuture<String>> reverts = List.of(revert(this.keys), revertResources(this.resources),
+                revertInGame(this.game));
+        // One status once every kind is done, so a later success never hides an earlier failure.
+        report(CompletableFuture.allOf(reverts.toArray(CompletableFuture[]::new)).thenApply(ignored -> String.join("; ",
+                reverts.stream().map(CompletableFuture::join).filter(failure -> !failure.isEmpty()).toList())));
     }
 
     /** A mod row opens the mod's page, a file row its Configuration tab. */

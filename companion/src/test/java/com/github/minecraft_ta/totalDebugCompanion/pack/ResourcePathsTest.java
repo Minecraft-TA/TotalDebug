@@ -45,6 +45,8 @@ class ResourcePathsTest {
     void checksJsonTheWayTheGameReadsIt() {
         assertEquals(Optional.empty(), ResourcePaths.check("assets/testmod/models/block/gear.json", "{\"parent\":\"block/cube\"}"));
         assertTrue(ResourcePaths.check("assets/testmod/models/block/gear.json", "{\"parent\":").orElseThrow().startsWith("Not valid JSON"));
+        assertTrue(ResourcePaths.check("assets/testmod/models/block/gear.json", "  \n").orElseThrow().startsWith("Not valid JSON"),
+                "an empty file is no JSON value, though the parser reads it without an error");
         assertEquals(Optional.of("The translation of item.testmod.gear is not a string"),
                 ResourcePaths.check("assets/testmod/lang/en_us.json", "{\"item.testmod.gear\":{\"a\":1}}"));
         assertEquals(Optional.empty(), ResourcePaths.check("data/testmod/function/tick.mcfunction", "say {"));

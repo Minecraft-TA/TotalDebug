@@ -93,8 +93,8 @@ public final class TotalDebugClient {
                 companionApp::sendPackCatalog
         );
         this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
+        companionApp.setSessionOpenedHandler(this.packStacks::republish);
         companionApp.setPackCatalogHandler((inventoryId, modules) -> {
-            this.packStacks.republish();
             // Icons are drawn from the resource snapshot, which must follow the current packs even when the
             // saved catalog is reused.
             this.snapshotRequested = true;

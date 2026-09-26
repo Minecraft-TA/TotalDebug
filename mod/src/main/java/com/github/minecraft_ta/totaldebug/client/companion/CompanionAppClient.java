@@ -124,6 +124,7 @@ public final class CompanionAppClient implements AutoCloseable {
             scriptId
     );
     private volatile Runnable sessionClosedHandler = () -> { };
+    private volatile Runnable sessionOpenedHandler = () -> { };
     private volatile BiConsumer<String, Map<String, String>> packCatalogHandler = (inventoryId, modules) -> { };
     private volatile Consumer<SetKeyBindingMessage> keyBindingHandler = message -> send(new KeyBindingResultMessage(
             new KeyBindingResultPayload(message.payload().requestId(), message.payload().name(), "", "", "", "",
@@ -253,6 +254,11 @@ public final class CompanionAppClient implements AutoCloseable {
 
     public void setSessionClosedHandler(Runnable handler) {
         this.sessionClosedHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    /** Runs after each completed handshake, on the transport's thread. */
+    public void setSessionOpenedHandler(Runnable handler) {
+        this.sessionOpenedHandler = Objects.requireNonNull(handler, "handler");
     }
 
     /** Receives each available runtime inventory, with the module containing each mod, whenever Companion has it. */
@@ -521,6 +527,7 @@ public final class CompanionAppClient implements AutoCloseable {
         sendServerManifest();
         ResourceSnapshotMessage snapshot = this.resourceSnapshot;
         if (snapshot != null) send(snapshot);
+        this.sessionOpenedHandler.run();
         startRuntimeInventoryPreparation(false);
     }
 

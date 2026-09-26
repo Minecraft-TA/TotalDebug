@@ -91,6 +91,7 @@ public final class ResourcePaths {
             Throwable cause = invalid.getCause() == null ? invalid : invalid.getCause();
             return Optional.of("Not valid JSON: " + cause.getMessage());
         }
+        if (parsed.isJsonNull()) return Optional.of("Not valid JSON: the file holds no value");
         if (apply(path) == Apply.LANGUAGE) {
             if (!parsed.isJsonObject()) return Optional.of("A language file holds one object of translations");
             for (Map.Entry<String, JsonElement> entry : parsed.getAsJsonObject().entrySet()) {

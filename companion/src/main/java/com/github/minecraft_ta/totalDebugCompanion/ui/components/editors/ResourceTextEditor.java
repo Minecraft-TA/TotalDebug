@@ -40,10 +40,10 @@ final class ResourceTextEditor extends JPanel {
     private static final Pattern LINE = Pattern.compile("line (\\d+)");
 
     /**
-     * The managed pack's name, its copy or null, the copy tried in the game or null, and a pack above the managed one that
-     * supplies the file too, or null.
+     * The managed pack the text is saved in, its copy there or null, the copy tried in the game or null, and a pack above
+     * the managed one that supplies the file too, or null.
      */
-    private record Found(String pack, String managed, String tried, String overriddenBy) {
+    private record Found(Path pack, String managed, String tried, String overriddenBy) {
     }
 
     private final String path;
@@ -61,17 +61,25 @@ final class ResourceTextEditor extends JPanel {
     private String packText;
     /** The text tried in the game, or null. */
     private String triedText;
-    /** The managed pack the text is saved in, such as the datapack of the current world. */
+    /** The managed pack the text is saved in, or null for the current world's until it is known. */
+    private Path pack;
+    /** The managed pack the text is saved in, as the bar names it. */
     private String packName = "the TotalDebug pack";
+    /** Counts writes, so the copies read when the tab opened never replace the text of a later write. */
+    private int writes;
     private boolean managed;
     private boolean busy;
     private boolean disposed;
 
-    /** {@code origin} names the file that was opened, such as a mod's JAR. */
-    ResourceTextEditor(String path, String origin, LoadedResource.Text content, ResourceEdits edits) {
+    /**
+     * {@code origin} names the file that was opened, such as a mod's JAR, and {@code pack} is the managed pack it lies in,
+     * which stays the target, or null to save into the current world's.
+     */
+    ResourceTextEditor(String path, String origin, Path pack, LoadedResource.Text content, ResourceEdits edits) {
         super(new BorderLayout());
         this.path = Objects.requireNonNull(path, "path");
         this.origin = Objects.requireNonNull(origin, "origin");
+        this.pack = pack;
         this.edits = Objects.requireNonNull(edits, "edits");
         this.packText = content.value();
         this.text = new EditableTextPanel(content.syntaxStyle(), this::changed, this::save);
@@ -119,22 +127,25 @@ final class ResourceTextEditor extends JPanel {
 
     /** Shows the copy the game uses instead of the opened file's, and names a pack that overrides the managed one. */
     private void readCopies() {
+        int started = this.writes;
+        Path opened = this.pack;
         CompletableFuture.supplyAsync(() -> {
             try {
-                return new Found(packName(this.edits.pack(this.path)),
-                        this.edits.managed(this.path).map(ResourceTextEditor::text).orElse(null),
+                Path pack = opened != null ? opened : this.edits.pack(this.path);
+                return new Found(pack, this.edits.managed(pack, this.path).map(ResourceTextEditor::text).orElse(null),
                         this.edits.tried(this.path).map(ResourceTextEditor::text).orElse(null),
                         this.edits.overriddenBy(this.path).orElse(null));
             } catch (Exception exception) {
                 throw new CompletionException(exception);
             }
         }).whenComplete((found, failure) -> SwingUtilities.invokeLater(() -> {
-            if (this.disposed) return;
+            if (this.disposed || this.writes != started) return;
             if (failure != null) {
                 showNotice(message(failure), ThemeColors::error);
                 return;
             }
-            this.packName = found.pack();
+            this.pack = found.pack();
+            this.packName = packName(found.pack());
             if (found.managed() != null) {
                 this.packText = found.managed();
                 this.managed = true;
@@ -202,7 +213,7 @@ final class ResourceTextEditor extends JPanel {
         if (this.busy || this.text.text().equals(this.packText)) return;
         String edited = checked();
         if (edited == null) return;
-        run(this.edits.save(this.path, edited.getBytes(StandardCharsets.UTF_8)), "Not saved: ", saved -> {
+        run(this.edits.save(this.path, this.pack, edited.getBytes(StandardCharsets.UTF_8)), "Not saved: ", saved -> {
             this.packText = edited;
             this.managed = true;
             this.triedText = null;
@@ -234,6 +245,7 @@ final class ResourceTextEditor extends JPanel {
 
     /** Runs a write, then shows what the game uses and what its reload reported. */
     private void run(CompletableFuture<ResourceEdits.Saved> write, String failurePrefix, Consumer<ResourceEdits.Saved> done) {
+        this.writes++;
         this.busy = true;
         changed();
         this.state.setText("Reloading in the game");

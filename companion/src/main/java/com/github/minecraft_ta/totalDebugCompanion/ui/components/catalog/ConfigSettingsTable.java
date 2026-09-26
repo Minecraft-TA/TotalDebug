@@ -42,6 +42,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Point;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -166,6 +167,14 @@ final class ConfigSettingsTable extends JTable {
                 }
             });
         }
+        getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK), "tryInGame");
+        getActionMap().put("tryInGame", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                int row = getSelectedRow();
+                if (row >= 0 && ConfigSettingsTable.this.model.shown.get(row).setting() != null) tryInGame(row);
+            }
+        });
         ContextMenus.installTable(this, this::rowMenu);
     }
 
@@ -246,7 +255,7 @@ final class ConfigSettingsTable extends JTable {
             edit.setEnabled(this.model.isCellEditable(viewRow, 1));
             menu.add(edit);
             if (this.tried != null) {
-                Action tryValue = ContextMenus.action("Try Value in Game\u2026", null, null, () -> tryInGame(viewRow));
+                Action tryValue = ContextMenus.action("Try Value in Game\u2026", null, "Ctrl+Enter", () -> tryInGame(viewRow));
                 tryValue.setEnabled(this.model.isCellEditable(viewRow, 1));
                 menu.add(tryValue);
             }

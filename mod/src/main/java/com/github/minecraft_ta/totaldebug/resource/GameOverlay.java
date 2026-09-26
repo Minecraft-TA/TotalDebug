@@ -80,7 +80,7 @@ public final class GameOverlay {
     }
 
     /** The pack's view of the entries; it holds nothing of its own, so closing it does nothing. */
-    private record Resources(PackLocationInfo location) implements PackResources {
+    record Resources(PackLocationInfo location) implements PackResources {
         @Override
         public IoSupplier<InputStream> getRootResource(String... elements) {
             return null;
@@ -95,7 +95,7 @@ public final class GameOverlay {
         @Override
         public void listResources(PackType type, String namespace, String path, ResourceOutput output) {
             String namespaceRoot = root(type) + namespace + "/";
-            String prefix = namespaceRoot + path + "/";
+            String prefix = path.isEmpty() ? namespaceRoot : namespaceRoot + path + "/";
             for (Map.Entry<String, byte[]> entry : ENTRIES.entrySet()) {
                 if (!entry.getKey().startsWith(prefix)) continue;
                 ResourceLocation location = ResourceLocation.tryBuild(namespace, entry.getKey().substring(namespaceRoot.length()));

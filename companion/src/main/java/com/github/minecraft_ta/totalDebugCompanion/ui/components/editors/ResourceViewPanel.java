@@ -4,11 +4,13 @@ import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourcePaths;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
+import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 
+import java.nio.file.Path;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.beans.PropertyChangeListener;
@@ -100,7 +102,8 @@ public final class ResourceViewPanel extends JPanel {
         setMetadata(this.fileType.description());
         String origin = this.source instanceof ArchiveEntrySource entry
                 ? entry.archivePath().getFileName().toString() : this.source.displayName();
-        return new ResourceTextEditor(path, origin, text, this.edits);
+        Path pack = this.source instanceof LocalFileSource file ? this.edits.packOf(file.path()).orElse(null) : null;
+        return new ResourceTextEditor(path, origin, pack, text, this.edits);
     }
 
     /** Whether the tab can close: an edited text has no unsaved changes, or they were discarded after asking. */
