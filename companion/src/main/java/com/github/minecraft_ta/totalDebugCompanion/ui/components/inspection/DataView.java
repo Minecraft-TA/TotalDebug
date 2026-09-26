@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
@@ -516,7 +517,7 @@ final class DataView extends JPanel {
             setBorder(BorderFactory.createEmptyBorder(0, indent, 0, 6));
             setText(row.name());
             Font font = DataView.this.table.getFont();
-            setFont(row.depth() == 0 ? font.deriveFont(Font.BOLD) : font);
+            setFont(font);
             if (row.kind() != DataRows.Kind.ENTRY) {
                 setIcon(row.kind() == DataRows.Kind.OMITTED ? null : Icons.ERROR);
                 setForeground(muted(selected));
@@ -560,7 +561,7 @@ final class DataView extends JPanel {
             if (!selected && DataView.this.changed.contains(row.key())) {
                 setBackground(ChangeMarks.tint());
             }
-            setToolTipText(row.expandable() || row.value().length() < 60 ? null : row.value());
+            setToolTipText(row.expandable() || row.value().length() < 60 ? null : Tooltip.of("").code(row.value()).html());
         }
     }
 }

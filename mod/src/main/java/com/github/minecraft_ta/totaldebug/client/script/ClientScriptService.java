@@ -75,7 +75,7 @@ public final class ClientScriptService implements AutoCloseable {
             sendUntrackedResult(message.scriptId(), ExecutionStatus.COMPILATION_FAILED, exception.getMessage());
             return;
         }
-        SubjectRef subject = null;
+        SubjectRef.InWorld subject = null;
         if (!message.subject().isEmpty()) {
             if (!message.subjectSessionId().equals(this.gameSession.get())) {
                 sendUntrackedResult(message.scriptId(), ExecutionStatus.RUN_EXCEPTION,
@@ -83,7 +83,7 @@ public final class ClientScriptService implements AutoCloseable {
                 return;
             }
             try {
-                subject = SubjectRef.parse(message.subject());
+                subject = SubjectRef.parseWorld(message.subject());
             } catch (IllegalArgumentException exception) {
                 sendUntrackedResult(message.scriptId(), ExecutionStatus.COMPILATION_FAILED,
                         "Invalid script target: " + exception.getMessage());
@@ -130,7 +130,7 @@ public final class ClientScriptService implements AutoCloseable {
         }
     }
 
-    private void runOnClient(RunScriptMessage message, ScriptExecutionEnvironment environment, SubjectRef subject) {
+    private void runOnClient(RunScriptMessage message, ScriptExecutionEnvironment environment, SubjectRef.InWorld subject) {
         ScriptRunner activeRunner;
         try {
             activeRunner = runner();

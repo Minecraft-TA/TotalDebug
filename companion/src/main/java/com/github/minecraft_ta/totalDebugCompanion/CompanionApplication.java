@@ -28,6 +28,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationServi
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
@@ -64,6 +65,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.LinkedHashMap;
@@ -157,6 +159,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 }
                 @Override public void resourceSnapshot(ResourceSnapshotMessage message) {
                     itemIcons.accept(message.archive(), message.layers());
+                }
+                @Override public void packCatalog(PackCatalogMessage message) {
+                    handlePackCatalog(message);
                 }
                 @Override public void inspectSubject(InspectSubjectMessage message) {
                     openOrQueue(new NavigationTarget.Inspection(message.payload()), NavigationService.Activation.ACTIVATE_WINDOW);
@@ -658,6 +663,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             }
             synchronized (lifecycleLock) { current = replacement; }
             installed = true;
+            restoreCatalog(replacement);
             runCleanup("Restore debugger preferences", () -> restoreProjectState(replacement));
             if (ui != null) refreshUiProfile();
             updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Selected project is not connected to Minecraft."));
@@ -715,8 +721,35 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         validateProfile(requested);
         ProjectScope replacement = ProjectScope.open(lifecycleLock, requested);
         synchronized (lifecycleLock) { current = replacement; }
+        restoreCatalog(replacement);
         restoreProjectState(replacement);
         if (runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory(), requested.workspaceDirectory());
+    }
+
+    /** Shows the project's saved pack catalog and item icons, which stay browsable without a game connection. */
+    private void restoreCatalog(ProjectScope scope) {
+        scope.catalog().addListener(() -> {
+            if (currentScope() == scope) onUi(CompanionUi::catalogChanged);
+        });
+        itemIcons.setItemLookup(itemId -> scope.catalog().index().flatMap(index -> index.itemIcon(itemId)));
+        // Independent tasks: unreadable icon archives must not keep the catalog from loading.
+        itemIcons.restore(scope.paths().previews());
+        CompletableFuture.runAsync(scope.catalog()::restore);
+    }
+
+    private void handlePackCatalog(PackCatalogMessage message) {
+        ProjectScope scope;
+        synchronized (lifecycleLock) {
+            if (switching) return;
+            scope = current;
+        }
+        if (scope == null || !scope.isActive()) return;
+        switch (message.state()) {
+            case PackCatalogMessage.CAPTURING -> scope.catalog().capturing();
+            case PackCatalogMessage.AVAILABLE -> scope.catalog().accept(message.inventoryId(),
+                    Path.of(message.catalogFile()), ForkJoinPool.commonPool());
+            default -> scope.catalog().failed(message.detail());
+        }
     }
 
     private void restoreProjectState(ProjectScope scope) {
@@ -750,11 +783,14 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     runtimeInventoryPending(
                             message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail());
                 }
-                case RuntimeInventoryMessage.AVAILABLE -> runtimeIndexService.accept(
-                        current.dataDirectory(),
-                        message.inventoryId(),
-                        Path.of(message.inventoryFile())
-                );
+                case RuntimeInventoryMessage.AVAILABLE -> {
+                    runtimeIndexService.accept(
+                            current.dataDirectory(),
+                            message.inventoryId(),
+                            Path.of(message.inventoryFile())
+                    );
+                    this.current.catalog().inventoryAnnounced(message.inventoryId());
+                }
                 case RuntimeInventoryMessage.FAILED -> runtimeIndexService.failedBeforeBuild(message.detail());
                 default -> runtimeIndexService.failedBeforeBuild("Minecraft sent an unknown runtime inventory state");
             }

@@ -1,15 +1,22 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.SubjectLinks;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptSubject;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.values.ScriptResultTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -24,7 +31,6 @@ import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.ImageIcon;
@@ -38,7 +44,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JToggleButton;
-import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.border.CompoundBorder;
@@ -46,7 +51,6 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -74,16 +78,13 @@ public final class InspectionPanel extends JPanel {
     static final List<Integer> LIVE_INTERVALS_MS = List.of(500, 1_000, 2_000, 5_000);
     private static final String RESULT_CARD = "result";
     private static final String PROBLEM_CARD = "problem";
-    private static final int HEADER_ICON_SIZE = 32;
-    private static final int TAB_ICON_SIZE = 32;
 
     private final InspectSubjectPayload subject;
     private final Consumer<NavigationTarget> navigator;
     private final Supplier<SnippetExecutionService> snippets;
     private final ItemIconService icons;
     private final Runnable removeIconListener;
-    private final JLabel icon = new JLabel();
-    private final JLabel name = new JLabel();
+    private final SubjectHeader header = new SubjectHeader();
     private final JLabel replaced = new JLabel();
     private final JLabel problemNotice = new JLabel();
     private final ItemTabIcon tabIcon = new ItemTabIcon(Icons.EVALUATE_EXPRESSION);
@@ -108,8 +109,10 @@ public final class InspectionPanel extends JPanel {
     private final FactsPanel.Actions actions = new FactsPanel.Actions() {
         @Override
         public void open(FactLink link) {
-            if (link.kind() == FactLink.Kind.CLASS) {
-                InspectionPanel.this.navigator.accept(new NavigationTarget.RuntimeClass(link.target()));
+            try {
+                InspectionPanel.this.navigator.accept(SubjectLinks.target(link));
+            } catch (IllegalArgumentException unsupported) {
+                showProblemNotice(unsupported.getMessage(), unsupported.getMessage());
             }
         }
 
@@ -168,8 +171,9 @@ public final class InspectionPanel extends JPanel {
         this.runSide.setRenderer(labels(value -> value == Side.CLIENT ? "Client" : "Server"));
         this.runSide.setToolTipText("Read the server's or the client's copy of the world");
         this.face.setRenderer(labels(value -> sideLabel(value == null ? "" : value.toString())));
-        this.face.setToolTipText("<html>Side passed to capability queries.<br>None asks for the unsided handler, "
-                + "which the mod defines; it is not a combination of the six faces.</html>");
+        this.face.setToolTipText(Tooltip.of("Side passed to capability queries")
+                .text("None asks for the unsided handler, which the mod defines; it is not a combination of the six faces.")
+                .html());
         this.runSide.addActionListener(event -> refresh());
         this.face.addActionListener(event -> refresh());
         this.refresh.setToolTipText("Read again");
@@ -194,30 +198,41 @@ public final class InspectionPanel extends JPanel {
         reloadIcons();
     }
 
-    /** The icon and name, with the controls on the same row. */
+    /** The icon, name and links to what the subject is, with the controls on the same row. */
     private JComponent header() {
-        this.name.putClientProperty("FlatLaf.styleClass", "h3");
-        this.icon.setPreferredSize(new Dimension(HEADER_ICON_SIZE, HEADER_ICON_SIZE));
-        this.icon.setHorizontalAlignment(SwingConstants.CENTER);
-        JPanel title = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        title.add(this.icon);
-        title.add(Box.createHorizontalStrut(10));
-        title.add(this.name);
-
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         for (JComponent control : new JComponent[]{this.runSide, this.face, this.live, this.liveInterval,
                 this.toolsButton, this.refresh}) {
-            controls.add(control);
+            this.header.addControl(control);
         }
-        JPanel header = new JPanel(new BorderLayout(12, 0));
-        header.add(title, BorderLayout.WEST);
-        header.add(controls, BorderLayout.EAST);
-        header.setBorder(new CompoundBorder(
-                DynamicMatteBorder.separatorRule(0, 0, 1, 0),
-                BorderFactory.createEmptyBorder(8, 12, 8, 12)
-        ));
-        this.name.setText(this.identity.title());
-        return header;
+        showIdentityHeader();
+        return this.header;
+    }
+
+    /** The registry id, the owning mod and the definition this occurrence is an instance of. */
+    private void showIdentityHeader() {
+        this.header.setTitle(this.identity.title());
+        List<JComponent> parts = new ArrayList<>();
+        parts.add(SubjectHeader.text(this.identity.registryId()));
+        String namespace = namespace(this.identity.registryId());
+        if (!namespace.isEmpty()) {
+            String modName = this.identity.modName().isBlank() ? namespace : this.identity.modName();
+            parts.add(new LinkLabel(modName, Icons.MOD, "mod " + namespace,
+                    () -> this.navigator.accept(new NavigationTarget.ModPage(namespace))));
+            SubjectRef.Definition definition = definition(this.identity);
+            parts.add(new LinkLabel(this.identity.title(), SubjectIcons.definition(definition.kind()),
+                    definition.format(), () -> this.navigator.accept(new NavigationTarget.Definition(definition))));
+        }
+        this.header.setSubtitle(parts);
+    }
+
+    static SubjectRef.Definition definition(SubjectIdentity identity) {
+        return new SubjectRef.Definition(identity.kind() == SubjectIdentity.Kind.ENTITY
+                ? SubjectRef.DefinitionKind.ENTITY_TYPE : SubjectRef.DefinitionKind.BLOCK, identity.registryId());
+    }
+
+    private static String namespace(String registryId) {
+        int separator = registryId.indexOf(':');
+        return separator <= 0 ? "" : registryId.substring(0, separator);
     }
 
     /** Messages shown only while they apply: a replaced subject, and a read that failed. */
@@ -240,11 +255,17 @@ public final class InspectionPanel extends JPanel {
     }
 
     /** The first overview section: what occupies the subject, where it is and the classes behind it. */
-    static FactSection identitySection(SubjectIdentity identity, SubjectRef subject) {
+    static FactSection identitySection(SubjectIdentity identity, SubjectRef.InWorld subject) {
         List<Fact> facts = new ArrayList<>();
-        facts.add(Fact.text("ID", identity.registryId()));
+        facts.add(Fact.text("ID", identity.registryId()).withLink(FactLink.toSubject(definition(identity))));
         if (!identity.modName().isBlank()) {
-            facts.add(Fact.text("Mod", identity.modName()));
+            Fact mod = Fact.text("Mod", identity.modName());
+            try {
+                mod = mod.withLink(FactLink.toSubject(new SubjectRef.Mod(namespace(identity.registryId()))));
+            } catch (IllegalArgumentException notAModId) {
+                // A namespace that is not a mod id has no mod page to link to.
+            }
+            facts.add(mod);
         }
         switch (subject) {
             case SubjectRef.Block block -> facts.add(Fact.text("Position",
@@ -290,12 +311,13 @@ public final class InspectionPanel extends JPanel {
         JavaSnippetSource.GeneratedSource source = JavaSnippetSource.body("InspectTarget",
                 readerSource((String) this.face.getSelectedItem()));
         long current = ++this.revision;
+        if (!awaitReadiness(current, selectedSide)) return;
         try {
             this.active = this.snippets.get().execute(
                     source,
                     selectedSide,
                     ScriptExecutionEnvironment.POST_TICK,
-                    new ScriptSubject(SubjectRef.parse(this.subject.subject()), this.subject.gameSessionId())
+                    new ScriptSubject(SubjectRef.parseWorld(this.subject.subject()), this.subject.gameSessionId())
             );
         } catch (RuntimeException exception) {
             readFailed(exception.getMessage());
@@ -317,6 +339,26 @@ public final class InspectionPanel extends JPanel {
         // A replaced subject starts its tools again while finishing; the next read waits for the run current then.
         finished.thenCompose(ignored -> this.toolRun).whenComplete((ignored, failure) ->
                 SwingUtilities.invokeLater(() -> scheduleLive(current)));
+    }
+
+    /**
+     * A tab opened from the game usually exists before the runtime index and the server comparison are ready. Until
+     * the chosen side can run the read, the page shows why and reads as soon as that changes. Returns whether the
+     * read can start now.
+     */
+    private boolean awaitReadiness(long current, Side side) {
+        ScriptCompilationService.Readiness readiness;
+        try {
+            readiness = this.snippets.get().readiness(side);
+        } catch (RuntimeException unavailable) {
+            return true;
+        }
+        if (readiness.ready()) return true;
+        readFailed(readiness.detail());
+        readiness.changed().thenRunAsync(() -> {
+            if (!this.disposed && current == this.revision) refresh();
+        }, SwingUtilities::invokeLater);
+        return false;
     }
 
     /** Queues the next live read once the current one, including tools, has finished. */
@@ -392,7 +434,7 @@ public final class InspectionPanel extends JPanel {
             this.replaced.setVisible(true);
         }
         this.identity = reported;
-        this.name.setText(this.identity.title());
+        showIdentityHeader();
         showSections();
         reloadIcons();
         EditorTabs tabs = (EditorTabs) SwingUtilities.getAncestorOfClass(EditorTabs.class, this);
@@ -423,7 +465,7 @@ public final class InspectionPanel extends JPanel {
     /** Shows the identity section followed by the latest read's sections, updating in place where possible. */
     private void showSections() {
         List<FactSection> sections = new ArrayList<>();
-        sections.add(identitySection(this.identity, SubjectRef.parse(this.subject.subject())));
+        sections.add(identitySection(this.identity, SubjectRef.parseWorld(this.subject.subject())));
         sections.addAll(this.readSections);
         if (this.facts == null || !this.facts.update(sections)) {
             this.facts = new FactsPanel(sections, this.icons, this.actions, this.collapsed);
@@ -453,10 +495,8 @@ public final class InspectionPanel extends JPanel {
 
     private void showProblemNotice(String text, String details) {
         this.problemNotice.setText(text);
-        this.problemNotice.setForeground(ThemeColors.text());
-        String bounded = details.length() > 4_000 ? details.substring(0, 4_000) + "…" : details;
-        this.problemNotice.setToolTipText(bounded.isBlank() ? null
-                : "<html><pre>" + escape(bounded.strip()) + "</pre></html>");
+        ThemeColors.keepForeground(this.problemNotice, ThemeColors::text);
+        this.problemNotice.setToolTipText(Tooltip.of("").code(details).html());
         this.problemNotice.setVisible(true);
     }
 
@@ -469,9 +509,6 @@ public final class InspectionPanel extends JPanel {
         return text.lines().findFirst().orElse(text);
     }
 
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-    }
 
     private void reloadIcons() {
         if (this.disposed) return;
@@ -479,16 +516,18 @@ public final class InspectionPanel extends JPanel {
             this.facts.reloadIcons();
         }
         this.tools.reloadIcons();
-        // The client's icon has the selected item's tints; after a replacement only the plain item model is known.
+        // The client's icon has the selected stack's tints; after a replacement the captured default stack's are used.
         boolean selectedItem = this.identity.iconItem().equals(this.subject.identity().iconItem());
-        String model = selectedItem ? this.subject.iconModel()
-                : this.identity.iconItem().isEmpty() ? "" : ItemIconService.itemModel(this.identity.iconItem());
-        Map<Integer, Integer> tints = selectedItem ? this.subject.iconTints() : Map.of();
-        this.icons.render(model, tints, HEADER_ICON_SIZE)
+        CatalogIndex.ItemIcon replacement = selectedItem || this.identity.iconItem().isEmpty()
+                ? null : this.icons.itemIcon(this.identity.iconItem());
+        String model = selectedItem ? this.subject.iconModel() : replacement == null ? "" : replacement.model();
+        Map<Integer, Integer> tints = selectedItem ? this.subject.iconTints()
+                : replacement == null ? Map.of() : replacement.tints();
+        this.icons.render(model, tints, SubjectHeader.ICON_SIZE)
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
-                    if (!this.disposed) this.icon.setIcon(image.map(ImageIcon::new).orElse(null));
+                    if (!this.disposed) this.header.setIcon(image.map(ImageIcon::new).orElse(null));
                 }));
-        this.icons.render(model, tints, TAB_ICON_SIZE)
+        this.icons.render(model, tints, this.tabIcon.size())
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                     if (this.disposed) return;
                     this.tabIcon.setImage(image.orElse(null));

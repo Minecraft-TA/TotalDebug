@@ -124,6 +124,17 @@ final class ResourcePackStack implements AutoCloseable {
         return List.copyOf(result);
     }
 
+    /** The highest-priority root containing a resource, which is where its effective copy lives. */
+    Optional<ItemRenderResourceRoot> provider(String resourcePath) throws IOException {
+        validateResourcePath(resourcePath);
+        for (int index = this.roots.size() - 1; index >= 0; index--) {
+            if (this.roots.get(index).contains(resourcePath)) {
+                return Optional.of(this.roots.get(index).descriptor());
+            }
+        }
+        return Optional.empty();
+    }
+
     boolean contains(String resourcePath) throws IOException {
         validateResourcePath(resourcePath);
         for (int index = this.roots.size() - 1; index >= 0; index--) {
@@ -212,6 +223,8 @@ final class ResourcePackStack implements AutoCloseable {
 
         List<String> list(String prefix, String suffix) throws IOException;
 
+        ItemRenderResourceRoot descriptor();
+
         @Override
         default void close() throws IOException {
         }
@@ -270,6 +283,11 @@ final class ResourcePackStack implements AutoCloseable {
         private ArchiveRoot(ItemRenderResourceRoot descriptor) throws IOException {
             this.descriptor = descriptor;
             this.archive = new ZipFile(descriptor.path().toFile());
+        }
+
+        @Override
+        public ItemRenderResourceRoot descriptor() {
+            return this.descriptor;
         }
 
         @Override

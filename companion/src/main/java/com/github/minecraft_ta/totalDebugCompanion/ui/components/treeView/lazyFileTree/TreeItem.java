@@ -33,6 +33,11 @@ public class TreeItem {
         return false;
     }
 
+    /** Whether double-click and Enter open this item; directories only expand unless they open a page. */
+    public boolean isActivatable() {
+        return !isDirectory();
+    }
+
     public String getName() {
         return name;
     }
@@ -45,8 +50,14 @@ public class TreeItem {
         return this.presentation == null ? PrimarySecondaryText.primary(this.name) : this.presentation;
     }
 
+    /** Shown while the pointer rests on the row; never used as data. */
     public String getTooltip() {
         return this.name;
+    }
+
+    /** The full location that Copy path and compaction use, or null for rows that are no file or folder. */
+    public String location() {
+        return null;
     }
 
     public void setIcon(Icon icon) {

@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totalDebugCompanion;
 
 import javax.swing.JLabel;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 
@@ -103,6 +105,23 @@ public final class UiDevHarness {
                 exitCode = 2;
             } finally { System.exit(exitCode); }
         });
+    }
+
+    /** The test mod's catalog, with its configuration file holding one modified setting. */
+    private static void installCatalogFixture(Path root) throws Exception {
+        Path jar = CatalogFixtures.modJar(Files.createDirectories(root.resolve("catalog-fixture")));
+        Files.writeString(jar.resolveSibling("testmod-common.toml"), """
+                #Widget behavior
+                [widgets]
+                	#How fast widgets spin
+                	speed = 9
+                	mode = "FAST"
+                """);
+        ProjectScope scope = application.currentScope();
+        Path file = scope.paths().catalog();
+        Files.createDirectories(file.getParent());
+        CatalogFixtures.catalog(jar).write(file);
+        scope.catalog().accept(CatalogFixtures.INVENTORY, file, Runnable::run);
     }
 
     private static void installRuntimeFixture(Path indexFile, Path classes) throws Exception {
@@ -810,6 +829,7 @@ public final class UiDevHarness {
         }
         application.openProject(profile).join();
         installRuntimeFixture(indexFile, sampleClasses);
+        installCatalogFixture(root);
         writeSampleSource(sample);
 
         GlobalConfig.getInstance().loadFrom(root);

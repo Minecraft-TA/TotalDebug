@@ -1073,10 +1073,6 @@
       }
     },
     "Tree": {
-      "collapsedIcon": "/expui/general/chevronRight.svg",
-      "collapsedSelectedIcon": "/expui/general/chevronRight.svg",
-      "expandedIcon": "/expui/general/chevronDown.svg",
-      "expandedSelectedIcon": "/expui/general/chevronDown.svg",
       "forceFocusedSelectionForeground": false,
       "rowHeight": 24,
       "hash": "tree-indent-guide-border",

@@ -1,7 +1,20 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
+import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
+import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
+import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.CatalogSearch;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogIcons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ModLogoIcons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogMessages;
 
 import java.util.Locale;
 import java.util.function.Supplier;
@@ -18,6 +31,9 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Category;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ClassResult;
+import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.DefinitionResult;
+import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ModResult;
+import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ResourceResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Result;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.SymbolResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.TextResult;
@@ -45,6 +61,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -61,6 +78,8 @@ import java.util.stream.Collectors;
 
 public class SearchEverywherePopup extends JFrame {
     private static final int RESULT_LIMIT = 160;
+    private static final int CODE_ROW_HEIGHT = 32;
+    private static final int PREVIEW_SIZE = UiMetrics.previewPixels(UiMetrics.ITEM_ICON_SIZE);
     private static final String RESULTS_CARD = "results";
     private static final String MESSAGE_CARD = "message";
     private static final String NEXT_CATEGORY_ACTION = "searchEverywhere.nextCategory";
@@ -124,8 +143,14 @@ public class SearchEverywherePopup extends JFrame {
     private final Window owner;
     private final RuntimeIndexService indexLoader;
     private final Supplier<RuntimeBinding> runtime;
+    private final Supplier<PackCatalogService> catalog;
+    private final CatalogIcons catalogIcons;
     private final Consumer<NavigationTarget> navigator;
+    private CatalogSearch catalogSearch;
+    private final Map<String, Icon> modLogos = new HashMap<>();
+    private String resultNote = "";
     SearchEverywherePopup(Window owner, RuntimeIndexService indexLoader, Supplier<RuntimeBinding> runtime,
+                          Supplier<PackCatalogService> catalog, ItemIconService itemIcons,
                           Consumer<NavigationTarget> navigator) {
         this.owner = owner;
         if (owner != null && !owner.getFocusableWindowState()) {
@@ -134,6 +159,8 @@ public class SearchEverywherePopup extends JFrame {
         }
         this.indexLoader = indexLoader;
         this.runtime = runtime;
+        this.catalog = Objects.requireNonNull(catalog, "catalog");
+        this.catalogIcons = new CatalogIcons(itemIcons, PREVIEW_SIZE);
         this.navigator = navigator;
         this.moduleFilterPopup = new ModuleFilterPopup(
                 this.modules,
@@ -212,8 +239,15 @@ public class SearchEverywherePopup extends JFrame {
         open();
     }
 
+    /** Searches again when the selected project's pack catalog changed while the popup is open. */
+    void catalogChanged() {
+        if (isVisible()) refreshResults();
+    }
+
     @Override
     public void dispose() {
+        this.catalogIcons.dispose();
+        this.modLogos.clear();
         indexLoader.removeStatusListener(this.indexStatusListener);
         ThemeManager.removeThemeChangeListener(this.themeListener);
         this.searchGeneration.incrementAndGet();
@@ -274,7 +308,7 @@ public class SearchEverywherePopup extends JFrame {
         installCategoryCycling(this.resultList);
         this.resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.resultList.setCellRenderer(new SearchResultRenderer());
-        this.resultList.setFixedCellHeight(32);
+        this.resultList.setFixedCellHeight(CODE_ROW_HEIGHT);
         this.resultList.addListSelectionListener(event -> {
             if (event.getValueIsAdjusting()) {
                 return;
@@ -304,7 +338,7 @@ public class SearchEverywherePopup extends JFrame {
     private void configureSearchField() {
         this.searchTextField.setName("searchEverywhere.query");
         installCategoryCycling(this.searchTextField);
-        this.searchTextField.putClientProperty("JTextField.placeholderText", "Search classes and symbols");
+        this.searchTextField.putClientProperty("JTextField.placeholderText", placeholder(this.category));
         this.searchTextField.getDocument().addDocumentListener((DocumentChangeListener) event -> queueDocumentRefresh());
         this.searchTextField.registerKeyboardAction(
                 event -> moveSelection(-1),
@@ -409,11 +443,34 @@ public class SearchEverywherePopup extends JFrame {
     private void selectCategory(Category selected) {
         this.category = selected;
         this.categoryButtons.get(selected).setSelected(true);
-        this.searchTextField.putClientProperty(
-                "JTextField.placeholderText",
-                selected == Category.TEXT ? "Search indexed string literals" : "Search classes and symbols"
-        );
+        this.searchTextField.putClientProperty("JTextField.placeholderText", placeholder(selected));
         refreshResults();
+    }
+
+    static String placeholder(Category category) {
+        return switch (category) {
+            case ALL -> "Search mods, content, classes and symbols";
+            case MODS -> "Search mods";
+            case ITEMS -> "Search items";
+            case BLOCKS -> "Search blocks";
+            case ENTITIES -> "Search entity types";
+            case RESOURCES -> "Search resource paths";
+            case CLASSES, SYMBOLS -> "Search classes and symbols";
+            case TEXT -> "Search indexed string literals";
+        };
+    }
+
+    /** The search over the current project's captured catalog, or null while it has none. */
+    private CatalogSearch catalogSearch() {
+        PackCatalogService service = this.catalog.get();
+        CatalogIndex index = service == null ? null : service.index().orElse(null);
+        if (index == null) {
+            this.catalogSearch = null;
+        } else if (this.catalogSearch == null || this.catalogSearch.index() != index) {
+            this.catalogSearch = new CatalogSearch(index);
+            this.modLogos.clear();
+        }
+        return this.catalogSearch;
     }
 
     private void cycleCategory(int direction) {
@@ -472,8 +529,17 @@ public class SearchEverywherePopup extends JFrame {
             this.pendingSearch = null;
         }
         RuntimeBinding installed = runtime.get();
-        if (installed == null) {
+        CatalogSearch catalogSearch = this.category.usesCatalog() ? catalogSearch() : null;
+        if (installed == null && (!this.category.usesCatalog() || catalogSearch == null && this.category.usesIndex())) {
             showIndexStatus(indexLoader.status());
+            return;
+        }
+        if (catalogSearch == null && !this.category.usesIndex()) {
+            PackCatalogService service = this.catalog.get();
+            this.searchPending = false;
+            this.resultModel.clear();
+            this.resultCount.setText("Catalog unavailable");
+            showMessage(service == null ? "No project is open" : CatalogMessages.unavailable(service.state()));
             return;
         }
 
@@ -482,12 +548,12 @@ public class SearchEverywherePopup extends JFrame {
             this.searchPending = false;
             this.resultModel.clear();
             this.resultCount.setText(" ");
-            showMessage(this.category == Category.TEXT
-                    ? "Type to search indexed string literals"
-                    : "Type to search classes and symbols");
+            String placeholder = placeholder(this.category);
+            showMessage("Type to s" + placeholder.substring(1));
             return;
         }
-        if (this.category != Category.TEXT && !query.chars().allMatch(character -> character < 128)) {
+        if ((this.category == Category.CLASSES || this.category == Category.SYMBOLS)
+                && !query.chars().allMatch(character -> character < 128)) {
             this.searchPending = false;
             this.resultModel.clear();
             this.resultCount.setText("0 results");
@@ -495,22 +561,27 @@ public class SearchEverywherePopup extends JFrame {
             return;
         }
 
-        if (sourceCatalog != installed.sources()) syncRuntimeModules(installed);
+        if (installed != null && sourceCatalog != installed.sources()) syncRuntimeModules(installed);
         Category requestedCategory = this.category;
-        int[] sourceIds = this.selectedModuleIds.size() == this.modules.size()
+        boolean allModules = this.modules.isEmpty() || this.selectedModuleIds.size() == this.modules.size();
+        int[] sourceIds = installed == null || allModules
                 ? null
                 : this.sourceCatalog.sourceIdsForModules(this.selectedModuleIds);
+        Set<String> moduleIds = allModules ? null : Set.copyOf(this.selectedModuleIds);
+        this.resultNote = installed == null && requestedCategory.usesIndex() ? ", class index unavailable" : "";
         this.searchPending = true;
         this.resultCount.setText("Searching…");
         this.pendingSearch = this.searchExecutor.schedule(() -> {
             try {
                 if (runtime.get() != installed) return;
                 List<Result> results = this.search.search(
-                        installed.snapshot().index(),
+                        installed == null ? null : installed.snapshot().index(),
+                        catalogSearch,
                         query,
                         requestedCategory,
                         RESULT_LIMIT,
-                        sourceIds
+                        sourceIds,
+                        moduleIds
                 );
                 SwingUtilities.invokeLater(() -> { if (runtime.get() == installed) applyResults(generation, results); });
             } catch (RuntimeException failure) {
@@ -529,8 +600,11 @@ public class SearchEverywherePopup extends JFrame {
                 ? null
                 : identity(this.resultList.getSelectedValue());
         this.resultModel.clear();
+        // Items, blocks and mods show larger previews; code results keep compact rows.
+        this.resultList.setFixedCellHeight(results.stream().anyMatch(SearchEverywherePopup::hasPreview)
+                ? PREVIEW_SIZE + 8 : CODE_ROW_HEIGHT);
         this.resultModel.addAll(results);
-        this.resultCount.setText(results.size() + (results.size() == 1 ? " result" : " results"));
+        this.resultCount.setText(results.size() + (results.size() == 1 ? " result" : " results") + this.resultNote);
         if (results.isEmpty()) {
             showMessage("No results in the selected modules");
             return;
@@ -603,6 +677,9 @@ public class SearchEverywherePopup extends JFrame {
             case TextResult text -> navigator.accept(
                     new NavigationTarget.LiteralUsages(text.value())
             );
+            case ModResult mod -> navigator.accept(new NavigationTarget.ModPage(mod.modId()));
+            case DefinitionResult definition -> navigator.accept(new NavigationTarget.Definition(definition.entry().subject()));
+            case ResourceResult resource -> navigator.accept(resource.resource().target());
         }
     }
 
@@ -610,7 +687,8 @@ public class SearchEverywherePopup extends JFrame {
         var menu = new JPopupMenu();
         if (this.searchPending || row < 0 || row >= this.resultModel.size()) return menu;
         Result result = this.resultModel.get(row);
-        var open = new JMenuItem(result instanceof TextResult ? "Find usages" : "Open source",
+        boolean code = result instanceof ClassResult || result instanceof SymbolResult;
+        var open = new JMenuItem(result instanceof TextResult ? "Find usages" : code ? "Open source" : "Open",
                 result instanceof TextResult ? Icons.SEARCH_ICON : Icons.JUMP_TO_SOURCE);
         open.addActionListener(event -> openResult(result));
         menu.add(open);
@@ -627,11 +705,23 @@ public class SearchEverywherePopup extends JFrame {
                     ? new CodeSymbol.FieldSymbol(symbol.ownerBinaryName(), symbol.name(), symbol.descriptor()).displayName()
                     : new CodeSymbol.MethodSymbol(symbol.ownerBinaryName(), symbol.name(), symbol.descriptor()).displayName();
             case TextResult text -> text.value();
+            case ModResult mod -> mod.modId();
+            case DefinitionResult definition -> definition.entry().id();
+            case ResourceResult resource -> resource.resource().path();
         };
     }
 
     private ModuleSummary moduleSummary(Result result) {
-        var sources = Arrays.stream(result.sourceIds())
+        int[] sourceIds = switch (result) {
+            case ClassResult type -> type.sourceIds();
+            case SymbolResult symbol -> symbol.sourceIds();
+            case TextResult text -> text.sourceIds();
+            case ModResult ignored -> null;
+            case DefinitionResult ignored -> null;
+            case ResourceResult ignored -> null;
+        };
+        if (sourceIds == null) return catalogSummary(result);
+        var sources = Arrays.stream(sourceIds)
                 .mapToObj(this.sourceCatalog::sourceFor)
                 .distinct()
                 .toList();
@@ -642,12 +732,9 @@ public class SearchEverywherePopup extends JFrame {
         PrimarySecondaryText text = resultModules.size() == 1
                 ? RuntimeModulePresentation.of(resultModules.getFirst()).text()
                 : PrimarySecondaryText.primary(RuntimeModulePresentation.compactSummary(resultModules));
-        String tooltip = sources.stream()
-                .map(RuntimeModulePresentation::of)
-                .map(RuntimeModulePresentation::tooltip)
-                .distinct()
-                .collect(Collectors.joining(" | "));
-        return new ModuleSummary(text, tooltip);
+        Tooltip tooltip = Tooltip.of("");
+        sources.stream().map(RuntimeModulePresentation::of).distinct().forEach(module -> module.describe(tooltip));
+        return new ModuleSummary(text, tooltip.html());
     }
 
     private static String identity(Result result) {
@@ -655,7 +742,26 @@ public class SearchEverywherePopup extends JFrame {
             case ClassResult type -> "C:" + type.binaryName();
             case SymbolResult symbol -> "S:" + symbol.ownerBinaryName() + '#' + symbol.name() + symbol.descriptor();
             case TextResult text -> "T:" + text.value();
+            case ModResult mod -> "M:" + mod.modId();
+            case DefinitionResult definition -> "D:" + definition.entry().subject().format();
+            case ResourceResult resource -> "R:" + resource.resource().file() + "!" + resource.resource().path();
         };
+    }
+
+    /** The owning mod and kind of a catalog result, shown where index results show their module. */
+    private static ModuleSummary catalogSummary(Result result) {
+        PrimarySecondaryText text = switch (result) {
+            case ModResult ignored -> PrimarySecondaryText.primary("Mod");
+            case DefinitionResult definition -> new PrimarySecondaryText(definition.owner(),
+                    switch (definition.entry().kind()) {
+                        case ITEM -> "Item";
+                        case BLOCK -> "Block";
+                        case ENTITY_TYPE -> "Entity type";
+                    });
+            case ResourceResult resource -> new PrimarySecondaryText(resource.owner(), "Resource");
+            default -> PrimarySecondaryText.primary("");
+        };
+        return new ModuleSummary(text, (text.primary() + "  " + text.secondary()).strip());
     }
 
     private static String symbolPrimary(SymbolResult symbol) {
@@ -727,6 +833,20 @@ public class SearchEverywherePopup extends JFrame {
                     presentation = new PrimarySecondaryText(textPreview(text.value()), "String literal");
                     icon = Icons.VALUE;
                 }
+                case ModResult mod -> {
+                    presentation = new PrimarySecondaryText(mod.title(), (mod.modId() + "  " + mod.version()).strip());
+                    icon = modLogo(mod.modId());
+                }
+                case DefinitionResult definition -> {
+                    presentation = new PrimarySecondaryText(definition.entry().title(), definition.entry().id());
+                    Icon drawn = catalogIcons.icon(definition.icon(), list);
+                    icon = drawn == null
+                            ? new CenteredIcon(SubjectIcons.definition(definition.entry().kind()), PREVIEW_SIZE) : drawn;
+                }
+                case ResourceResult resource -> {
+                    presentation = new PrimarySecondaryText(resource.resource().fileName(), resource.resource().path());
+                    icon = FileTypeResolver.resolve(resource.resource().fileName()).icon();
+                }
             }
 
             PrimarySecondaryLabel left = new PrimarySecondaryLabel();
@@ -755,6 +875,15 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private record ModuleSummary(PrimarySecondaryText text, String tooltip) {
+    }
+
+    private static boolean hasPreview(Result result) {
+        return result instanceof ModResult || result instanceof DefinitionResult;
+    }
+
+    private Icon modLogo(String modId) {
+        return this.modLogos.computeIfAbsent(modId, id -> ModLogoIcons.icon(ModSummary.resolve(id,
+                this.catalogSearch == null ? null : this.catalogSearch.index(), this.sourceCatalog).orElse(null), PREVIEW_SIZE));
     }
 
     private static final class SearchCategoryButton extends JToggleButton {

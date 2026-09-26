@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
 import com.formdev.flatlaf.FlatDefaultsAddon;
 import com.formdev.flatlaf.FlatLaf;
+import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 
@@ -49,6 +50,12 @@ public class CompanionDefaultsAddon extends FlatDefaultsAddon {
         }
 
         defaults.put("Tree.rowHeight", UiMetrics.TREE_ROW_HEIGHT);
+        // The JetBrains chevrons; FlatSVGIcon picks the dark variant in dark themes.
+        for (String state : new String[]{"collapsed", "expanded"}) {
+            String svg = state.equals("collapsed") ? "icons/arrow_right.svg" : "icons/arrow_down.svg";
+            defaults.put("Tree." + state + "Icon", new FlatSVGIcon(svg));
+            defaults.put("Tree." + state + "SelectedIcon", new FlatSVGIcon(svg));
+        }
         defaults.put("TabbedPane.tabInsets", new Insets(0, 10, 0, 10));
         defaults.put("TabbedPane.tabHeight", UiMetrics.TAB_HEIGHT);
         defaults.put("TabbedPane.tabSelectionHeight", 2);

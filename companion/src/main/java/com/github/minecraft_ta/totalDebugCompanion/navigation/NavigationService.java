@@ -9,6 +9,8 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
+import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
+import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LiteralUsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
@@ -117,6 +119,7 @@ public final class NavigationService {
             case NavigationTarget.ArchiveEntry entry -> project.sources().modules().stream()
                     .flatMap(module -> project.sources().sourcesForModule(module.id()).stream())
                     .anyMatch(source -> source.path().equals(entry.archive().toAbsolutePath().normalize()));
+            case NavigationTarget.ModPage ignored -> true;
             case null, default -> false;
         };
         if (!available) return null;
@@ -129,6 +132,7 @@ public final class NavigationService {
                     case NavigationTarget.LocalFile file -> requireRevealed(fileTree.revealLocalPath(file.path()));
                     case NavigationTarget.ArchiveEntry entry -> requireRevealed(fileTree.revealArchivePath(entry.archive(), entry.entryName()));
                     case NavigationTarget.RuntimeClass type -> revealRuntimePath(type.binaryName(), type.binaryName().replace('.', '/') + ".class");
+                    case NavigationTarget.ModPage page -> requireRevealed(fileTree.revealModPage(page));
                     default -> throw new IllegalArgumentException("Editor has no tree location");
                 };
                 reportFailure(result, target);
@@ -278,6 +282,17 @@ public final class NavigationService {
                     this.window.openSearchEverywhere(search);
                     return CompletableFuture.completedFuture(null);
                 }, Activation.KEEP_CURRENT_WINDOW);
+                case NavigationTarget.ModPage page -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        ModView.class,
+                        view -> view.modId().equals(page.modId()),
+                        () -> new ModView(editors.get(), page)
+                ).thenAccept(view -> view.show(page)), activation);
+                case NavigationTarget.Definition definition -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        DefinitionView.class,
+                        view -> view.subject().equals(definition.subject()),
+                        () -> new DefinitionView(editors.get(), definition.subject())
+                ).thenApply(ignored -> null), activation);
+                case NavigationTarget.RuntimeModuleNode node -> revealRuntimeModule(node);
             };
         } catch (RuntimeException failure) {
             navigation = CompletableFuture.failedFuture(failure);
@@ -422,7 +437,8 @@ public final class NavigationService {
         return !(target instanceof NavigationTarget.RuntimePackage)
                 && !(target instanceof NavigationTarget.LocalDirectory)
                 && !(target instanceof NavigationTarget.ArchiveDirectory)
-                && !(target instanceof NavigationTarget.ModuleSearch);
+                && !(target instanceof NavigationTarget.ModuleSearch)
+                && !(target instanceof NavigationTarget.RuntimeModuleNode);
     }
 
     private static boolean sameEditorDestination(NavigationTarget requested, NavigationTarget editorTarget) {
@@ -638,6 +654,11 @@ public final class NavigationService {
         return result;
     }
 
+    private CompletableFuture<Void> revealRuntimeModule(NavigationTarget.RuntimeModuleNode target) {
+        requireNavigationAdmission(captureContext());
+        return requireRevealed(this.fileTree.revealRuntimeModule(target.moduleId()));
+    }
+
     private CompletableFuture<Void> revealLocalPath(NavigationTarget.LocalDirectory target) {
         requireNavigationAdmission(captureContext());
         return this.fileTree.revealLocalPath(target.path()).thenCompose(revealed -> revealed
@@ -705,6 +726,9 @@ public final class NavigationService {
             case NavigationTarget.RuntimePackage runtimePackage -> runtimePackage.packageName();
             case NavigationTarget.ModuleSearch ignored -> "Search Everywhere";
             case NavigationTarget.Inspection inspection -> inspection.subject().subject();
+            case NavigationTarget.ModPage page -> "mod " + page.modId();
+            case NavigationTarget.Definition definition -> definition.subject().format();
+            case NavigationTarget.RuntimeModuleNode node -> "module " + node.moduleId();
         };
     }
 

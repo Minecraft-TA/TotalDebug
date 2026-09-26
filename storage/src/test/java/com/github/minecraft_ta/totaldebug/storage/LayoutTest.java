@@ -20,6 +20,8 @@ class LayoutTest {
         assertEquals(game.resolve("total-debug"), instance.home());
         assertEquals(instance.home().resolve("cache/runtime/index.jindex"), instance.index());
         assertEquals(instance.home().resolve("scripts"), instance.scripts());
+        assertEquals(instance.home().resolve("cache/runtime/catalog.json"), instance.catalog());
+        assertEquals(instance.home().resolve("cache/inspection-previews"), instance.previews());
         assertEquals(instance.home().resolve("companion-app"), InstancePaths.installationDirectory(game));
     }
 

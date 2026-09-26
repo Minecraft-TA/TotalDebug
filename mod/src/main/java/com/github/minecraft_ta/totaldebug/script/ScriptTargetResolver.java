@@ -11,7 +11,7 @@ import net.minecraft.world.level.Level;
  */
 @FunctionalInterface
 public interface ScriptTargetResolver {
-    ScriptTarget resolve(SubjectRef subject);
+    ScriptTarget resolve(SubjectRef.InWorld subject);
 
     /** Describes what a resolved target currently is; used to report it and to reject a changed subject. */
     default SubjectIdentity identify(ScriptTarget target) {

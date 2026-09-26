@@ -73,6 +73,8 @@ Extension code runs in three places:
 | Loot-table guard, capability walking, NBT conversion | mod | Standard library module |
 | Subject references, `target()`, `facts()`, script runner, transport, permissions, scheduling | mod and protocol | Kernel |
 | Resource snapshots, `ItemIcons`, raw value capture | mod | Kernel services |
+| Pack catalog capture of mods, registries and configuration files | mod and storage | Kernel capture |
+| Mod and definition subjects, mod and definition pages, Mods tree, catalog search | protocol and Companion | Kernel |
 | Compiler, `ItemIconService`, facts renderer, inspection page shell, live refresh, editor, debugger, MCP | Companion | Kernel |
 
 ## Two API layers
@@ -200,7 +202,7 @@ This example shows the intended result end to end. The AE2 calls and parts of th
 2. **Open an item's flow.** Selecting Redstone opens the **Flow** view for `ae2:grid/minecraft:redstone`:
 
 ```
-ME Network · Base (controller 120 64 -35) ▸ Redstone                 [Live] [1 h]
+ME Network  Base (controller 120 64 -35) ▸ Redstone                 [Live] [1 h]
 Redstone                                                        Stock 184,302
 
 Net +1,240 /min (+74,400 /h)    In 1,510 /min    Out 270 /min

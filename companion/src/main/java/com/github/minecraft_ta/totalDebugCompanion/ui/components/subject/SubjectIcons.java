@@ -1,0 +1,48 @@
+package com.github.minecraft_ta.totalDebugCompanion.ui.components.subject;
+
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
+
+import javax.swing.Icon;
+
+/** Consistent type icons for subject navigation, page tabs and links. */
+public final class SubjectIcons {
+    private SubjectIcons() { }
+
+    public static Icon definition(SubjectRef.DefinitionKind kind) {
+        return switch (kind) {
+            case BLOCK -> Icons.BLOCK;
+            case ITEM -> Icons.ITEM;
+            case ENTITY_TYPE -> Icons.ENTITY;
+        };
+    }
+
+    public static Icon tab(ModTab tab) {
+        return switch (tab) {
+            case OVERVIEW -> Icons.MOD;
+            case BLOCKS -> Icons.BLOCK;
+            case ITEMS -> Icons.ITEM;
+            case ENTITIES -> Icons.ENTITY;
+            case CONFIGURATION -> Icons.CONFIG_FILE;
+            case RESOURCES -> Icons.RESOURCES_ROOT;
+        };
+    }
+
+    public static Icon link(FactLink link) {
+        if (link.kind() == FactLink.Kind.CLASS) return Icons.JAVA_CLASS;
+        SubjectRef subject;
+        try {
+            subject = SubjectRef.parse(link.target());
+        } catch (IllegalArgumentException unknown) {
+            return null;
+        }
+        return switch (subject) {
+            case SubjectRef.Mod ignored -> Icons.MOD;
+            case SubjectRef.Definition definition -> definition(definition.kind());
+            case SubjectRef.Block ignored -> Icons.BLOCK;
+            case SubjectRef.Entity ignored -> Icons.ENTITY;
+        };
+    }
+}

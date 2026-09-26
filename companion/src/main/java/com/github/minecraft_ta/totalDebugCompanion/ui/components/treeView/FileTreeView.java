@@ -10,6 +10,7 @@ import java.util.function.Supplier;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
@@ -143,6 +144,10 @@ public class FileTreeView extends JScrollPane {
             TreeItem item,
             Consumer<NavigationTarget> navigator
     ) {
+        if (item instanceof NavigableTreeItem navigable) {
+            navigator.accept(navigable.navigationTarget());
+            return;
+        }
         if (item.isDirectory()) {
             return;
         }
@@ -201,14 +206,7 @@ public class FileTreeView extends JScrollPane {
     }
 
     private static String location(TreeItem item) {
-        if (item instanceof FileSystemFileItem file) return file.getPath().toAbsolutePath().normalize().toString();
-        if (item instanceof ZipFileRootItem.Entry entry) {
-            return entry.getArchivePath().toAbsolutePath().normalize() + "!/" + entry.getEntryPath();
-        }
-        if (item instanceof FileSystemDirectoryItem || item instanceof ZipFileRootItem || item instanceof ZipFileRootItem.DirectoryEntry
-                || item instanceof RuntimeSourceTreeItem || item instanceof RuntimeSourceTreeItem.RuntimeDirectoryEntry
-                || item instanceof RuntimeSourceTreeItem.RuntimeFileEntry) return item.getTooltip();
-        return null;
+        return item.location();
     }
 
     private RuntimeSourceCatalog sourceCatalog() {
@@ -231,6 +229,10 @@ public class FileTreeView extends JScrollPane {
             scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
             rootItems.add(scripts);
         }
+        var mods = new ModTreeItems.Root(() -> new ModTreeItems.Snapshot(scope.catalog().state(), scope.sources()));
+        if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent()) {
+            rootItems.add(mods);
+        }
         if (binding != null && !catalog.modules().isEmpty()) {
             rootItems.add(new DecompiledSourcesTreeItem(this.tree, binding.decompiler()));
         }
@@ -238,7 +240,7 @@ public class FileTreeView extends JScrollPane {
         if (!catalog.modules().isEmpty()) {
             var runtime = new DirectoryTreeItem("runtime") {
                 {
-                    setPresentation(PrimarySecondaryText.primary(binding == null ? "Mods" : binding.snapshot().isRuntime() ? "Runtime" : "Sources"));
+                    setPresentation(PrimarySecondaryText.primary(binding != null && binding.snapshot().isRuntime() ? "Runtime" : "Sources"));
                 }
 
                 @Override
@@ -302,6 +304,30 @@ public class FileTreeView extends JScrollPane {
         }
         path.addAll(List.of(entryPath.split("/")));
         return revealRuntimeDirectory(source.module(), path);
+    }
+
+    /** Selects a mod's node, or the group of the requested tab, in the Mods tree. */
+    public CompletableFuture<Boolean> revealModPage(NavigationTarget.ModPage page) {
+        List<String> path = new ArrayList<>();
+        var scope = project.get();
+        var index = scope == null ? null : scope.catalog().index().orElse(null);
+        if (index != null && index.mod(page.modId()).isEmpty() && index.otherNamespaces().contains(page.modId())) {
+            path.add(ModTreeItems.OTHER_NAMESPACES);
+        }
+        path.add(page.modId());
+        if (page.tab() != ModTab.OVERVIEW) {
+            path.add(ModTreeItems.groupName(page.tab()));
+        }
+        return this.tree.revealItemPath(ModTreeItems.ROOT, path);
+    }
+
+    /** Selects a runtime module's node in the Runtime tree. */
+    public CompletableFuture<Boolean> revealRuntimeModule(String moduleId) {
+        return sourceCatalog().modules().stream()
+                .filter(module -> module.id().equals(moduleId))
+                .findFirst()
+                .map(module -> revealRuntimeDirectory(module, List.of()))
+                .orElseGet(() -> CompletableFuture.completedFuture(false));
     }
 
     public CompletableFuture<Boolean> revealLocalPath(Path directory) {

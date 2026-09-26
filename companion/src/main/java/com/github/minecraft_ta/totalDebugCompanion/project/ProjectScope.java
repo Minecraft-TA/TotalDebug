@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.project;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -37,6 +38,8 @@ public final class ProjectScope implements AutoCloseable {
     private final InstanceState state;
     private final ScriptFiles scriptFiles;
     public ScriptFiles scriptFiles() { return scriptFiles; }
+    private final PackCatalogService catalog;
+    public PackCatalogService catalog() { return catalog; }
     private final List<PendingNavigation> pending = new ArrayList<>();
     private volatile Phase phase = Phase.ACTIVE;
     private volatile RuntimeBinding runtime;
@@ -48,6 +51,7 @@ public final class ProjectScope implements AutoCloseable {
         this.profile = Objects.requireNonNull(profile);
         this.state = Objects.requireNonNull(state);
         this.scriptFiles = new ScriptFiles(paths().scripts());
+        this.catalog = new PackCatalogService(paths());
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {

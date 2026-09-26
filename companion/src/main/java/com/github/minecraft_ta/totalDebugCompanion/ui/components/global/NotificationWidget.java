@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
@@ -185,7 +186,7 @@ final class NotificationWidget extends JButton implements AutoCloseable {
             previewId = preview == null ? null : preview.id();
             message.setText(preview == null ? "" : preview.message());
             message.setIcon(preview == null ? null : icon(preview));
-            message.setToolTipText(preview == null ? null : "Show notification: " + preview.message());
+            message.setToolTipText(preview == null ? null : Tooltip.of("Show notification").text(preview.message()).html());
             message.setVisible(preview != null);
             unread = snapshot.unread() > 0;
             repaint();
@@ -310,7 +311,7 @@ final class NotificationWidget extends JButton implements AutoCloseable {
             boolean changed = !entry.copyText().equals(replacement.copyText());
             entry = replacement;
             toggle.setText(entry.message());
-            toggle.setToolTipText(entry.message());
+            toggle.setToolTipText(Tooltip.of("").text(entry.message()).html());
             context.setText(entry.source().label());
             context.setForeground(ThemeColors.secondaryText());
             time.setText(DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(entry.time()));

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
@@ -131,6 +132,12 @@ final class RuntimeSourceTreeItem extends DirectoryTreeItem {
 
     @Override
     public String getTooltip() {
+        // The path is Companion's cached copy; the logical location names the file the game loaded.
+        return Tooltip.of(RuntimeModulePresentation.location(this.source.logicalUri())).html();
+    }
+
+    @Override
+    public String location() {
         return this.source.logicalUri();
     }
 
@@ -219,6 +226,11 @@ final class RuntimeSourceTreeItem extends DirectoryTreeItem {
 
         @Override
         public String getTooltip() {
+            return Tooltip.of(Tooltip.shortPath(this.directory)).html();
+        }
+
+        @Override
+        public String location() {
             return this.directory.toString();
         }
     }
@@ -249,6 +261,11 @@ final class RuntimeSourceTreeItem extends DirectoryTreeItem {
 
         @Override
         public String getTooltip() {
+            return Tooltip.of(Tooltip.shortPath(this.path)).html();
+        }
+
+        @Override
+        public String location() {
             return this.path.toString();
         }
     }

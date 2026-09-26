@@ -1,5 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
+import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ResourceBrowser;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totalDebugCompanion.testui.OffscreenPopupFactory;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import java.io.UncheckedIOException;
@@ -76,6 +83,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.IntConsumer;
 import java.util.function.Predicate;
 import javax.imageio.ImageIO;
+import javax.swing.JTable;
 import javax.swing.AbstractButton;
 import javax.swing.Action;
 import javax.swing.JButton;
@@ -530,6 +538,13 @@ final class UiScenarioDriver {
                 });
             }
             case SERVICE_STATUS -> advanceServiceStatus(context);
+            case MOD_PAGE -> context.once("mod-page", () -> navigate(new NavigationTarget.ModPage("testmod")));
+            case MOD_CONFIGURATION -> context.once("mod-configuration", () ->
+                    navigate(new NavigationTarget.ModPage("testmod", ModTab.CONFIGURATION, "")));
+            case MOD_RESOURCES -> context.once("mod-resources", () ->
+                    navigate(new NavigationTarget.ModPage("testmod", ModTab.RESOURCES, "")));
+            case DEFINITION_PAGE -> context.once("definition-page", () -> navigate(new NavigationTarget.Definition(
+                    new SubjectRef.Definition(SubjectRef.DefinitionKind.BLOCK, "testmod:widget_block"))));
             case INDEXING -> {
                 selectCodeEditor(context);
                 context.once("indexing", () -> mainWindow.setRuntimeIndexStatus(
@@ -552,8 +567,35 @@ final class UiScenarioDriver {
         return new DebugEngine.Variable(name, name, name, value, type, kind, 0, 0, 0, 0);
     }
 
+    /** Opens a page without activating the window, which stays off the visible desktop while it is captured. */
+    private void navigate(NavigationTarget target) {
+        mainWindow.navigate(target, NavigationService.Activation.KEEP_CURRENT_WINDOW);
+    }
+
+    /** The selected editor tab is titled {@code title} and shows a table with rows under {@code column}. */
+    private boolean showsTable(String title, String column) {
+        var editor = mainWindow.getEditorTabs().getSelectedEditor();
+        if (editor == null || !title.equals(editor.getTitle())) return false;
+        for (JTable table : findComponents(mainWindow, JTable.class)) {
+            if (table.isShowing() && table.getColumnCount() > 0 && column.equals(table.getColumnName(0)) && table.getRowCount() > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean ready(UiRenderScenario scenario, ScenarioContext context) {
         return switch (scenario) {
+            case MOD_PAGE -> mainWindow.getEditorTabs().getSelectedEditor() instanceof ModView view
+                    && "Test Mod".equals(view.getTitle());
+            case MOD_CONFIGURATION -> showsTable("Test Mod", "Setting");
+            case MOD_RESOURCES -> {
+                var editor = mainWindow.getEditorTabs().getSelectedEditor();
+                ResourceBrowser browser = findComponent(mainWindow, ResourceBrowser.class);
+                yield editor instanceof ModView && browser != null && browser.isShowing() && browser.rowCount() > 0;
+            }
+            case DEFINITION_PAGE -> mainWindow.getEditorTabs().getSelectedEditor() instanceof DefinitionView view
+                    && "Widget Block".equals(view.getTitle());
             case TAB_MENU -> visibleMenuPopup() != null && mainWindow.getEditorTabs().getSelectedIndex()
                     == mainWindow.getEditorTabs().getTabCount() - 1;
             case TAB_REVEAL -> {
@@ -599,7 +641,7 @@ final class UiScenarioDriver {
                         && gutter.isShowing();
             }
             case BREAKPOINT_EDITOR -> visibleMenuPopup() != null
-                    && findLabelContaining(visibleMenuPopup(), "Line breakpoint") != null;
+                    && findLabelContaining(visibleMenuPopup(), "Breakpoint on line") != null;
             case BREAKPOINT_INTERACTION -> context.completedActions.contains("breakpoint-interaction");
             case METHOD_BREAKPOINT -> {
                 var selected = mainWindow.getEditorTabs().getSelectedEditor();
@@ -957,6 +999,15 @@ final class UiScenarioDriver {
             }
         }
         return null;
+    }
+
+    private <T extends Component> List<T> findComponents(Container root, Class<T> type) {
+        List<T> found = new ArrayList<>();
+        for (Component component : root.getComponents()) {
+            if (type.isInstance(component)) found.add(type.cast(component));
+            if (component instanceof Container child) found.addAll(findComponents(child, type));
+        }
+        return found;
     }
 
     private JLabel findLabelContaining(Container root, String expectedText) {

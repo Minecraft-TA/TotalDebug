@@ -123,7 +123,7 @@ class ExecutionRunsTest {
             var recorder = new Recorder();
             int id = runs.open(recorder);
             ScriptSubject subject = targeted ? new ScriptSubject(
-                    SubjectRef.parse("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session", "minecraft:pig") : null;
+                    SubjectRef.parseWorld("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session", "minecraft:pig") : null;
             String source = "import fixture.ScriptProgram; public class Probe extends ScriptProgram { public Object run() { return null; } }";
             var submission = new FutureTask<>(() -> runs.submit(id, project, source, false, ScriptExecutionEnvironment.THREAD, subject));
             Thread submitter = Thread.ofPlatform().unstarted(submission);

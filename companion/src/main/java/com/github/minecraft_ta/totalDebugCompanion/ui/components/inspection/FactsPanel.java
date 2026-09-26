@@ -1,5 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.SectionHeading;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
+
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -16,7 +22,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JSeparator;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.awt.BasicStroke;
@@ -57,8 +62,8 @@ import java.util.regex.Pattern;
  */
 public final class FactsPanel extends JPanel {
     static final int SLOT_COLUMNS = 9;
-    private static final int SLOT_SIZE = 40;
-    private static final int ICON_SIZE = 32;
+    private static final int ICON_SIZE = UiMetrics.previewPixels(UiMetrics.ITEM_ICON_SIZE);
+    private static final int SLOT_SIZE = ICON_SIZE + 8;
     private static final int MIN_LABEL_WIDTH = 96;
     private static final int MAX_LABEL_WIDTH = 240;
     private static final Pattern NUMBER = Pattern.compile("[+-]?\\d[\\d,.]*(?:[eE][+-]?\\d+)?[bBsSlLfFdD%]?");
@@ -221,7 +226,7 @@ public final class FactsPanel extends JPanel {
         private final List<JLabel> labels = new ArrayList<>();
         private final List<SlotCell> slots = new ArrayList<>();
         private final List<JComponent> values = new ArrayList<>();
-        private final JLabel heading = new JLabel();
+        private SectionHeading heading;
 
         private SectionView(FactSection section) {
             super(new BorderLayout());
@@ -241,38 +246,23 @@ public final class FactsPanel extends JPanel {
         }
 
         private JComponent header(FactSection section) {
-            this.heading.setText(section.title());
-            this.heading.setFont(this.heading.getFont().deriveFont(Font.BOLD));
-            this.heading.setIconTextGap(4);
-            JPanel header = new JPanel(new BorderLayout(8, 0));
-            header.add(this.heading, BorderLayout.WEST);
-            JPanel rule = new JPanel(new GridBagLayout());
-            GridBagConstraints fill = new GridBagConstraints();
-            fill.weightx = 1;
-            fill.fill = GridBagConstraints.HORIZONTAL;
-            rule.add(new JSeparator(), fill);
-            header.add(rule, BorderLayout.CENTER);
+            JLabel omitted = null;
             if (section.omittedFacts() > 0) {
-                JLabel omitted = new JLabel(section.omittedFacts() + " more not shown");
-                omitted.setForeground(ThemeColors.mutedText());
-                header.add(omitted, BorderLayout.EAST);
+                omitted = new JLabel(section.omittedFacts() + " more not shown");
+                ThemeColors.keepForeground(omitted, ThemeColors::mutedText);
             }
-            header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            header.addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseClicked(MouseEvent event) {
-                    if (!FactsPanel.this.collapsed.remove(SectionView.this.title)) {
-                        FactsPanel.this.collapsed.add(SectionView.this.title);
-                    }
-                    showCollapsed();
+            this.heading = new SectionHeading(section.title(), omitted, () -> {
+                if (!FactsPanel.this.collapsed.remove(SectionView.this.title)) {
+                    FactsPanel.this.collapsed.add(SectionView.this.title);
                 }
+                showCollapsed();
             });
-            return header;
+            return this.heading;
         }
 
         private void showCollapsed() {
             boolean collapsed = FactsPanel.this.collapsed.contains(this.title);
-            this.heading.setIcon(UIManager.getIcon(collapsed ? "Tree.collapsedIcon" : "Tree.expandedIcon"));
+            this.heading.setCollapsed(collapsed);
             this.body.setVisible(!collapsed);
             revalidate();
         }
@@ -306,7 +296,7 @@ public final class FactsPanel extends JPanel {
 
         private void addRow(int row, String text, JComponent value) {
             JLabel label = new JLabel(text);
-            label.setForeground(ThemeColors.mutedText());
+            ThemeColors.keepForeground(label, ThemeColors::secondaryText);
             label.setToolTipText(text.isEmpty() ? null : text);
             this.labels.add(label);
             GridBagConstraints constraints = new GridBagConstraints();
@@ -326,8 +316,8 @@ public final class FactsPanel extends JPanel {
                 case DATA -> new DataRow(section.title(), fact);
                 case PROBLEM -> {
                     JLabel problem = new JLabel(fact.value(), Icons.ERROR, JLabel.LEADING);
-                    problem.setToolTipText(fact.value());
-                    problem.setForeground(ThemeColors.error());
+                    problem.setToolTipText(Tooltip.of("").text(fact.value()).html());
+                    ThemeColors.keepForeground(problem, ThemeColors::error);
                     yield problem;
                 }
                 case TEXT, STACK -> new ValueLabel(fact);
@@ -351,7 +341,7 @@ public final class FactsPanel extends JPanel {
                     case DataRow data -> data.set(next, changed);
                     case JLabel problem -> {
                         problem.setText(next.value());
-                        problem.setToolTipText(next.value());
+                        problem.setToolTipText(Tooltip.of("").text(next.value()).html());
                     }
                     default -> {
                     }
@@ -365,6 +355,14 @@ public final class FactsPanel extends JPanel {
                 if (value instanceof AmountRow amount) amount.loadTexture();
             });
         }
+    }
+
+    /** Where a linked value leads: a class's source or another subject to inspect. */
+    private static String linkTooltip(FactLink link) {
+        return switch (link.kind()) {
+            case CLASS -> Tooltip.of("Open source").detail(link.target()).html();
+            case SUBJECT -> Tooltip.of("Open").detail(link.target()).html();
+        };
     }
 
     /** A text value colored by what it is; a linked value opens its target when clicked. */
@@ -401,8 +399,10 @@ public final class FactsPanel extends JPanel {
             setText(next.value());
             setOpaque(changed);
             boolean linked = next.link() != null;
+            setIcon(linked ? SubjectIcons.link(next.link()) : null);
             setCursor(linked ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) : Cursor.getDefaultCursor());
-            setToolTipText(linked ? next.link().target() : next.value().length() > 40 ? next.value() : null);
+            setToolTipText(linked ? linkTooltip(next.link())
+                    : next.value().length() > 40 ? Tooltip.of("").text(next.value()).html() : null);
             hover(this.hovered);
         }
 
@@ -419,6 +419,13 @@ public final class FactsPanel extends JPanel {
         Fact fact() {
             return this.fact;
         }
+
+        /** A restyle resets the foreground to the default text color; the link color and font come back here. */
+        @Override
+        public void updateUI() {
+            super.updateUI();
+            if (this.fact != null) hover(this.hovered);
+        }
     }
 
     /** A bar with its amount beside it, and for fluids the fluid's name and texture. */
@@ -431,7 +438,7 @@ public final class FactsPanel extends JPanel {
         private AmountRow(Fact fact) {
             super(new FlowLayout(FlowLayout.LEFT, 0, 0));
             this.bar = new AmountBar(fact.amount(), fact.capacity());
-            this.amount.setForeground(ThemeColors.mutedText());
+            ThemeColors.keepForeground(this.amount, ThemeColors::mutedText);
             add(this.bar);
             add(Box.createHorizontalStrut(10));
             add(this.name);
@@ -452,12 +459,12 @@ public final class FactsPanel extends JPanel {
         private void describe() {
             if (this.fact.kind() == Fact.Kind.FLUID) {
                 this.name.setText(this.fact.id().isEmpty() ? "Empty" : this.fact.value());
-                this.name.setForeground(this.fact.id().isEmpty() ? ThemeColors.mutedText() : ThemeColors.text());
+                ThemeColors.keepForeground(this.name, this.fact.id().isEmpty() ? ThemeColors::mutedText : ThemeColors::text);
                 this.amount.setText(amounts(this.fact.amount(), this.fact.capacity(), this.fact.unit()));
                 this.name.setToolTipText(this.fact.id().isEmpty() ? null : this.fact.id());
             } else {
                 this.name.setText(amounts(this.fact.amount(), this.fact.capacity(), this.fact.unit()));
-                this.name.setForeground(ThemeColors.text());
+                ThemeColors.keepForeground(this.name, ThemeColors::text);
                 this.amount.setText(this.fact.capacity() > 0
                         ? Math.round(this.bar.fraction() * 100) + "%" : "");
             }
@@ -490,9 +497,9 @@ public final class FactsPanel extends JPanel {
         private DataRow(String section, Fact fact) {
             super(new FlowLayout(FlowLayout.LEFT, 0, 0));
             this.summary.setBackground(ChangeMarks.tint());
-            this.summary.setForeground(ThemeColors.text());
+            ThemeColors.keepForeground(this.summary, ThemeColors::text);
             JLabel open = new JLabel("Open in Data");
-            open.setForeground(ThemeColors.link());
+            ThemeColors.keepForeground(open, ThemeColors::link);
             open.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             open.addMouseListener(new MouseAdapter() {
                 @Override
@@ -542,9 +549,9 @@ public final class FactsPanel extends JPanel {
 
         private void describe() {
             setToolTipText(this.stack.id().isEmpty()
-                    ? this.stack.label() + ": empty"
-                    : this.stack.label() + ": " + this.stack.value() + " ×" + this.stack.amount()
-                    + "  (" + this.stack.id() + ")");
+                    ? Tooltip.of("Empty").detail(this.stack.label()).html()
+                    : Tooltip.of(this.stack.value() + " ×" + this.stack.amount())
+                    .detail(this.stack.id()).detail(this.stack.label()).html());
         }
 
         private void load() {
@@ -552,7 +559,8 @@ public final class FactsPanel extends JPanel {
                 return;
             }
             String id = this.stack.id();
-            FactsPanel.this.icons.render(ItemIconService.itemModel(id), Map.of(), ICON_SIZE)
+            CatalogIndex.ItemIcon item = FactsPanel.this.icons.itemIcon(id);
+            FactsPanel.this.icons.render(item.model(), item.tints(), ICON_SIZE)
                     .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                         if (!id.equals(this.stack.id())) return;
                         this.icon = image.orElse(null);

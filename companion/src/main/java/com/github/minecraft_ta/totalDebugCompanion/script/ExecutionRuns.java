@@ -92,6 +92,10 @@ public final class ExecutionRuns implements AutoCloseable {
         return this.scripts.stop(id);
     }
 
+    public ScriptCompilationService.Readiness readiness(boolean serverSide) {
+        return this.scripts.readiness(serverSide);
+    }
+
     /** Ends runs submitted on the given connection or an earlier one. */
     public void disconnected(long connection, boolean expected) {
         for (int id : List.copyOf(this.runs.keySet())) {

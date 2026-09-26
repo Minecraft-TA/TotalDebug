@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol.execution;
 
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
 import java.util.Collections;
 import java.util.List;
@@ -85,6 +86,7 @@ class ExecutionFactsTest {
 
         assertEquals(handler, decoded.facts().getFirst().facts().getFirst());
         assertThrows(IllegalArgumentException.class, () -> FactLink.toClass(" "));
+        assertEquals(new FactLink(FactLink.Kind.SUBJECT, "mod mekanism"), FactLink.toSubject(new SubjectRef.Mod("mekanism")));
     }
 
     @Test

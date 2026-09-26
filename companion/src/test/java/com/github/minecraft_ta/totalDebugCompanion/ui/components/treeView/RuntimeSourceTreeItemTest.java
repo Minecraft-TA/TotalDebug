@@ -35,7 +35,7 @@ final class RuntimeSourceTreeItemTest {
         var item = new RuntimeSourceTreeItem(source);
         assertEquals(label, item.getPresentation().primary());
         assertEquals(label + " [source 1]", item.getName());
-        assertEquals(logicalUri, item.getTooltip());
+        assertEquals(logicalUri, item.location());
     }
 
     @Test

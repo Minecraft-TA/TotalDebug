@@ -120,7 +120,7 @@ public class EditorTabs extends JTabbedPane {
         others.setEnabled(getTabCount() > 1);
         others.addActionListener(event -> closeMatching(candidate -> candidate != editor));
         menu.add("Close all").addActionListener(event -> closeMatching(candidate -> true));
-        String location = editor.getLocation().tooltip();
+        String location = editor.getLocation().location();
         Action reveal = this.revealActionProvider == null ? null : this.revealActionProvider.apply(editor);
         if (!location.isBlank() || reveal != null) menu.addSeparator();
         if (!location.isBlank()) {

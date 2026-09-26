@@ -23,7 +23,8 @@ public record ItemRenderResourceRoot(Path path, String prefix) {
         return this.prefix.isEmpty() ? this.path.toString() : this.path + "!/" + this.prefix;
     }
 
-    String entryPath(String resourcePath) {
+    /** Where a resource of this root is inside its directory or archive. */
+    public String entryPath(String resourcePath) {
         return this.prefix + resourcePath;
     }
 

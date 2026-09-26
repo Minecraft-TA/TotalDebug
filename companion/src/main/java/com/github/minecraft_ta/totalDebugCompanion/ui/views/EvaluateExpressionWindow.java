@@ -459,7 +459,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         if (snapshot.pause() != null) {
             for (var frame : snapshot.pause().frames()) {
                 this.context.addItem(new EvaluationContext(null, snapshot.pauseId(), frame,
-                        "Paused · " + frame.name() + ":" + frame.line()));
+                        "Paused at " + frame.name() + ":" + frame.line()));
             }
         }
         if (previous != null) {

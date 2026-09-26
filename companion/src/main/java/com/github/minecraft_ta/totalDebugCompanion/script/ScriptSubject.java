@@ -7,7 +7,7 @@ import java.util.Objects;
  * The target a script run is bound to: a subject in the game session where it was selected. When
  * {@code expectedId} is not empty the run only starts while the subject still has that registry id.
  */
-public record ScriptSubject(SubjectRef subject, String gameSessionId, String expectedId) {
+public record ScriptSubject(SubjectRef.InWorld subject, String gameSessionId, String expectedId) {
     public ScriptSubject {
         Objects.requireNonNull(subject, "subject");
         Objects.requireNonNull(gameSessionId, "gameSessionId");
@@ -18,7 +18,7 @@ public record ScriptSubject(SubjectRef subject, String gameSessionId, String exp
     }
 
     /** A subject accepting whatever occupies it. */
-    public ScriptSubject(SubjectRef subject, String gameSessionId) {
+    public ScriptSubject(SubjectRef.InWorld subject, String gameSessionId) {
         this(subject, gameSessionId, "");
     }
 }

@@ -129,12 +129,36 @@ class ScriptCompilationServiceTest {
     }
 
     @Test
+    void readinessSaysWhyARunCannotStartAndSignalsTheNextChange() throws Exception {
+        try (ReadySnapshot snapshot = fixture();
+             var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
+            ScriptCompilationService.Readiness unbound = compiler.readiness(false);
+            assertFalse(unbound.ready());
+            assertEquals("The runtime class index is not ready for compilation", unbound.detail());
+            assertFalse(unbound.changed().isDone());
+
+            compiler.bind(snapshot);
+
+            assertTrue(unbound.changed().isDone(), "binding the index is a change");
+            assertTrue(compiler.readiness(false).ready(), "client runs need only the index");
+            ScriptCompilationService.Readiness server = compiler.readiness(true);
+            assertFalse(server.ready());
+            assertEquals("Waiting for the client index and server handshake comparison", server.detail());
+
+            compiler.runtimeDisconnected();
+
+            assertTrue(server.changed().isDone());
+            assertEquals("Minecraft disconnected", compiler.readiness(true).detail());
+        }
+    }
+
+    @Test
     void sendsTheSubjectARunIsBoundTo() throws Exception {
         try (ReadySnapshot snapshot = fixture();
              var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
             compiler.bind(snapshot);
             compiler.submit(8, SOURCE, false, ScriptExecutionEnvironment.POST_TICK,
-                    new ScriptSubject(SubjectRef.parse("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session",
+                    new ScriptSubject(SubjectRef.parseWorld("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session",
                             "minecraft:pig"),
                     outcome -> this.failures.add(outcome.result()));
             RunScriptMessage message = this.sent.poll(10, TimeUnit.SECONDS);

@@ -266,6 +266,10 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         refreshActions();
         this.projectSelector.refresh();
     }
+    @Override public void catalogChanged() {
+        this.fileTreeView.reloadProfile();
+        if (this.searchEverywherePopup != null) this.searchEverywherePopup.catalogChanged();
+    }
     @Override public void runtimeChanged() { statusBar.refreshContext(); editorTabs.astCache().refreshEnvironment(); navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }
     @Override public void navigate(NavigationTarget target, NavigationService.Activation activation) { navigation().navigate(target, activation); }
     @Override public void focus() { UIUtils.focusWindow(this); }
@@ -488,16 +492,23 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     public void openSearchEverywhere() {
         if (this.searchEverywherePopup == null) {
-            this.searchEverywherePopup = new SearchEverywherePopup(this, indexLoader, this::searchRuntime, target -> navigation().navigate(target));
+            this.searchEverywherePopup = createSearchEverywhere();
         }
         this.searchEverywherePopup.open();
     }
 
     public void openSearchEverywhere(NavigationTarget.ModuleSearch search) {
         if (this.searchEverywherePopup == null) {
-            this.searchEverywherePopup = new SearchEverywherePopup(this, indexLoader, this::searchRuntime, target -> navigation().navigate(target));
+            this.searchEverywherePopup = createSearchEverywhere();
         }
         this.searchEverywherePopup.open(search.moduleIds(), search.query());
+    }
+
+    private SearchEverywherePopup createSearchEverywhere() {
+        return new SearchEverywherePopup(this, indexLoader, this::searchRuntime, () -> {
+            ProjectScope scope = project.get();
+            return scope == null ? null : scope.catalog();
+        }, itemIcons, target -> navigation().navigate(target));
     }
 
     private RuntimeBinding searchRuntime() {

@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.ZipFileRootItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import javax.swing.SwingUtilities;
@@ -35,7 +36,10 @@ class LocalModSourcesTest {
                 var view = new FileTreeView(() -> scope, ignored -> { });
                 view.reloadProfile();
                 var tree = (LazyFileJTree) view.getViewport().getView();
-                assertEquals(1, tree.getModel().getChildCount(tree.getModel().getRoot()));
+                var root = tree.getModel().getRoot();
+                assertEquals(2, tree.getModel().getChildCount(root));
+                assertEquals("mods", ((LazyTreeNode) tree.getModel().getChild(root, 0)).getUserObject().getName());
+                assertEquals("runtime", ((LazyTreeNode) tree.getModel().getChild(root, 1)).getUserObject().getName());
                 tree.setRootNodes();
             });
         } finally { scope.retire(); scope.close(); }

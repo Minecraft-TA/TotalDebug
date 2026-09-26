@@ -25,6 +25,25 @@ class SubjectRefTest {
     }
 
     @Test
+    void modAndDefinitionTextRoundTrips() {
+        assertEquals(new SubjectRef.Mod("mekanism"), SubjectRef.parse("mod mekanism"));
+        assertEquals("mod mekanism", new SubjectRef.Mod("mekanism").format());
+        SubjectRef.Definition definition = new SubjectRef.Definition(SubjectRef.DefinitionKind.ENTITY_TYPE, "minecraft:zombie");
+        assertEquals("definition entity_type minecraft:zombie", definition.format());
+        assertEquals(definition, SubjectRef.parse(definition.format()));
+        assertEquals("minecraft", definition.namespace());
+    }
+
+    @Test
+    void worldSubjectsRejectModsAndDefinitions() {
+        assertEquals(new SubjectRef.Block("minecraft:overworld", 1, 2, 3), SubjectRef.parseWorld("block minecraft:overworld 1 2 3"));
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> SubjectRef.parseWorld("definition item minecraft:stone"));
+        assertEquals("definition item minecraft:stone names a mod or definition, not a block or entity in the world",
+                failure.getMessage());
+    }
+
+    @Test
     void rejectsMalformedSubjects() {
         assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse(""));
         assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("chunk minecraft:overworld 0 0"));
@@ -34,5 +53,9 @@ class SubjectRefTest {
         assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("block minecraft:overworld 1 5000 3"));
         assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("entity not-a-uuid"));
         assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("block minecraft:" + "a".repeat(400) + " 0 0 0"));
+        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("mod Mekanism"));
+        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("mod"));
+        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("definition fluid minecraft:water"));
+        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("definition item stone"));
     }
 }

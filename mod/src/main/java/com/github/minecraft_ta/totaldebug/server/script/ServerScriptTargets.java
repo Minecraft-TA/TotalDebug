@@ -20,7 +20,7 @@ final class ServerScriptTargets implements ScriptTargetResolver {
     }
 
     @Override
-    public ScriptTarget resolve(SubjectRef subject) {
+    public ScriptTarget resolve(SubjectRef.InWorld subject) {
         return switch (subject) {
             case SubjectRef.Block block -> ScriptTargetResolver.block(level(block.dimension()), block);
             case SubjectRef.Entity entity -> entity(entity);

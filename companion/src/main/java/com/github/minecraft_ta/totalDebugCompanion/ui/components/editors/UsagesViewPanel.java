@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceU
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
@@ -412,7 +413,7 @@ public final class UsagesViewPanel extends JPanel {
                     includeClassName,
                     RuntimeModulePresentation.of(
                             this.searchService.sourceCatalog().sourceFor(usage.sourceId())
-                    ).tooltip()
+                    )
             )));
         }
         return node;
@@ -594,7 +595,7 @@ public final class UsagesViewPanel extends JPanel {
         }
     }
 
-    private record UsageNode(ReferenceUsage usage, boolean includeClassName, String moduleTooltip) {
+    private record UsageNode(ReferenceUsage usage, boolean includeClassName, RuntimeModulePresentation module) {
         @Override
         public String toString() {
             return usageLabel(this.usage, this.includeClassName);
@@ -628,10 +629,8 @@ public final class UsagesViewPanel extends JPanel {
             } else if (userValue instanceof UsageNode usage) {
                 ReferenceLocation location = usage.usage().location();
                 setIcon(locationIcon(location.site()));
-                setToolTipText(
-                        usage.moduleTooltip() + " | " + location.className() + '#'
-                                + usageLabel(usage.usage(), false)
-                );
+                setToolTipText(usage.module().describe(
+                        Tooltip.of(location.className() + '.' + usageLabel(usage.usage(), false))).html());
             }
             if (!(userValue instanceof UsageNode) && !(userValue instanceof GroupNode)) return component;
             this.label.configure(PrimarySecondaryText.primary(getText()), getIcon(), tree.getFont(),

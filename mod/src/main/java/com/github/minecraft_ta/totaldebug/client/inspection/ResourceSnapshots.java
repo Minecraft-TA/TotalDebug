@@ -140,7 +140,8 @@ public final class ResourceSnapshots {
                 zip.setLevel(1);
                 long[] total = {0};
                 Set<String> written = new HashSet<>();
-                for (String folder : List.of("models", "textures", "atlases")) {
+                // Blockstates choose a block's models, so a definition page can show how the block is drawn.
+                for (String folder : List.of("blockstates", "models", "textures", "atlases")) {
                     for (Map.Entry<ResourceLocation, List<Resource>> entry
                             : manager.listResourceStacks(folder, id -> true).entrySet()) {
                         requireUnchanged(manager, expected);

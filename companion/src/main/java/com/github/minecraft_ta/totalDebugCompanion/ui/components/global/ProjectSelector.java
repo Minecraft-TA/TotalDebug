@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
@@ -58,7 +59,8 @@ public final class ProjectSelector extends JMenu {
                 .filter(project -> project.profile().equals(current)).map(ProjectRegistry.Project::name)
                 .findFirst().orElseGet(() -> ProjectRegistry.defaultName(current));
         setText(shorten(name, 34));
-        setToolTipText(current == null ? "Open a Minecraft instance" : name + " — " + current.workspaceDirectory());
+        setToolTipText(current == null ? "Open a Minecraft instance"
+                : Tooltip.of(name).detail(Tooltip.shortPath(current.workspaceDirectory())).html());
         setEnabled(!this.projects.isSwitching());
     }
 
@@ -104,7 +106,7 @@ public final class ProjectSelector extends JMenu {
 
     private void addProject(ProjectRegistry.Project project) {
         var item = new ProjectItem(project.name(), shortenPath(project.profile().workspaceDirectory()));
-        item.setToolTipText(project.profile().workspaceDirectory().toString());
+        item.setToolTipText(Tooltip.of(project.name()).detail(Tooltip.shortPath(project.profile().workspaceDirectory())).html());
         item.addActionListener(event -> open(project.profile()));
         var options = new JPopupMenu();
         options.add("Rename…").addActionListener(event -> {

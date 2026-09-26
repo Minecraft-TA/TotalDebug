@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.InspectionTool;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
@@ -169,7 +170,7 @@ final class ToolsPanel extends JPanel {
             source = JavaSnippetSource.body(tool.name(), tool.text());
             source.requireExecutableSize();
             execution = this.snippets.get().execute(source, side, ScriptExecutionEnvironment.POST_TICK,
-                    new ScriptSubject(SubjectRef.parse(this.subject.subject()), this.subject.gameSessionId(),
+                    new ScriptSubject(SubjectRef.parseWorld(this.subject.subject()), this.subject.gameSessionId(),
                             registryId));
         } catch (RuntimeException exception) {
             view.showFailure(exception.getMessage());
@@ -228,7 +229,7 @@ final class ToolsPanel extends JPanel {
             }
             String logs = ExecutionTextDisplay.format(outcome.logs()).strip();
             this.output.setText(logs.lines().findFirst().orElse(""));
-            this.output.setToolTipText(logs.isEmpty() ? null : logs);
+            this.output.setToolTipText(Tooltip.of("").code(logs).html());
             this.output.setVisible(!logs.isEmpty());
             this.section.revalidate();
             this.section.repaint();
@@ -253,7 +254,7 @@ final class ToolsPanel extends JPanel {
             String text = message == null || message.isBlank() ? "The tool failed" : message;
             this.status.setIcon(Icons.ERROR);
             this.status.setText(text.lines().findFirst().orElse(text));
-            this.status.setToolTipText("<html><pre>" + escape(text) + "</pre></html>");
+            this.status.setToolTipText(Tooltip.of("").code(text).html());
             this.section.revalidate();
         }
     }
@@ -263,7 +264,7 @@ final class ToolsPanel extends JPanel {
         name.putClientProperty("FlatLaf.styleClass", "h4");
         JButton edit = new JButton("Edit");
         edit.putClientProperty("JButton.buttonType", "borderless");
-        edit.setToolTipText(tool.path().toString());
+        edit.setToolTipText(Tooltip.of("Open the script").detail(Tooltip.shortPath(tool.path())).html());
         edit.addActionListener(event -> this.navigator.accept(new NavigationTarget.LocalFile(tool.path())));
         JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         header.add(name);
@@ -384,9 +385,6 @@ final class ToolsPanel extends JPanel {
         return Objects.requireNonNullElse(cause.getMessage(), cause.getClass().getSimpleName());
     }
 
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-    }
 
     private static <T extends JComponent> T aligned(T component) {
         component.setAlignmentX(Component.LEFT_ALIGNMENT);

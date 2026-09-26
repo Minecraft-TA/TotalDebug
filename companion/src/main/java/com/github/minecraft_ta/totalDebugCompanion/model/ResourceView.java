@@ -46,7 +46,7 @@ public final class ResourceView implements IEditorPanel {
 
     @Override
     public String getTooltip() {
-        return this.source.tooltip();
+        return getLocation().tooltip();
     }
 
     @Override

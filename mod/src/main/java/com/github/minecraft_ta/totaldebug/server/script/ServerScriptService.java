@@ -145,10 +145,10 @@ public final class ServerScriptService {
             return;
         }
 
-        SubjectRef subject = null;
+        SubjectRef.InWorld subject = null;
         if (!payload.subject().isEmpty()) {
             try {
-                subject = SubjectRef.parse(payload.subject());
+                subject = SubjectRef.parseWorld(payload.subject());
             } catch (IllegalArgumentException exception) {
                 sendCompilationFailure(server, player, payload.scriptId(),
                         "Invalid script target: " + exception.getMessage());

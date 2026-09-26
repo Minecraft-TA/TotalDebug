@@ -16,9 +16,7 @@ public class FileTreeViewHeader extends JPanel {
         setPreferredSize(size);
         setMaximumSize(size);
         setBorder(BorderFactory.createEmptyBorder(0, scale(10), 0, scale(8)));
-        JLabel files = new JLabel("Files");
-        files.setFont(files.getFont().deriveFont(Font.BOLD));
-        add(files);
+        add(new JLabel("Project"));
     }
 
     @Override

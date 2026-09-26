@@ -284,7 +284,7 @@ public final class DebuggerPanel extends JPanel {
             case "pause" -> "Paused by user";
             case "exception" -> "Paused on exception";
             case "entry" -> "Paused at entry";
-            default -> event.reason().isBlank() ? "Paused" : "Paused · " + event.reason();
+            default -> event.reason().isBlank() ? "Paused" : "Paused: " + event.reason();
         };
     }
 
