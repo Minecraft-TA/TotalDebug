@@ -20,8 +20,11 @@ import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.util.List;
 import java.util.Map;
@@ -172,6 +175,45 @@ class ConfigPanelTest {
     }
 
     @Test
+    void unsavedTextKeepsTheFileItWasEditedFrom() throws Exception {
+        Path config = Files.createDirectories(this.directory.resolve("config"));
+        Path first = config.resolve("first.toml");
+        Path second = config.resolve("second.toml");
+        Files.writeString(first, "speed = 1\n");
+        Files.writeString(second, "speed = 1\nextra = 3\n");
+        PackCatalog.ConfigFile a = new PackCatalog.ConfigFile("first.toml", PackCatalog.ConfigType.COMMON, first,
+                List.of(), List.of());
+        PackCatalog.ConfigFile b = new PackCatalog.ConfigFile("second.toml", PackCatalog.ConfigType.COMMON, second,
+                List.of(), List.of());
+        ConfigPanel[] panel = new ConfigPanel[1];
+        SwingUtilities.invokeAndWait(() -> {
+            panel[0] = new ConfigPanel("testmod", this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()),
+                    target -> { });
+            panel[0].setFiles(List.of(a));
+        });
+        ConfigSettingsTable table = component(panel[0], ConfigSettingsTable.class);
+        RSyntaxTextArea area = component(component(panel[0], EditableTextPanel.class), RSyntaxTextArea.class);
+        awaitOnSwing(() -> area.getText().equals("speed = 1\n"));
+
+        SwingUtilities.invokeAndWait(() -> {
+            area.setText("speed = 2\n");
+            // A catalog refresh that now lists another file selects it while the text is unsaved.
+            panel[0].setFiles(List.of(b));
+        });
+        awaitOnSwing(() -> table.getRowCount() == 2);
+        SwingUtilities.invokeAndWait(() -> button(panel[0], "Save").doClick());
+
+        awaitOnSwing(() -> {
+            try {
+                return Files.readString(first).equals("speed = 2\n");
+            } catch (IOException unreadable) {
+                return false;
+            }
+        });
+        assertEquals("speed = 1\nextra = 3\n", Files.readString(second), "the other file keeps its text");
+    }
+
+    @Test
     void savingATextTheFileNoLongerHoldsAsksFirst() throws Exception {
         Path file = Files.createDirectories(this.directory.resolve("config")).resolve("testmod-common.toml");
         Files.writeString(file, "speed = 5\n");
@@ -260,6 +302,18 @@ class ConfigPanelTest {
 
         assertEquals(List.of(new ConfigSources.Source("New World", newer), new ConfigSources.Source("Old World", older),
                 new ConfigSources.Source("New worlds", defaults)), ConfigSources.of(this.directory, FILE));
+    }
+
+    @Test
+    void theOpenWorldsServerConfigurationComesFirst() throws Exception {
+        Path open = world("Open World", 1_000);
+        Path newer = world("New World", 2_000);
+        try (FileChannel channel = FileChannel.open(open.getParent().getParent().resolve("session.lock"),
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock ignored = channel.lock()) {
+            assertEquals(List.of(new ConfigSources.Source("Open World", open), new ConfigSources.Source("New World", newer)),
+                    ConfigSources.of(this.directory, FILE), "an edit is meant for the world the game has open");
+        }
     }
 
     @Test
