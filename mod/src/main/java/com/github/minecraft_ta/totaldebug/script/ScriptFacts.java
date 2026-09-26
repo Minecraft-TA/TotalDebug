@@ -148,7 +148,7 @@ public final class ScriptFacts {
                 return text(label, "null");
             }
             int budget = (int) Math.min(FactData.MAX_BYTES, ScriptFacts.this.dataBudget);
-            if (budget < 1) {
+            if (budget < NbtFactData.MINIMUM_BYTES) {
                 return text(label, "Not reported: the data budget of this read is used up");
             }
             FactData data = NbtFactData.encode(tag, budget);

@@ -63,6 +63,24 @@ class ScriptFactsTest {
     }
 
     @Test
+    void aBudgetTooSmallForAnyTagCountsAsUsedUp() {
+        ScriptFacts facts = new ScriptFacts(text -> { });
+        for (int index = 0; index < 4; index++) {
+            // A compound holding one byte array named "bytes" encodes as the array's bytes plus 14.
+            CompoundTag tag = new CompoundTag();
+            tag.put("bytes", new ByteArrayTag(new byte[FactData.MAX_BYTES - 14 - (index == 3 ? 1 : 0)]));
+            facts.section("NBT").nbt("Copy " + index, tag);
+        }
+
+        facts.section("NBT").nbt("Last", new CompoundTag());
+
+        List<Fact> reported = facts.snapshot().getFirst().facts();
+        assertEquals(FactData.MAX_TOTAL_BYTES - 1,
+                reported.subList(0, 4).stream().mapToLong(fact -> fact.data().size()).sum());
+        assertEquals(Fact.Kind.TEXT, reported.getLast().kind(), "one byte cannot hold even an empty compound");
+    }
+
+    @Test
     void aFailingGuardedReadKeepsEarlierFactsReportsTheProblemAndLetsLaterReadsRun() {
         List<String> log = new ArrayList<>();
         ScriptFacts facts = new ScriptFacts(log::add);

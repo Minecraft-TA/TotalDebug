@@ -68,9 +68,27 @@ class DataViewTest {
     }
 
     @Test
+    void dataIsDecodedOnTheDecoderAndALateOlderReadIsNotShown() throws Exception {
+        run(() -> {
+            List<Runnable> decodes = new ArrayList<>();
+            DataView view = new DataView(decodes::add);
+            view.show(List.of(new DataRows.Root("NBT › Block entity", furnace(1, "", List.of()))));
+            view.show(List.of(new DataRows.Root("NBT › Block entity", furnace(3, "", List.of()))));
+            assertEquals(0, view.search().size(), "nothing is decoded on the Swing thread");
+
+            decodes.get(1).run();
+            decodes.get(0).run();
+
+            List<String> texts = new ArrayList<>();
+            for (int index = 0; index < view.search().size(); index++) texts.add(view.search().textAt(index));
+            assertTrue(texts.contains("Slot 2b"), "the newer read with three items stays shown: " + texts);
+        });
+    }
+
+    @Test
     void typingFindsCollapsedEntriesAndRevealsTheSelectedMatch() throws Exception {
         run(() -> {
-            DataView view = new DataView();
+            DataView view = new DataView(Runnable::run);
             view.show(List.of(new DataRows.Root("NBT › Block entity", furnace(2, "", List.of()))));
             SpeedSearchTarget search = view.search();
             int second = -1;
@@ -107,7 +125,7 @@ class DataViewTest {
     @Test
     void aNewerReadKeepsExpansionAndSelectionByEntryAndMarksChangedValues() throws Exception {
         run(() -> {
-            DataView view = new DataView();
+            DataView view = new DataView(Runnable::run);
             view.show(List.of(new DataRows.Root("NBT › Block entity", furnace(1, "a", List.of()))));
             view.toggle(1);
             int slot = names(view.rows()).indexOf("[0]");
@@ -123,7 +141,7 @@ class DataViewTest {
     @Test
     void copyOffersExactSnbtOnlyForCompletelyTransferredEntries() throws Exception {
         run(() -> {
-            DataView view = new DataView();
+            DataView view = new DataView(Runnable::run);
             view.show(List.of(new DataRows.Root("NBT › Block entity",
                     furnace(1, "C:\\path", List.of(new FactData.Omission("Items", 40))))));
 

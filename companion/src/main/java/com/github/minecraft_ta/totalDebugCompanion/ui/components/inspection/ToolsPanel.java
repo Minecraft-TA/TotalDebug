@@ -111,7 +111,7 @@ final class ToolsPanel extends JPanel {
             }
             if (failure != null) {
                 removeAll();
-                this.views.clear();
+                clearViews();
                 add(aligned(problemLabel("Tools could not be read: " + rootMessage(failure))));
                 revalidate();
                 repaint();
@@ -126,7 +126,7 @@ final class ToolsPanel extends JPanel {
             List<Path> paths = applicable.stream().map(InspectionTool::path).toList();
             if (!paths.equals(List.copyOf(this.views.keySet()))) {
                 removeAll();
-                this.views.clear();
+                clearViews();
                 for (InspectionTool tool : applicable) {
                     ToolView view = new ToolView(tool);
                     this.views.put(tool.path(), view);
@@ -143,6 +143,14 @@ final class ToolsPanel extends JPanel {
             CompletableFuture.allOf(runs.toArray(CompletableFuture[]::new)).whenComplete((ignored, error) -> done.complete(null));
         }));
         return done;
+    }
+
+    /** Drops every tool view; the data a dropped tool reported leaves the Data tab with it. */
+    private void clearViews() {
+        for (ToolView view : this.views.values()) {
+            this.reported.accept(view.name, List.of());
+        }
+        this.views.clear();
     }
 
     private List<InspectionTool> loadTools() {

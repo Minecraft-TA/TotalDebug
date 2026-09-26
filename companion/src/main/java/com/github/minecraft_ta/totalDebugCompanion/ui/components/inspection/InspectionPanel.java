@@ -101,6 +101,7 @@ public final class InspectionPanel extends JPanel {
     private final ScriptResultTree object = new ScriptResultTree();
     private final DataView data = new DataView();
     private final Map<String, List<DataRows.Root>> dataBySource = new LinkedHashMap<>();
+    private CompletableFuture<Void> toolRun = CompletableFuture.completedFuture(null);
     private final Set<String> collapsed = new HashSet<>();
     private final JTextArea problem = new JTextArea();
     private final JPanel cards = new JPanel(new CardLayout());
@@ -304,12 +305,17 @@ public final class InspectionPanel extends JPanel {
         if (!this.live.isSelected()) {
             this.refresh.setEnabled(false);
         }
-        CompletableFuture<Void> toolsDone = this.tools.run(selectedSide);
-        CompletableFuture<Void> builtInDone = this.active.completion().handle((outcome, failure) -> {
-            SwingUtilities.invokeLater(() -> finish(current, selectedSide, source, outcome, failure));
-            return null;
-        });
-        CompletableFuture.allOf(builtInDone, toolsDone).whenComplete((ignored, failure) ->
+        this.toolRun = this.tools.run(selectedSide);
+        CompletableFuture<Void> finished = new CompletableFuture<>();
+        this.active.completion().whenComplete((outcome, failure) -> SwingUtilities.invokeLater(() -> {
+            try {
+                finish(current, selectedSide, source, outcome, failure);
+            } finally {
+                finished.complete(null);
+            }
+        }));
+        // A replaced subject starts its tools again while finishing; the next read waits for the run current then.
+        finished.thenCompose(ignored -> this.toolRun).whenComplete((ignored, failure) ->
                 SwingUtilities.invokeLater(() -> scheduleLive(current)));
     }
 
@@ -392,7 +398,7 @@ public final class InspectionPanel extends JPanel {
         EditorTabs tabs = (EditorTabs) SwingUtilities.getAncestorOfClass(EditorTabs.class, this);
         if (tabs != null) tabs.refreshEditorTitles();
         if (replacedNow) {
-            this.tools.run(selectedSide);
+            this.toolRun = this.tools.run(selectedSide);
         }
     }
 

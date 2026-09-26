@@ -97,6 +97,7 @@ public final class CompanionAppClient implements AutoCloseable {
     }
     private final Object connectionLock = new Object();
     private volatile Connection connection;
+    private volatile ResourceSnapshotMessage resourceSnapshot;
     private volatile CompanionDiscovery discovery;
     private volatile BooleanSupplier companionEnabled = () -> true;
 
@@ -285,9 +286,14 @@ public final class CompanionAppClient implements AutoCloseable {
         send(new ExecutionResultMessage(scriptId, result));
     }
 
-    /** Tells Companion where to read item icon resources; dropped while no session is authenticated. */
+    /**
+     * Tells Companion where to read item icon resources. The newest snapshot is kept and sent again when a session
+     * authenticates, since a capture can finish before its connection does.
+     */
     public void sendResourceSnapshot(String archive, int layers) {
-        send(new ResourceSnapshotMessage(archive, layers));
+        ResourceSnapshotMessage snapshot = new ResourceSnapshotMessage(archive, layers);
+        this.resourceSnapshot = snapshot;
+        send(snapshot);
     }
 
     public synchronized void openClassAndFocus(
@@ -416,6 +422,8 @@ public final class CompanionAppClient implements AutoCloseable {
         attempt.authenticated.complete(null);
         send(new DebugTargetMessage("minecraft-client", "Minecraft Client", DebugTargetMessage.LOCAL_JVM, ProcessHandle.current().pid()));
         sendServerManifest();
+        ResourceSnapshotMessage snapshot = this.resourceSnapshot;
+        if (snapshot != null) send(snapshot);
         startRuntimeInventoryPreparation(false);
     }
 

@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.script.ScriptTarget;
 import net.minecraft.core.Direction;
 import net.neoforged.neoforge.capabilities.BaseCapability;
 import net.neoforged.neoforge.capabilities.BlockCapability;
+import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.EntityCapability;
 
 /**
@@ -22,8 +23,14 @@ public final class CapabilityReader {
         int exposed = 0;
         switch (target) {
             case ScriptTarget.PlacedBlock block -> {
+                String chest = StorageReader.otherChestHalfUnreadable(block.level(), block.pos(), block.state());
                 for (BlockCapability<?, ?> capability : BlockCapability.getAll()) {
                     if (!queryable(capability.contextClass(), side)) {
+                        continue;
+                    }
+                    if (chest != null && capability == Capabilities.ItemHandler.BLOCK) {
+                        section.text(capability.name().toString(), chest);
+                        exposed++;
                         continue;
                     }
                     Object handler = ((BlockCapability<Object, Direction>) capability).getCapability(

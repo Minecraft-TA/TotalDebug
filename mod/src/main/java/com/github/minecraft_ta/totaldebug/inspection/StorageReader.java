@@ -28,6 +28,7 @@ import java.util.function.Supplier;
  */
 public final class StorageReader {
     public static final int MAX_SLOTS = 96;
+    public static final int MAX_TANKS = 32;
 
     private StorageReader() {
     }
@@ -44,7 +45,7 @@ public final class StorageReader {
         BlockPos pos = block.pos();
         BlockState state = block.state();
         facts.guarded("Items", () -> {
-            String otherHalf = pendingLootInOtherChestHalf(level, pos, state);
+            String otherHalf = otherChestHalfUnreadable(level, pos, state);
             if (otherHalf != null) {
                 facts.section("Items").text("Contents", otherHalf);
                 return;
@@ -101,8 +102,12 @@ public final class StorageReader {
             return;
         }
         ScriptFacts.Section section = facts.section("Fluids");
-        for (int tank = 0; tank < handler.getTanks(); tank++) {
+        int tanks = handler.getTanks();
+        for (int tank = 0; tank < Math.min(tanks, MAX_TANKS); tank++) {
             section.fluid("Tank " + tank, handler.getFluidInTank(tank), handler.getTankCapacity(tank));
+        }
+        if (tanks > MAX_TANKS) {
+            section.text("Tanks", tanks + " (first " + MAX_TANKS + " shown)");
         }
     }
 
@@ -129,12 +134,19 @@ public final class StorageReader {
         return lootTable == null ? null : notRead(lootTable);
     }
 
-    private static String pendingLootInOtherChestHalf(Level level, BlockPos pos, BlockState state) {
+    /**
+     * Why a double chest's item handler must not be looked up, or null. Resolving it combines both halves: an unloaded
+     * other half would be loaded, and its pending loot generated on access.
+     */
+    static String otherChestHalfUnreadable(Level level, BlockPos pos, BlockState state) {
         if (!(state.getBlock() instanceof ChestBlock) || state.getValue(ChestBlock.TYPE) == ChestType.SINGLE) {
             return null;
         }
         BlockPos other = pos.relative(ChestBlock.getConnectedDirection(state));
-        if (!level.isLoaded(other) || !(level.getBlockEntity(other) instanceof RandomizableContainer container)
+        if (!level.isLoaded(other)) {
+            return "Not read: the other chest half is not loaded";
+        }
+        if (!(level.getBlockEntity(other) instanceof RandomizableContainer container)
                 || container.getLootTable() == null) {
             return null;
         }

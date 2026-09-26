@@ -25,6 +25,9 @@ final class NbtFactData {
     private NbtFactData() {
     }
 
+    /** The smallest encoded tag: an empty compound, its type and its end. A smaller budget is used up. */
+    static final int MINIMUM_BYTES = 2;
+
     static FactData encode(Tag tag, int maxBytes) {
         if (serializedSize(tag) + 1 <= maxBytes) {
             return FactData.of(write(tag), List.of());

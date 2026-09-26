@@ -29,6 +29,7 @@ import javax.swing.JViewport;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -56,6 +57,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * The exact data of a read, such as block entity NBT, as a tree-table of key, type and value, or as SNBT text. Typing
@@ -83,9 +87,17 @@ final class DataView extends JPanel {
     private Map<String, String> previousValues = Map.of();
     private List<DataRows.Row> rows = List.of();
     private List<DataRows.Row> entries;
+    private final Executor decoder;
+    private long shown;
 
     DataView() {
+        this(ForkJoinPool.commonPool());
+    }
+
+    /** {@code decoder} decodes the data of each read; a large read must not hold up the Swing thread. */
+    DataView(Executor decoder) {
         super(new BorderLayout());
+        this.decoder = decoder;
         ButtonGroup modes = new ButtonGroup();
         modes.add(this.treeMode);
         modes.add(this.textMode);
@@ -112,13 +124,33 @@ final class DataView extends JPanel {
         SpeedSearch.install(this.search);
     }
 
-    /** Shows the data of a newer read, keeping expansion, selection and scroll position by entry. */
+    /**
+     * Shows the data of a newer read, keeping expansion, selection and scroll position by entry. The data is decoded
+     * on the decoder; only the newest read is shown.
+     */
     void show(List<DataRows.Root> next) {
-        List<DataRows.Decoded> decoded = new ArrayList<>(next.size());
-        for (DataRows.Root root : next) {
-            decoded.add(DataRows.Decoded.of(root));
+        long generation = ++this.shown;
+        CompletableFuture.supplyAsync(() -> Prepared.of(next), this.decoder).thenAccept(prepared -> {
+            Runnable apply = () -> {
+                if (generation == this.shown) apply(prepared.roots(), prepared.values());
+            };
+            if (SwingUtilities.isEventDispatchThread()) apply.run();
+            else SwingUtilities.invokeLater(apply);
+        });
+    }
+
+    /** A read's data decoded, with the printed value of every leaf for marking changes. */
+    private record Prepared(List<DataRows.Decoded> roots, Map<String, String> values) {
+        static Prepared of(List<DataRows.Root> next) {
+            List<DataRows.Decoded> decoded = new ArrayList<>(next.size());
+            for (DataRows.Root root : next) {
+                decoded.add(DataRows.Decoded.of(root));
+            }
+            return new Prepared(decoded, leafValues(decoded));
         }
-        Map<String, String> values = leafValues(decoded);
+    }
+
+    private void apply(List<DataRows.Decoded> decoded, Map<String, String> values) {
         this.changed.clear();
         if (!this.previousValues.isEmpty()) {
             values.forEach((key, value) -> {
