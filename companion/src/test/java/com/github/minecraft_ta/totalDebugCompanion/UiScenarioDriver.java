@@ -78,6 +78,7 @@ import java.awt.KeyboardFocusManager;
 import java.awt.Point;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Rectangle2D;
@@ -105,6 +106,7 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.JTree;
@@ -580,6 +582,36 @@ final class UiScenarioDriver {
                 var mod = mainWindow.editorContext().project().catalog().index().orElseThrow().mod("testmod").orElseThrow();
                 navigate(new NavigationTarget.ArchiveEntry(Path.of(mod.file()), "assets/testmod/models/item/widget.json"));
             });
+            case TEXTURE_EDITOR -> {
+                context.once("texture-editor", () -> navigate(new NavigationTarget.LocalFile(mainWindow.editorContext().project()
+                        .profile().workspaceDirectory().resolve("resourcepacks/Faithful/assets/testmod/textures/item/widget.png"), 0)));
+                // The harness opens a texture of its own first; draw only once the pack's texture is the tab shown.
+                var editor = mainWindow.getEditorTabs().getSelectedEditor();
+                ImageViewPanel panel = editor == null || !"widget.png".equals(editor.getTitle()) ? null
+                        : findComponents(mainWindow, ImageViewPanel.class).stream().filter(Component::isShowing).findFirst().orElse(null);
+                AbstractButton pencil = panel == null ? null : findComponents(panel, AbstractButton.class).stream()
+                        .filter(button -> "Pencil".equals(button.getAccessibleContext().getAccessibleName())).findFirst().orElse(null);
+                JScrollPane scroll = panel == null ? null : findComponent(panel, JScrollPane.class);
+                // The stroke is aimed at the middle of the view, once the texture is fitted to it.
+                if (pencil == null || scroll == null || !scroll.isShowing()
+                        || scroll.getViewport().getView().getPreferredSize().width < scroll.getViewport().getWidth() / 2) break;
+                context.once("texture-stroke", () -> {
+                    pencil.doClick();
+                    Component canvas = scroll.getViewport().getView();
+                    int y = canvas.getHeight() / 2;
+                    canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_PRESSED, 0, InputEvent.BUTTON1_DOWN_MASK,
+                            canvas.getWidth() / 3, y, 1, false, MouseEvent.BUTTON1));
+                    canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_DRAGGED, 1, InputEvent.BUTTON1_DOWN_MASK,
+                            canvas.getWidth() * 2 / 3, y + canvas.getHeight() / 8, 0, false, MouseEvent.NOBUTTON));
+                    canvas.dispatchEvent(new MouseEvent(canvas, MouseEvent.MOUSE_RELEASED, 2, 0,
+                            canvas.getWidth() * 2 / 3, y + canvas.getHeight() / 8, 1, false, MouseEvent.BUTTON1));
+                    // Saved, so that closing the harness has no unsaved texture to ask about.
+                    findComponents(mainWindow, JButton.class).stream()
+                            .filter(button -> button.isShowing() && "Save".equals(button.getText())).findFirst()
+                            .ifPresent(JButton::doClick);
+                    context.completedActions.add("texture-stroke");
+                });
+            }
             case RESOURCE_PACKS -> context.once("resource-packs", () ->
                     navigate(new NavigationTarget.PackResources(ResourcesTab.PACKS, "")));
             case WORLD_NONE -> context.once("world-none", () -> {
@@ -689,6 +721,8 @@ final class UiScenarioDriver {
             }
             case RESOURCE_PACKS -> showsTable("Resources", "Pack");
             case SAVE_INTO -> findComponents(mainWindow, JComboBox.class).stream().anyMatch(box -> box.isShowing() && box.getItemCount() > 1);
+            case TEXTURE_EDITOR -> context.completedActions.contains("texture-stroke")
+                    && findComponents(mainWindow, JButton.class).stream().noneMatch(button -> button.isShowing() && "Save".equals(button.getText()));
             case CONTENT -> {
                 ContentBrowser browser = findComponent(mainWindow, ContentBrowser.class);
                 yield mainWindow.getEditorTabs().getSelectedEditor() instanceof ContentView && browser != null

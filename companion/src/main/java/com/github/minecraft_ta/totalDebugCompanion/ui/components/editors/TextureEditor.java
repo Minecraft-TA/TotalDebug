@@ -1,0 +1,346 @@
+package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
+
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
+import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+
+import javax.imageio.ImageIO;
+import javax.swing.AbstractAction;
+import javax.swing.AbstractButton;
+import javax.swing.Box;
+import javax.swing.ButtonGroup;
+import javax.swing.Icon;
+import javax.swing.InputMap;
+import javax.swing.JButton;
+import javax.swing.JColorChooser;
+import javax.swing.JComponent;
+import javax.swing.JPanel;
+import javax.swing.KeyStroke;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.FlowLayout;
+import java.awt.Graphics;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.event.ActionEvent;
+import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.Consumer;
+
+/**
+ * A texture of the pack, edited pixel by pixel (see {@link PackResourceEditor} for how it is saved). The shown frame of
+ * an animation is drawn on, or the whole sheet. Tools: Pencil (B), Eraser (E), Fill (G) and Color Picker (I); with none
+ * chosen (Escape) a drag moves the view, as the middle button always does. Alt+click with the pencil picks the color
+ * under it, Shift+click draws a line from the last pixel drawn. Ctrl+Z undoes a stroke, Ctrl+Shift+Z or Ctrl+Y redoes
+ * it.
+ */
+final class TextureEditor extends PackResourceEditor<BufferedImage> {
+    /** How many of the texture's colors the palette offers, the most used in the whole sheet first. */
+    private static final int PALETTE_SIZE = 16;
+
+    private enum Tool {
+        PENCIL, ERASER, FILL, PICKER
+    }
+
+    private final TexturePixels pixels;
+    private final ImageViewPanel view;
+    private final ButtonGroup tools = new ButtonGroup();
+    private final FlatIconButton pencil = new FlatIconButton(Icons.PENCIL, true);
+    private final FlatIconButton eraser = new FlatIconButton(Icons.ERASER, true);
+    private final FlatIconButton fill = new FlatIconButton(Icons.FILL, true);
+    private final FlatIconButton picker = new FlatIconButton(Icons.COLOR_PICKER, true);
+    private final FlatIconButton undo = new FlatIconButton(Icons.UNDO, false);
+    private final FlatIconButton redo = new FlatIconButton(Icons.REDO, false);
+    private final JButton color = new FlatIconButton(null, false);
+    private final JPanel palette = new JPanel(new FlowLayout(FlowLayout.LEFT, 1, 0));
+    /** The color drawn with, as ARGB. */
+    private int argb;
+    /** The last pixel drawn, where Shift+click starts a line, or null. */
+    private Point last;
+    /** The content last loaded or saved, which the shown pixels are compared with; null for none. */
+    private BufferedImage saved;
+
+    /** {@code metadata} receives the status line: size, zoom and the pixel under the mouse. */
+    TextureEditor(String path, String origin, Path pack, LoadedResource.Image content, ResourceEdits edits,
+                  Consumer<String> metadata) {
+        super(path, origin, pack, content.value(), edits);
+        this.pixels = new TexturePixels(content.value());
+        this.saved = content.value();
+        this.view = new ImageViewPanel(new LoadedResource.Image(this.pixels.sheet(), content.byteCount(), content.animation(),
+                content.animationProblem()), metadata);
+        this.view.addTools(tool(this.pencil, Tool.PENCIL, "Pencil", "B"), tool(this.eraser, Tool.ERASER, "Eraser", "E"),
+                tool(this.fill, Tool.FILL, "Fill", "G"), tool(this.picker, Tool.PICKER, "Color Picker", "I"),
+                Box.createHorizontalStrut(10), this.color, this.palette, Box.createHorizontalStrut(10),
+                action(this.undo, "Undo", "Ctrl+Z", this::undo),
+                action(this.redo, "Redo", "Ctrl+Shift+Z", this::redo));
+        this.color.addActionListener(event -> chooseColor());
+        this.view.setPainter(new Painter());
+        List<Integer> colors = this.pixels.palette(sheetBounds(), 1);
+        setColor(colors.isEmpty() ? 0xFF000000 : colors.getFirst());
+        bindKeys();
+        refresh();
+        start(this.view);
+    }
+
+    /** The image view, for tests. */
+    ImageViewPanel view() {
+        return this.view;
+    }
+
+    private Component tool(FlatIconButton button, Tool tool, String name, String key) {
+        button.putClientProperty(Tool.class, tool);
+        button.setToolTipText(Tooltip.action(name, key).html());
+        button.getAccessibleContext().setAccessibleName(name);
+        button.addActionListener(event -> this.view.updateCursor());
+        this.tools.add(button);
+        return button;
+    }
+
+    private Component action(FlatIconButton button, String name, String keys, Runnable action) {
+        button.setToolTipText(Tooltip.action(name, keys).html());
+        button.getAccessibleContext().setAccessibleName(name);
+        button.addActionListener(event -> action.run());
+        return button;
+    }
+
+    /** The tool chosen, or null to move the view. */
+    private Tool tool() {
+        for (AbstractButton button : List.of(this.pencil, this.eraser, this.fill, this.picker)) {
+            if (button.isSelected()) return (Tool) button.getClientProperty(Tool.class);
+        }
+        return null;
+    }
+
+    private void choose(AbstractButton button) {
+        if (button == null) this.tools.clearSelection();
+        else button.setSelected(true);
+        this.view.updateCursor();
+    }
+
+    private void bindKeys() {
+        // Single keys choose tools only while the image has the focus, so they never reach a text field.
+        InputMap viewKeys = this.view.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+        bind(this.view, viewKeys, "B", "pencil", () -> choose(this.pencil));
+        bind(this.view, viewKeys, "E", "eraser", () -> choose(this.eraser));
+        bind(this.view, viewKeys, "G", "fill", () -> choose(this.fill));
+        bind(this.view, viewKeys, "I", "picker", () -> choose(this.picker));
+        bind(this.view, viewKeys, "ESCAPE", "move", () -> choose(null));
+        InputMap keys = getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+        bind(this, keys, "ctrl Z", "undo", this::undo);
+        bind(this, keys, "ctrl shift Z", "redo", this::redo);
+        bind(this, keys, "ctrl Y", "redo", this::redo);
+        bind(this, keys, "ctrl S", "save", this::save);
+    }
+
+    private static void bind(JComponent component, InputMap keys, String key, String name, Runnable action) {
+        keys.put(KeyStroke.getKeyStroke(key), name);
+        component.getActionMap().put(name, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                action.run();
+            }
+        });
+    }
+
+    private void undo() {
+        if (this.pixels.undo()) edited();
+    }
+
+    private void redo() {
+        if (this.pixels.redo()) edited();
+    }
+
+    /** Shows the pixels after a stroke, undo or redo changed them. */
+    private void edited() {
+        this.view.pixelsChanged();
+        refresh();
+        changed();
+    }
+
+    /** Shows what can be undone and the colors of the shown pixels. */
+    private void refresh() {
+        this.undo.setEnabled(this.pixels.canUndo());
+        this.redo.setEnabled(this.pixels.canRedo());
+        this.palette.removeAll();
+        for (int swatch : this.pixels.palette(sheetBounds(), PALETTE_SIZE)) {
+            FlatIconButton button = new FlatIconButton(new Swatch(swatch, 10), false);
+            button.setToolTipText(Tooltip.of(describe(swatch)).html());
+            button.getAccessibleContext().setAccessibleName(describe(swatch));
+            button.addActionListener(event -> setColor(swatch));
+            this.palette.add(button);
+        }
+        this.palette.revalidate();
+        this.palette.repaint();
+    }
+
+    private Rectangle sheetBounds() {
+        return new Rectangle(this.pixels.sheet().getWidth(), this.pixels.sheet().getHeight());
+    }
+
+    private void chooseColor() {
+        Color chosen = JColorChooser.showDialog(this, "Color", new Color(this.argb, true), true);
+        if (chosen != null) setColor(chosen.getRGB());
+    }
+
+    private void setColor(int argb) {
+        this.argb = argb;
+        this.color.setIcon(new Swatch(argb, 16));
+        String description = describe(argb);
+        this.color.setToolTipText(Tooltip.of("Color").text(description + ". Click to choose another").html());
+        this.color.getAccessibleContext().setAccessibleName("Color " + description);
+    }
+
+    /** A color as the status line names a pixel's, such as {@code #3F76E4, alpha 255}. */
+    static String describe(int argb) {
+        return "#" + String.format(Locale.ROOT, "%06X", argb & 0xFFFFFF) + ", alpha " + (argb >>> 24);
+    }
+
+    /** Draws with the chosen tool in pixels of the sheet, one stroke per press. */
+    private final class Painter implements ImageViewPanel.Painter {
+        @Override
+        public boolean paints() {
+            return tool() != null;
+        }
+
+        @Override
+        public void press(Point pixel, Rectangle region, MouseEvent event) {
+            Tool tool = tool();
+            if (tool == Tool.PICKER || tool == Tool.PENCIL && event.isAltDown()) {
+                pick(pixel, region);
+                return;
+            }
+            pixels.begin();
+            int drawn = tool == Tool.ERASER ? 0 : argb;
+            if (tool == Tool.FILL) {
+                pixels.fill(pixel.x, pixel.y, drawn, region);
+            } else if (event.isShiftDown() && last != null) {
+                pixels.line(last.x, last.y, pixel.x, pixel.y, drawn, region);
+            } else {
+                pixels.set(pixel.x, pixel.y, drawn, region);
+            }
+            last = pixel;
+            view.pixelsChanged();
+        }
+
+        @Override
+        public void drag(Point pixel, Rectangle region, MouseEvent event) {
+            Tool tool = tool();
+            if (tool == Tool.PICKER || tool == Tool.PENCIL && event.isAltDown()) {
+                pick(pixel, region);
+                return;
+            }
+            if (tool == Tool.FILL || last == null || last.equals(pixel)) return;
+            pixels.line(last.x, last.y, pixel.x, pixel.y, tool == Tool.ERASER ? 0 : argb, region);
+            last = pixel;
+            view.pixelsChanged();
+        }
+
+        @Override
+        public void release() {
+            if (pixels.end()) edited();
+        }
+
+        private void pick(Point pixel, Rectangle region) {
+            if (region.contains(pixel)) setColor(pixels.color(pixel.x, pixel.y));
+        }
+    }
+
+    /** A square of a color over a checkerboard, so a transparent one shows as such. */
+    private record Swatch(int argb, int size) implements Icon {
+        @Override
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            int half = this.size / 2;
+            graphics.setColor(Color.WHITE);
+            graphics.fillRect(x, y, this.size, this.size);
+            graphics.setColor(Color.LIGHT_GRAY);
+            graphics.fillRect(x, y, half, half);
+            graphics.fillRect(x + half, y + half, this.size - half, this.size - half);
+            graphics.setColor(new Color(this.argb, true));
+            graphics.fillRect(x, y, this.size, this.size);
+            graphics.setColor(ThemeColors.separator());
+            graphics.drawRect(x, y, this.size - 1, this.size - 1);
+        }
+
+        @Override
+        public int getIconWidth() {
+            return this.size;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return this.size;
+        }
+    }
+
+    @Override
+    protected BufferedImage shown() {
+        return this.pixels.sheet();
+    }
+
+    @Override
+    protected boolean same(BufferedImage first, BufferedImage second) {
+        return TexturePixels.same(first, second);
+    }
+
+    @Override
+    protected void load(BufferedImage content) {
+        this.saved = content;
+        // Nothing left to show keeps the pixels on screen, unsaved; the same pixels keep what can be undone.
+        if (content == null || TexturePixels.same(this.pixels.sheet(), content)) return;
+        this.pixels.replace(content);
+        this.last = null;
+        this.view.setSheet(this.pixels.sheet());
+        refresh();
+    }
+
+    @Override
+    protected void markSaved(BufferedImage content) {
+        this.saved = content;
+    }
+
+    @Override
+    protected boolean modified() {
+        return !TexturePixels.same(this.pixels.sheet(), this.saved);
+    }
+
+    @Override
+    protected BufferedImage decode(byte[] bytes) throws IOException {
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
+        if (image == null) throw new IOException("The copy in the pack is not a PNG image");
+        return image;
+    }
+
+    @Override
+    protected byte[] encode(BufferedImage content) throws IOException {
+        return TexturePixels.png(content);
+    }
+
+    @Override
+    protected BufferedImage copy(BufferedImage content) {
+        return TexturePixels.copy(content);
+    }
+
+    @Override
+    protected BufferedImage none() {
+        return null;
+    }
+
+    @Override
+    protected String noun() {
+        return "texture";
+    }
+
+    @Override
+    void dispose() {
+        super.dispose();
+        this.view.dispose();
+    }
+}

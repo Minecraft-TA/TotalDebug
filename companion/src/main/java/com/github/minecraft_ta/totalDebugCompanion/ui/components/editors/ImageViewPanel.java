@@ -26,6 +26,21 @@ import java.util.function.Consumer;
 
 public final class ImageViewPanel extends JPanel {
 
+    /**
+     * Draws on the shown image with the mouse. Pixels are given in the whole sheet, and {@code region} is the part shown:
+     * the frame, or the whole sheet.
+     */
+    interface Painter {
+        /** Whether a drag with the left button draws rather than moves the view. */
+        boolean paints();
+
+        void press(Point pixel, Rectangle region, MouseEvent event);
+
+        void drag(Point pixel, Rectangle region, MouseEvent event);
+
+        void release();
+    }
+
     private static final double MINIMUM_SCALE = 0.05;
     private static final double MAXIMUM_SCALE = 64;
     /** Zoom levels from 100% up. Whole numbers draw every image pixel with the same number of screen pixels. */
@@ -33,7 +48,7 @@ public final class ImageViewPanel extends JPanel {
     private static final double ZOOM_STEP_BELOW_ACTUAL = 1.25;
     private static final int GAME_TICK_MILLIS = 50;
 
-    private final BufferedImage image;
+    private BufferedImage image;
     private final int byteCount;
     private final String animationProblem;
     /** Played frames whose index lies inside the sheet, in playing order. */
@@ -59,6 +74,8 @@ public final class ImageViewPanel extends JPanel {
     private int frameTicks;
     private double wheelRotation;
     private Point hoveredPixel;
+    private Painter painter;
+    private JPanel toolbar;
 
     public ImageViewPanel(LoadedResource.Image content) {
         this(content, ignored -> {});
@@ -105,6 +122,7 @@ public final class ImageViewPanel extends JPanel {
 
     private JComponent createToolbar() {
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
+        this.toolbar = toolbar;
         toolbar.setBorder(DynamicMatteBorder.rule(0, 0, 1, 0));
         toolbar.add(button(this.zoomOut, "Zoom Out", () -> zoomAtCenter(nextScale(this.canvas.scale(), -1))));
         toolbar.add(button(this.zoomIn, "Zoom In", () -> zoomAtCenter(nextScale(this.canvas.scale(), 1))));
@@ -145,13 +163,69 @@ public final class ImageViewPanel extends JPanel {
         return button;
     }
 
+    /** Adds controls after the viewer's own, such as drawing tools. */
+    void addTools(Component... tools) {
+        this.toolbar.add(Box.createHorizontalStrut(10));
+        for (Component tool : tools) this.toolbar.add(tool);
+        this.toolbar.revalidate();
+    }
+
+    /** Lets {@code painter} draw with the left button while it {@link Painter#paints() paints}; the middle button still moves the view. */
+    void setPainter(Painter painter) {
+        this.painter = painter;
+        this.canvas.setFocusable(true);
+        updateCursor();
+    }
+
+    Painter painter() {
+        return this.painter;
+    }
+
+    /** Shows a new sheet, such as another copy of the texture, keeping the zoom and the frame. */
+    void setSheet(BufferedImage sheet) {
+        this.image = sheet;
+        this.canvas.setImage(shownImage());
+        updateStatus();
+    }
+
+    /** Shows the sheet's pixels again after they were changed in place. */
+    void pixelsChanged() {
+        this.canvas.repaint();
+        updateStatus();
+    }
+
+    /** The part of the sheet shown: the frame, or the whole sheet. */
+    Rectangle shownRegion() {
+        return isAnimated() && !this.wholeSheet.isSelected() ? frameRegion(this.framePosition)
+                : new Rectangle(this.image.getWidth(), this.image.getHeight());
+    }
+
+    /** Whether a left drag draws now. */
+    private boolean painting() {
+        return this.painter != null && this.painter.paints();
+    }
+
+    /** Shows the cursor of what a left drag does now: drawing or moving the view. */
+    void updateCursor() {
+        this.canvas.setCursor(painting() ? Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR) : Cursor.getDefaultCursor());
+    }
+
     private void installMouseHandling() {
         MouseAdapter mouse = new MouseAdapter() {
             private Point dragStart;
             private Point viewStart;
+            private boolean drawing;
 
             @Override
             public void mousePressed(MouseEvent event) {
+                if (painting() && SwingUtilities.isLeftMouseButton(event)) {
+                    canvas.requestFocusInWindow();
+                    // The frame being drawn on stays shown.
+                    if (play.isSelected()) setPlaying(false);
+                    this.drawing = true;
+                    painter.press(sheetPixel(event.getPoint()), shownRegion(), event);
+                    return;
+                }
                 if (!SwingUtilities.isLeftMouseButton(event) && !SwingUtilities.isMiddleMouseButton(event)) return;
                 this.dragStart = event.getLocationOnScreen();
                 this.viewStart = scrollPane.getViewport().getViewPosition();
@@ -160,6 +234,11 @@ public final class ImageViewPanel extends JPanel {
 
             @Override
             public void mouseDragged(MouseEvent event) {
+                if (this.drawing) {
+                    painter.drag(sheetPixel(event.getPoint()), shownRegion(), event);
+                    hover(event.getPoint());
+                    return;
+                }
                 if (this.dragStart == null) return;
                 Point now = event.getLocationOnScreen();
                 setViewPosition(this.viewStart.x - (now.x - this.dragStart.x), this.viewStart.y - (now.y - this.dragStart.y));
@@ -168,8 +247,13 @@ public final class ImageViewPanel extends JPanel {
 
             @Override
             public void mouseReleased(MouseEvent event) {
+                if (this.drawing) {
+                    this.drawing = false;
+                    painter.release();
+                    return;
+                }
                 this.dragStart = null;
-                canvas.setCursor(Cursor.getDefaultCursor());
+                updateCursor();
             }
 
             @Override
@@ -202,6 +286,13 @@ public final class ImageViewPanel extends JPanel {
         this.canvas.addMouseListener(mouse);
         this.canvas.addMouseMotionListener(mouse);
         this.canvas.addMouseWheelListener(mouse);
+    }
+
+    /** The sheet pixel under a canvas point, which may lie outside the shown region. */
+    private Point sheetPixel(Point canvasPoint) {
+        Point2D point = this.canvas.toImage(canvasPoint);
+        Rectangle region = shownRegion();
+        return new Point(region.x + (int) Math.floor(point.getX()), region.y + (int) Math.floor(point.getY()));
     }
 
     private boolean canPan() {
@@ -284,9 +375,21 @@ public final class ImageViewPanel extends JPanel {
         return !this.frames.isEmpty();
     }
 
-    private BufferedImage frameImage(int position) {
+    private Rectangle frameRegion(int position) {
         Rectangle region = this.animation.region(this.frames.get(position).index());
+        // A sheet of another size, such as another pack's copy, shows whole where the frame does not fit.
+        Rectangle sheet = new Rectangle(this.image.getWidth(), this.image.getHeight());
+        return sheet.contains(region) ? region : sheet;
+    }
+
+    private BufferedImage frameImage(int position) {
+        Rectangle region = frameRegion(position);
         return this.image.getSubimage(region.x, region.y, region.width, region.height);
+    }
+
+    /** The image the canvas shows: the frame, or the whole sheet. */
+    private BufferedImage shownImage() {
+        return isAnimated() && !this.wholeSheet.isSelected() ? frameImage(this.framePosition) : this.image;
     }
 
     private void setPlaying(boolean playing) {
@@ -317,7 +420,7 @@ public final class ImageViewPanel extends JPanel {
 
     private void updateSheetMode() {
         boolean sheet = this.wholeSheet.isSelected();
-        this.canvas.setImage(sheet ? this.image : frameImage(this.framePosition));
+        this.canvas.setImage(shownImage());
         this.frameSlider.setEnabled(!sheet);
         this.play.setEnabled(!sheet);
         setPlaying(this.play.isSelected());

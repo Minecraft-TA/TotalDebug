@@ -96,7 +96,7 @@ public final class ResourceViewPanel extends JPanel {
     private void showContent(LoadedResource content) {
         Component view = switch (content) {
             case LoadedResource.Text text -> textView(text);
-            case LoadedResource.Image image -> new ImageViewPanel(image, this::setMetadata);
+            case LoadedResource.Image image -> imageView(image);
         };
         if (view instanceof AbstractTextViewPanel text) text.installNavigationHistoryMenu(navigation);
         if (view instanceof ResourceTextEditor editor) editor.textPanel().installNavigationHistoryMenu(navigation);
@@ -150,9 +150,19 @@ public final class ResourceViewPanel extends JPanel {
         return new ResourceTextEditor(path, origin, pack, text, this.edits);
     }
 
-    /** Whether the tab can close: an edited text has no unsaved changes, or they were discarded after asking. */
+    /** An editor for a texture of the pack, otherwise the image. */
+    private Component imageView(LoadedResource.Image image) {
+        String path = this.edits == null ? null : ResourcePaths.of(this.source).orElse(null);
+        if (path == null || !ResourcePaths.editableImage(path)) return new ImageViewPanel(image, this::setMetadata);
+        String origin = this.source instanceof ArchiveEntrySource entry
+                ? entry.archivePath().getFileName().toString() : this.source.displayName();
+        Path pack = this.source instanceof LocalFileSource file ? this.edits.packOf(file.path()).orElse(null) : null;
+        return new TextureEditor(path, origin, pack, image, this.edits, this::setMetadata);
+    }
+
+    /** Whether the tab can close: an edited resource has no unsaved changes, or they were discarded after asking. */
     public boolean canClose() {
-        return !(this.activeView instanceof ResourceTextEditor editor) || editor.confirmLeave();
+        return !(this.activeView instanceof PackResourceEditor<?> editor) || editor.confirmLeave();
     }
 
     private void showCenteredMessage(String message, Runnable retry) {
@@ -208,7 +218,7 @@ public final class ResourceViewPanel extends JPanel {
     }
 
     private void disposeActiveView() {
-        if (this.activeView instanceof ResourceTextEditor editor) {
+        if (this.activeView instanceof PackResourceEditor<?> editor) {
             editor.dispose();
         } else if (this.activeView instanceof AbstractTextViewPanel textView) {
             textView.dispose();
