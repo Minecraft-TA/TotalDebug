@@ -105,15 +105,23 @@ public final class CurrentWorld {
 
     /**
      * The world's datapacks. The game names a pack in the world's {@code datapacks} folder {@code file/} and its file
-     * name (see {@link PackFolders}).
+     * name (see {@link PackFolders}), and drops one whose folder or zip is gone when it loads the world.
      */
     private static List<ListedPack> datapacks(Path world, List<String> enabled, List<String> disabled) throws IOException {
         Map<String, Path> files = PackFolders.list(world.resolve("datapacks"));
         List<ListedPack> packs = new ArrayList<>();
-        for (String id : enabled.reversed()) packs.add(new ListedPack(id, ListedPack.State.ENABLED, files.remove(id)));
-        for (String id : disabled) packs.add(new ListedPack(id, ListedPack.State.DISABLED, files.remove(id)));
+        for (String id : enabled.reversed()) {
+            if (!gone(id, files)) packs.add(new ListedPack(id, ListedPack.State.ENABLED, files.remove(id)));
+        }
+        for (String id : disabled) {
+            if (!gone(id, files)) packs.add(new ListedPack(id, ListedPack.State.DISABLED, files.remove(id)));
+        }
         files.forEach((id, file) -> packs.add(new ListedPack(id, ListedPack.State.NEW, file)));
         return packs;
+    }
+
+    private static boolean gone(String id, Map<String, Path> files) {
+        return id.startsWith("file/") && !files.containsKey(id);
     }
 
     /** The root compound of a gzipped NBT file, whose root is written with a name the reader does not take. */

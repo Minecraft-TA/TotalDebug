@@ -131,6 +131,12 @@ final class PacksPanel extends JPanel {
      * data of every mod, and a namespace before a colon for a pack a mod adds in code.
      */
     static Row row(ListedPack pack, CatalogIndex index, Side side) {
+        Row row = fromId(pack, index, side);
+        // The running game's title, such as Programmer Art, names a pack better than its id; a file's name names its own.
+        return pack.file() != null || pack.title().isEmpty() ? row : new Row(pack, pack.title(), row.from(), row.modId());
+    }
+
+    private static Row fromId(ListedPack pack, CatalogIndex index, Side side) {
         String id = pack.id();
         if (pack.file() != null) return new Row(pack, PackFolders.title(pack.file()), side.folder, "");
         if (id.startsWith("file/")) return new Row(pack, id.substring("file/".length()), side.folder, "");

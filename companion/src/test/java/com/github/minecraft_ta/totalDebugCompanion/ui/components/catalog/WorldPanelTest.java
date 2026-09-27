@@ -60,6 +60,10 @@ class WorldPanelTest {
                 PacksPanel.Side.RESOURCES).from());
         assertEquals("Every mod", PacksPanel.row(new ListedPack("mod_resources", ListedPack.State.ENABLED, null), null,
                 PacksPanel.Side.RESOURCES).from());
+        PacksPanel.Row programmerArt = PacksPanel.row(new ListedPack("programmer_art", ListedPack.State.ENABLED, null,
+                "Programmer Art"), null, PacksPanel.Side.RESOURCES);
+        assertEquals(List.of("Programmer Art", "Minecraft"), List.of(programmerArt.name(), programmerArt.from()),
+                "the running game's title names it");
     }
 
     private static List<String> row(String id, CatalogIndex index) {

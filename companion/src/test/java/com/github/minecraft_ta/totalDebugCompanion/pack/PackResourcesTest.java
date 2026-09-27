@@ -109,6 +109,16 @@ class PackResourcesTest {
                 "the game names a pack for each mod file, which its pack screen shows as one");
         assertEquals(ListedPack.State.DISABLED, running.getLast().state());
         assertEquals(this.directory.resolve("resourcepacks/Unused"), running.getFirst().file());
+        assertEquals(List.of("Unused", "", "Minecraft", ""), running.stream().map(ListedPack::title).toList(),
+                "the running game's titles are kept, except for the mods it shows as one");
+    }
+
+    @Test
+    void withoutAGameAPackOfTheFolderThatIsGoneIsNotListed() throws Exception {
+        Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"programmer_art\",\"file/Gone\"]\n");
+        assertEquals(List.of("programmer_art", "vanilla"),
+                PackResources.resourcePacks(null, this.directory).stream().map(ListedPack::id).toList(),
+                "the game drops it when it starts; a built-in pack has no file of its own and stays");
     }
 
     @Test

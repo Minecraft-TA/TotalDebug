@@ -37,7 +37,6 @@ public final class CatalogSearch {
     private final String[] names;
     private final String[] ids;
     private List<ModResources.Resource> resources;
-    private List<PackResult> packs;
     private List<Path> directories;
     /** Where the game keeps its keys, or null without a game directory. */
     private final Path options;
@@ -103,7 +102,8 @@ public final class CatalogSearch {
                         owner == null ? ownerId : owner.title()));
             }
         }
-        if (category == Category.ALL || category == Category.RESOURCES) {
+        // The player's packs belong to no module.
+        if (moduleIds == null && (category == Category.ALL || category == Category.RESOURCES)) {
             for (PackResult pack : packs()) {
                 if (PackFolders.title(pack.file()).toLowerCase(Locale.ROOT).contains(folded)) results.add(pack);
             }
@@ -125,11 +125,10 @@ public final class CatalogSearch {
     }
 
     /**
-     * The resource packs in {@code resourcepacks/} and the current world's datapacks, listed on first use; none without a
-     * game directory. Blocking.
+     * The resource packs in {@code resourcepacks/} and the current world's datapacks, listed again for every search as
+     * the player adds packs or opens another world; none without a game directory. Blocking.
      */
     private List<PackResult> packs() {
-        if (this.packs != null) return this.packs;
         List<PackResult> packs = new ArrayList<>();
         Path workspace = this.options == null ? null : this.options.getParent();
         if (workspace != null) {
@@ -143,8 +142,7 @@ public final class CatalogSearch {
                 // Packs that cannot be listed are not found; the rest of the search still is.
             }
         }
-        this.packs = List.copyOf(packs);
-        return this.packs;
+        return packs;
     }
 
     /** The bindings with the keys {@code options.txt} gives them now, or their defaults when it cannot be read. Blocking. */

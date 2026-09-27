@@ -131,17 +131,23 @@ public final class PackResources {
      */
     public static List<ListedPack> resourcePacks(PackStackPayload stack, Path workspace) throws IOException {
         Map<String, Path> files = PackFolders.list(workspace.resolve("resourcepacks"));
-        List<String> enabled = new ArrayList<>();
+        // The ids of the enabled packs, lowest first, with the titles the running game gives them.
+        LinkedHashMap<String, String> enabled = new LinkedHashMap<>();
         if (stack == null) {
-            enabled.addAll(enabledInOptions(workspace.resolve("options.txt")));
+            // The game drops a pack of the folder that is gone when it starts.
+            for (String id : enabledInOptions(workspace.resolve("options.txt"))) {
+                if (!id.startsWith("file/") || files.containsKey(id)) enabled.put(id, "");
+            }
         } else {
             for (PackStackPayload.Pack pack : stack.resourcePacks()) {
-                String id = pack.id().startsWith("mod/") ? MOD_RESOURCES : pack.id();
-                if (!enabled.contains(id)) enabled.add(id);
+                if (pack.id().startsWith("mod/")) enabled.putIfAbsent(MOD_RESOURCES, "");
+                else enabled.putIfAbsent(pack.id(), pack.title());
             }
         }
         List<ListedPack> packs = new ArrayList<>();
-        for (String id : enabled.reversed()) packs.add(new ListedPack(id, ListedPack.State.ENABLED, files.remove(id)));
+        for (String id : enabled.sequencedKeySet().reversed()) {
+            packs.add(new ListedPack(id, ListedPack.State.ENABLED, files.remove(id), enabled.get(id)));
+        }
         files.forEach((id, file) -> packs.add(new ListedPack(id, ListedPack.State.DISABLED, file)));
         return packs;
     }

@@ -91,6 +91,13 @@ final class ResourceTextEditor extends JPanel {
     private int reads;
     private boolean managed;
     private boolean busy;
+    /**
+     * The working pack or the current world changed and its copy is being read; a save waits for it, so it goes into the
+     * pack the tab shows.
+     */
+    private boolean following;
+    /** The working pack or the current world changed during a save, and is followed once the save completes. */
+    private boolean followAfterSave;
     private boolean disposed;
 
     /**
@@ -162,17 +169,31 @@ final class ResourceTextEditor extends JPanel {
      */
     private void chooseTarget() {
         if (this.listingTargets || !(this.target.getSelectedItem() instanceof Path chosen) || chosen.equals(this.pack)) return;
+        this.following = true;
+        changed();
         this.edits.setWorkingPack(this.path, chosen);
     }
 
     /** Shows the copy of the working pack chosen now, whose notice replaces the last pack's. */
     private void targetChanged() {
-        if (!this.disposed && this.opened == null && !this.busy) readCopies(true);
+        follow(true);
     }
 
     /** Reads the copies again when the tab follows the current world, which may have changed. */
     private void packsChanged() {
-        if (!this.disposed && this.opened == null && !this.busy) readCopies(false);
+        follow(false);
+    }
+
+    /** Reads the working pack's copy again, once a save under way completes; {@code changed} as for {@link #readCopies}. */
+    private void follow(boolean changed) {
+        if (this.disposed || this.opened != null) return;
+        if (this.busy) {
+            this.followAfterSave = true;
+            return;
+        }
+        this.following = true;
+        changed();
+        readCopies(changed);
     }
 
     /** Reads the copies again when this resource's entry in the change record changed. */
@@ -192,6 +213,10 @@ final class ResourceTextEditor extends JPanel {
 
     EditableTextPanel textPanel() {
         return this.text;
+    }
+
+    JComboBox<Path> targetBox() {
+        return this.target;
     }
 
     /**
@@ -216,10 +241,12 @@ final class ResourceTextEditor extends JPanel {
             }
         }).whenComplete((found, failure) -> SwingUtilities.invokeLater(() -> {
             if (this.disposed || this.writes != started || this.reads != read) return;
+            // A read that fails leaves the pack to save into unknown, so saving waits for the next one.
             if (failure != null) {
                 showNotice(message(failure), ThemeColors::error);
                 return;
             }
+            this.following = false;
             showPack(found.pack());
             showTargets(found.targets(), found.pack());
             this.seen = found.recorded();
@@ -275,7 +302,7 @@ final class ResourceTextEditor extends JPanel {
         boolean edited = !this.text.text().equals(this.packText);
         this.save.setVisible(edited);
         this.discard.setVisible(edited);
-        this.save.setEnabled(!this.busy);
+        this.save.setEnabled(!this.busy && !this.following);
         this.discard.setEnabled(!this.busy);
         this.target.setEnabled(!this.busy);
     }
@@ -301,7 +328,7 @@ final class ResourceTextEditor extends JPanel {
 
     /** Checks the text, writes it into the managed pack, then shows what the game uses and what its reload reported. */
     void save() {
-        if (this.busy || this.text.text().equals(this.packText)) return;
+        if (this.busy || this.following || this.text.text().equals(this.packText)) return;
         String edited = checked();
         if (edited == null) return;
         this.writes++;
@@ -318,6 +345,7 @@ final class ResourceTextEditor extends JPanel {
                         showState("");
                         showNotice("Not saved: " + message(failure), ThemeColors::error);
                         changed();
+                        followLater();
                         return;
                     }
                     boolean keepEdits = !this.text.text().equals(edited);
@@ -333,7 +361,15 @@ final class ResourceTextEditor extends JPanel {
                         showNotice(saved.unused(), ThemeColors::warning);
                     }
                     changed();
+                    followLater();
                 }));
+    }
+
+    /** Follows a working pack or world change that came during the save just completed. */
+    private void followLater() {
+        if (!this.followAfterSave) return;
+        this.followAfterSave = false;
+        follow(true);
     }
 
     private void showResult(List<String> problems, String reloadFailure) {

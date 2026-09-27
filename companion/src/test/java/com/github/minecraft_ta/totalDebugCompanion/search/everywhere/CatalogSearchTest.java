@@ -116,6 +116,13 @@ class CatalogSearchTest {
         PackResult datapack = assertInstanceOf(PackResult.class, search.search(null, catalog, "tweaks", Category.RESOURCES, 20, null, null).getFirst());
         assertEquals(List.of(tweaks, "Datapack"), List.of(datapack.file(), datapack.kind()), "the current world's datapacks are found too");
         assertTrue(search.search(null, catalog, "faith", Category.MODS, 20, null, null).isEmpty());
+        assertTrue(search.search(null, catalog, "faith", Category.ALL, 20, null, Set.of("testmod")).isEmpty(),
+                "the player's packs belong to no module");
+
+        Path added = Files.createDirectories(this.directory.resolve("resourcepacks/Added"));
+        Files.writeString(added.resolve("pack.mcmeta"), "{}");
+        assertEquals(added, assertInstanceOf(PackResult.class, search.search(null, catalog, "added", Category.ALL, 20, null, null)
+                .getFirst()).file(), "a pack added after the last search is found");
     }
 
     private CatalogSearch catalog() throws Exception {

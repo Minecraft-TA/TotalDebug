@@ -58,6 +58,17 @@ class CurrentWorldTest {
     }
 
     @Test
+    void aDatapackWhoseFolderIsGoneIsNotListed() throws Exception {
+        Path world = this.directory.resolve("world");
+        Map<String, Object> data = LevelDatFixture.world("Test");
+        data.put("DataPacks", Map.of("Enabled", List.of("vanilla", "file/Gone"), "Disabled", List.of("file/AlsoGone")));
+        LevelDatFixture.write(world, data);
+
+        assertEquals(List.of("vanilla"), CurrentWorld.read(world).datapacks().stream().map(ListedPack::id).toList(),
+                "the game drops it when it loads the world");
+    }
+
+    @Test
     void datapacksFollowThePackScreenWithNewFolderPacksLast() throws Exception {
         Path world = this.directory.resolve("world");
         LevelDatFixture.write(world, LevelDatFixture.world("Test"));
