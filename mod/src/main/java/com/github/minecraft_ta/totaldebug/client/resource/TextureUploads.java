@@ -117,8 +117,10 @@ final class TextureUploads {
         Optional<Resource> resource = resources.getResource(location);
         if (resource.isEmpty()) return false;
         boolean shown = false;
+        boolean own = textures.get(location) instanceof SimpleTexture texture && texture.getClass() == SimpleTexture.class;
         // A texture of its own reads its .mcmeta for other sections than an animation, which the full reload covers.
-        if (!animated && textures.get(location) instanceof SimpleTexture texture && texture.getClass() == SimpleTexture.class) {
+        if (own && animated) return false;
+        if (own && textures.get(location) instanceof SimpleTexture texture) {
             try {
                 texture.load(resources);
             } catch (IOException exception) {
@@ -143,11 +145,12 @@ final class TextureUploads {
     private static boolean upload(TextureAtlas atlas, TextureAtlasSprite sprite, Resource resource, boolean animated) {
         SpriteContents contents = sprite.contents();
         NativeImage original = contents.getOriginalImage();
-        NativeImage image;
         ResourceMetadata metadata;
+        NativeImage image;
         try (InputStream input = resource.open()) {
-            image = NativeImage.read(input);
+            // The metadata first, so an unreadable .mcmeta leaves no image to free.
             metadata = resource.metadata();
+            image = NativeImage.read(input);
         } catch (IOException | RuntimeException exception) {
             TotalDebug.LOGGER.warn("Texture {} could not be read", contents.name(), exception);
             return false;
@@ -228,7 +231,10 @@ final class TextureUploads {
         tickers.forEach(TextureAtlasSprite.Ticker::close);
         previous.close();
         atlas.bind();
-        sprite.uploadFirstFrame();
+        // Every animation starts over at its first frame, which is shown now, as when the atlas was stitched.
+        for (TextureAtlasSprite each : atlas.getTextures().values()) {
+            if (each == sprite || each.contents().getUniqueFrames().count() > 1) each.uploadFirstFrame();
+        }
         return true;
     }
 
