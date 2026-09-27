@@ -95,11 +95,6 @@ public final class PackResources {
         List<ListedPack> enabled = new ArrayList<>(listed.stream().filter(pack -> pack.state() == ListedPack.State.ENABLED).toList().reversed());
         enabled.addAll(listed.stream().filter(pack -> pack.state() == ListedPack.State.NEW).toList());
         List<Source> sources = new ArrayList<>();
-        if (enabled.isEmpty()) {
-            sources.add(vanilla(index));
-            sources.addAll(mods(index));
-            return sources;
-        }
         for (ListedPack pack : enabled) {
             switch (pack.id()) {
                 case VANILLA -> sources.add(vanilla(index));
@@ -109,6 +104,11 @@ public final class PackResources {
                 }
             }
         }
+        // The game adds a required pack the world does not list where it goes by default: Minecraft's at the bottom, the
+        // mods' data at the top.
+        List<String> ids = enabled.stream().map(ListedPack::id).toList();
+        if (!ids.contains(VANILLA)) sources.addFirst(vanilla(index));
+        if (!ids.contains(MOD_DATA)) sources.addAll(mods(index));
         return sources;
     }
 

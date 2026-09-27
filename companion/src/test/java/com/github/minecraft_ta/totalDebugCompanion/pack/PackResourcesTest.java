@@ -132,6 +132,20 @@ class PackResourcesTest {
     }
 
     @Test
+    void withoutAGameTheRequiredDataPacksStayWhenTheWorldListsNone() throws Exception {
+        CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
+        Path world = this.directory.resolve("saves/World");
+        Map<String, Object> data = LevelDatFixture.world("World");
+        data.remove("DataPacks");
+        LevelDatFixture.write(world, data);
+        pack(world.resolve("datapacks/Added"), RECIPE);
+
+        assertEquals(List.of("vanilla", "file/Added", "mod/testmod"),
+                PackResources.data(null, index, this.directory).stream().map(PackResources.Source::id).toList(),
+                "the game adds Minecraft's data at the bottom and the mods' at the top");
+    }
+
+    @Test
     void withoutAGameDataFollowsTheCurrentWorldsDatapacks() throws Exception {
         CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
         Path world = this.directory.resolve("saves/World");

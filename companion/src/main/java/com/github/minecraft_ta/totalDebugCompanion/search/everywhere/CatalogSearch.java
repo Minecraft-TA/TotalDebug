@@ -18,7 +18,6 @@ import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -131,18 +130,18 @@ public final class CatalogSearch {
     private List<PackResult> packs() {
         List<PackResult> packs = new ArrayList<>();
         Path workspace = this.options == null ? null : this.options.getParent();
-        if (workspace != null) {
-            try {
-                PackFolders.list(workspace.resolve("resourcepacks")).values().forEach(file -> packs.add(new PackResult(file, "Resource pack")));
-                Optional<Path> world = CurrentWorld.directory(workspace);
-                if (world.isPresent()) {
-                    PackFolders.list(world.get().resolve("datapacks")).values().forEach(file -> packs.add(new PackResult(file, "Datapack")));
-                }
-            } catch (IOException unreadable) {
-                // Packs that cannot be listed are not found; the rest of the search still is.
-            }
-        }
+        if (workspace == null) return packs;
+        addPacks(workspace.resolve("resourcepacks"), "Resource pack", packs);
+        CurrentWorld.directory(workspace).ifPresent(world -> addPacks(world.resolve("datapacks"), "Datapack", packs));
         return packs;
+    }
+
+    private static void addPacks(Path folder, String kind, List<PackResult> packs) {
+        try {
+            PackFolders.list(folder).values().forEach(file -> packs.add(new PackResult(file, kind)));
+        } catch (IOException unreadable) {
+            // Packs of a folder that cannot be listed are not found; the rest of the search still is.
+        }
     }
 
     /** The bindings with the keys {@code options.txt} gives them now, or their defaults when it cannot be read. Blocking. */

@@ -98,6 +98,8 @@ final class ResourceTextEditor extends JPanel {
     private boolean following;
     /** The working pack or the current world changed during a save, and is followed once the save completes. */
     private boolean followAfterSave;
+    /** Whether that change ends what the notice said, as a new working pack does; a pack stack change does not. */
+    private boolean clearAfterSave;
     /** Why the game does not use the shown copy, as the notice last said it, or null. */
     private String usageNotice;
     private boolean disposed;
@@ -193,6 +195,7 @@ final class ResourceTextEditor extends JPanel {
         if (this.disposed || this.opened != null) return;
         if (this.busy) {
             this.followAfterSave = true;
+            this.clearAfterSave |= changed;
             return;
         }
         this.following = true;
@@ -380,8 +383,10 @@ final class ResourceTextEditor extends JPanel {
     /** Follows a working pack or world change that came during the save just completed. */
     private void followLater() {
         if (!this.followAfterSave) return;
+        boolean changed = this.clearAfterSave;
         this.followAfterSave = false;
-        follow(true);
+        this.clearAfterSave = false;
+        follow(changed);
     }
 
     private void showResult(List<String> problems, String reloadFailure) {
