@@ -85,26 +85,28 @@ public final class PageLoader<T> {
             } catch (Exception exception) {
                 throw new CompletionException(exception);
             }
-        }).whenComplete((value, failure) -> SwingUtilities.invokeLater(() -> {
-            this.running = false;
-            try {
-                if (this.disposed) return;
-                if (this.again) {
-                    // A newer request came in while this read ran; its read replaces this one unseen.
-                    this.again = false;
-                    load();
-                    return;
-                }
-                if (this.cancelled) return;
-                if (failure == null) this.show.accept(value);
-                else this.fail.accept(failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure);
-            } finally {
-                finished.complete(null);
-            }
-        }));
+        }).whenComplete((value, failure) -> {
+            // Completed off the Swing thread, so a wait on the Swing thread does not block what it waits for.
+            finished.complete(null);
+            SwingUtilities.invokeLater(() -> showRead(value, failure));
+        });
     }
 
-    /** The read that runs or ran last, which completes once it has been shown, replaced or dropped. */
+    private void showRead(T value, Throwable failure) {
+        this.running = false;
+        if (this.disposed) return;
+        if (this.again) {
+            // A newer request came in while this read ran; its read replaces this one unseen.
+            this.again = false;
+            load();
+            return;
+        }
+        if (this.cancelled) return;
+        if (failure == null) this.show.accept(value);
+        else this.fail.accept(failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure);
+    }
+
+    /** The read that runs or ran last, which completes when the read has finished, before it is shown. */
     public CompletableFuture<?> current() {
         return this.current;
     }

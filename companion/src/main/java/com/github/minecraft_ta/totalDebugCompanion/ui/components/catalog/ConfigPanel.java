@@ -108,8 +108,10 @@ final class ConfigPanel extends JPanel {
         this.textEditor = new ConfigTextEditor(this.writer, this::setStatus, this::load);
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.values = new PageLoader<>(this::prepareValues, read -> show(read.file(), read.values(),
-                read.values() == null ? "" : read.values().text(), read.problem()), failure -> { }).whenShown(this);
-        this.sources = new PageLoader<>(this::prepareSources, read -> showSources(read.file(), read.found(), true), failure -> { });
+                read.values() == null ? "" : read.values().text(), read.problem()),
+                failure -> showFailure("Could not read the file: " + failure.getMessage())).whenShown(this);
+        this.sources = new PageLoader<>(this::prepareSources, read -> showSources(read.file(), read.found(), true),
+                failure -> showFailure("Could not list the worlds' copies: " + failure.getMessage()));
         configureFiles();
         this.content.add(toolbar(), BorderLayout.NORTH);
         JPanel settings = new JPanel(new BorderLayout());
@@ -358,6 +360,12 @@ final class ConfigPanel extends JPanel {
     private Path selectedPath() {
         ConfigSources.Source selected = (ConfigSources.Source) this.source.getSelectedItem();
         return selected == null ? null : selected.path();
+    }
+
+    /** Shows why the selected file's values could not be read, in place of the previous file's. */
+    private void showFailure(String problem) {
+        PackCatalog.ConfigFile file = selectedFile();
+        if (file != null) show(file, null, "", problem);
     }
 
     /** Reads the selected file again. */

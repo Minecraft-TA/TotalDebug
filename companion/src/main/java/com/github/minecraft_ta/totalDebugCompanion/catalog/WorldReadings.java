@@ -23,14 +23,17 @@ public final class WorldReadings {
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
     private Summary last;
 
-    /** Records what the World page read; the listeners hear of it when it differs from the read before. Any thread. */
+    /**
+     * Records what the World page read; the listeners hear of it when it differs from the read before, or when it is the
+     * first, since the tree may be reading the world at the same time. Any thread.
+     */
     public void read(Summary summary) {
         Summary before;
         synchronized (this) {
             before = this.last;
             this.last = summary;
         }
-        if (before != null && !before.equals(summary)) this.listeners.forEach(Runnable::run);
+        if (!summary.equals(before)) this.listeners.forEach(Runnable::run);
     }
 
     /** Records what the Project tree shows, so a read that finds the same asks for nothing; the listeners hear nothing. */

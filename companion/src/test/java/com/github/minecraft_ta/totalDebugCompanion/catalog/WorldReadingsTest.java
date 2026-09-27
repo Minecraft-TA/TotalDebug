@@ -16,16 +16,17 @@ class WorldReadingsTest {
         WorldReadings.Summary world = new WorldReadings.Summary(Path.of("saves/World"), 59, 15);
 
         readings.read(world);
-        assertEquals(0, changes.get(), "the first read is what the tree shows");
+        assertEquals(1, changes.get(), "the tree may be reading the world at the same time, so the first read counts");
         readings.read(world);
-        assertEquals(0, changes.get(), "reading the same world again changes nothing");
+        assertEquals(1, changes.get(), "reading the same world again changes nothing");
+        readings.shown(world);
         readings.read(new WorldReadings.Summary(Path.of("saves/World"), 59, 16));
-        assertEquals(1, changes.get(), "a datapack was added since");
+        assertEquals(2, changes.get(), "a datapack was added since the tree read the world");
         readings.read(WorldReadings.Summary.NONE);
-        assertEquals(2, changes.get(), "the world could not be read any more");
+        assertEquals(3, changes.get(), "the world could not be read any more");
 
         remove.run();
         readings.read(world);
-        assertEquals(2, changes.get());
+        assertEquals(3, changes.get());
     }
 }
