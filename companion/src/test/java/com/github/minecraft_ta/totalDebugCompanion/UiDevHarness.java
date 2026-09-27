@@ -112,14 +112,15 @@ public final class UiDevHarness {
     /** The test mod's catalog, with its configuration file holding one modified setting. */
     private static void installCatalogFixture(Path root) throws Exception {
         Path jar = CatalogFixtures.modJar(Files.createDirectories(root.resolve("catalog-fixture")));
-        Files.writeString(Files.createDirectories(jar.resolveSibling("config")).resolve("testmod-common.toml"), """
+        ProjectScope scope = application.currentScope();
+        // Companion reads a mod's configuration from the game directory's config folder, as the game writes it there.
+        Files.writeString(Files.createDirectories(scope.profile().workspaceDirectory().resolve("config")).resolve("testmod-common.toml"), """
                 #Widget behavior
                 [widgets]
                 	#How fast widgets spin
                 	speed = 9
                 	mode = "FAST"
                 """);
-        ProjectScope scope = application.currentScope();
         // The test mod's Spin binding moved to Q, where it collides with dropping an item.
         Files.writeString(scope.profile().workspaceDirectory().resolve("options.txt"),
                 "key_key.testmod.spin:key.keyboard.q\nkey_key.drop:key.keyboard.q\n");
