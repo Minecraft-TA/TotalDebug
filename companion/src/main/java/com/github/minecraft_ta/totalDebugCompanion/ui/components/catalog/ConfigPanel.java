@@ -9,10 +9,10 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Sidebar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.SegmentedToggle;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.ThinSplitPane;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
@@ -30,7 +30,6 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -38,7 +37,6 @@ import javax.swing.text.JTextComponent;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -71,14 +69,13 @@ final class ConfigPanel extends JPanel {
     /** The outcome of the last edit, or why a typed value was refused. */
     private String status = "";
     /** The file list's width, kept while Companion runs so every mod page opens with the width last dragged to. */
-    private static int fileListWidth = 220;
 
     /** File list rows are the files, under a heading per folder when the mod keeps them in one. */
     private final DefaultListModel<Object> fileModel = new DefaultListModel<>();
     private final JList<Object> fileList = new JList<>(this.fileModel);
     private final JScrollPane fileScroll = new JScrollPane(this.fileList);
     private final JPanel content = new JPanel(new BorderLayout());
-    private final ThinSplitPane split;
+    private final Sidebar sidebar;
     private int lastFileIndex = -1;
     private final DefaultComboBoxModel<ConfigSources.Source> sourceModel = new DefaultComboBoxModel<>();
     private final JComboBox<ConfigSources.Source> source = new JComboBox<>(this.sourceModel);
@@ -124,12 +121,9 @@ final class ConfigPanel extends JPanel {
         this.message.setBorder(UiMetrics.messagePadding());
         this.cards.add(this.message, MESSAGE_CARD);
         this.content.add(this.cards, BorderLayout.CENTER);
-        this.split = new ThinSplitPane(this.fileScroll, new JPanel());
-        this.split.setDividerLocation(fileListWidth);
-        this.split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, event -> {
-            if (this.split.isShowing()) fileListWidth = this.split.getDividerLocation();
-        });
-        add(this.content, BorderLayout.CENTER);
+        this.sidebar = new Sidebar("config-files", 220, this.fileScroll, this.content);
+        this.sidebar.setSidebarShown(false);
+        add(this.sidebar, BorderLayout.CENTER);
 
         this.table.setEditing(this::edit, this::setStatus, row -> {
             Path path = selectedPath();
@@ -195,7 +189,6 @@ final class ConfigPanel extends JPanel {
         });
         ContextMenus.installList(this.fileList, row -> fileMenu());
         this.fileScroll.setBorder(BorderFactory.createEmptyBorder());
-        this.fileScroll.setMinimumSize(new Dimension(120, 0));
     }
 
     private JPopupMenu fileMenu() {
@@ -285,15 +278,7 @@ final class ConfigPanel extends JPanel {
         } finally {
             this.updating = false;
         }
-        removeAll();
-        if (files.size() > 1) {
-            this.split.setRightComponent(this.content);
-            this.split.setDividerLocation(fileListWidth);
-            add(this.split, BorderLayout.CENTER);
-        } else {
-            add(this.content, BorderLayout.CENTER);
-        }
-        revalidate();
+        this.sidebar.setSidebarShown(files.size() > 1);
         showFile();
     }
 

@@ -10,11 +10,11 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Sidebar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
@@ -33,7 +33,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import java.io.IOException;
 import java.awt.BorderLayout;
-import java.awt.Dimension;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -134,9 +133,7 @@ public final class LogsPanel extends JPanel {
             showRows();
         });
         JScrollPane fileScroll = new JScrollPane(this.fileList);
-        fileScroll.setBorder(DynamicMatteBorder.rule(0, 0, 0, 1));
-        fileScroll.setPreferredSize(new Dimension(UIScale.scale(300), 0));
-        add(fileScroll, BorderLayout.WEST);
+        fileScroll.setBorder(BorderFactory.createEmptyBorder());
 
         this.rows.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         this.rows.setFixedCellWidth(1);
@@ -166,7 +163,7 @@ public final class LogsPanel extends JPanel {
         });
         ContextMenus.installList(this.rows, this::menu);
         this.body = new BrowserBody("Filter messages, loggers and mods", BrowserBody.scroll(this.rows), this.rows, this::applyFilter);
-        add(this.body, BorderLayout.CENTER);
+        add(new Sidebar("log-files", 300, fileScroll, this.body), BorderLayout.CENTER);
 
         // The game writes its logs while it runs, so the page reads them again whenever it is shown.
         this.rowLoader = new PageLoader<>(this::prepareRows, this::showRead, failure -> showMessage(

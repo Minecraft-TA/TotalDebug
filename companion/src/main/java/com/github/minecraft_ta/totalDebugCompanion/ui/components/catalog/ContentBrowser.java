@@ -4,13 +4,14 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Sidebar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
+import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.Icon;
 import javax.swing.JList;
@@ -19,7 +20,6 @@ import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
-import java.awt.Dimension;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +43,7 @@ public final class ContentBrowser extends JPanel {
     private final DefaultListModel<Kind> kinds = new DefaultListModel<>();
     private final JList<Kind> kindList = new JList<>(this.kinds);
     private final JScrollPane kindScroll = new JScrollPane(this.kindList);
+    private final Sidebar sidebar;
     private final CatalogEntryTable table;
     private final boolean namesMods;
     private Map<String, List<CatalogIndex.Entry>> content = Map.of();
@@ -72,10 +73,9 @@ public final class ContentBrowser extends JPanel {
             this.pendingKind = selectedKind();
             showSelected();
         });
-        this.kindScroll.setBorder(DynamicMatteBorder.rule(0, 0, 0, 1));
-        this.kindScroll.setPreferredSize(new Dimension(190, 0));
-        add(this.kindScroll, BorderLayout.WEST);
-        add(this.table, BorderLayout.CENTER);
+        this.kindScroll.setBorder(BorderFactory.createEmptyBorder());
+        this.sidebar = new Sidebar("content-kinds", 190, this.kindScroll, this.table);
+        add(this.sidebar, BorderLayout.CENTER);
         TypeToFilter.forwardTyping(this.kindList, this::filterField);
     }
 
@@ -94,7 +94,7 @@ public final class ContentBrowser extends JPanel {
         } finally {
             this.updating = false;
         }
-        this.kindScroll.setVisible(content.size() > 1);
+        this.sidebar.setSidebarShown(content.size() > 1);
         select(this.pendingKind);
     }
 
