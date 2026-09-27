@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 
+import java.nio.file.Path;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
@@ -63,7 +65,7 @@ public final class SearchEverywhereSearch {
     }
 
     public sealed interface Result permits ClassResult, SymbolResult, TextResult, ModResult, DefinitionResult, ResourceResult,
-            KeyBindingResult {
+            KeyBindingResult, PackResult {
         String searchableName();
     }
 
@@ -104,6 +106,19 @@ public final class SearchEverywhereSearch {
     }
 
     /** A resource shipped in a mod file. */
+    /** A resource pack or datapack of its own folder or zip file; {@code kind} says which, such as {@code Datapack}. */
+    public record PackResult(Path file, String kind) implements Result {
+        public PackResult {
+            Objects.requireNonNull(file, "file");
+            Objects.requireNonNull(kind, "kind");
+        }
+
+        @Override
+        public String searchableName() {
+            return PackFolders.title(this.file);
+        }
+    }
+
     public record ResourceResult(ModResources.Resource resource, String owner) implements Result {
         public ResourceResult {
             Objects.requireNonNull(resource, "resource");
@@ -308,8 +323,9 @@ public final class SearchEverywhereSearch {
             case ClassResult ignored -> 4;
             case SymbolResult symbol -> symbol.kind() == SymbolKind.METHOD ? 5 : 6;
             case TextResult ignored -> 7;
-            case ResourceResult ignored -> 8;
-            case KeyBindingResult ignored -> 9;
+            case PackResult ignored -> 8;
+            case ResourceResult ignored -> 9;
+            case KeyBindingResult ignored -> 10;
         };
     }
 
@@ -322,6 +338,7 @@ public final class SearchEverywhereSearch {
             case DefinitionResult definition -> definition.entry().subject().format();
             case ResourceResult resource -> resource.resource().file() + "!" + resource.resource().path();
             case KeyBindingResult key -> key.name();
+            case PackResult pack -> pack.file().toString();
         };
     }
 }

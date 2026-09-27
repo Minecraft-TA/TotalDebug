@@ -2,10 +2,12 @@ package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Category;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.DefinitionResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ModResult;
+import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.PackResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ResourceResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Result;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
@@ -97,6 +99,23 @@ class CatalogSearchTest {
 
         assertEquals(5, results.size());
         assertEquals("Ingot", results.getFirst().searchableName());
+    }
+
+    @Test
+    void packsAreFoundByNameAndOpenTheirPage() throws Exception {
+        Path faithful = Files.createDirectories(this.directory.resolve("resourcepacks/Faithful"));
+        Files.writeString(faithful.resolve("pack.mcmeta"), "{}");
+        Path world = this.directory.resolve("saves/World");
+        LevelDatFixture.write(world, LevelDatFixture.world("World"));
+        Path tweaks = LevelDatFixture.datapack(world, "Tweaks");
+        SearchEverywhereSearch search = new SearchEverywhereSearch();
+        CatalogSearch catalog = catalog();
+
+        PackResult resourcePack = assertInstanceOf(PackResult.class, search.search(null, catalog, "faith", Category.ALL, 20, null, null).getFirst());
+        assertEquals(List.of(faithful, "Resource pack"), List.of(resourcePack.file(), resourcePack.kind()));
+        PackResult datapack = assertInstanceOf(PackResult.class, search.search(null, catalog, "tweaks", Category.RESOURCES, 20, null, null).getFirst());
+        assertEquals(List.of(tweaks, "Datapack"), List.of(datapack.file(), datapack.kind()), "the current world's datapacks are found too");
+        assertTrue(search.search(null, catalog, "faith", Category.MODS, 20, null, null).isEmpty());
     }
 
     private CatalogSearch catalog() throws Exception {

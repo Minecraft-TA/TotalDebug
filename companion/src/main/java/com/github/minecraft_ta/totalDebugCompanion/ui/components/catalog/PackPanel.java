@@ -58,7 +58,18 @@ public final class PackPanel extends JPanel {
     }
 
     private static Loaded read(Path file) throws IOException {
-        return new Loaded(PackFolders.meta(file).orElse(null), icon(file), ModResources.list(file));
+        return new Loaded(PackFolders.meta(file).orElse(null), icon(file), side(file, ModResources.list(file)));
+    }
+
+    /**
+     * The files the game reads from the pack: assets from a resource pack, data from a world's datapack; a pack kept
+     * elsewhere lists both.
+     */
+    private static List<ModResources.Resource> side(Path file, List<ModResources.Resource> resources) {
+        Path parent = file.toAbsolutePath().normalize().getParent();
+        String folder = parent == null || parent.getFileName() == null ? "" : parent.getFileName().toString();
+        String root = folder.equals("resourcepacks") ? "assets/" : folder.equals("datapacks") ? "data/" : "";
+        return root.isEmpty() ? resources : resources.stream().filter(resource -> resource.path().startsWith(root)).toList();
     }
 
     /** The pack's {@code pack.png} fitted into the header, or null without a readable one. */
@@ -73,7 +84,7 @@ public final class PackPanel extends JPanel {
     }
 
     private void show(Loaded loaded) {
-        if (loaded.icon() != null) this.header.setIcon(new ImageIcon(loaded.icon()));
+        this.header.setIcon(loaded.icon() != null ? new ImageIcon(loaded.icon()) : new PlateIcon(Icons.RESOURCES_ROOT, SubjectHeader.ICON_SIZE));
         List<JComponent> subtitle = new ArrayList<>();
         if (loaded.meta() != null && !loaded.meta().description().isBlank()) {
             subtitle.add(SubjectHeader.text(loaded.meta().description().strip()));

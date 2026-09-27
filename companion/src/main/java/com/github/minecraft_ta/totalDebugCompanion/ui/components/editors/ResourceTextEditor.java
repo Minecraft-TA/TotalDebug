@@ -153,14 +153,21 @@ final class ResourceTextEditor extends JPanel {
         // Another world opening changes the current world's datapack a data file is shown from and saved into.
         this.stopFollowingPacks = edits.addStackListener(() -> SwingUtilities.invokeLater(this::packsChanged));
         // A working pack chosen in another tab is where this one saves too.
-        this.stopFollowingWorkingPack = edits.addWorkingPackListener(() -> SwingUtilities.invokeLater(this::packsChanged));
+        this.stopFollowingWorkingPack = edits.addWorkingPackListener(() -> SwingUtilities.invokeLater(this::targetChanged));
     }
 
-    /** Saves into the chosen pack from now on, for this file and every file of a mod on its side, and shows its copy. */
+    /**
+     * Saves into the chosen pack from now on, for this file and every file of a mod on its side; every open tab, this one
+     * too, then shows the new pack's copy.
+     */
     private void chooseTarget() {
         if (this.listingTargets || !(this.target.getSelectedItem() instanceof Path chosen) || chosen.equals(this.pack)) return;
         this.edits.setWorkingPack(this.path, chosen);
-        readCopies(true);
+    }
+
+    /** Shows the copy of the working pack chosen now, whose notice replaces the last pack's. */
+    private void targetChanged() {
+        if (!this.disposed && this.opened == null && !this.busy) readCopies(true);
     }
 
     /** Reads the copies again when the tab follows the current world, which may have changed. */
@@ -319,8 +326,12 @@ final class ResourceTextEditor extends JPanel {
                     this.managed = true;
                     if (keepEdits) this.text.markSaved(edited);
                     else this.text.load(edited);
-                    showState(saved.reloadFailure().isEmpty() ? saved.effect().description() : "");
+                    // A copy the game does not use does not apply, however the reload went.
+                    showState(saved.reloadFailure().isEmpty() && saved.unused().isEmpty() ? saved.effect().description() : "");
                     showResult(saved.problems(), saved.reloadFailure());
+                    if (saved.reloadFailure().isEmpty() && saved.problems().isEmpty() && !saved.unused().isEmpty()) {
+                        showNotice(saved.unused(), ThemeColors::warning);
+                    }
                     changed();
                 }));
     }

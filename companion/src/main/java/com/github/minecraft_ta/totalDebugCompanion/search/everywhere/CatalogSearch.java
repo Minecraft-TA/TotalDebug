@@ -1,9 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
+import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.PackResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Category;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.DefinitionResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.KeyBindingResult;
@@ -15,6 +18,7 @@ import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -33,6 +37,7 @@ public final class CatalogSearch {
     private final String[] names;
     private final String[] ids;
     private List<ModResources.Resource> resources;
+    private List<PackResult> packs;
     private List<Path> directories;
     /** Where the game keeps its keys, or null without a game directory. */
     private final Path options;
@@ -98,6 +103,11 @@ public final class CatalogSearch {
                         owner == null ? ownerId : owner.title()));
             }
         }
+        if (category == Category.ALL || category == Category.RESOURCES) {
+            for (PackResult pack : packs()) {
+                if (PackFolders.title(pack.file()).toLowerCase(Locale.ROOT).contains(folded)) results.add(pack);
+            }
+        }
         if (category == Category.RESOURCES) {
             for (ModResources.Resource resource : resources()) {
                 if (!resource.path().toLowerCase(Locale.ROOT).contains(folded)) continue;
@@ -112,6 +122,29 @@ public final class CatalogSearch {
                 .sorted(Comparator.comparingInt((Result result) -> SearchEverywhereSearch.rank(result, query)))
                 .limit(limit)
                 .toList();
+    }
+
+    /**
+     * The resource packs in {@code resourcepacks/} and the current world's datapacks, listed on first use; none without a
+     * game directory. Blocking.
+     */
+    private List<PackResult> packs() {
+        if (this.packs != null) return this.packs;
+        List<PackResult> packs = new ArrayList<>();
+        Path workspace = this.options == null ? null : this.options.getParent();
+        if (workspace != null) {
+            try {
+                PackFolders.list(workspace.resolve("resourcepacks")).values().forEach(file -> packs.add(new PackResult(file, "Resource pack")));
+                Optional<Path> world = CurrentWorld.directory(workspace);
+                if (world.isPresent()) {
+                    PackFolders.list(world.get().resolve("datapacks")).values().forEach(file -> packs.add(new PackResult(file, "Datapack")));
+                }
+            } catch (IOException unreadable) {
+                // Packs that cannot be listed are not found; the rest of the search still is.
+            }
+        }
+        this.packs = List.copyOf(packs);
+        return this.packs;
     }
 
     /** The bindings with the keys {@code options.txt} gives them now, or their defaults when it cannot be read. Blocking. */

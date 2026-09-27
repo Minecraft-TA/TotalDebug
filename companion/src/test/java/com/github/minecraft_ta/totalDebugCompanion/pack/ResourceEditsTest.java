@@ -311,6 +311,35 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aSaveIntoADisabledPackOfTheirsSaysTheGameDoesNotUseIt() throws Exception {
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
+        ResourceEdits.Saved saved = edits(ChangeRecord.inMemory()).save(LANG, mine, bytes("{}")).get(5, TimeUnit.SECONDS);
+
+        assertEquals("The MyPack resource pack is not enabled, so the game does not use this file", saved.unused(),
+                "saving writes the file but does not enable the player's pack");
+        ResourceEdits named = edits(ChangeRecord.inMemory());
+        named.packStack(STACK);
+        assertTrue(named.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS).unused().isEmpty(),
+                "the managed pack is enabled when it is saved to");
+    }
+
+    @Test
+    void aFileOnTheSideAPackIsNotReadForIsNotSavedInThatPack() throws Exception {
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Path world = Files.createDirectories(this.directory.resolve("saves/World"));
+        Path datapack = LevelDatFixture.datapack(world, "Tweaks");
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+
+        assertTrue(edits.packOf(mine.resolve("data/mypack/recipe/gear.json")).isEmpty(), "the game reads no data from a resource pack");
+        assertTrue(edits.packOf(datapack.resolve("assets/mypack/lang/en_us.json")).isEmpty(), "nor assets from a datapack");
+        assertEquals(mine, edits.packOf(mine.resolve(LANG)).orElseThrow());
+        assertEquals(datapack, edits.packOf(datapack.resolve("data/tweaks/recipe/gear.json")).orElseThrow());
+    }
+
+    @Test
     void aFileOfTheirOwnPackIsSavedInPlaceWithoutMovingThatPack() throws Exception {
         Path world = world("World");
         Path mine = Files.createDirectories(world.resolve("datapacks/MyPack"));

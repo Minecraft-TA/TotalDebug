@@ -60,12 +60,19 @@ public final class ResourceEdits {
     /**
      * What a write did: when the game uses it, the pack folder it went to, and the problems
      * the game's reload logged about it, or why the reload failed in {@code reloadFailure}, empty otherwise.
+     * {@code unused} says why the game does not use the pack's copy even so, such as the pack not being enabled; empty
+     * when it does.
      */
-    public record Saved(ConfigChanges.Effect effect, Path pack, List<String> problems, String reloadFailure) {
+    public record Saved(ConfigChanges.Effect effect, Path pack, List<String> problems, String reloadFailure, String unused) {
         public Saved {
             Objects.requireNonNull(effect, "effect");
             problems = List.copyOf(problems);
             Objects.requireNonNull(reloadFailure, "reloadFailure");
+            Objects.requireNonNull(unused, "unused");
+        }
+
+        Saved(ConfigChanges.Effect effect, Path pack, List<String> problems, String reloadFailure) {
+            this(effect, pack, problems, reloadFailure, "");
         }
     }
 
@@ -240,14 +247,18 @@ public final class ResourceEdits {
     public Optional<Path> packOf(Path file) {
         Path normalized = file.toAbsolutePath().normalize();
         Path resources = this.workspace.resolve("resourcepacks");
-        if (normalized.startsWith(resources) && resources.relativize(normalized).getNameCount() >= 2) {
+        if (normalized.startsWith(resources) && resources.relativize(normalized).getNameCount() >= 3) {
+            // The game reads assets from a resource pack, never data.
+            if (!resources.relativize(normalized).getName(1).toString().equals("assets")) return Optional.empty();
             Path pack = resources.resolve(resources.relativize(normalized).getName(0));
             return managed(pack) || PackFolders.isPack(pack) ? Optional.of(pack) : Optional.empty();
         }
         Path saves = this.workspace.resolve("saves");
         if (!normalized.startsWith(saves) || saves.relativize(normalized).getNameCount() < 4) return Optional.empty();
         Path pack = saves.resolve(saves.relativize(normalized).subpath(0, 3));
-        return pack.getParent().getFileName().toString().equals("datapacks") && (managed(pack) || PackFolders.isPack(pack))
+        // The game reads data from a datapack, never assets.
+        boolean data = saves.relativize(normalized).getNameCount() > 3 && saves.relativize(normalized).getName(3).toString().equals("data");
+        return data && pack.getParent().getFileName().toString().equals("datapacks") && (managed(pack) || PackFolders.isPack(pack))
                 ? Optional.of(pack) : Optional.empty();
     }
 
@@ -345,7 +356,10 @@ public final class ResourceEdits {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }).thenCompose(pack -> apply(path, pack)));
+        }).thenCompose(pack -> apply(path, pack))
+                // A pack of the player's that is not enabled or lies below another keeps its copy unused, reloaded or not.
+                .thenApply(saved -> new Saved(saved.effect(), saved.pack(), saved.problems(), saved.reloadFailure(),
+                        unusedBecause(path, saved.pack()).orElse(""))));
     }
 
     /**
