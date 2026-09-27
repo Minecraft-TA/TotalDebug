@@ -1,6 +1,6 @@
 # The Modpack tree
 
-Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Content, Configuration, Key bindings and Changes; the change record holds configuration settings, key bindings and resources. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
+Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Content, Configuration, Resources (its files; the Packs tab follows), Key bindings and Changes; the change record holds configuration settings, key bindings and resources. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
 
 ## Purpose
 
@@ -42,6 +42,19 @@ Companion shows one world: the one the game has open, or the one played last whi
 - **World state:** a **World** root beside Modpack holds what is really the world's own: its overview (seed, time, weather, difficulty, spawn), game rules and datapacks. Later: loaded chunks and the tickets that keep them loaded, players and saved data.
 - **Server configuration** stays under Configuration, with the current world's file first.
 - **Writes:** a data change is saved in the current world's datapack, and says so.
+
+## Resources
+
+Every resource of the pack, each file once, in the copy the game uses:
+
+- **Order:** assets follow the resource pack stack and data the datapack stack, lowest first, and the highest pack that supplies a path wins.
+  - With a game connected, both stacks are the ones it names (`PACK_STACK`), so data includes the current world's datapacks. A game at its menu or on a server has no data of its own, so none is listed then.
+  - Without one, assets follow `options.txt`, and data comes from Minecraft and the mods. When `options.txt` leaves them out, vanilla goes at the bottom and the mods' resources at the top, as the game adds them.
+  - The mods stack as NeoForge stacks them: one pack per mod file, in the order the game loaded the mods, which the catalog keeps. A file with several mods is one pack named by all of them.
+- **Unreadable packs:** a pack the game builds in memory, such as a mod's generated assets, a mod inside another mod's file, and the built-in Programmer Art and High Contrast packs add nothing Companion can read, so they are skipped.
+- **Rows:** a row names its namespace and folder and the pack its copy comes from; its tooltip lists the lower packs it hides. The filter matches the path and the pack's name. The list is read again when the game's packs change and after a save or revert has finished, keeping the selection. A pack that cannot be read is skipped.
+- **Opening:** opening a row opens the winning copy, which is also the one the resource editor saves over in the managed pack.
+- **Speed:** the join and its sort run off the Swing thread. The list has one row height and follows the view's width, so it never renders every row to measure itself. In All the Mods 10 To the Sky (352,924 resources on 2026-09-27), filtering takes about 30 ms per keystroke.
 
 ## Content kinds
 

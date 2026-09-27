@@ -338,6 +338,11 @@ public class FileTreeView extends JScrollPane {
                 registry.isEmpty() ? List.of(ModTreeItems.CONTENT) : List.of(ModTreeItems.CONTENT, registry));
     }
 
+    /** Selects the Resources row of the Modpack tree. */
+    public CompletableFuture<Boolean> revealPackResources() {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.RESOURCES));
+    }
+
     /** Selects the Key bindings row of the Modpack tree. */
     public CompletableFuture<Boolean> revealKeyBindings() {
         return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.KEY_BINDINGS));

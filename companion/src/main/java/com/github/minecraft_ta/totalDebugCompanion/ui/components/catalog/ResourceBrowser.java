@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
@@ -17,6 +18,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import javax.swing.text.JTextComponent;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
+import javax.swing.AbstractListModel;
 import javax.swing.DefaultListModel;
 import javax.swing.Icon;
 import javax.swing.JComponent;
@@ -32,6 +34,7 @@ import javax.swing.ToolTipManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics;
@@ -41,6 +44,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -52,14 +56,17 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * A mod's resources by kind. Categories are listed with their counts; files show their path inside the category, and
- * textures show as a grid of pixel-exact previews. Opening a resource shows it in a resource tab.
+ * Resources by kind, a mod's or the whole pack's. Categories are listed with their counts; files show their path inside
+ * the category, and textures show as a grid of pixel-exact previews. Opening a resource shows it in a resource tab.
+ * The list is sorted once when resources are set and rows have one height, so filtering stays quick for a whole pack.
  */
 public final class ResourceBrowser extends JPanel {
     private static final String ALL = "";
     private static final String TEXTURES = "assets/textures";
     private static final int CELL_WIDTH = 92;
     private static final int CELL_HEIGHT = 84;
+    private static final String LIST_CARD = "list";
+    private static final String MESSAGE_CARD = "message";
     private static final Icon ANIMATED = Icons.RUN.derive(12, 12);
 
     private record Category(String key, String label, int count) {
@@ -76,16 +83,22 @@ public final class ResourceBrowser extends JPanel {
         }
     }
 
-    private final DefaultListModel<Category> categories = new DefaultListModel<>();
+    private DefaultListModel<Category> categories = new DefaultListModel<>();
     private final JList<Category> categoryList = new JList<>(this.categories);
     private final JScrollPane categoryScroll = new JScrollPane(this.categoryList);
     private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
-    private final DefaultListModel<ModResources.Resource> shown = new DefaultListModel<>();
+    private final ShownModel shown = new ShownModel();
     private final JList<ModResources.Resource> list = new JList<>(this.shown);
     private final JLabel empty = new JLabel();
+    private final JPanel body = new JPanel(new CardLayout());
     private final TextureThumbnails thumbnails = new TextureThumbnails(UiMetrics.previewPixels(UiMetrics.THUMBNAIL_SIZE));
     private final Consumer<String> categoryChanged;
+    /** The resources in the order they are shown, and what the filter matches in each, in lowercase. */
     private List<ModResources.Resource> resources = List.of();
+    private List<String> lowercasePaths = List.of();
+    /** The pack each resource's copy comes from and the packs it hides, by path, for the whole pack; empty for a mod. */
+    private Map<String, String> from = Map.of();
+    private Map<String, List<String>> hidden = Map.of();
     private Set<String> animated = Set.of();
     private String pendingCategory = ALL;
     private boolean updating;
@@ -151,10 +164,11 @@ public final class ResourceBrowser extends JPanel {
         listScroll.getVerticalScrollBar().setUnitIncrement(16);
         JPanel content = new JPanel(new BorderLayout());
         content.add(top, BorderLayout.NORTH);
-        content.add(listScroll, BorderLayout.CENTER);
         this.empty.setBorder(UiMetrics.messagePadding());
-        this.empty.setVisible(false);
-        content.add(this.empty, BorderLayout.SOUTH);
+        this.empty.setVerticalAlignment(SwingConstants.TOP);
+        this.body.add(listScroll, LIST_CARD);
+        this.body.add(this.empty, MESSAGE_CARD);
+        content.add(this.body, BorderLayout.CENTER);
         add(content, BorderLayout.CENTER);
         TypeToFilter.install(this.list, this.filter);
         TypeToFilter.forwardTyping(this.categoryList, () -> this.filter);
@@ -181,22 +195,63 @@ public final class ResourceBrowser extends JPanel {
         return category.root().equals("data") ? words + " (data)" : words;
     }
 
-    public void setResources(List<ModResources.Resource> resources) {
-        this.resources = List.copyOf(resources);
+    /**
+     * Resources made ready to show: sorted once, with their paths in lowercase for filtering, the count of each
+     * category, and the textures that are animated. Across the whole pack, {@code from} names the pack each copy comes
+     * from and {@code hidden} the lower packs that supply the same path, the nearest first; both are empty for a mod.
+     */
+    public record Prepared(List<ModResources.Resource> resources, List<String> lowercasePaths, Map<String, Integer> counts,
+                           Set<String> animated, Map<String, String> from, Map<String, List<String>> hidden) {
+    }
+
+    /** Prepares {@code resources} to show. It takes a while for a whole pack, so it runs off the Swing thread there. */
+    public static Prepared prepare(List<ModResources.Resource> resources, Map<String, String> from,
+                                   Map<String, List<String>> hidden) {
+        // Sorted once here, by keys made once, instead of on every keystroke.
+        List<String> keys = new ArrayList<>(resources.size());
+        for (ModResources.Resource resource : resources) keys.add(resource.relativePath() + '\u0000' + resource.path());
+        Integer[] order = new Integer[resources.size()];
+        for (int index = 0; index < order.length; index++) order[index] = index;
+        Arrays.sort(order, Comparator.comparing(keys::get));
+        List<ModResources.Resource> sorted = new ArrayList<>(order.length);
+        List<String> lowercase = new ArrayList<>(order.length);
+        for (Integer index : order) {
+            ModResources.Resource resource = resources.get(index);
+            sorted.add(resource);
+            // The filter matches everything the row shows: the path and the pack the copy comes from.
+            String source = from.getOrDefault(resource.path(), "");
+            lowercase.add((resource.path() + (source.isEmpty() ? "" : "\n" + source)).toLowerCase(Locale.ROOT));
+        }
         Set<String> animated = new HashSet<>();
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (ModResources.Category category : ModResources.categories(resources)) counts.put(category.key(), 0);
         for (ModResources.Resource resource : resources) {
+            counts.merge(resource.category().key(), 1, Integer::sum);
             if (resource.path().endsWith(".png.mcmeta")) animated.add(resource.path().substring(0, resource.path().length() - 7));
         }
-        this.animated = animated;
+        return new Prepared(List.copyOf(sorted), List.copyOf(lowercase), counts, Set.copyOf(animated), Map.copyOf(from),
+                Map.copyOf(hidden));
+    }
+
+    public void setResources(List<ModResources.Resource> resources) {
+        setResources(prepare(resources, Map.of(), Map.of()));
+    }
+
+    public void setResources(Prepared prepared) {
+        this.resources = prepared.resources();
+        this.lowercasePaths = prepared.lowercasePaths();
+        this.animated = prepared.animated();
+        this.from = prepared.from();
+        this.hidden = prepared.hidden();
         this.updating = true;
         try {
-            this.categories.clear();
-            Map<String, Integer> counts = new LinkedHashMap<>();
-            for (ModResources.Category category : ModResources.categories(resources)) counts.put(category.key(), 0);
-            for (ModResources.Resource resource : resources) counts.merge(resource.category().key(), 1, Integer::sum);
-            this.categories.addElement(new Category(ALL, "All", resources.size()));
-            counts.forEach((key, count) -> this.categories.addElement(new Category(key, label(key), count)));
-            this.categoryScroll.setVisible(counts.size() > 1);
+            // A new model set at once: adding rows one by one makes the list measure all its rows after each.
+            DefaultListModel<Category> categories = new DefaultListModel<>();
+            categories.addElement(new Category(ALL, "All", prepared.resources().size()));
+            prepared.counts().forEach((key, count) -> categories.addElement(new Category(key, label(key), count)));
+            this.categories = categories;
+            this.categoryList.setModel(categories);
+            this.categoryScroll.setVisible(prepared.counts().size() > 1);
             selectKey(this.pendingCategory);
         } finally {
             this.updating = false;
@@ -204,10 +259,10 @@ public final class ResourceBrowser extends JPanel {
         applyFilter();
     }
 
-    /** Shows a message instead of resources, for example why they could not be read. */
+    /** Shows a message in place of the resources, for example why they could not be read; empty shows the resources. */
     public void setMessage(String message) {
         this.empty.setText(message);
-        this.empty.setVisible(!message.isEmpty());
+        ((CardLayout) this.body.getLayout()).show(this.body, message.isEmpty() ? LIST_CARD : MESSAGE_CARD);
     }
 
     public void selectCategory(String key) {
@@ -244,20 +299,43 @@ public final class ResourceBrowser extends JPanel {
         boolean textures = TEXTURES.equals(key);
         String text = this.filter.getText().strip().toLowerCase(Locale.ROOT);
         List<ModResources.Resource> matching = new ArrayList<>();
-        for (ModResources.Resource resource : this.resources) {
+        for (int index = 0; index < this.resources.size(); index++) {
+            ModResources.Resource resource = this.resources.get(index);
             if (!key.isEmpty() && !resource.category().key().equals(key)) continue;
             if (textures && !resource.path().endsWith(".png")) continue;
-            if (!text.isEmpty() && !resource.path().toLowerCase(Locale.ROOT).contains(text)) continue;
+            if (!text.isEmpty() && !this.lowercasePaths.get(index).contains(text)) continue;
             matching.add(resource);
         }
-        matching.sort(Comparator.comparing(ModResources.Resource::relativePath)
-                .thenComparing(ModResources.Resource::path));
         this.list.setLayoutOrientation(textures ? JList.HORIZONTAL_WRAP : JList.VERTICAL);
         this.list.setVisibleRowCount(textures ? -1 : 8);
-        this.list.setFixedCellWidth(textures ? CELL_WIDTH : -1);
-        this.list.setFixedCellHeight(textures ? CELL_HEIGHT : -1);
-        this.shown.clear();
-        this.shown.addAll(matching);
+        // Fixed sizes keep the list from rendering every row to measure it. A vertical list paints each row at its own
+        // width anyway, so a width of one only makes it follow the view's width instead of the widest row's.
+        this.list.setFixedCellWidth(textures ? CELL_WIDTH : 1);
+        this.list.setFixedCellHeight(textures ? CELL_HEIGHT : rowHeight());
+        ModResources.Resource selected = this.list.getSelectedValue();
+        int firstVisible = this.list.getFirstVisibleIndex();
+        this.shown.show(matching);
+        // A refresh keeps the selected resource, and otherwise the rows in view, where they are still listed.
+        int kept = selected == null ? -1 : indexOf(matching, selected.path());
+        if (kept >= 0) {
+            this.list.setSelectedIndex(kept);
+            this.list.ensureIndexIsVisible(kept);
+        } else if (firstVisible > 0 && firstVisible < matching.size()) {
+            this.list.ensureIndexIsVisible(firstVisible);
+        }
+    }
+
+    private static int indexOf(List<ModResources.Resource> resources, String path) {
+        for (int index = 0; index < resources.size(); index++) {
+            if (resources.get(index).path().equals(path)) return index;
+        }
+        return -1;
+    }
+
+    /** The height of a list row, measured once on a row of the first resource; -1 while there is none. */
+    private int rowHeight() {
+        if (this.resources.isEmpty()) return -1;
+        return render(this.list, this.resources.getFirst(), 0, false, false).getPreferredSize().height;
     }
 
     private Component render(JList<? extends ModResources.Resource> list, ModResources.Resource resource, int index,
@@ -265,6 +343,9 @@ public final class ResourceBrowser extends JPanel {
         if (showsTextures()) return new TextureCell(resource, selected, list);
         PrimarySecondaryLabel label = new PrimarySecondaryLabel();
         String secondary = resource.folder();
+        String source = this.from.get(resource.path());
+        // Across the whole pack, a folder is only clear with its namespace, and a copy with the pack it comes from.
+        if (source != null) secondary = (resource.namespace() + (secondary.isEmpty() ? "" : ":" + secondary) + "  " + source);
         if (selectedCategory().isEmpty()) secondary = (label(resource.category().key()) + "  " + secondary).strip();
         label.configure(new PrimarySecondaryText(resource.fileName(), secondary),
                 FileTypeResolver.resolve(resource.fileName()).icon(), list.getFont(), selected,
@@ -273,8 +354,51 @@ public final class ResourceBrowser extends JPanel {
         label.setOpaque(true);
         label.setBackground(selected ? list.getSelectionBackground() : list.getBackground());
         label.setBorder(UiMetrics.listRowPadding());
-        label.setToolTipText(resource.path());
+        label.setToolTipText(tooltip(resource));
         return label;
+    }
+
+    private String tooltip(ModResources.Resource resource) {
+        return tooltip(Tooltip.of(resource.path()), resource);
+    }
+
+    /** Adds the pack a copy comes from and the lower packs it hides, across the whole pack. */
+    private String tooltip(Tooltip tooltip, ModResources.Resource resource) {
+        String source = this.from.get(resource.path());
+        if (source != null) tooltip.fact("From", source);
+        List<String> below = this.hidden.getOrDefault(resource.path(), List.of());
+        if (!below.isEmpty()) tooltip.fact("Hides", String.join(", ", below));
+        return tooltip.html();
+    }
+
+    /** The resources passing the filter; replaced as a whole, so a whole pack's are not copied row by row. */
+    private static final class ShownModel extends AbstractListModel<ModResources.Resource> {
+        private List<ModResources.Resource> items = List.of();
+
+        void show(List<ModResources.Resource> items) {
+            int before = this.items.size();
+            this.items = items;
+            if (before > 0) fireIntervalRemoved(this, 0, before - 1);
+            if (!items.isEmpty()) fireIntervalAdded(this, 0, items.size() - 1);
+        }
+
+        ModResources.Resource get(int index) {
+            return this.items.get(index);
+        }
+
+        int size() {
+            return this.items.size();
+        }
+
+        @Override
+        public int getSize() {
+            return this.items.size();
+        }
+
+        @Override
+        public ModResources.Resource getElementAt(int index) {
+            return this.items.get(index);
+        }
     }
 
     /** A texture preview with its name below; animated textures carry a small play mark. */
@@ -295,7 +419,9 @@ public final class ResourceBrowser extends JPanel {
             name.setFont(list.getFont().deriveFont(list.getFont().getSize2D() - 1f));
             name.setForeground(selected ? list.getSelectionForeground() : ThemeColors.secondaryText());
             add(name, BorderLayout.SOUTH);
-            setToolTipText(texture.relativePath() + (moving ? ", animated" : ""));
+            // Across the whole pack, the same name can be in several namespaces.
+            String id = ResourceBrowser.this.from.isEmpty() ? texture.relativePath() : texture.namespace() + ":" + texture.relativePath();
+            setToolTipText(tooltip(Tooltip.of(id + (moving ? ", animated" : "")), texture));
         }
     }
 

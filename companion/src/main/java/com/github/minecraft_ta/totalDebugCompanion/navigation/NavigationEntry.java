@@ -30,6 +30,7 @@ record NavigationEntry(
             case NavigationTarget.ArchiveDirectory ignored -> false;
             case NavigationTarget.ModPage ignored -> false;
             case NavigationTarget.PackConfiguration ignored -> false;
+            case NavigationTarget.PackResources ignored -> false;
             case NavigationTarget.Changes ignored -> false;
             case NavigationTarget.KeyBindings ignored -> false;
             case NavigationTarget.Content ignored -> false;

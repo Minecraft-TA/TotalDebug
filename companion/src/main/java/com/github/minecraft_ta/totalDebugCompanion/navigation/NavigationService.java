@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ChangesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ConfigFileView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
 import com.github.minecraft_ta.totalDebugCompanion.model.KeyBindingsView;
+import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
@@ -129,6 +130,7 @@ public final class NavigationService {
                     .anyMatch(source -> source.path().equals(entry.archive().toAbsolutePath().normalize()));
             case NavigationTarget.ModPage ignored -> true;
             case NavigationTarget.PackConfiguration ignored -> true;
+            case NavigationTarget.PackResources ignored -> true;
             case NavigationTarget.Changes ignored -> true;
             case NavigationTarget.KeyBindings ignored -> true;
             case NavigationTarget.Content ignored -> true;
@@ -146,6 +148,7 @@ public final class NavigationService {
                     case NavigationTarget.RuntimeClass type -> revealRuntimePath(type.binaryName(), type.binaryName().replace('.', '/') + ".class");
                     case NavigationTarget.ModPage page -> requireRevealed(fileTree.revealModPage(page));
                     case NavigationTarget.PackConfiguration ignored -> requireRevealed(fileTree.revealPackConfiguration());
+                    case NavigationTarget.PackResources ignored -> requireRevealed(fileTree.revealPackResources());
                     case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges());
                     case NavigationTarget.KeyBindings ignored -> requireRevealed(fileTree.revealKeyBindings());
                     case NavigationTarget.Content content -> requireRevealed(fileTree.revealContent(content.registry()));
@@ -308,6 +311,11 @@ public final class NavigationService {
                         view -> true,
                         () -> new PackConfigurationView(editors.get())
                 ).thenAccept(PackConfigurationView::refresh), activation);
+                case NavigationTarget.PackResources resources -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        PackResourcesView.class,
+                        view -> true,
+                        () -> new PackResourcesView(editors.get())
+                ).thenAccept(view -> view.show(resources.category())), activation);
                 case NavigationTarget.Changes ignored -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         ChangesView.class,
                         view -> true,
@@ -790,6 +798,7 @@ public final class NavigationService {
             case NavigationTarget.Inspection inspection -> inspection.subject().subject();
             case NavigationTarget.ModPage page -> "mod " + page.modId();
             case NavigationTarget.PackConfiguration ignored -> "modpack configuration";
+            case NavigationTarget.PackResources ignored -> "modpack resources";
             case NavigationTarget.Changes ignored -> "changes";
             case NavigationTarget.KeyBindings ignored -> "key bindings";
             case NavigationTarget.Content content -> "modpack " + (content.registry().isEmpty() ? "content"

@@ -94,6 +94,25 @@ class ResourceEditsTest {
     }
 
     @Test
+    void editListenersHearOfASaveOnceTheOptionsEnableThePack() throws Exception {
+        Path options = Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\"]\n");
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packStack(STACK);
+        List<String> seen = new CopyOnWriteArrayList<>();
+        edits.addEditListener(() -> {
+            try {
+                seen.add(Files.readString(options));
+            } catch (IOException unreadable) {
+                seen.add(unreadable.toString());
+            }
+        });
+
+        edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
+        assertEquals(List.of("resourcePacks:[\"vanilla\",\"file/TotalDebug\"]\n"), seen,
+                "a listener reading the pack stack then finds the pack enabled");
+    }
+
+    @Test
     void revertingTwiceRevertsOnce() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);

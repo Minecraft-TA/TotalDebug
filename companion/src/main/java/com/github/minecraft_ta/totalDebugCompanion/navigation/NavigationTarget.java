@@ -27,6 +27,7 @@ public sealed interface NavigationTarget permits
         NavigationTarget.Inspection,
         NavigationTarget.ModPage,
         NavigationTarget.PackConfiguration,
+        NavigationTarget.PackResources,
         NavigationTarget.Changes,
         NavigationTarget.KeyBindings,
         NavigationTarget.Content,
@@ -70,6 +71,13 @@ public sealed interface NavigationTarget permits
 
     /** The settings of every mod in the pack. */
     record PackConfiguration() implements NavigationTarget {
+    }
+
+    /** Every resource of the pack as the game uses it; {@code category}, such as {@code assets/textures}, selects a kind, empty all. */
+    record PackResources(String category) implements NavigationTarget {
+        public PackResources {
+            category = Objects.requireNonNullElse(category, "");
+        }
     }
 
     /** A registered block, item or entity type, described by the captured pack catalog. */
