@@ -222,6 +222,7 @@ class ResourceEditsTest {
         awaitSent(sent, 1);
         CompletableFuture<ResourceEdits.Saved> second = edits.save("assets/testmod/models/block/gear.json", bytes("{}"));
         CompletableFuture<ResourceEdits.Saved> third = edits.save("assets/testmod/lang/de_de.json", bytes("{}"));
+        CompletableFuture<ResourceEdits.Saved> fourth = edits.save("assets/testmod/textures/block/gear.png", bytes("png"));
         Thread.sleep(200);
         assertEquals(1, sent.size(), "the second and third wait for the first reload");
         assertEquals(Set.of(ReloadPayload.Kind.LANGUAGE), sent.getFirst().kinds());
@@ -231,8 +232,8 @@ class ResourceEditsTest {
         assertEquals(ConfigChanges.Effect.NOW, first.get(5, TimeUnit.SECONDS).effect());
         awaitSent(sent, 2);
         ReloadPayload merged = sent.get(1);
-        assertEquals(Set.of(ReloadPayload.Kind.RESOURCES), merged.kinds(), "a full reload covers the language");
-        assertEquals(2, merged.watched().size());
+        assertEquals(Set.of(ReloadPayload.Kind.RESOURCES), merged.kinds(), "a full reload covers the language and textures");
+        assertEquals(3, merged.watched().size());
 
         edits.answered(new ReloadResultPayload(merged.requestId(), 900, List.of(new ReloadResultPayload.Problem(
                 "assets/testmod/models/block/gear.json", "Unable to load model testmod:block/gear")), ""));
@@ -266,6 +267,8 @@ class ResourceEditsTest {
 
             assertEquals(1, sent.size(), "one reload for both files");
             assertEquals(2, sent.getFirst().watched().size());
+            assertEquals(Set.of(ReloadPayload.Kind.LANGUAGE, ReloadPayload.Kind.TEXTURES), sent.getFirst().kinds(),
+                    "the language and the texture's pixels are shown the quick way");
         } finally {
             queue.shutdownNow();
         }

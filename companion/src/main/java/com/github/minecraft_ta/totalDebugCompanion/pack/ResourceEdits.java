@@ -508,6 +508,7 @@ public final class ResourceEdits {
     private static ReloadPayload.Kind kind(String path) {
         return switch (ResourcePaths.apply(path)) {
             case LANGUAGE -> ReloadPayload.Kind.LANGUAGE;
+            case TEXTURE -> ReloadPayload.Kind.TEXTURES;
             case RESOURCES -> ReloadPayload.Kind.RESOURCES;
             default -> ReloadPayload.Kind.DATA;
         };
@@ -577,7 +578,11 @@ public final class ResourceEdits {
         this.next = null;
         this.running = batch;
         if (batch == null) return;
-        if (batch.kinds.contains(ReloadPayload.Kind.RESOURCES)) batch.kinds.remove(ReloadPayload.Kind.LANGUAGE);
+        // A full reload covers the language and textures.
+        if (batch.kinds.contains(ReloadPayload.Kind.RESOURCES)) {
+            batch.kinds.remove(ReloadPayload.Kind.LANGUAGE);
+            batch.kinds.remove(ReloadPayload.Kind.TEXTURES);
+        }
         Predicate<AbstractMessage> send = this.game;
         int id = this.requests.incrementAndGet();
         this.waiting.put(id, batch.result);

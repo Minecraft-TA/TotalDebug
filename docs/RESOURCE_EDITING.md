@@ -1,6 +1,6 @@
 # Resource editing
 
-Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`, protocol 27); textures drawn pixel by pixel and saved the same way; the change record holds all of them and reverts them. Not yet: ordering and enabling packs, uploading an edited texture into the game's atlas without a reload, and forced values.
+Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`, protocol 28); textures drawn pixel by pixel, saved the same way and put in place in the running game without a full reload; the change record holds all of them and reverts them. Not yet: ordering and enabling packs, and forced values.
 
 ## Goal
 
@@ -15,7 +15,7 @@ This design covers the **pack's content**: what ships with the pack and is the s
 | Configuration settings, as values and as file text | Done |
 | Key bindings | Done |
 | Text resources: models, blockstates, language files, atlases, sounds, and data such as recipes, tags and loot tables | Done |
-| Textures, including animation frames | Pixel editing done; upload into the atlas without a reload next |
+| Textures, including animation frames | Done |
 | Forced configuration values that a reload does not reach | Step after textures |
 
 **Not in scope:** the state of a running world. It lives in the world save, differs per world, and has no pack-level file to revert to.
@@ -59,12 +59,13 @@ Each resource kind has a reload that makes the running game use it. The change s
 | Resource | Reload | Effect |
 |---|---|---|
 | `assets/*/lang/*.json` | Language only | Now, in about a second |
-| Other assets: models, blockstates, textures, atlases, sounds, fonts, particles, shaders | Full client resource reload | Now, after the reload |
-| Textures of a stitched atlas | Upload into the atlas (next step; until then a full client resource reload) | Now, without a reload |
+| `assets/*/textures/**.png`, when only its pixels changed | Put in place: a texture of its own read again, a sprite of an atlas given the new pixels and mipmaps where it is | Now, at once |
+| Other assets: models, blockstates, atlases, sounds, fonts, particles, shaders, and textures the quick way cannot show | Full client resource reload | Now, after the reload |
 | Data: recipes, tags, loot tables, advancements, functions, predicates, item modifiers, data maps, mods' own reload listeners | Server data reload, as `/reload` | Now, after the reload |
 | Data read when a world loads: worldgen, dimension types, damage types, other dynamic registries | None | After rejoining the world; generated chunks keep their content |
 | Resources a mod reads from its JAR or only at startup | None | After restarting the game |
 
+- **Textures the quick way:** the game reads the PNG from its resource manager, so the pack on top wins, and shows it where the texture is: a texture of its own, such as an entity's, is loaded again; a sprite of an atlas, such as a block's, gets the new pixels and mipmaps in its place, which models and animations already point to. It takes the full reload instead when the size or animation changed, when no atlas holds the texture under its path (atlases such as the GUI sprites and particles name theirs otherwise), when the managed pack was not enabled yet, and for a save into the player's own pack, which names no pack to check the copy on top against.
 - Requests made during a reload are merged into one more reload after it ends, and writes queued together, such as Revert All on the Changes page, ask for one reload once the last of them is written.
 - **Problems:** during a reload the mod collects warnings and errors that name an edited path or resource location whole, such as a model that failed to parse, and returns them with the result. The resource tab shows them on the edited file.
 - **Offline checks:** before writing, Companion reads JSON the way the game does: models and data strictly, language files leniently. A language file is one object whose values are text, or lists of components as NeoForge allows.
@@ -75,11 +76,11 @@ Each resource kind has a reload that makes the running game use it. The change s
 | Message | Direction | Content |
 |---|---|---|
 | `PACK_STACK` | Game to Companion | Enabled resource packs and datapacks in order, with their files, and the pack formats; sent when the stack changes and after every handshake |
-| `RELOAD` | Companion to game | Request id, what to reload (language, resources, data), the managed pack and the edited paths |
+| `RELOAD` | Companion to game | Request id, what to reload (language, textures, resources, data), the managed pack and the edited paths |
 | `RELOAD_RESULT` | Game to Companion | Request id, duration, problems naming edited paths, or the error |
 
 - These are kernel services every extension needs, so they are native messages rather than scripts run through the evaluator.
-- One protocol version bump for the step: 27.
+- One protocol version bump for the step: 27; textures shown the quick way: 28.
 
 ## Change record
 
@@ -164,7 +165,6 @@ Later steps:
 | Step | Content |
 |---|---|
 | Packs tab of Resources | Order and enable packs |
-| Live texture upload | An edited texture of a stitched atlas uploaded into the atlas without a resource reload, its frames too; a full reload where the size or animation changed |
 | Forced values | Read-site analysis, verification after reloads, Force; its own design for writes into the game's memory |
 | Catalog and program insights | As planned in [MODPACK.md](MODPACK.md#order) |
 | World data editing | NBT of block entities, entities and item stacks from the inspection page; own design first |

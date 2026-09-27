@@ -35,6 +35,9 @@ class ResourcePathsTest {
     void namesWhatTheGameReloads() {
         assertEquals(ResourcePaths.Apply.LANGUAGE, ResourcePaths.apply("assets/testmod/lang/en_us.json"));
         assertEquals(ResourcePaths.Apply.RESOURCES, ResourcePaths.apply("assets/testmod/models/block/gear.json"));
+        assertEquals(ResourcePaths.Apply.TEXTURE, ResourcePaths.apply("assets/testmod/textures/block/gear.png"));
+        assertEquals(ResourcePaths.Apply.RESOURCES, ResourcePaths.apply("assets/testmod/textures/block/gear.png.mcmeta"),
+                "an animation's frames are read when the atlas is stitched");
         assertEquals(ResourcePaths.Apply.DATA, ResourcePaths.apply("data/testmod/recipe/gear.json"));
         assertEquals(ResourcePaths.Apply.DATA, ResourcePaths.apply("data/minecraft/tags/block/mineable/pickaxe.json"));
         assertEquals(ResourcePaths.Apply.WORLD_LOAD, ResourcePaths.apply("data/testmod/worldgen/biome/glade.json"));

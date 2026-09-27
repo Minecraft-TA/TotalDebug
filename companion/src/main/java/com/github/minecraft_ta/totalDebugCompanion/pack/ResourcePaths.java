@@ -31,6 +31,8 @@ public final class ResourcePaths {
     public enum Apply {
         /** A language reload, about a second. */
         LANGUAGE,
+        /** A texture's new pixels put in place, at once; a reload of every client resource where that cannot show them. */
+        TEXTURE,
         /** A reload of every client resource. */
         RESOURCES,
         /** A reload of the server's data, as {@code /reload} does. */
@@ -85,7 +87,8 @@ public final class ResourcePaths {
     public static Apply apply(String path) {
         String[] parts = path.split("/", 4);
         if (parts[0].equals("assets")) {
-            return parts.length > 3 && parts[2].equals("lang") && path.endsWith(".json") ? Apply.LANGUAGE : Apply.RESOURCES;
+            if (parts.length > 3 && parts[2].equals("lang") && path.endsWith(".json")) return Apply.LANGUAGE;
+            return parts.length > 3 && parts[2].equals("textures") && path.endsWith(".png") ? Apply.TEXTURE : Apply.RESOURCES;
         }
         return parts.length > 3 && WORLD_LOAD_FOLDERS.contains(parts[2]) ? Apply.WORLD_LOAD : Apply.DATA;
     }

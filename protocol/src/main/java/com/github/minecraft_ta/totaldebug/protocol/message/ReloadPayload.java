@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Protocol-27 payload asking the game to reload what edited resources need. {@code managedPack} is the id of the pack
+ * Protocol-28 payload asking the game to reload what edited resources need. {@code managedPack} is the id of the pack
  * Companion manages, such as {@code file/TotalDebug}, which the game enables at the top of its stacks before the
  * reload; empty for none. {@code watched} are the edited resource paths whose problems the answer reports.
  */
@@ -24,7 +24,9 @@ public record ReloadPayload(int requestId, Set<Kind> kinds, String managedPack, 
         /** Every client resource. */
         RESOURCES,
         /** The server's data, as {@code /reload} does. */
-        DATA
+        DATA,
+        /** The pixels of textures, put in place where they are; all resources where that cannot show them. */
+        TEXTURES
     }
 
     public ReloadPayload {
