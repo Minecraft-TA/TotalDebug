@@ -285,8 +285,10 @@ public final class ResourceEdits {
             if (packs.get(index).id().equals(id)) position = index;
         }
         if (position < 0) {
-            // The managed pack is enabled by the reload after a save.
-            return managed(pack) ? Optional.empty() : Optional.of(notEnabled(pack));
+            // The managed pack is enabled by the reload after a save, and so is a datapack the world has not disabled,
+            // as /reload does.
+            if (managed(pack)) return Optional.empty();
+            return assets ? Optional.of(notEnabled(pack)) : disabledOnDisk(path, pack);
         }
         for (int index = packs.size() - 1; index > position; index--) {
             PackStackPayload.Pack above = packs.get(index);
@@ -346,6 +348,10 @@ public final class ResourceEdits {
             try {
                 Path pack = into != null ? into : pack(path);
                 if (managed(pack)) preparePack(pack, path.startsWith("assets/"));
+                // A pack of the player's may have been removed since the tab chose it; the game would not load it.
+                else if (!PackFolders.isPack(pack)) {
+                    throw new IOException("The " + PackFolders.label(pack) + " is gone or has no pack.mcmeta, so the game does not load it");
+                }
                 Path file = pack.resolve(path);
                 byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
                 ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);

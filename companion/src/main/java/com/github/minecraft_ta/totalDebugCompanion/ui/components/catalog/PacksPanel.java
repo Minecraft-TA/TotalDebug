@@ -176,7 +176,8 @@ final class PacksPanel extends JPanel {
         String query = this.body.query().toLowerCase(Locale.ROOT);
         List<Row> shown = new ArrayList<>();
         for (Row row : this.model.all) {
-            if (query.isEmpty() || row.pack().id().toLowerCase(Locale.ROOT).contains(query)
+            if (query.isEmpty() || row.name().toLowerCase(Locale.ROOT).contains(query)
+                    || row.pack().id().toLowerCase(Locale.ROOT).contains(query)
                     || row.from().toLowerCase(Locale.ROOT).contains(query)
                     || state(row.pack().state()).toLowerCase(Locale.ROOT).contains(query)) {
                 shown.add(row);

@@ -13,9 +13,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.util.Comparator;
 import java.util.List;
@@ -23,11 +26,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceEditsTest {
@@ -308,6 +313,38 @@ class ResourceEditsTest {
         assertEquals("The Old datapack of World is not enabled, so the game does not use this file",
                 edits.unusedBecause(recipe, old).orElseThrow());
         assertTrue(edits.unusedBecause(recipe, added).isEmpty(), "a new pack of the world's folder is enabled when the world loads");
+    }
+
+    @Test
+    void aDatapackAddedSinceTheWorldLoadedCountsAsUsedAsAReloadEnablesIt() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        Map<String, Object> data = LevelDatFixture.world("World");
+        data.put("DataPacks", Map.of("Enabled", List.of("vanilla"), "Disabled", List.of("file/Off")));
+        LevelDatFixture.write(world, data);
+        Path added = LevelDatFixture.datapack(world, "Added");
+        Path off = LevelDatFixture.datapack(world, "Off");
+        Files.writeString(world.resolve("session.lock"), "x");
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packStack(STACK);
+        String recipe = "data/tweaks/recipe/gear.json";
+
+        try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.WRITE);
+             FileLock ignored = channel.lock()) {
+            assertTrue(edits.unusedBecause(recipe, added).isEmpty(), "a reload enables it, as /reload does");
+            assertEquals("The Off datapack of World is not enabled, so the game does not use this file",
+                    edits.unusedBecause(recipe, off).orElseThrow(), "but not one the world disabled");
+        }
+    }
+
+    @Test
+    void aPackOfTheirsThatIsGoneIsNotSavedInto() throws Exception {
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        CompletableFuture<ResourceEdits.Saved> save = edits(ChangeRecord.inMemory()).save(LANG, mine, bytes("{}"));
+
+        Throwable failure = assertThrows(ExecutionException.class, () -> save.get(5, TimeUnit.SECONDS));
+        while (failure.getCause() != null) failure = failure.getCause();
+        assertEquals("The MyPack resource pack is gone or has no pack.mcmeta, so the game does not load it", failure.getMessage());
+        assertFalse(Files.exists(mine.resolve(LANG)));
     }
 
     @Test
