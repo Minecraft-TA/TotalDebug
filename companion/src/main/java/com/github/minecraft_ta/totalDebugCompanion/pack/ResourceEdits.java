@@ -359,7 +359,16 @@ public final class ResourceEdits {
      * makes the game use it.
      */
     public CompletableFuture<Saved> save(String path, Path into, byte[] content) {
+        return save(path, into, content, Map.of());
+    }
+
+    /**
+     * Saves as {@link #save(String, Path, byte[])} does, and writes each of {@code alongside}, by pack path, into the same
+     * pack where it has no copy yet, such as the animation of a texture; each is a change of its own.
+     */
+    public CompletableFuture<Saved> save(String path, Path into, byte[] content, Map<String, byte[]> alongside) {
         Objects.requireNonNull(content, "content");
+        Objects.requireNonNull(alongside, "alongside");
         return finished(writeAndApply(path, () -> {
             try {
                 Path pack = into != null ? into : pack(path);
@@ -374,6 +383,15 @@ public final class ResourceEdits {
                 if (this.record.change(target) == null) this.originals.keep(previous);
                 AtomicFiles.replace(file, staged -> Files.write(staged, content));
                 this.record.changed(target, ResourceOriginals.hash(previous), ResourceOriginals.hash(content));
+                for (Map.Entry<String, byte[]> companion : alongside.entrySet()) {
+                    Path companionFile = pack.resolve(companion.getKey());
+                    // The pack's own copy, even a different one, stays.
+                    if (Files.exists(companionFile)) continue;
+                    ChangeRecord.Resource added = new ChangeRecord.Resource(companion.getKey(), pack);
+                    if (this.record.change(added) == null) this.originals.keep(null);
+                    AtomicFiles.replace(companionFile, staged -> Files.write(staged, companion.getValue()));
+                    this.record.changed(added, ResourceOriginals.hash(null), ResourceOriginals.hash(companion.getValue()));
+                }
                 return pack;
             } catch (IOException exception) {
                 throw new CompletionException(exception);

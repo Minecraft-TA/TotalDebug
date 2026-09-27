@@ -13,12 +13,17 @@ public sealed interface LoadedResource permits LoadedResource.Text, LoadedResour
 
     /**
      * A decoded image. {@code animation} is the texture animation from its {@code .mcmeta}, or null; when that file
-     * exists but cannot be used, {@code animationProblem} says why.
+     * exists but cannot be used, {@code animationProblem} says why. {@code metadata} is that file as it was read beside
+     * the image, or null without one.
      */
-    record Image(BufferedImage value, int byteCount, TextureAnimation animation, String animationProblem)
+    record Image(BufferedImage value, int byteCount, TextureAnimation animation, String animationProblem, byte[] metadata)
             implements LoadedResource {
         public Image(BufferedImage value, int byteCount) {
-            this(value, byteCount, null, "");
+            this(value, byteCount, null, "", null);
+        }
+
+        public Image(BufferedImage value, int byteCount, TextureAnimation animation, String animationProblem) {
+            this(value, byteCount, animation, animationProblem, null);
         }
     }
 }

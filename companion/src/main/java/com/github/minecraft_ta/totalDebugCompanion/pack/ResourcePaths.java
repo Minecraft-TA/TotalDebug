@@ -31,7 +31,10 @@ public final class ResourcePaths {
     public enum Apply {
         /** A language reload, about a second. */
         LANGUAGE,
-        /** A texture's new pixels put in place, at once; a reload of every client resource where that cannot show them. */
+        /**
+         * A texture's new pixels or animation put in place, at once; a reload of every client resource where that cannot
+         * show them.
+         */
         TEXTURE,
         /** A reload of every client resource. */
         RESOURCES,
@@ -88,7 +91,8 @@ public final class ResourcePaths {
         String[] parts = path.split("/", 4);
         if (parts[0].equals("assets")) {
             if (parts.length > 3 && parts[2].equals("lang") && path.endsWith(".json")) return Apply.LANGUAGE;
-            return parts.length > 3 && parts[2].equals("textures") && path.endsWith(".png") ? Apply.TEXTURE : Apply.RESOURCES;
+            boolean texture = parts.length > 3 && parts[2].equals("textures") && (path.endsWith(".png") || path.endsWith(".png.mcmeta"));
+            return texture ? Apply.TEXTURE : Apply.RESOURCES;
         }
         return parts.length > 3 && WORLD_LOAD_FOLDERS.contains(parts[2]) ? Apply.WORLD_LOAD : Apply.DATA;
     }

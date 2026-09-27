@@ -56,12 +56,13 @@ public final class ResourceLoader {
             TextureAnimation animation = TextureAnimation.read(metadata.get(), value.getWidth(), value.getHeight())
                     .orElse(null);
             if (animation != null && animation.frames().stream().noneMatch(frame -> animation.contains(frame.index()))) {
-                return new LoadedResource.Image(value, image.byteCount(), null, "Animation frames lie outside the texture");
+                return new LoadedResource.Image(value, image.byteCount(), null, "Animation frames lie outside the texture",
+                        metadata.get());
             }
-            return new LoadedResource.Image(value, image.byteCount(), animation, "");
+            return new LoadedResource.Image(value, image.byteCount(), animation, "", metadata.get());
         } catch (RuntimeException exception) {
             return new LoadedResource.Image(value, image.byteCount(), null,
-                    "Invalid animation metadata: " + exception.getMessage());
+                    "Invalid animation metadata: " + exception.getMessage(), metadata.get());
         }
     }
 

@@ -20,25 +20,32 @@ import net.minecraft.server.packs.resources.ResourceMetadata;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Shows edited textures in the running game without reloading every resource. A texture of its own, such as an
  * entity's, is read again; a sprite of an atlas, such as a block's, gets the new pixels and mipmaps in its place in the
- * atlas, where models and animations already point. Only a change of pixels is shown this way: a new size, animation or
- * sprite takes the full reload, and so does a texture the game does not read from the pack it was saved into yet.
- * Render thread only.
+ * atlas, where models and animations already point, and a new animation where its {@code .mcmeta} changed but not the
+ * size of a frame. A new frame size or sprite takes the full reload, and so does a texture the game does not read from
+ * the pack it was saved into yet. Render thread only.
  */
 final class TextureUploads {
     private TextureUploads() {
     }
 
-    /** Whether {@code path} is a texture the game reads as an image, such as {@code assets/ns/textures/block/gear.png}. */
+    /**
+     * Whether {@code path} is shown this way: a texture the game reads as an image, such as
+     * {@code assets/ns/textures/block/gear.png}, or its animation beside it.
+     */
     static boolean texture(String path) {
         String[] parts = path.split("/", 4);
-        return parts.length == 4 && parts[0].equals("assets") && parts[2].equals("textures") && path.endsWith(".png");
+        return parts.length == 4 && parts[0].equals("assets") && parts[2].equals("textures")
+                && (path.endsWith(".png") || path.endsWith(".png.mcmeta"));
     }
 
     /**
@@ -53,26 +60,33 @@ final class TextureUploads {
     }
 
     /**
-     * Shows the new pixels of every texture of {@code paths}, read from {@code pack}; returns false where one needs the
-     * full reload, which then shows all of them.
+     * Shows the new pixels or animation of every texture of {@code paths}, which were saved into {@code pack}; returns
+     * false where one needs the full reload, which then shows all of them.
      */
     static boolean upload(List<String> paths, String pack) {
         Minecraft minecraft = Minecraft.getInstance();
+        ResourceManager resources = minecraft.getResourceManager();
         Map<ResourceLocation, AbstractTexture> textures = textures(minecraft.getTextureManager());
         if (textures == null) return false;
+        Set<ResourceLocation> changed = new LinkedHashSet<>();
         for (String path : paths) {
             String[] parts = path.split("/", 3);
-            ResourceLocation location = ResourceLocation.tryBuild(parts[1], parts[2]);
-            if (location == null || !upload(minecraft.getResourceManager(), textures, location, pack)) return false;
+            ResourceLocation saved = ResourceLocation.tryBuild(parts[1], parts[2]);
+            if (saved == null) return false;
+            // A pack or namespace added since the last reload is not read yet; the copy shown would be another pack's.
+            Optional<Resource> top = resources.getResource(saved);
+            if (top.isEmpty() || !top.get().sourcePackId().equals(pack)) return false;
+            changed.add(path.endsWith(".mcmeta") ? saved.withPath(saved.getPath().substring(0, saved.getPath().length() - ".mcmeta".length())) : saved);
+        }
+        for (ResourceLocation texture : changed) {
+            if (!upload(resources, textures, texture)) return false;
         }
         return true;
     }
 
-    private static boolean upload(ResourceManager resources, Map<ResourceLocation, AbstractTexture> textures,
-                                  ResourceLocation location, String pack) {
-        // A pack or namespace added since the last reload is not read yet; the copy shown would be another pack's.
+    private static boolean upload(ResourceManager resources, Map<ResourceLocation, AbstractTexture> textures, ResourceLocation location) {
         Optional<Resource> resource = resources.getResource(location);
-        if (resource.isEmpty() || !resource.get().sourcePackId().equals(pack)) return false;
+        if (resource.isEmpty()) return false;
         boolean shown = false;
         if (textures.get(location) instanceof SimpleTexture texture && texture.getClass() == SimpleTexture.class) {
             try {
@@ -92,26 +106,101 @@ final class TextureUploads {
         return shown;
     }
 
-    /** Puts the resource's pixels into the sprite's place in its atlas; false when more than the pixels changed. */
+    /**
+     * Puts the resource into the sprite's place in its atlas: its pixels where only they changed, a new animation where
+     * the frames did but not their size; false where the size changed.
+     */
     private static boolean upload(TextureAtlas atlas, TextureAtlasSprite sprite, Resource resource) {
         SpriteContents contents = sprite.contents();
         NativeImage original = contents.getOriginalImage();
-        try (InputStream input = resource.open(); NativeImage image = NativeImage.read(input)) {
-            if (image.getWidth() != original.getWidth() || image.getHeight() != original.getHeight()) return false;
-            if (!animation(resource.metadata(), image).equals(animation(contents.metadata(), original))) return false;
-            original.copyFrom(image);
+        NativeImage image;
+        ResourceMetadata metadata;
+        try (InputStream input = resource.open()) {
+            image = NativeImage.read(input);
+            metadata = resource.metadata();
         } catch (IOException | RuntimeException exception) {
-            TotalDebug.LOGGER.warn("Texture {} could not be put into its atlas", contents.name(), exception);
+            TotalDebug.LOGGER.warn("Texture {} could not be read", contents.name(), exception);
             return false;
         }
-        // The smaller levels are made from the new pixels, as when the atlas was stitched; the first level is the image.
-        NativeImage[] previous = contents.byMipLevel;
-        contents.byMipLevel = MipmapGenerator.generateMipLevels(new NativeImage[]{original}, previous.length - 1);
-        for (int level = 1; level < previous.length; level++) previous[level].close();
+        try {
+            if (image.getWidth() == original.getWidth() && image.getHeight() == original.getHeight()
+                    && animation(metadata, image).equals(animation(contents.metadata(), original))) {
+                original.copyFrom(image);
+                image.close();
+                // The smaller levels are made from the new pixels, as when the atlas was stitched; the first level is the image.
+                NativeImage[] previous = contents.byMipLevel;
+                contents.byMipLevel = MipmapGenerator.generateMipLevels(new NativeImage[]{original}, previous.length - 1);
+                for (int level = 1; level < previous.length; level++) previous[level].close();
+                atlas.bind();
+                // An animation's next frame is uploaded from the new pixels on the next tick.
+                sprite.uploadFirstFrame();
+                return true;
+            }
+            FrameSize frame = metadata.getSection(AnimationMetadataSection.SERIALIZER).orElse(AnimationMetadataSection.EMPTY)
+                    .calculateFrameSize(image.getWidth(), image.getHeight());
+            // A frame of another size needs another place in the atlas, which only stitching it again gives.
+            if (frame.width() != contents.width() || frame.height() != contents.height()) {
+                image.close();
+                return false;
+            }
+            return animate(atlas, sprite, new SpriteContents(contents.name(), frame, image, metadata), contents.byMipLevel.length - 1);
+        } catch (RuntimeException exception) {
+            TotalDebug.LOGGER.warn("Texture {} could not be put into its atlas", contents.name(), exception);
+            image.close();
+            return false;
+        }
+    }
+
+    /**
+     * Gives the sprite {@code fresh} contents, with a new animation, in its place: the atlas's animations start over with
+     * it. False, with nothing changed, where the game's fields cannot be reached.
+     */
+    @SuppressWarnings("unchecked")
+    private static boolean animate(TextureAtlas atlas, TextureAtlasSprite sprite, SpriteContents fresh, int mipLevel) {
+        Field contentsField;
+        Field spritesField;
+        Field tickersField;
+        List<SpriteContents> sprites;
+        List<TextureAtlasSprite.Ticker> tickers;
+        try {
+            contentsField = field(TextureAtlasSprite.class, "contents");
+            spritesField = field(TextureAtlas.class, "sprites");
+            tickersField = field(TextureAtlas.class, "animatedTextures");
+            sprites = (List<SpriteContents>) spritesField.get(atlas);
+            tickers = (List<TextureAtlasSprite.Ticker>) tickersField.get(atlas);
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            TotalDebug.LOGGER.warn("The atlas {} cannot be given a new animation; it takes a full reload", atlas.location(), exception);
+            fresh.close();
+            return false;
+        }
+        fresh.increaseMipLevel(mipLevel);
+        SpriteContents previous = sprite.contents();
+        try {
+            contentsField.set(sprite, fresh);
+            List<SpriteContents> replaced = new ArrayList<>(sprites);
+            replaced.replaceAll(contents -> contents == previous ? fresh : contents);
+            spritesField.set(atlas, List.copyOf(replaced));
+            // Each ticker plays the contents it was made for, so the atlas makes them again, as when it was stitched.
+            List<TextureAtlasSprite.Ticker> made = new ArrayList<>();
+            for (TextureAtlasSprite each : atlas.getTextures().values()) {
+                TextureAtlasSprite.Ticker ticker = each.createTicker();
+                if (ticker != null) made.add(ticker);
+            }
+            tickersField.set(atlas, List.copyOf(made));
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException(exception);
+        }
+        tickers.forEach(TextureAtlasSprite.Ticker::close);
+        previous.close();
         atlas.bind();
-        // An animation's next frame is uploaded from the new pixels on the next tick.
         sprite.uploadFirstFrame();
         return true;
+    }
+
+    private static Field field(Class<?> owner, String name) throws NoSuchFieldException {
+        Field field = owner.getDeclaredField(name);
+        field.setAccessible(true);
+        return field;
     }
 
     /** The animation a texture declares, as a text that is equal for the same frames, sizes and times. */
@@ -129,9 +218,7 @@ final class TextureUploads {
     @SuppressWarnings("unchecked")
     private static Map<ResourceLocation, AbstractTexture> textures(TextureManager manager) {
         try {
-            Field textures = TextureManager.class.getDeclaredField("byPath");
-            textures.setAccessible(true);
-            return Map.copyOf((Map<ResourceLocation, AbstractTexture>) textures.get(manager));
+            return Map.copyOf((Map<ResourceLocation, AbstractTexture>) field(TextureManager.class, "byPath").get(manager));
         } catch (ReflectiveOperationException | RuntimeException exception) {
             TotalDebug.LOGGER.warn("The game's textures could not be listed; edited textures take a full reload", exception);
             return null;

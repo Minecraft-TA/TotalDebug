@@ -12,7 +12,8 @@ class TextureUploadsTest {
     void onlyTexturesAreShownTheQuickWay() {
         assertTrue(TextureUploads.texture("assets/testmod/textures/block/gear.png"));
         assertTrue(TextureUploads.texture("assets/testmod/textures/entity/gear/spinner.png"));
-        assertFalse(TextureUploads.texture("assets/testmod/textures/block/gear.png.mcmeta"), "a new animation takes the full reload");
+        assertTrue(TextureUploads.texture("assets/testmod/textures/block/gear.png.mcmeta"), "a texture's animation too");
+        assertFalse(TextureUploads.texture("assets/testmod/textures/block/gear.json"));
         assertFalse(TextureUploads.texture("assets/testmod/lang/en_us.json"));
         assertFalse(TextureUploads.texture("assets/testmod/textures.png"));
     }
