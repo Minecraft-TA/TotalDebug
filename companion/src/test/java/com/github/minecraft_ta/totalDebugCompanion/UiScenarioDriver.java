@@ -559,6 +559,27 @@ final class UiScenarioDriver {
             case WORLD -> context.once("world", () -> navigate(new NavigationTarget.World(WorldTab.OVERVIEW)));
             case WORLD_RULES -> context.once("world-rules", () -> navigate(new NavigationTarget.World(WorldTab.GAME_RULES)));
             case WORLD_DATAPACKS -> context.once("world-datapacks", () -> navigate(new NavigationTarget.World(WorldTab.DATAPACKS)));
+            case WORLD_NO_MATCH -> {
+                context.once("world-no-match", () -> navigate(new NavigationTarget.World(WorldTab.GAME_RULES)));
+                if (showsTable("Test World", "Rule")) {
+                    context.once("world-no-match-filter", () -> findComponents(mainWindow, JTextField.class).stream()
+                            .filter(field -> field.isShowing() && "Filter by rule or value".equals(field.getClientProperty("JTextField.placeholderText")))
+                            .findFirst().ifPresent(field -> field.setText("unknownRule")));
+                }
+            }
+            case WORLD_UNREADABLE -> context.once("world-unreadable", () -> {
+                writeWorldFile("level.dat", new byte[]{1, 2, 3});
+                navigate(new NavigationTarget.World(WorldTab.OVERVIEW));
+            });
+            case WORLD_NONE -> context.once("world-none", () -> {
+                Path saves = mainWindow.editorContext().project().profile().workspaceDirectory().resolve("saves");
+                try {
+                    Files.move(saves, saves.resolveSibling("saves-moved"));
+                } catch (IOException exception) {
+                    throw new UncheckedIOException(exception);
+                }
+                navigate(new NavigationTarget.World(WorldTab.OVERVIEW));
+            });
             case INSPECTION -> {
                 context.once("inspection", () -> navigate(new NavigationTarget.Inspection(InspectionSample.SUBJECT)));
                 SubjectPanel panel = findComponent(mainWindow, SubjectPanel.class);
@@ -600,6 +621,21 @@ final class UiScenarioDriver {
     }
 
     /** The selected editor tab is titled {@code title} and shows a table with rows under {@code column}. */
+    /** Writes {@code bytes} into a file of the harness's world, such as a broken {@code level.dat}. */
+    private void writeWorldFile(String name, byte[] bytes) {
+        try {
+            Files.write(mainWindow.editorContext().project().profile().workspaceDirectory().resolve("saves/Test World").resolve(name), bytes);
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+
+    /** Whether the selected page shows a message starting with {@code text} in place of its content. */
+    private boolean showsMessage(String text) {
+        return mainWindow.getEditorTabs().getSelectedEditor() != null && findComponents(mainWindow, JLabel.class).stream()
+                .anyMatch(label -> label.isShowing() && label.getText() != null && label.getText().startsWith(text));
+    }
+
     private boolean showsTable(String title, String column) {
         var editor = mainWindow.getEditorTabs().getSelectedEditor();
         if (editor == null || !title.equals(editor.getTitle())) return false;
@@ -632,6 +668,9 @@ final class UiScenarioDriver {
                     && "Test World".equals(view.getTitle());
             case WORLD_RULES -> showsTable("Test World", "Rule");
             case WORLD_DATAPACKS -> showsTable("Test World", "Pack");
+            case WORLD_NO_MATCH -> showsMessage("No game rule matches the filter.");
+            case WORLD_UNREADABLE -> showsMessage("The world Test World could not be read");
+            case WORLD_NONE -> showsMessage("No world has been played in this instance yet.");
             case CONTENT -> {
                 ContentBrowser browser = findComponent(mainWindow, ContentBrowser.class);
                 yield mainWindow.getEditorTabs().getSelectedEditor() instanceof ContentView && browser != null

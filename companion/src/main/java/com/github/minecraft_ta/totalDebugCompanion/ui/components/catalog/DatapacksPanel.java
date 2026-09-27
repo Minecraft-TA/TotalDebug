@@ -47,8 +47,8 @@ import java.util.function.Consumer;
 
 /**
  * The world's datapacks as the game's pack screen lists them: enabled ones with the highest first, then disabled ones,
- * then packs in the world's folder the game enables when it loads the world next. A pack a mod brings opens the mod's
- * page; a pack in the world's folder is shown in Explorer from its menu.
+ * then packs in the world's folder the game enables when it loads the world next. Opening a pack a mod brings opens the
+ * mod's page; opening a pack in the world's folder shows it in Explorer.
  */
 final class DatapacksPanel extends JPanel {
     private static final String TABLE_CARD = "table";
@@ -184,8 +184,10 @@ final class DatapacksPanel extends JPanel {
         ((CardLayout) this.cards.getLayout()).show(this.cards, empty ? MESSAGE_CARD : TABLE_CARD);
     }
 
+    /** Opens the mod a pack comes from, or shows a pack in the world's folder in Explorer. */
     private void open(Row row) {
         if (!row.modId().isEmpty()) this.navigator.accept(new NavigationTarget.ModPage(row.modId()));
+        else if (row.pack().file() != null) Explorer.show(row.pack().file());
     }
 
     private String tooltip(Row row) {
@@ -209,7 +211,8 @@ final class DatapacksPanel extends JPanel {
         Row row = selected.getFirst();
         if (!row.modId().isEmpty()) menu.add(ContextMenus.action("Open " + row.from(), null, "ENTER", () -> open(row)));
         if (row.pack().file() != null) {
-            menu.add(ContextMenus.action("Show in Explorer", null, null, () -> Explorer.show(row.pack().file())));
+            menu.add(ContextMenus.action("Show in Explorer", null, row.modId().isEmpty() ? "ENTER" : null,
+                    () -> Explorer.show(row.pack().file())));
         }
         if (menu.getComponentCount() > 0) menu.addSeparator();
         menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy ID", row.pack().id())));

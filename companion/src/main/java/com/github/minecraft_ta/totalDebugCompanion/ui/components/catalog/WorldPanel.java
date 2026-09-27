@@ -40,12 +40,14 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.NumberFormat;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -197,6 +199,7 @@ public final class WorldPanel extends JPanel {
     /** The world's settings, then its time and weather, each noting a game rule that holds it still. */
     static List<FactSection> sections(CurrentWorld.Saved saved) {
         List<Fact> world = new ArrayList<>();
+        // A seed is typed into the game as it is, and a spawn's coordinates are separated by commas, so neither is grouped.
         if (saved.seed() != null) world.add(Fact.text("Seed", Long.toString(saved.seed())));
         world.add(Fact.text("Game mode", saved.gameMode() + (saved.hardcore() ? ", hardcore" : "")));
         world.add(Fact.text("Difficulty", saved.difficulty() + (saved.difficultyLocked() ? ", locked" : "")));
@@ -204,7 +207,7 @@ public final class WorldPanel extends JPanel {
         CurrentWorld.Spawn spawn = saved.spawn();
         world.add(Fact.text("Spawn", spawn.x() + ", " + spawn.y() + ", " + spawn.z()));
         List<Fact> time = new ArrayList<>();
-        time.add(Fact.text("Day", Long.toString(saved.day())));
+        time.add(Fact.text("Day", NumberFormat.getIntegerInstance(Locale.ROOT).format(saved.day())));
         boolean clockStopped = "false".equals(saved.gameRules().get("doDaylightCycle"));
         time.add(Fact.text("Time", saved.timeOfDay() + (clockStopped ? ", stopped" : "")));
         boolean weatherStopped = "false".equals(saved.gameRules().get("doWeatherCycle"));
