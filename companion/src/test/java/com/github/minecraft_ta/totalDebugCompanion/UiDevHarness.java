@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion;
 import javax.swing.JLabel;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
@@ -140,6 +141,11 @@ public final class UiDevHarness {
                 [27Sept2026 10:00:01.000] [Render thread/WARN] [net.minecraft.client.resources.model.ModelBakery/]: Missing model testmod:block/widget_block
                 [27Sept2026 10:00:02.000] [Server thread/ERROR] [testmod.WidgetBlockEntity/]: Widget failed to spin
                 """);
+        // A world with a pack in its folder the game enables when it loads the world next.
+        Path world = scope.profile().workspaceDirectory().resolve("saves/Test World");
+        LevelDatFixture.write(world, LevelDatFixture.world("Test World"));
+        LevelDatFixture.datapack(world, "Tweaks");
+        LevelDatFixture.datapack(world, "Structures");
         Path file = scope.paths().catalog();
         Files.createDirectories(file.getParent());
         CatalogFixtures.catalog(jar).write(file);

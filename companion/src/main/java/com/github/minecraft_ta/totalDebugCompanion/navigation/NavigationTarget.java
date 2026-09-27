@@ -31,6 +31,7 @@ public sealed interface NavigationTarget permits
         NavigationTarget.Logs,
         NavigationTarget.Changes,
         NavigationTarget.KeyBindings,
+        NavigationTarget.World,
         NavigationTarget.Content,
         NavigationTarget.Definition,
         NavigationTarget.RuntimeModuleNode {
@@ -63,6 +64,13 @@ public sealed interface NavigationTarget permits
     record KeyBindings(String binding) implements NavigationTarget {
         public KeyBindings {
             binding = Objects.requireNonNullElse(binding, "");
+        }
+    }
+
+    /** The current world: the one the game has open, or the one played last. */
+    record World(WorldTab tab) implements NavigationTarget {
+        public World {
+            Objects.requireNonNull(tab, "tab");
         }
     }
 

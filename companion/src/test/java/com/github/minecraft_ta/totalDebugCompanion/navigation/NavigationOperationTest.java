@@ -2,12 +2,14 @@ package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.model.JavaEditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.model.KeyBindingsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
+import com.github.minecraft_ta.totalDebugCompanion.model.WorldView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
@@ -188,6 +190,20 @@ class NavigationOperationTest {
             assertInstanceOf(LogsView.class, edt(fixture.tabs::getSelectedEditor), "the tab shows the log it was opened on");
             fixture.navigation.goForward().get(5, TimeUnit.SECONDS);
             assertInstanceOf(KeyBindingsView.class, edt(fixture.tabs::getSelectedEditor));
+        }
+    }
+
+    @Test void theWorldPageComesBackOnTheTabItShowedWhileItIsReadAgain() throws Exception {
+        try (var fixture = new Fixture()) {
+            LevelDatFixture.write(directory.resolve("game/saves/World"), LevelDatFixture.world("World"));
+            fixture.navigation.navigate(new NavigationTarget.World(WorldTab.GAME_RULES), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
+            SubjectRef.Definition stone = new SubjectRef.Definition(RegistryIds.BLOCK, "minecraft:stone");
+            fixture.navigation.navigate(new NavigationTarget.Definition(stone), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
+            edt(() -> { fixture.tabs.closeMatching(WorldView.class::isInstance); return null; });
+
+            fixture.navigation.goBack().get(5, TimeUnit.SECONDS);
+
+            assertEquals(new NavigationTarget.World(WorldTab.GAME_RULES), edt(() -> fixture.tabs.getSelectedEditor().getNavigationTarget()));
         }
     }
 

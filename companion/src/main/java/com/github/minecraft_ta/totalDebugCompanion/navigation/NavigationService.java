@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
 import com.github.minecraft_ta.totalDebugCompanion.model.KeyBindingsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
+import com.github.minecraft_ta.totalDebugCompanion.model.WorldView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
@@ -135,6 +136,7 @@ public final class NavigationService {
             case NavigationTarget.Logs ignored -> true;
             case NavigationTarget.Changes ignored -> true;
             case NavigationTarget.KeyBindings ignored -> true;
+            case NavigationTarget.World ignored -> true;
             case NavigationTarget.Content ignored -> true;
             case null, default -> false;
         };
@@ -154,6 +156,7 @@ public final class NavigationService {
                     case NavigationTarget.Logs ignored -> requireRevealed(fileTree.revealLogs());
                     case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges());
                     case NavigationTarget.KeyBindings ignored -> requireRevealed(fileTree.revealKeyBindings());
+                    case NavigationTarget.World world -> requireRevealed(fileTree.revealWorld(world.tab()));
                     case NavigationTarget.Content content -> requireRevealed(fileTree.revealContent(content.registry()));
                     default -> throw new IllegalArgumentException("Editor has no tree location");
                 };
@@ -342,6 +345,11 @@ public final class NavigationService {
                     view.refresh();
                     view.show(keys.binding());
                 }), activation);
+                case NavigationTarget.World world -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        WorldView.class,
+                        view -> true,
+                        () -> new WorldView(editors.get())
+                ).thenAccept(view -> view.show(world.tab())), activation);
                 case NavigationTarget.Definition definition -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         DefinitionView.class,
                         view -> view.subject().equals(definition.subject()),
@@ -817,6 +825,7 @@ public final class NavigationService {
             case NavigationTarget.Logs ignored -> "logs";
             case NavigationTarget.Changes ignored -> "changes";
             case NavigationTarget.KeyBindings ignored -> "key bindings";
+            case NavigationTarget.World ignored -> "world";
             case NavigationTarget.Content content -> "modpack " + (content.registry().isEmpty() ? "content"
                     : ContentKinds.of(content.registry()).plural().toLowerCase(Locale.ROOT));
             case NavigationTarget.Definition definition -> definition.subject().format();

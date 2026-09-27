@@ -1,6 +1,6 @@
 # The Modpack tree
 
-Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Content, Configuration, Resources (its files; the Packs tab follows), Key bindings, Logs and Changes; the change record holds configuration settings, key bindings and resources. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
+Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Content, Configuration, Resources (its files; the Packs tab follows), Key bindings, Logs and Changes; the World root with its overview, game rules and datapacks; the change record holds configuration settings, key bindings and resources. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
 
 ## Purpose
 
@@ -40,6 +40,7 @@ Companion shows one world: the one the game has open, or the one played last whi
 
 - **Pack content read from the world:** tags, recipes, loot tables, biomes and enchantments belong to a world in the game's terms, but they are the pack's content. They are listed under Content, read from the current world, not presented as world content.
 - **World state:** a **World** root beside Modpack holds what is really the world's own: its overview (seed, time, weather, difficulty, spawn), game rules and datapacks. Later: loaded chunks and the tickets that keep them loaded, players and saved data.
+- **Reading the world:** the World page reads the world's `level.dat` whenever it is shown, so it works without the game. The game writes `level.dat` when it autosaves and when the world closes; while the world is open, the header says when it was saved. Datapacks are listed as the game's pack screen lists them: enabled ones with the highest first, then disabled ones, then packs in the world's `datapacks` folder that the game enables when it loads the world next.
 - **Server configuration** stays under Configuration, with the current world's file first.
 - **Writes:** a data change is saved in the current world's datapack, and says so.
 

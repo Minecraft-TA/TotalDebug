@@ -38,7 +38,6 @@ import javax.swing.text.JTextComponent;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
-import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.HierarchyEvent;
@@ -195,17 +194,7 @@ final class ConfigPanel extends JPanel {
         if (path == null) return null;
         JPopupMenu menu = new JPopupMenu();
         menu.add(ContextMenus.copyAction("Copy Path", path.toString()));
-        menu.add(ContextMenus.action("Show in Explorer", null, null, () -> {
-            try {
-                Desktop.getDesktop().browseFileDirectory(path.toFile());
-            } catch (UnsupportedOperationException exception) {
-                try {
-                    Desktop.getDesktop().open(path.getParent().toFile());
-                } catch (IOException ignored) {
-                    // The path stays available through Copy path.
-                }
-            }
-        }));
+        menu.add(ContextMenus.action("Show in Explorer", null, null, () -> Explorer.show(path)));
         return menu;
     }
 
