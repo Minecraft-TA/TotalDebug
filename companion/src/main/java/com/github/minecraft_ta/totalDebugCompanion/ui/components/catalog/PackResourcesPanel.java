@@ -68,7 +68,8 @@ public final class PackResourcesPanel extends JPanel {
         }, listed -> {
             this.packs.setPacks(listed, this.catalog.index().orElse(null));
             TabTitles.setCounted(this.tabs, 1, ResourcesTab.PACKS.title(), listed.size());
-        }, failure -> this.packs.setPacks(List.of(), null)).whenShown(this.packs).follow(edits::addStackListener);
+        }, failure -> this.packs.showFailure("The resource packs could not be listed: " + failure.getMessage()))
+                .whenShown(this.packs).follow(edits::addStackListener);
         load();
     }
 

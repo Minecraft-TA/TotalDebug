@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.Worlds;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
@@ -90,6 +92,8 @@ public final class ResourceEdits {
     private final List<Runnable> stackListeners = new CopyOnWriteArrayList<>();
     /** Run after a save or revert has written its file and the game used it, or failed to. */
     private final List<Runnable> editListeners = new CopyOnWriteArrayList<>();
+    /** Run when a working pack is chosen, which changes where resource tabs save. */
+    private final List<Runnable> workingPackListeners = new CopyOnWriteArrayList<>();
     private Batch running;
     private Batch next;
 
@@ -174,7 +178,10 @@ public final class ResourceEdits {
     public Path pack(String path) throws IOException {
         Path folder = packFolder(path);
         String working = this.state.workingPack(side(path));
-        if (!working.isEmpty() && Files.isDirectory(folder.resolve(working))) return folder.resolve(working);
+        // Only a folder the game takes as a pack; one that lost its pack.mcmeta is not loaded.
+        if (!working.isEmpty() && Files.isDirectory(folder.resolve(working)) && PackFolders.isPack(folder.resolve(working))) {
+            return folder.resolve(working);
+        }
         return folder.resolve(PACK_NAME);
     }
 
@@ -191,10 +198,20 @@ public final class ResourceEdits {
         return packs;
     }
 
-    /** Saves the resources of {@code path}'s side into {@code pack} from now on, when they come from a mod or an archive. */
+    /**
+     * Saves the resources of {@code path}'s side into {@code pack} from now on, when they come from a mod or an archive,
+     * and tells every open resource tab.
+     */
     public void setWorkingPack(String path, Path pack) {
         String name = pack.getFileName().toString();
         this.state.setWorkingPack(side(path), name.equals(PACK_NAME) ? "" : name);
+        this.workingPackListeners.forEach(Runnable::run);
+    }
+
+    /** Runs {@code listener} whenever a working pack is chosen; returns what removes it. */
+    public Runnable addWorkingPackListener(Runnable listener) {
+        this.workingPackListeners.add(listener);
+        return () -> this.workingPackListeners.remove(listener);
     }
 
     /** Whether {@code pack} is a pack Companion manages, which it creates, enables and places on top. */
@@ -246,19 +263,19 @@ public final class ResourceEdits {
      * enabled by the reload after a save, so only the packs above it count. Blocking.
      */
     public Optional<String> unusedBecause(String path, Path pack) {
+        boolean assets = path.startsWith("assets/");
         PackStackPayload current = this.stack;
-        if (current == null) return Optional.empty();
-        List<PackStackPayload.Pack> packs = path.startsWith("assets/") ? current.resourcePacks() : current.dataPacks();
+        // The game names the open world's datapacks only; another world's and a closed game's are read from their files.
+        if (current == null || !assets && !Worlds.isOpen(pack.getParent().getParent())) return disabledOnDisk(path, pack);
+        List<PackStackPayload.Pack> packs = assets ? current.resourcePacks() : current.dataPacks();
         String id = "file/" + pack.getFileName();
         int position = -1;
         for (int index = 0; index < packs.size(); index++) {
             if (packs.get(index).id().equals(id)) position = index;
         }
-        String name = "The " + PackFolders.label(pack);
         if (position < 0) {
-            // A world that is not open has no datapacks in the game; the managed pack is enabled when it is saved to.
-            boolean elsewhere = !path.startsWith("assets/") && !Worlds.isOpen(pack.getParent().getParent());
-            return managed(pack) || elsewhere ? Optional.empty() : Optional.of(name + " is not enabled, so the game does not use this file");
+            // The managed pack is enabled by the reload after a save.
+            return managed(pack) ? Optional.empty() : Optional.of(notEnabled(pack));
         }
         for (int index = packs.size() - 1; index > position; index--) {
             PackStackPayload.Pack above = packs.get(index);
@@ -267,6 +284,30 @@ public final class ResourceEdits {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Why the game will not use {@code pack}'s copy when it next starts or loads the world: the pack not being enabled in
+     * {@code options.txt}, or disabled in the world's {@code level.dat}. The managed pack is enabled when saved to.
+     */
+    private Optional<String> disabledOnDisk(String path, Path pack) {
+        if (managed(pack)) return Optional.empty();
+        String id = "file/" + pack.getFileName();
+        try {
+            if (path.startsWith("assets/")) {
+                return PackResources.enabledInOptions(this.workspace.resolve("options.txt")).contains(id)
+                        ? Optional.empty() : Optional.of(notEnabled(pack));
+            }
+            boolean disabled = CurrentWorld.read(pack.getParent().getParent()).datapacks().stream()
+                    .anyMatch(listed -> listed.id().equals(id) && listed.state() == ListedPack.State.DISABLED);
+            return disabled ? Optional.of(notEnabled(pack)) : Optional.empty();
+        } catch (IOException | RuntimeException unreadable) {
+            return Optional.empty();
+        }
+    }
+
+    private static String notEnabled(Path pack) {
+        return "The " + PackFolders.label(pack) + " is not enabled, so the game does not use this file";
     }
 
     private static boolean contains(Path source, String path) {

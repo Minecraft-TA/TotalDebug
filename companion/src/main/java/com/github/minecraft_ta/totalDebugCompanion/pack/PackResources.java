@@ -19,7 +19,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -91,8 +90,10 @@ public final class PackResources {
      */
     public static List<Source> data(PackStackPayload stack, CatalogIndex index, Path workspace) {
         if (stack != null) return stack.dataPacks().stream().map(pack -> source(pack, index)).toList();
-        List<ListedPack> enabled = worldDatapacks(workspace).stream()
-                .filter(pack -> pack.state() == ListedPack.State.ENABLED).toList().reversed();
+        // The game enables a new pack of the world's folder above the others when it loads the world.
+        List<ListedPack> listed = worldDatapacks(workspace);
+        List<ListedPack> enabled = new ArrayList<>(listed.stream().filter(pack -> pack.state() == ListedPack.State.ENABLED).toList().reversed());
+        enabled.addAll(listed.stream().filter(pack -> pack.state() == ListedPack.State.NEW).toList());
         List<Source> sources = new ArrayList<>();
         if (enabled.isEmpty()) {
             sources.add(vanilla(index));
@@ -218,7 +219,7 @@ public final class PackResources {
     }
 
     /** The resource packs {@code options.txt} enables, lowest first; the game's defaults when it lists none. */
-    static List<String> enabledInOptions(Path options) throws IOException {
+    public static List<String> enabledInOptions(Path options) throws IOException {
         if (!Files.isRegularFile(options)) return List.of(VANILLA, MOD_RESOURCES);
         for (String line : Files.readAllLines(options, StandardCharsets.UTF_8)) {
             if (!line.startsWith("resourcePacks:")) continue;
@@ -235,9 +236,8 @@ public final class PackResources {
         return List.of(VANILLA, MOD_RESOURCES);
     }
 
-    /** A title for a pack the running game has not named: its folder or file name. */
+    /** A title for a pack the running game has not named: its folder or file name, as the game titles it. */
     static String title(String id) {
-        String name = id.startsWith("file/") ? id.substring("file/".length()) : id;
-        return name.toLowerCase(Locale.ROOT).endsWith(".zip") ? name.substring(0, name.length() - 4) : name;
+        return id.startsWith("file/") ? id.substring("file/".length()) : id;
     }
 }

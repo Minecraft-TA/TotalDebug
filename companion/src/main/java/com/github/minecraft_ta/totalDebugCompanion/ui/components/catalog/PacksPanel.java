@@ -150,6 +150,14 @@ final class PacksPanel extends JPanel {
         return new Row(pack, name, index.mod(owner).map(PackCatalog.Mod::title).orElse(owner), owner);
     }
 
+    /** Shows why the packs could not be listed, in place of the list. */
+    void showFailure(String message) {
+        this.model.all = List.of();
+        this.model.shown = List.of();
+        this.model.fireTableDataChanged();
+        this.body.showMessage(message);
+    }
+
     static String state(ListedPack.State state) {
         return switch (state) {
             case ENABLED -> "Enabled";

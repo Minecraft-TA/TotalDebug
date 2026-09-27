@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
@@ -18,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -284,6 +286,31 @@ class ResourceEditsTest {
     }
 
     @Test
+    void withoutAGameADisabledPackOfTheirsIsNamedFromTheFilesThatEnableIt() throws Exception {
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
+        assertEquals("The MyPack resource pack is not enabled, so the game does not use this file",
+                edits.unusedBecause(LANG, mine).orElseThrow(), "options.txt does not enable it");
+        Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\",\"file/MyPack\"]\n");
+        assertTrue(edits.unusedBecause(LANG, mine).isEmpty());
+        assertTrue(edits.unusedBecause(LANG, this.directory.resolve("resourcepacks/TotalDebug")).isEmpty(),
+                "the managed pack is enabled when it is saved to");
+
+        Path world = this.directory.resolve("saves/World");
+        Map<String, Object> data = LevelDatFixture.world("World");
+        data.put("DataPacks", Map.of("Enabled", List.of("vanilla"), "Disabled", List.of("file/Old")));
+        LevelDatFixture.write(world, data);
+        Path old = LevelDatFixture.datapack(world, "Old");
+        Path added = LevelDatFixture.datapack(world, "Added");
+        String recipe = "data/testmod/recipe/gear.json";
+        assertEquals("The Old datapack of World is not enabled, so the game does not use this file",
+                edits.unusedBecause(recipe, old).orElseThrow());
+        assertTrue(edits.unusedBecause(recipe, added).isEmpty(), "a new pack of the world's folder is enabled when the world loads");
+    }
+
+    @Test
     void aFileOfTheirOwnPackIsSavedInPlaceWithoutMovingThatPack() throws Exception {
         Path world = world("World");
         Path mine = Files.createDirectories(world.resolve("datapacks/MyPack"));
@@ -336,6 +363,8 @@ class ResourceEditsTest {
             for (Path file : files.sorted(Comparator.reverseOrder()).toList()) Files.delete(file);
         }
         assertEquals(managed, edits.pack(LANG), "a working pack that is gone falls back to the managed pack");
+        Files.createDirectories(mine);
+        assertEquals(managed, edits.pack(LANG), "so does a folder the game does not take as a pack, without pack.mcmeta");
         edits.setWorkingPack(LANG, managed);
         assertEquals("", state.workingPack("assets"));
     }

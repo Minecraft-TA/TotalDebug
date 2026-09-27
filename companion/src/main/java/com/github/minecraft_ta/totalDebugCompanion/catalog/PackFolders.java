@@ -32,12 +32,17 @@ public final class PackFolders {
     }
 
     /**
-     * Whether the game takes {@code entry} as a pack: a folder with a {@code pack.mcmeta}, or a file ending in
-     * {@code .zip}, as its {@code PackDetector} does.
+     * Whether the game takes {@code entry} as a pack: a folder or a file ending in {@code .zip}, as its
+     * {@code PackDetector} finds them, with a {@code pack.mcmeta} at its root, which it reads before listing the pack.
      */
     public static boolean isPack(Path entry) {
         if (Files.isDirectory(entry)) return Files.isRegularFile(entry.resolve("pack.mcmeta"));
-        return Files.isRegularFile(entry) && entry.getFileName().toString().endsWith(".zip");
+        if (!Files.isRegularFile(entry) || !entry.getFileName().toString().endsWith(".zip")) return false;
+        try (ZipFile zip = new ZipFile(entry.toFile())) {
+            return zip.getEntry("pack.mcmeta") != null;
+        } catch (IOException unreadable) {
+            return false;
+        }
     }
 
     /** The packs in {@code folder} by the id the game gives them, {@code file/} and their file name; none without it. */
@@ -52,10 +57,9 @@ public final class PackFolders {
         return packs;
     }
 
-    /** A pack's name as the game shows it: its file name, without {@code .zip}. */
+    /** A pack's name as the game shows it: its folder or file name. */
     public static String title(Path pack) {
-        String name = pack.getFileName().toString();
-        return name.endsWith(".zip") ? name.substring(0, name.length() - ".zip".length()) : name;
+        return pack.getFileName().toString();
     }
 
     /** What the pack's {@code pack.mcmeta} says, or empty when it has none or it cannot be read. */

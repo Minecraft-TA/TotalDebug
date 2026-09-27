@@ -55,7 +55,7 @@ class WorldPanelTest {
     void aResourcePackIsNamedByWhereItComesFromToo() {
         PacksPanel.Row faithful = PacksPanel.row(new ListedPack("file/Faithful.zip", ListedPack.State.DISABLED,
                 this.directory.resolve("resourcepacks/Faithful.zip")), null, PacksPanel.Side.RESOURCES);
-        assertEquals(List.of("Faithful", "Resource packs folder"), List.of(faithful.name(), faithful.from()));
+        assertEquals(List.of("Faithful.zip", "Resource packs folder"), List.of(faithful.name(), faithful.from()));
         assertEquals("Minecraft", PacksPanel.row(new ListedPack("programmer_art", ListedPack.State.ENABLED, null), null,
                 PacksPanel.Side.RESOURCES).from());
         assertEquals("Every mod", PacksPanel.row(new ListedPack("mod_resources", ListedPack.State.ENABLED, null), null,

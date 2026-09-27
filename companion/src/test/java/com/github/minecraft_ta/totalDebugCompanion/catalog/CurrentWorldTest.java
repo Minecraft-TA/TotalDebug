@@ -62,7 +62,8 @@ class CurrentWorldTest {
         Path world = this.directory.resolve("world");
         LevelDatFixture.write(world, LevelDatFixture.world("Test"));
         Path tweaks = LevelDatFixture.datapack(world, "Tweaks");
-        Path added = Files.writeString(world.resolve("datapacks/Added.zip"), "");
+        Path added = LevelDatFixture.zipDatapack(world, "Added.zip");
+        Files.writeString(world.resolve("datapacks/Broken.zip"), "");
         Files.writeString(world.resolve("datapacks/notes.txt"), "not a pack");
         Files.createDirectories(world.resolve("datapacks/backup"));
         Files.writeString(world.resolve("datapacks/Old.ZIP"), "");
@@ -70,7 +71,7 @@ class CurrentWorldTest {
         List<ListedPack> packs = CurrentWorld.read(world).datapacks();
         assertEquals(List.of("file/Tweaks", "mod_data", "vanilla", "bundle", "mod/testmod:data/testmod/datapacks/extra", "file/Added.zip"),
                 packs.stream().map(ListedPack::id).toList(),
-                "the highest enabled pack comes first, as in the game, which skips a folder without pack.mcmeta and a .ZIP");
+                "the highest enabled pack comes first, as in the game, which skips a folder or zip without pack.mcmeta and a .ZIP");
         assertEquals(List.of(ListedPack.State.ENABLED, ListedPack.State.ENABLED, ListedPack.State.ENABLED,
                         ListedPack.State.DISABLED, ListedPack.State.DISABLED, ListedPack.State.NEW),
                 packs.stream().map(ListedPack::state).toList(), "the game enables a new folder pack when it loads the world");

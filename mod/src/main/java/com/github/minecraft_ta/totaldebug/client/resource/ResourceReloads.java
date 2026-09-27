@@ -13,11 +13,13 @@ import net.minecraft.server.packs.resources.Resource;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Reloads what Companion's edited resources need: the language, every client resource, or the singleplayer server's
@@ -25,9 +27,9 @@ import java.util.function.Supplier;
  * packs fixed at the top stay above it.
  */
 public final class ResourceReloads {
-    /** A resource reload that has not finished, and the managed pack it selected; client thread only. */
+    /** A resource reload that has not finished, and the folder packs selected when it started; client thread only. */
     private static CompletableFuture<Void> pendingResources;
-    private static String pendingPack;
+    private static Set<String> pendingPacks = Set.of();
 
     private ResourceReloads() {
     }
@@ -65,8 +67,8 @@ public final class ResourceReloads {
 
     /**
      * Fails a resource reload the game rolled back. When a reload fails, Minecraft turns off every resource pack, reloads
-     * again and never completes the reload it was asked for; the managed pack it had selected is then gone. Client
-     * thread only, on ticks without a loading overlay.
+     * again and never completes the reload it was asked for; the folder packs it had selected, the managed pack or the
+     * player's own, are then gone. Client thread only, on ticks without a loading overlay.
      */
     public static void tick() {
         CompletableFuture<Void> pending = pendingResources;
@@ -75,7 +77,7 @@ public final class ResourceReloads {
             pendingResources = null;
             return;
         }
-        if (Minecraft.getInstance().getResourcePackRepository().getSelectedIds().contains(pendingPack)) return;
+        if (Minecraft.getInstance().getResourcePackRepository().getSelectedIds().containsAll(pendingPacks)) return;
         pendingResources = null;
         pending.completeExceptionally(new IllegalStateException(
                 "The game could not load the resources and turned off every resource pack; its log names the cause"));
@@ -107,16 +109,19 @@ public final class ResourceReloads {
             if (failure == null) reload.complete(null);
             else reload.completeExceptionally(failure);
         });
-        if (minecraft.getResourcePackRepository().getSelectedIds().contains(managedPack)) {
+        Set<String> folderPacks = minecraft.getResourcePackRepository().getSelectedIds().stream()
+                .filter(id -> id.startsWith("file/")).collect(Collectors.toSet());
+        if (!folderPacks.isEmpty()) {
             pendingResources = reload;
-            pendingPack = managedPack;
+            pendingPacks = folderPacks;
         }
         return reload;
     }
 
     /**
-     * Whether the running resource manager already reads every watched language file from the managed pack; a pack or
-     * namespace added since the last reload is only seen after a full reload.
+     * Whether the running resource manager already reads every watched language file from the pack it was saved into:
+     * the managed pack, or with none named, the player's own folder pack whose copy is on top. A pack or namespace added
+     * since the last reload is only seen after a full reload.
      */
     private static boolean suppliedBy(String managedPack, List<String> watched) {
         for (String path : watched) {
@@ -125,7 +130,12 @@ public final class ResourceReloads {
             ResourceLocation location = ResourceLocation.tryBuild(parts[1], parts[2]);
             if (location == null) return false;
             List<Resource> stack = Minecraft.getInstance().getResourceManager().getResourceStack(location);
-            if (stack.stream().noneMatch(resource -> resource.sourcePackId().equals(managedPack))) return false;
+            if (managedPack.isEmpty()) {
+                // The stack is lowest first; the copy on top is the one the game shows.
+                if (stack.isEmpty() || !stack.getLast().sourcePackId().startsWith("file/")) return false;
+            } else if (stack.stream().noneMatch(resource -> resource.sourcePackId().equals(managedPack))) {
+                return false;
+            }
         }
         return true;
     }

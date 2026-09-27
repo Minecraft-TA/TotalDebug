@@ -71,6 +71,8 @@ final class ResourceTextEditor extends JPanel {
     private final Runnable stopListening;
     /** Stops following the game's packs. */
     private final Runnable stopFollowingPacks;
+    /** Stops following the choice of working pack. */
+    private final Runnable stopFollowingWorkingPack;
     /** The text a save under way writes, or null. */
     private String saving;
     /** The folder pack the opened file lies in, which stays the target, or null to save into the working pack. */
@@ -150,6 +152,8 @@ final class ResourceTextEditor extends JPanel {
         this.stopListening = edits.record().addListener(() -> SwingUtilities.invokeLater(this::recordChanged));
         // Another world opening changes the current world's datapack a data file is shown from and saved into.
         this.stopFollowingPacks = edits.addStackListener(() -> SwingUtilities.invokeLater(this::packsChanged));
+        // A working pack chosen in another tab is where this one saves too.
+        this.stopFollowingWorkingPack = edits.addWorkingPackListener(() -> SwingUtilities.invokeLater(this::packsChanged));
     }
 
     /** Saves into the chosen pack from now on, for this file and every file of a mod on its side, and shows its copy. */
@@ -271,7 +275,8 @@ final class ResourceTextEditor extends JPanel {
 
     /** Names where the text comes from, followed by {@code detail} when it is not empty. */
     private void showState(String detail) {
-        String source = this.managed ? "Edited in " + this.packName
+        // A copy Companion did not write, such as a file of the player's own pack, is in the pack but not edited.
+        String source = this.managed ? (this.seen != null ? "Edited in " : "In ") + this.packName
                 : this.opened != null ? "Not in " + this.packName + " any more" : "From " + this.origin;
         this.state.setText(detail.isEmpty() ? source : source + ", " + detail);
     }
@@ -370,6 +375,7 @@ final class ResourceTextEditor extends JPanel {
         this.disposed = true;
         this.stopListening.run();
         this.stopFollowingPacks.run();
+        this.stopFollowingWorkingPack.run();
         this.text.dispose();
     }
 }

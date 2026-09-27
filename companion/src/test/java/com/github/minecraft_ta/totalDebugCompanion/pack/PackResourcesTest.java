@@ -119,17 +119,21 @@ class PackResourcesTest {
         data.put("DataPacks", Map.of("Enabled", List.of("vanilla", "mod_data", "file/Tweaks", "create:generated"), "Disabled", List.of()));
         LevelDatFixture.write(world, data);
         Path tweaks = pack(world.resolve("datapacks/Tweaks"), RECIPE);
+        Path added = pack(world.resolve("datapacks/Added"), "data/testmod/recipe/cog.json");
 
         List<PackResources.Source> sources = PackResources.data(null, index, this.directory);
-        assertEquals("file/Tweaks", sources.getLast().id(), "the world's own pack is above the mods, as the world enables it");
-        assertEquals(List.of(tweaks), sources.getLast().files());
+        assertEquals(List.of("file/Tweaks", "file/Added"), sources.subList(sources.size() - 2, sources.size()).stream()
+                .map(PackResources.Source::id).toList(),
+                "the world's own pack is above the mods, and a new one in its folder above that, as the game enables it on load");
+        assertEquals(List.of(tweaks), sources.get(sources.size() - 2).files());
+        assertEquals(List.of(added), sources.getLast().files());
         assertEquals("Tweaks", PackResources.join(List.of(), sources).from().get(RECIPE));
     }
 
     @Test
     void optionsWithoutResourcePacksMeanTheGamesDefaults() throws Exception {
         assertEquals(List.of("vanilla", "mod_resources"), PackResources.enabledInOptions(this.directory.resolve("options.txt")));
-        assertEquals("Faithful", PackResources.title("file/Faithful.zip"));
+        assertEquals("Faithful.zip", PackResources.title("file/Faithful.zip"));
     }
 
     private static Path pack(Path folder, String... paths) throws IOException {
