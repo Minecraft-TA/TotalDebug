@@ -109,6 +109,7 @@ public final class ResourceEdits {
     public void gameDisconnected() {
         this.game = null;
         this.stack = null;
+        this.stackListeners.forEach(Runnable::run);
         for (CompletableFuture<ReloadResultPayload> request : this.waiting.values()) {
             request.completeExceptionally(new IOException("The game disconnected before it finished reloading"));
         }
@@ -121,7 +122,15 @@ public final class ResourceEdits {
         this.stackListeners.forEach(Runnable::run);
     }
 
-    /** Runs {@code listener} whenever the game names its packs again, on the thread that received them; returns its removal. */
+    /** The packs the running game named last, or null while no game is connected. */
+    public PackStackPayload packStack() {
+        return this.stack;
+    }
+
+    /**
+     * Runs {@code listener} whenever the game names its packs again, or disconnects, on the thread that saw it; returns
+     * its removal.
+     */
     public Runnable addStackListener(Runnable listener) {
         this.stackListeners.add(listener);
         return () -> this.stackListeners.remove(listener);

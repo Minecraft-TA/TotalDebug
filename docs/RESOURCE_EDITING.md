@@ -1,6 +1,6 @@
 # Resource editing
 
-Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`, protocol 27); the change record holds all three and reverts them. Not yet: the Resources row with its Packs tab, texture editing and forced values.
+Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`, protocol 27); the change record holds all three and reverts them. Not yet: the Packs tab of Resources, texture editing and forced values.
 
 ## Goal
 
@@ -153,7 +153,7 @@ Wording follows [UI_GUIDE.md](UI_GUIDE.md).
 
 - **Resource tab:** text resources (JSON, `.mcmeta`, `.lang`, `.mcfunction`, `.snbt`) are editable, showing the copy the game uses: the managed pack's, or the opened file. The bar names that source and when the game uses it; Save and Discard appear while the text has unsaved changes. A pack above the managed one that supplies the file too is named in a warning. An open tab follows reverts made on the Changes page.
 - **Changes page:** a Resources tab for resources in the managed packs, beside Configuration and Key bindings. Revert, or Delete, reverts the selected rows; reverting a file Companion added deletes it, and Delete asks first. Revert All reports every failure in one status.
-- **Modpack tree:** the Resources row with its Packs tab is the next step, then the World root for the current world ([MODPACK.md](MODPACK.md#order)).
+- **Modpack tree:** the Resources row lists every resource as the game uses it ([MODPACK.md](MODPACK.md#resources)); its Packs tab is the next step, then the World root for the current world.
 
 ## Order
 
@@ -161,7 +161,7 @@ Later steps:
 
 | Step | Content |
 |---|---|
-| Resources | One joined view of every namespace across vanilla, the mods and the packs, with a Packs tab to order and enable packs |
+| Packs tab of Resources | Order and enable packs |
 | Texture editing | Pixel tools in the image viewer with animation frames, live atlas upload, saved into the managed pack |
 | Forced values | Read-site analysis, verification after reloads, Force; its own design for writes into the game's memory |
 | Catalog and program insights | As planned in [MODPACK.md](MODPACK.md#order) |

@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
 import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
+import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -545,6 +546,7 @@ final class UiScenarioDriver {
             case SERVICE_STATUS -> advanceServiceStatus(context);
             case MOD_PAGE -> context.once("mod-page", () -> navigate(new NavigationTarget.ModPage("testmod")));
             case PACK_CONFIGURATION -> context.once("pack-configuration", () -> navigate(new NavigationTarget.PackConfiguration()));
+            case PACK_RESOURCES -> context.once("pack-resources", () -> navigate(new NavigationTarget.PackResources("")));
             case KEY_BINDINGS -> context.once("key-bindings", () -> navigate(new NavigationTarget.KeyBindings("")));
             case CONTENT -> context.once("content", () -> navigate(new NavigationTarget.Content("")));
             case INSPECTION -> {
@@ -605,6 +607,11 @@ final class UiScenarioDriver {
                     && "Test Mod".equals(view.getTitle());
             case MOD_CONFIGURATION -> showsTable("Test Mod", "Setting");
             case PACK_CONFIGURATION -> showsTable("Configuration", "Setting");
+            case PACK_RESOURCES -> {
+                ResourceBrowser browser = findComponent(mainWindow, ResourceBrowser.class);
+                yield mainWindow.getEditorTabs().getSelectedEditor() instanceof PackResourcesView && browser != null
+                        && browser.isShowing() && browser.rowCount() > 0;
+            }
             case KEY_BINDINGS -> showsTable("Key bindings", "Action");
             case CONTENT -> {
                 ContentBrowser browser = findComponent(mainWindow, ContentBrowser.class);

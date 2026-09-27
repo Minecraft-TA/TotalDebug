@@ -38,6 +38,7 @@ final class ModTreeItems {
     static final String ROOT = "modpack";
     static final String MODS = "mods";
     static final String CONFIGURATION = "configuration";
+    static final String RESOURCES = "resources";
     static final String CHANGES = "changes";
     static final String KEY_BINDINGS = "key-bindings";
     static final String CONTENT = "content";
@@ -87,14 +88,15 @@ final class ModTreeItems {
     }
 
     /**
-     * The rows under Modpack: Mods, Content, Configuration and Key bindings once the catalog describes them, and
-     * Changes while Companion has changes in effect.
+     * The rows under Modpack: Mods, Content, Configuration, Resources and Key bindings once the catalog describes them,
+     * and Changes while Companion has changes in effect.
      */
     static List<TreeItem> packChildren(Snapshot snapshot) {
         List<TreeItem> children = new ArrayList<>();
         children.add(new Mods(snapshot));
         if (snapshot.index() != null && !snapshot.index().entries().isEmpty()) children.add(new Content(null, snapshot.index().content()));
         if (snapshot.index() != null) children.add(new Configuration());
+        if (snapshot.index() != null) children.add(new PackResources());
         if (snapshot.index() != null && !snapshot.index().catalog().keyBindings().isEmpty()) {
             children.add(new KeyBindings(snapshot.index().catalog().keyBindings().size()));
         }
@@ -296,6 +298,26 @@ final class ModTreeItems {
         }
     }
 
+    /** Opens every resource of the pack as the game uses it. */
+    static final class PackResources extends TreeItem implements NavigableTreeItem {
+        PackResources() {
+            super(RESOURCES);
+            setPresentation(PrimarySecondaryText.primary("Resources"));
+            setIcon(Icons.RESOURCES_ROOT);
+            setSortPriority(3);
+        }
+
+        @Override
+        public String getTooltip() {
+            return "Resources of every mod and pack, as the game uses them";
+        }
+
+        @Override
+        public NavigationTarget navigationTarget() {
+            return new NavigationTarget.PackResources("");
+        }
+    }
+
     /**
      * Registered content by kind, as one row per registry: the pack's, or one mod's when {@code modId} is not null.
      * Each row is named by its registry id, so a kind is revealed by its registry.
@@ -363,7 +385,7 @@ final class ModTreeItems {
             super(KEY_BINDINGS);
             setPresentation(new PrimarySecondaryText("Key bindings", NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
             setIcon(Icons.KEYBOARD);
-            setSortPriority(3);
+            setSortPriority(4);
         }
 
         @Override
@@ -383,7 +405,7 @@ final class ModTreeItems {
             super(CHANGES);
             setPresentation(new PrimarySecondaryText("Changes", NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
             setIcon(Icons.CHANGES);
-            setSortPriority(4);
+            setSortPriority(5);
         }
 
         @Override
