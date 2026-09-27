@@ -78,9 +78,12 @@ public final class PackResources {
         return sources;
     }
 
-    /** The packs data comes from, lowest first. {@code stack} is what the running game named, or null. */
+    /**
+     * The packs data comes from, lowest first. {@code stack} is what the running game named, or null. A game at its menu
+     * or on a server names no datapacks, since no data of its own is loaded, so none are listed then.
+     */
     public static List<Source> data(PackStackPayload stack, CatalogIndex index) {
-        if (stack != null && !stack.dataPacks().isEmpty()) return stack.dataPacks().stream().map(pack -> source(pack, index)).toList();
+        if (stack != null) return stack.dataPacks().stream().map(pack -> source(pack, index)).toList();
         List<Source> sources = new ArrayList<>();
         sources.add(vanilla(index));
         sources.addAll(mods(index));
@@ -88,7 +91,7 @@ public final class PackResources {
     }
 
     /** Joins {@code assets} and {@code data}, each lowest first, into the copies the game uses. Blocking. */
-    public static Joined join(List<Source> assets, List<Source> data) throws IOException {
+    public static Joined join(List<Source> assets, List<Source> data) {
         Map<String, ModResources.Resource> winners = new LinkedHashMap<>();
         Map<String, String> from = new HashMap<>();
         Map<String, List<String>> hidden = new HashMap<>();
@@ -100,9 +103,16 @@ public final class PackResources {
     }
 
     private static void stack(List<Source> sources, String root, Map<String, ModResources.Resource> winners,
-                              Map<String, String> from, Map<String, List<String>> hidden) throws IOException {
+                              Map<String, String> from, Map<String, List<String>> hidden) {
         for (Source source : sources) {
-            for (ModResources.Resource resource : ModResources.list(source.files())) {
+            List<ModResources.Resource> listed;
+            try {
+                listed = ModResources.list(source.files());
+            } catch (IOException unreadable) {
+                // A file that cannot be read, such as a removed or broken archive, adds nothing; the rest still count.
+                continue;
+            }
+            for (ModResources.Resource resource : listed) {
                 if (!resource.path().startsWith(root)) continue;
                 String lower = from.put(resource.path(), source.title());
                 if (lower != null && !lower.equals(source.title())) {

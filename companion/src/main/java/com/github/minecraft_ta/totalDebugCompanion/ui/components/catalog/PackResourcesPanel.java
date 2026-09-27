@@ -28,7 +28,7 @@ public final class PackResourcesPanel extends JPanel {
     private final ResourceBrowser browser;
     private final Runnable removeCatalogListener;
     private final Runnable removeStackListener;
-    private final Runnable removeRecordListener;
+    private final Runnable removeEditListener;
     /** The kind of resource shown, such as {@code assets/textures}; empty for all. */
     private String category = "";
     private long generation;
@@ -44,8 +44,8 @@ public final class PackResourcesPanel extends JPanel {
         add(this.browser, BorderLayout.CENTER);
         this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(this::load));
         this.removeStackListener = edits.addStackListener(() -> SwingUtilities.invokeLater(this::load));
-        // A save or revert in the managed pack changes which copy wins.
-        this.removeRecordListener = edits.record().addListener(() -> SwingUtilities.invokeLater(this::load));
+        // A save or revert in the managed pack changes which copy wins, once it has enabled the pack.
+        this.removeEditListener = edits.addEditListener(() -> SwingUtilities.invokeLater(this::load));
         load();
     }
 
@@ -100,7 +100,7 @@ public final class PackResourcesPanel extends JPanel {
         this.disposed = true;
         this.removeCatalogListener.run();
         this.removeStackListener.run();
-        this.removeRecordListener.run();
+        this.removeEditListener.run();
         this.browser.dispose();
     }
 }

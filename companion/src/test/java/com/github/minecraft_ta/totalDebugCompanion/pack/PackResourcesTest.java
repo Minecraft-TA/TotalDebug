@@ -47,6 +47,19 @@ class PackResourcesTest {
     }
 
     @Test
+    void aGameWithoutAWorldListsNoDataAndAnUnreadablePackAddsNothing() throws Exception {
+        CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
+        PackStackPayload menu = new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack("mod/testmod", "Mod resources", "")),
+                List.of());
+        assertEquals(List.of(), PackResources.data(menu, index), "at the menu or on a server the game has no data of its own");
+
+        PackResources.Joined joined = PackResources.join(List.of(
+                new PackResources.Source("file/Gone", "Gone", List.of(this.directory.resolve("resourcepacks/Gone.zip"))),
+                new PackResources.Source("mod/testmod", "Test Mod", index.resourceFiles("testmod"))), List.of());
+        assertEquals("Test Mod", joined.from().get(TEXTURE), "a pack that cannot be read is skipped, not the whole list");
+    }
+
+    @Test
     void withAGameBothFollowTheStacksItNamed() throws Exception {
         CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
         Path faithful = pack(this.directory.resolve("resourcepacks/Faithful"), TEXTURE);

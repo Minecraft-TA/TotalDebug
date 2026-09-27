@@ -81,6 +81,8 @@ public final class ResourceEdits {
     private volatile PackStackPayload stack;
     /** Run whenever the game names its packs again, such as after another world opened. */
     private final List<Runnable> stackListeners = new CopyOnWriteArrayList<>();
+    /** Run after a save or revert has written its file and the game used it, or failed to. */
+    private final List<Runnable> editListeners = new CopyOnWriteArrayList<>();
     private Batch running;
     private Batch next;
 
@@ -134,6 +136,20 @@ public final class ResourceEdits {
     public Runnable addStackListener(Runnable listener) {
         this.stackListeners.add(listener);
         return () -> this.stackListeners.remove(listener);
+    }
+
+    /**
+     * Runs {@code listener} after each save or revert has finished, the managed pack enabled and the game reloaded;
+     * returns its removal.
+     */
+    public Runnable addEditListener(Runnable listener) {
+        this.editListeners.add(listener);
+        return () -> this.editListeners.remove(listener);
+    }
+
+    /** Tells the edit listeners once {@code edit} has finished, whether it worked or not. */
+    private CompletableFuture<Saved> finished(CompletableFuture<Saved> edit) {
+        return edit.whenComplete((ignored, failure) -> this.editListeners.forEach(Runnable::run));
     }
 
     /** Takes the game's answer to a reload. */
@@ -216,7 +232,7 @@ public final class ResourceEdits {
      */
     public CompletableFuture<Saved> save(String path, Path into, byte[] content) {
         Objects.requireNonNull(content, "content");
-        return write(() -> {
+        return finished(write(() -> {
             try {
                 Path pack = into != null ? into : pack(path);
                 preparePack(pack, path.startsWith("assets/"));
@@ -230,7 +246,7 @@ public final class ResourceEdits {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }).thenCompose(pack -> apply(path, pack));
+        }).thenCompose(pack -> apply(path, pack)));
     }
 
     /**
@@ -241,7 +257,7 @@ public final class ResourceEdits {
         if (!(change.target() instanceof ChangeRecord.Resource target)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Not a resource in the managed pack"));
         }
-        return write(() -> {
+        return finished(write(() -> {
             try {
                 // Reverted already, such as twice from the Changes page before it refreshed.
                 if (!change.equals(this.record.change(target))) return target.location();
@@ -260,7 +276,7 @@ public final class ResourceEdits {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }).thenCompose(pack -> apply(target.path(), pack));
+        }).thenCompose(pack -> apply(target.path(), pack)));
     }
 
     /** Runs {@code write} in the project's write queue; refused once the project closes. */
