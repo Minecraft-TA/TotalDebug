@@ -369,7 +369,9 @@ public final class ResourceEdits {
     public CompletableFuture<Saved> save(String path, Path into, byte[] content, Map<String, byte[]> alongside) {
         Objects.requireNonNull(content, "content");
         Objects.requireNonNull(alongside, "alongside");
-        return finished(writeAndApply(path, () -> {
+        // The files written beside it, which the reload watches too: they may change what the game makes of the resource.
+        List<String> added = new CopyOnWriteArrayList<>();
+        return finished(writeAndApply(path, added, () -> {
             try {
                 Path pack = into != null ? into : pack(path);
                 if (managed(pack)) preparePack(pack, path.startsWith("assets/"));
@@ -377,21 +379,23 @@ public final class ResourceEdits {
                 else if (!PackFolders.isPack(pack)) {
                     throw new IOException("The " + PackFolders.label(pack) + " is gone or has no pack.mcmeta, so the game does not load it");
                 }
+                // Written first: should one fail, the resource itself is left as it was, and the save fails whole.
+                for (Map.Entry<String, byte[]> companion : alongside.entrySet()) {
+                    Path companionFile = pack.resolve(companion.getKey());
+                    // The pack's own copy, even a different one, stays.
+                    if (Files.exists(companionFile)) continue;
+                    ChangeRecord.Resource beside = new ChangeRecord.Resource(companion.getKey(), pack);
+                    if (this.record.change(beside) == null) this.originals.keep(null);
+                    AtomicFiles.replace(companionFile, staged -> Files.write(staged, companion.getValue()));
+                    this.record.changed(beside, ResourceOriginals.hash(null), ResourceOriginals.hash(companion.getValue()));
+                    added.add(companion.getKey());
+                }
                 Path file = pack.resolve(path);
                 byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
                 ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
                 if (this.record.change(target) == null) this.originals.keep(previous);
                 AtomicFiles.replace(file, staged -> Files.write(staged, content));
                 this.record.changed(target, ResourceOriginals.hash(previous), ResourceOriginals.hash(content));
-                for (Map.Entry<String, byte[]> companion : alongside.entrySet()) {
-                    Path companionFile = pack.resolve(companion.getKey());
-                    // The pack's own copy, even a different one, stays.
-                    if (Files.exists(companionFile)) continue;
-                    ChangeRecord.Resource added = new ChangeRecord.Resource(companion.getKey(), pack);
-                    if (this.record.change(added) == null) this.originals.keep(null);
-                    AtomicFiles.replace(companionFile, staged -> Files.write(staged, companion.getValue()));
-                    this.record.changed(added, ResourceOriginals.hash(null), ResourceOriginals.hash(companion.getValue()));
-                }
                 return pack;
             } catch (IOException exception) {
                 throw new CompletionException(exception);
@@ -410,7 +414,7 @@ public final class ResourceEdits {
         if (!(change.target() instanceof ChangeRecord.Resource target)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Not a resource in the managed pack"));
         }
-        return finished(writeAndApply(target.path(), () -> {
+        return finished(writeAndApply(target.path(), List.of(), () -> {
             try {
                 // Reverted already, such as twice from the Changes page before it refreshed.
                 if (!change.equals(this.record.change(target))) return target.location();
@@ -451,16 +455,17 @@ public final class ResourceEdits {
     }
 
     /**
-     * Writes the file of {@code path} in the write queue, then tells when the game uses it. Writes queued together, such
-     * as saves in quick succession, take one reload: it is asked for once the last of them has written.
+     * Writes the file of {@code path} in the write queue, then tells when the game uses it; the reload also watches
+     * {@code alsoWatched}, filled by the write with files written beside it. Writes queued together, such as saves in
+     * quick succession, take one reload: it is asked for once the last of them has written.
      */
-    private CompletableFuture<Saved> writeAndApply(String path, Supplier<Path> write) {
+    private CompletableFuture<Saved> writeAndApply(String path, List<String> alsoWatched, Supplier<Path> write) {
         synchronized (this) {
             this.writing++;
         }
         return write(write).handle((pack, failure) -> {
             try {
-                return failure != null ? CompletableFuture.<Saved>failedFuture(failure) : apply(path, pack);
+                return failure != null ? CompletableFuture.<Saved>failedFuture(failure) : apply(path, alsoWatched, pack);
             } finally {
                 wrote();
             }
@@ -538,7 +543,7 @@ public final class ResourceEdits {
     }
 
     /** Tells when the game uses a resource written to {@code pack}, reloading what it needs when it runs. */
-    private CompletableFuture<Saved> apply(String path, Path pack) {
+    private CompletableFuture<Saved> apply(String path, List<String> alsoWatched, Path pack) {
         ResourcePaths.Apply apply = ResourcePaths.apply(path);
         boolean assets = path.startsWith("assets/");
         if (this.game == null) {
@@ -569,6 +574,8 @@ public final class ResourceEdits {
                 return CompletableFuture.completedFuture(new Saved(ConfigChanges.Effect.REJOIN, pack, List.of(), ""));
             }
         }
+        // Files written beside it join the same reload, which they are part of.
+        for (String beside : alsoWatched) reload(kind(beside), beside, managed(pack));
         return reload(kind(path), path, managed(pack)).handle((result, failure) -> {
             if (failure != null) {
                 return new Saved(assets ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS, pack,

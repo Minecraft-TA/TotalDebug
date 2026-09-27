@@ -294,6 +294,26 @@ class ResourceEditsTest {
     }
 
     @Test
+    void anAnimationWrittenBesideATextureIsReloadedWithIt() throws Exception {
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packStack(STACK);
+        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        edits.gameConnected(message -> {
+            if (message instanceof ReloadMessage reload) {
+                sent.add(reload.payload());
+                edits.answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(), ""));
+            }
+            return true;
+        });
+        String texture = "assets/testmod/textures/block/gear.png";
+
+        edits.save(texture, null, bytes("png"), Map.of(texture + ".mcmeta", bytes("{}"))).get(5, TimeUnit.SECONDS);
+        assertEquals(1, sent.size());
+        assertEquals(Set.of(texture, texture + ".mcmeta"), Set.copyOf(sent.getFirst().watched()),
+                "the game takes the new animation into account, not only the pixels");
+    }
+
+    @Test
     void aFileOfAnotherWorldsPackIsSavedIntoThatPack() throws Exception {
         Path older = world("Older");
         world("Newer");
