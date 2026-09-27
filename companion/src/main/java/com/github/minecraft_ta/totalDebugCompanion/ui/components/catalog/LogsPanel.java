@@ -10,8 +10,8 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
@@ -23,7 +23,6 @@ import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.Icon;
 import javax.swing.JComponent;
-import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -32,13 +31,10 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
+import java.io.IOException;
 import java.awt.BorderLayout;
-import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
-import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -55,7 +51,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
 /**
@@ -64,8 +60,6 @@ import java.util.function.Consumer;
  * again when the page is shown and they changed, keeping the selection.
  */
 public final class LogsPanel extends JPanel {
-    private static final String ROWS_CARD = "rows";
-    private static final String MESSAGE_CARD = "message";
     private static final DateTimeFormatter WRITTEN = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.ROOT);
     private static final DateTimeFormatter REPORTED = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
@@ -102,12 +96,10 @@ public final class LogsPanel extends JPanel {
     private final Consumer<NavigationTarget> navigator;
     private final DefaultListModel<Listed> files = new DefaultListModel<>();
     private final JList<Listed> fileList = new JList<>(this.files);
-    private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
     private final DefaultListModel<Row> shown = new DefaultListModel<>();
     private final JList<Row> rows = new JList<>(this.shown);
-    private final JLabel message = new JLabel();
-    private final JLabel notice = new JLabel();
-    private final JPanel cards = new JPanel(new CardLayout());
+    private final BrowserBody body;
+    private final PageLoader<List<Listed>> loader;
     /** Read files by path, guarded by itself. */
     private final Map<Path, Parsed> parsed = new HashMap<>();
     private List<Row> all = List.of();
@@ -116,11 +108,8 @@ public final class LogsPanel extends JPanel {
     /** A file to select once the files are listed, or null to keep the selection. */
     private Path wanted;
     private boolean updatingFiles;
-    private long generation;
-    /** Whether the files are being listed, and whether they are to be listed again once that is done. */
-    private boolean listing;
-    private boolean listAgain;
-    private long rowGeneration;
+    /** Reads the selected file's rows. */
+    private final PageLoader<List<Row>> rowLoader;
     private boolean disposed;
 
     public LogsPanel(PackCatalogService catalog, Path workspace, Consumer<NavigationTarget> navigator) {
@@ -149,12 +138,6 @@ public final class LogsPanel extends JPanel {
         fileScroll.setPreferredSize(new Dimension(UIScale.scale(300), 0));
         add(fileScroll, BorderLayout.WEST);
 
-        this.filter.putClientProperty("JTextField.placeholderText", "Filter messages, loggers and mods");
-        this.filter.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent event) { applyFilter(); }
-            @Override public void removeUpdate(DocumentEvent event) { applyFilter(); }
-            @Override public void changedUpdate(DocumentEvent event) { applyFilter(); }
-        });
         this.rows.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         this.rows.setFixedCellWidth(1);
         this.rows.setCellRenderer((list, row, index, selected, focused) -> {
@@ -182,31 +165,14 @@ public final class LogsPanel extends JPanel {
             }
         });
         ContextMenus.installList(this.rows, this::menu);
-        JPanel bar = new JPanel(new BorderLayout());
-        bar.setBorder(UiMetrics.barPadding());
-        bar.add(this.filter, BorderLayout.CENTER);
-        ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
-        this.notice.setBorder(UiMetrics.noticePadding());
-        this.notice.setVisible(false);
-        JPanel top = new JPanel(new BorderLayout());
-        top.add(bar, BorderLayout.NORTH);
-        top.add(this.notice, BorderLayout.SOUTH);
-        JScrollPane rowScroll = new JScrollPane(this.rows);
-        rowScroll.setBorder(BorderFactory.createEmptyBorder());
-        this.cards.add(rowScroll, ROWS_CARD);
-        this.message.setVerticalAlignment(JLabel.TOP);
-        this.message.setBorder(UiMetrics.messagePadding());
-        this.cards.add(this.message, MESSAGE_CARD);
-        JPanel content = new JPanel(new BorderLayout());
-        content.add(top, BorderLayout.NORTH);
-        content.add(this.cards, BorderLayout.CENTER);
-        add(content, BorderLayout.CENTER);
-        TypeToFilter.install(this.rows, this.filter);
+        this.body = new BrowserBody("Filter messages, loggers and mods", BrowserBody.scroll(this.rows), this.rows, this::applyFilter);
+        add(this.body, BorderLayout.CENTER);
 
         // The game writes its logs while it runs, so the page reads them again whenever it is shown.
-        addHierarchyListener(event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing()) load();
-        });
+        this.rowLoader = new PageLoader<>(this::prepareRows, this::showRead, failure -> showMessage(
+                (this.rowsOf == null ? "The file" : this.rowsOf.name()) + " could not be read: " + failure.getMessage()));
+        this.loader = new PageLoader<List<Listed>>(() -> this::listFiles, this::showFiles,
+                failure -> showMessage("The logs could not be listed: " + failure.getMessage())).whenShown(this);
         // Rows name the mods behind frames and failures as the catalog knows them.
         this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(() -> {
             if (this.disposed) return;
@@ -231,39 +197,16 @@ public final class LogsPanel extends JPanel {
         this.wanted = file == null ? null : file.toAbsolutePath().normalize();
     }
 
-    /**
-     * Lists the logs and crash reports again, reading only files that changed, and keeps the selection. A request while
-     * they are being listed lists them once more afterwards, rather than reading the same files twice at once.
-     */
+    /** Lists the logs and crash reports again, reading only files that changed, and keeps the selection. */
     public void load() {
-        if (this.disposed) return;
-        if (this.listing) {
-            this.listAgain = true;
-            return;
-        }
-        this.listing = true;
-        long current = ++this.generation;
-        CompletableFuture.supplyAsync(() -> {
-            List<Listed> listed = new ArrayList<>();
-            try {
-                for (GameLogs.LogFile file : GameLogs.list(this.workspace)) listed.add(listed(file, read(file)));
-            } catch (Exception exception) {
-                throw new IllegalStateException(exception.getMessage(), exception);
-            }
-            return listed;
-        }).whenComplete((listed, failure) -> SwingUtilities.invokeLater(() -> {
-            this.listing = false;
-            if (this.disposed || current != this.generation) return;
-            if (failure != null) {
-                showMessage("The logs could not be listed: " + (failure.getCause() == null ? failure : failure.getCause()).getMessage());
-            } else {
-                showFiles(listed);
-            }
-            if (this.listAgain) {
-                this.listAgain = false;
-                load();
-            }
-        }));
+        this.loader.load();
+    }
+
+    /** The logs and crash reports with what their rows say. Blocking. */
+    private List<Listed> listFiles() throws IOException {
+        List<Listed> listed = new ArrayList<>();
+        for (GameLogs.LogFile file : GameLogs.list(this.workspace)) listed.add(listed(file, read(file)));
+        return listed;
     }
 
     /** Shows the listed files, replacing the list only when it changed, and the selected file's rows. */
@@ -291,7 +234,7 @@ public final class LogsPanel extends JPanel {
         if (listed.isEmpty()) {
             this.rowsOf = null;
             // A file still being read must not bring its rows back.
-            this.rowGeneration++;
+            this.rowLoader.cancel();
             this.all = List.of();
             showMessage("The game has written no log or crash report yet.");
             return;
@@ -373,29 +316,30 @@ public final class LogsPanel extends JPanel {
         Listed listed = this.fileList.getSelectedValue();
         if (listed == null || listed.file().equals(this.rowsOf)) return;
         this.rowsOf = listed.file();
-        long current = ++this.rowGeneration;
+        this.rowLoader.load();
+    }
+
+    /** Reads the rows of the file shown now, naming mods from the catalog. */
+    private Callable<List<Row>> prepareRows() {
+        GameLogs.LogFile file = this.rowsOf;
+        if (file == null) return null;
         CatalogIndex index = this.catalog.index().orElse(null);
-        CompletableFuture.supplyAsync(() -> rows(listed.file(), read(listed.file()), index))
-                .whenComplete((read, failure) -> SwingUtilities.invokeLater(() -> {
-                    if (this.disposed || current != this.rowGeneration) return;
-                    if (failure != null) {
-                        showMessage(listed.file().name() + " could not be read: "
-                                + (failure.getCause() == null ? failure : failure.getCause()).getMessage());
-                        return;
-                    }
-                    Row selected = this.rows.getSelectedValue();
-                    this.all = read;
-                    applyFilter();
-                    // Reading a file again keeps the row that was selected, where it still is.
-                    for (int row = 0; selected != null && row < this.shown.size(); row++) {
-                        Row candidate = this.shown.get(row);
-                        if (candidate.primary().equals(selected.primary()) && Objects.equals(candidate.target(), selected.target())) {
-                            this.rows.setSelectedIndex(row);
-                            this.rows.ensureIndexIsVisible(row);
-                            break;
-                        }
-                    }
-                }));
+        return () -> rows(file, read(file), index);
+    }
+
+    /** Shows the read rows; reading a file again keeps the row that was selected, where it still is. */
+    private void showRead(List<Row> read) {
+        Row selected = this.rows.getSelectedValue();
+        this.all = read;
+        applyFilter();
+        for (int row = 0; selected != null && row < this.shown.size(); row++) {
+            Row candidate = this.shown.get(row);
+            if (candidate.primary().equals(selected.primary()) && Objects.equals(candidate.target(), selected.target())) {
+                this.rows.setSelectedIndex(row);
+                this.rows.ensureIndexIsVisible(row);
+                break;
+            }
+        }
     }
 
     private static List<Row> rows(GameLogs.LogFile file, Parsed parsed, CatalogIndex index) {
@@ -437,7 +381,7 @@ public final class LogsPanel extends JPanel {
     }
 
     private void applyFilter() {
-        String text = this.filter.getText().strip().toLowerCase(Locale.ROOT);
+        String text = this.body.query().toLowerCase(Locale.ROOT);
         List<Row> matching = new ArrayList<>();
         for (Row row : this.all) {
             if (text.isEmpty() || row.matched().contains(text)) matching.add(row);
@@ -445,7 +389,7 @@ public final class LogsPanel extends JPanel {
         this.shown.clear();
         this.shown.addAll(matching);
         if (!matching.isEmpty()) {
-            ((CardLayout) this.cards.getLayout()).show(this.cards, ROWS_CARD);
+            this.body.showContent();
             return;
         }
         Listed listed = this.fileList.getSelectedValue();
@@ -477,13 +421,11 @@ public final class LogsPanel extends JPanel {
 
     /** A line under the filter for what went wrong after it was asked for, until another file is chosen; empty hides it. */
     private void showNotice(String text) {
-        this.notice.setText(text);
-        this.notice.setVisible(!text.isEmpty());
+        this.body.showNotice(text);
     }
 
     private void showMessage(String text) {
-        this.message.setText(text);
-        ((CardLayout) this.cards.getLayout()).show(this.cards, MESSAGE_CARD);
+        this.body.showMessage(text);
     }
 
     /** How many rows the selected file shows. */
@@ -493,6 +435,8 @@ public final class LogsPanel extends JPanel {
 
     public void dispose() {
         this.disposed = true;
+        this.loader.dispose();
+        this.rowLoader.dispose();
         this.removeCatalogListener.run();
     }
 }

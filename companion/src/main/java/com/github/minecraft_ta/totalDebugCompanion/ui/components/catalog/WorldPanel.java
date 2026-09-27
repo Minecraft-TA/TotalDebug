@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
@@ -35,7 +36,6 @@ import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
-import java.awt.event.HierarchyEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -51,7 +51,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
@@ -72,6 +71,8 @@ public final class WorldPanel extends JPanel {
     private final Path workspace;
     private final PackCatalogService catalog;
     private final ItemIconService icons;
+    private final WorldReadings readings;
+    private final PageLoader<Loaded> loader;
     private final Runnable removeCatalogListener;
     private final SubjectHeader header = new SubjectHeader();
     private final JTabbedPane tabs = new JTabbedPane();
@@ -83,13 +84,17 @@ public final class WorldPanel extends JPanel {
     private final JPanel cards = new JPanel(new CardLayout());
     private CurrentWorld.Saved saved;
     private WorldTab requested;
-    private long generation;
     private boolean disposed;
 
-    /** {@code workspace} is the game directory, whose {@code saves} hold the worlds. */
-    public WorldPanel(Path workspace, PackCatalogService catalog, ItemIconService icons, Consumer<NavigationTarget> navigator) {
+    /**
+     * {@code workspace} is the game directory, whose {@code saves} hold the worlds; each read is recorded in
+     * {@code readings}, which the Project tree follows.
+     */
+    public WorldPanel(Path workspace, PackCatalogService catalog, ItemIconService icons, WorldReadings readings,
+                      Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.workspace = Objects.requireNonNull(workspace, "workspace");
+        this.readings = Objects.requireNonNull(readings, "readings");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         this.icons = Objects.requireNonNull(icons, "icons");
         this.datapacks = new DatapacksPanel(Objects.requireNonNull(navigator, "navigator"));
@@ -116,19 +121,8 @@ public final class WorldPanel extends JPanel {
             if (!this.disposed && this.saved != null) this.datapacks.setPacks(this.saved.datapacks(), this.catalog.index().orElse(null));
         }));
         // The game saves the world while it runs, so the page reads it whenever it is shown.
-        addHierarchyListener(event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing()) load();
-        });
-    }
-
-    /** Reads the current world again. */
-    void load() {
-        if (this.disposed) return;
-        long current = ++this.generation;
-        CompletableFuture.supplyAsync(() -> read(this.workspace))
-                .thenAccept(loaded -> SwingUtilities.invokeLater(() -> {
-                    if (!this.disposed && current == this.generation) show(loaded);
-                }));
+        this.loader = new PageLoader<>(() -> () -> read(this.workspace), this::show,
+                failure -> show(new Loaded(null, null, "The world could not be read: " + failure.getMessage()))).whenShown(this);
     }
 
     private static Loaded read(Path workspace) {
@@ -155,6 +149,7 @@ public final class WorldPanel extends JPanel {
 
     private void show(Loaded loaded) {
         this.saved = loaded.saved();
+        this.readings.read(WorldReadings.Summary.of(this.saved));
         if (this.saved == null) {
             this.message.setText(loaded.problem());
             ((CardLayout) this.cards.getLayout()).show(this.cards, MESSAGE_CARD);
@@ -267,6 +262,7 @@ public final class WorldPanel extends JPanel {
 
     public void dispose() {
         this.disposed = true;
+        this.loader.dispose();
         this.removeCatalogListener.run();
     }
 

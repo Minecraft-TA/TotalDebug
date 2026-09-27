@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -47,7 +48,6 @@ import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.event.ActionEvent;
-import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -63,6 +63,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
@@ -103,7 +104,7 @@ public final class ChangesPanel extends JPanel {
     private final ResourceEdits resourceEdits;
     private final Consumer<NavigationTarget> navigator;
     private final ConfigWriter writer;
-    private final Runnable removeRecordListener;
+    private final PageLoader<Loaded> loader;
     private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
     private final JButton revertAll = new JButton("Revert All");
     private final JLabel notice = new JLabel();
@@ -126,7 +127,6 @@ public final class ChangesPanel extends JPanel {
     private KeyBindings bindings;
     private String problem = "";
     private String status = "";
-    private long generation;
 
     public ChangesPanel(PackCatalogService catalog, ConfigChanges configChanges, KeyBindingControl keyControl,
                         ResourceEdits resourceEdits, Consumer<NavigationTarget> navigator) {
@@ -190,10 +190,9 @@ public final class ChangesPanel extends JPanel {
         TypeToFilter.install(this.table, this.filter);
         TypeToFilter.install(this.keyTable, this.filter);
         TypeToFilter.install(this.resourceTable, this.filter);
-        this.removeRecordListener = this.record.addListener(() -> SwingUtilities.invokeLater(this::load));
-        addHierarchyListener(event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing()) load();
-        });
+        this.loader = new PageLoader<>(this::prepareLoad, this::show,
+                failure -> setStatus("Could not read the changed files: " + failure.getMessage()))
+                .whenShown(this).follow(this.record::addListener);
         load();
     }
 
@@ -360,20 +359,17 @@ public final class ChangesPanel extends JPanel {
 
     /** Reads the changed files and keys again. */
     public void load() {
+        this.loader.load();
+    }
+
+    /** Reads the files of the changes recorded now, naming mods from the catalog. */
+    private Callable<Loaded> prepareLoad() {
         CatalogIndex index = this.catalog.index().orElse(null);
         List<ChangeRecord.Change> recorded = this.record.changes();
-        long current = ++this.generation;
-        CompletableFuture.supplyAsync(() -> {
+        return () -> {
             this.writer.refreshPending();
             return read(recorded, index);
-        }).whenComplete((loaded, failure) -> SwingUtilities.invokeLater(() -> {
-            if (current != this.generation) return;
-            if (failure != null) {
-                setStatus("Could not read the changed files: " + failure.getMessage());
-            } else {
-                show(loaded);
-            }
-        }));
+        };
     }
 
     /** The recorded changes: settings under their mod and file, mods by name, then key bindings. Blocking. */
@@ -652,7 +648,7 @@ public final class ChangesPanel extends JPanel {
     }
 
     public void dispose() {
-        this.removeRecordListener.run();
+        this.loader.dispose();
     }
 
     private final class ResourceChangesModel extends AbstractTableModel {

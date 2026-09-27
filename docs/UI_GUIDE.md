@@ -236,7 +236,8 @@ A component's own inner padding, such as a text field's or an editor's, and a ga
 
 ## Building and checking
 
-- Swing work on the event thread; reading files and the catalog off it. A load checks a generation counter, so a stale result never replaces a newer one.
+- Swing work on the event thread; reading files and the catalog off it, through [`PageLoader`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/PageLoader.java): one read at a time, a request during a read reads once more and the older result is dropped, a page loads when shown and when a source it follows changes.
+- A browser's filter bar, notice line and in-place message come from [`BrowserBody`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/BrowserBody.java).
 - Everything follows a theme switch: SVG icons with dark pairs, colors from roles, and no colors cached in fields.
 - Sizes go through `UIScale` and `UiMetrics`; no fixed pixel sizes for text.
 - Every new page or state gets a `UiRenderScenario`. Check it with `./gradlew :companion:uiHarness --args="--scenario=<id> --screenshot=<file>"` in both themes before asking for review.

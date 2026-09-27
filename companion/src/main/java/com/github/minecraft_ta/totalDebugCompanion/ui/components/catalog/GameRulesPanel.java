@@ -1,29 +1,21 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
-import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
-import javax.swing.BorderFactory;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.ToolTipManager;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
-import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -36,8 +28,6 @@ import java.util.regex.Pattern;
 
 /** The world's game rules with their saved values, filtered by rule or value. */
 final class GameRulesPanel extends JPanel {
-    private static final String TABLE_CARD = "table";
-    private static final String MESSAGE_CARD = "message";
     private static final Pattern NUMBER = Pattern.compile("-?\\d+");
 
     /** A rule with its value and what kind of literal the value is, which the game's commands take as such. */
@@ -54,7 +44,6 @@ final class GameRulesPanel extends JPanel {
         }
     }
 
-    private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
     private final RulesModel model = new RulesModel();
     private final JTable table = new JTable(this.model) {
         @Override
@@ -65,22 +54,10 @@ final class GameRulesPanel extends JPanel {
             return Tooltip.of(rule.name()).fact("Value", rule.literal(), ConfigSettingsTable.color(rule.kind())).html();
         }
     };
-    private final JLabel message = new JLabel();
-    private final JPanel cards = new JPanel(new CardLayout());
+    private final BrowserBody body;
 
     GameRulesPanel() {
         super(new BorderLayout());
-        this.filter.putClientProperty("JTextField.placeholderText", "Filter by rule or value");
-        this.filter.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent event) { applyFilter(); }
-            @Override public void removeUpdate(DocumentEvent event) { applyFilter(); }
-            @Override public void changedUpdate(DocumentEvent event) { applyFilter(); }
-        });
-        JPanel bar = new JPanel(new BorderLayout());
-        bar.setBorder(UiMetrics.barPadding());
-        bar.add(this.filter, BorderLayout.CENTER);
-        add(bar, BorderLayout.NORTH);
-
         this.table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         Tables.configure(this.table);
         this.table.setDefaultRenderer(Object.class, new RuleRenderer());
@@ -88,14 +65,8 @@ final class GameRulesPanel extends JPanel {
         ContextMenus.installTable(this.table, this::menu);
         this.table.getColumnModel().getColumn(0).setPreferredWidth(600);
         this.table.getColumnModel().getColumn(1).setPreferredWidth(400);
-        JScrollPane scroll = new JScrollPane(this.table);
-        scroll.setBorder(BorderFactory.createEmptyBorder());
-        this.cards.add(scroll, TABLE_CARD);
-        this.message.setVerticalAlignment(JLabel.TOP);
-        this.message.setBorder(UiMetrics.messagePadding());
-        this.cards.add(this.message, MESSAGE_CARD);
-        add(this.cards, BorderLayout.CENTER);
-        TypeToFilter.install(this.table, this.filter);
+        this.body = new BrowserBody("Filter by rule or value", BrowserBody.scroll(this.table), this.table, this::applyFilter);
+        add(this.body, BorderLayout.CENTER);
     }
 
     /** Shows the rules, keeping the selected ones selected. */
@@ -112,7 +83,7 @@ final class GameRulesPanel extends JPanel {
     }
 
     private void applyFilter() {
-        String query = this.filter.getText().strip().toLowerCase(Locale.ROOT);
+        String query = this.body.query().toLowerCase(Locale.ROOT);
         List<Rule> shown = new ArrayList<>();
         for (Rule rule : this.model.all) {
             if (query.isEmpty() || rule.name().toLowerCase(Locale.ROOT).contains(query)
@@ -123,8 +94,8 @@ final class GameRulesPanel extends JPanel {
         this.model.shown = List.copyOf(shown);
         this.model.fireTableDataChanged();
         boolean empty = shown.isEmpty();
-        if (empty) this.message.setText(this.model.all.isEmpty() ? "The world has no game rules saved." : "No game rule matches the filter.");
-        ((CardLayout) this.cards.getLayout()).show(this.cards, empty ? MESSAGE_CARD : TABLE_CARD);
+        if (empty) this.body.showMessage(this.model.all.isEmpty() ? "The world has no game rules saved." : "No game rule matches the filter.");
+        else this.body.showContent();
     }
 
     private List<Rule> selectedRules() {
@@ -165,7 +136,7 @@ final class GameRulesPanel extends JPanel {
     }
 
     JTextComponent filterField() {
-        return this.filter;
+        return this.body.filter();
     }
 
     private static final class RulesModel extends AbstractTableModel {

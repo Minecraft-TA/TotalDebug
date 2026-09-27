@@ -747,6 +747,23 @@ public class LazyFileJTree extends JTree {
         return result;
     }
 
+    /** Loads the rows under a top-level root again, when they were loaded; the other roots keep theirs. */
+    public CompletableFuture<Void> refreshRoot(String name) {
+        var result = new CompletableFuture<Void>();
+        UIUtils.onEdt(() -> {
+            LazyTreeNode root = findTopLevelNode(name);
+            if (root == null || !(root.areChildrenLoaded() || this.activeLoads.containsKey(root))) {
+                result.complete(null);
+                return;
+            }
+            root.markChildrenStale();
+            loadItemsForNode(root).whenComplete((ignored, failure) -> {
+                if (failure == null) result.complete(null); else result.completeExceptionally(failure);
+            });
+        });
+        return result;
+    }
+
     public CompletableFuture<Void> restoreItemPath(String rootName, List<String> segments, boolean select) {
         var result = new CompletableFuture<Void>();
         UIUtils.onEdt(() -> {

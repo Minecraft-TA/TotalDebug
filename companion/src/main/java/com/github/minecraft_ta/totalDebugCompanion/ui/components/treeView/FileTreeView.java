@@ -88,11 +88,12 @@ public class FileTreeView extends JScrollPane {
         }, SwingUtilities::invokeLater);
         return loading;
     }
-    public void dispose() { disposed = true; tree.setRootNodes(); }
+    public void dispose() { disposed = true; removeWorldListener.run(); tree.setRootNodes(); }
 
 
     private final Supplier<ProjectScope> project;
     private ProjectScope displayedProject;
+    private Runnable removeWorldListener = () -> { };
 
     public FileTreeView(Supplier<ProjectScope> project, Consumer<NavigationTarget> navigator) {
         super();
@@ -219,6 +220,7 @@ public class FileTreeView extends JScrollPane {
     public void reloadProfile() {
         var scope = project.get();
         if (scope == null) {
+            this.removeWorldListener.run();
             this.tree.setRootNodes();
             this.displayedProject = null;
             return;
@@ -239,7 +241,7 @@ public class FileTreeView extends JScrollPane {
             rootItems.add(mods);
         }
         if (Files.isDirectory(scope.profile().workspaceDirectory().resolve("saves"))) {
-            rootItems.add(new WorldTreeItems.Root(scope.profile().workspaceDirectory()));
+            rootItems.add(new WorldTreeItems.Root(scope.profile().workspaceDirectory(), scope.world()));
         }
         if (binding != null && !catalog.modules().isEmpty()) {
             rootItems.add(new DecompiledSourcesTreeItem(this.tree, binding.decompiler()));
@@ -260,8 +262,16 @@ public class FileTreeView extends JScrollPane {
             rootItems.add(runtime);
         }
         var roots = rootItems.toArray(DirectoryTreeItem[]::new);
-        if (this.displayedProject == scope) this.tree.refreshRootNodes(roots);
-        else this.tree.setRootNodes(roots);
+        if (this.displayedProject == scope) {
+            this.tree.refreshRootNodes(roots);
+        } else {
+            this.tree.setRootNodes(roots);
+            // The World rows follow what the World page read last.
+            this.removeWorldListener.run();
+            this.removeWorldListener = scope.world().addListener(() -> SwingUtilities.invokeLater(() -> {
+                if (!this.disposed && project.get() == scope) this.tree.refreshRoot(WorldTreeItems.ROOT);
+            }));
+        }
         this.displayedProject = scope;
     }
 

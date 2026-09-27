@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
@@ -56,6 +57,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -89,8 +91,8 @@ public final class ModPanel extends JPanel {
     private final ResourceBrowser resources;
     private ModSummary summary;
     private CatalogIndex index;
-    private long resourceGeneration;
-    private CompletableFuture<?> resourceLoad = CompletableFuture.completedFuture(null);
+    /** Lists the mod's resources for the Resources tab. */
+    private final PageLoader<List<ModResources.Resource>> resourceLoader;
     private boolean disposed;
 
     /**
@@ -108,6 +110,15 @@ public final class ModPanel extends JPanel {
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.listIcons = new CatalogIcons(icons, LIST_ICON_SIZE);
         this.resources = new ResourceBrowser(navigator, category -> { });
+        this.resourceLoader = new PageLoader<>(this::prepareResources, list -> {
+            this.resources.setResources(list);
+            this.resources.setMessage("");
+            setTab(ModTab.RESOURCES, list.size());
+        }, failure -> {
+            this.resources.setResources(List.of());
+            this.resources.setMessage("Resources could not be read: " + failure.getMessage());
+            setTab(ModTab.RESOURCES, 1);
+        });
         this.configs = new ConfigPanel(modId, workspace, changes, navigator);
         this.keyBindings = new KeyBindingsPanel(catalog, keyControl, modId, navigator);
         this.content = new ContentBrowser(this.listIcons, this::iconOf, navigator, null);
@@ -179,7 +190,7 @@ public final class ModPanel extends JPanel {
         this.listIcons.clear();
         if (this.summary == null) {
             // A load started while the mod was installed must not bring its tabs back.
-            this.resourceGeneration++;
+            this.resourceLoader.cancel();
             this.header.setTitle(this.modId);
             this.header.setIcon(new MonogramIcon(this.modId, SubjectHeader.ICON_SIZE));
             this.header.setSubtitle(List.of(SubjectHeader.text(this.modId)));
@@ -326,27 +337,19 @@ public final class ModPanel extends JPanel {
     }
 
     private void loadResources() {
-        long generation = ++this.resourceGeneration;
-        List<Path> files = this.summary.files();
+        this.resourceLoader.load();
+    }
+
+    /** Lists the files of the mod shown now; a mod of code alone has no Resources tab. */
+    private Callable<List<ModResources.Resource>> prepareResources() {
+        List<Path> files = this.summary == null ? List.of() : this.summary.files();
         if (files.isEmpty()) {
+            this.resourceLoader.cancel();
             this.resources.setResources(List.of());
             setTab(ModTab.RESOURCES, 0);
-            return;
+            return null;
         }
-        CompletableFuture<List<ModResources.Resource>> loading = CompletableFuture.supplyAsync(() -> {
-            try {
-                return ModResources.list(files);
-            } catch (IOException exception) {
-                throw new IllegalStateException(exception.getMessage(), exception);
-            }
-        });
-        this.resourceLoad = loading;
-        loading.whenComplete((list, failure) -> SwingUtilities.invokeLater(() -> {
-            if (this.disposed || generation != this.resourceGeneration) return;
-            this.resources.setResources(failure == null ? list : List.of());
-            this.resources.setMessage(failure == null ? "" : "Resources could not be read: " + failure.getCause().getMessage());
-            setTab(ModTab.RESOURCES, failure == null ? list.size() : 1);
-        }));
+        return () -> ModResources.list(files);
     }
 
     private void loadLogo(List<ModLogoIcons.Source> logo) {
@@ -418,7 +421,7 @@ public final class ModPanel extends JPanel {
 
     /** The listing of this page's resources that runs or ran last; mod files stay open while it runs. */
     CompletableFuture<?> resourceLoad() {
-        return this.resourceLoad;
+        return this.resourceLoader.current();
     }
 
     /** Whether the page can close: no configuration text has unsaved changes, or they were discarded after asking. */
@@ -428,6 +431,7 @@ public final class ModPanel extends JPanel {
 
     public void dispose() {
         this.disposed = true;
+        this.resourceLoader.dispose();
         this.removeCatalogListener.run();
         this.listIcons.dispose();
         this.resources.dispose();

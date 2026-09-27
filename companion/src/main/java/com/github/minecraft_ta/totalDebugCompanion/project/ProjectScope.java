@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.project;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
@@ -55,6 +56,9 @@ public final class ProjectScope implements AutoCloseable {
     /** Puts the instance's key bindings on keys, in the running game or in options.txt. */
     public KeyBindingControl keyBindings() { return keyBindings; }
     private final ResourceEdits resources;
+    private final WorldReadings world = new WorldReadings();
+    /** What was last read of the current world, which the World page and the Project tree follow. */
+    public WorldReadings world() { return world; }
     /** Writes edited resources into the packs Companion manages and reloads them in the running game. */
     public ResourceEdits resources() { return resources; }
     private final List<PendingNavigation> pending = new ArrayList<>();
