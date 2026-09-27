@@ -25,11 +25,17 @@ final class TexturePixels {
     private record Stroke(int[] pixels, int[] before, int[] after) {
     }
 
+    /** The most pixels a sheet has whose colors are counted for the palette; a larger one offers none. */
+    static final int PALETTE_PIXELS = 1024 * 1024;
+
     private BufferedImage sheet;
     private final Deque<Stroke> undone = new ArrayDeque<>();
     private final Deque<Stroke> done = new ArrayDeque<>();
-    /** How many pixels have each color that is not fully transparent, kept up to date by every change. */
-    private final Map<Integer, Integer> counts = new HashMap<>();
+    /**
+     * How many pixels have each color that is not fully transparent, kept up to date by every change; null for a sheet
+     * larger than {@link #PALETTE_PIXELS}, whose colors could fill the memory.
+     */
+    private Map<Integer, Integer> counts;
     /** The colors before the stroke under way changed them, by pixel index in the order they changed; null between strokes. */
     private Map<Integer, Integer> stroke;
 
@@ -49,7 +55,8 @@ final class TexturePixels {
         this.done.clear();
         this.undone.clear();
         this.stroke = null;
-        this.counts.clear();
+        this.counts = (long) this.sheet.getWidth() * this.sheet.getHeight() <= PALETTE_PIXELS ? new HashMap<>() : null;
+        if (this.counts == null) return;
         int width = this.sheet.getWidth();
         int[] row = new int[width];
         for (int y = 0; y < this.sheet.getHeight(); y++) {
@@ -113,18 +120,24 @@ final class TexturePixels {
         if (!bounds.contains(x, y)) return;
         int target = this.sheet.getRGB(x, y);
         if (target == argb) return;
-        Deque<int[]> open = new ArrayDeque<>();
-        open.push(new int[]{x, y});
-        while (!open.isEmpty()) {
-            int[] pixel = open.pop();
-            int px = pixel[0];
-            int py = pixel[1];
-            if (!bounds.contains(px, py) || this.sheet.getRGB(px, py) != target) continue;
-            set(px, py, argb, bounds);
-            open.push(new int[]{px + 1, py});
-            open.push(new int[]{px - 1, py});
-            open.push(new int[]{px, py + 1});
-            open.push(new int[]{px, py - 1});
+        // Pixels to look at, as x and y pairs; a pixel is painted before its neighbors are added, so each is added once.
+        int[] open = new int[64];
+        int size = 0;
+        set(x, y, argb, bounds);
+        open[size++] = x;
+        open[size++] = y;
+        while (size > 0) {
+            int py = open[--size];
+            int px = open[--size];
+            for (int side = 0; side < 4; side++) {
+                int nx = px + (side == 0 ? 1 : side == 1 ? -1 : 0);
+                int ny = py + (side == 2 ? 1 : side == 3 ? -1 : 0);
+                if (!bounds.contains(nx, ny) || this.sheet.getRGB(nx, ny) != target) continue;
+                set(nx, ny, argb, bounds);
+                if (size + 2 > open.length) open = Arrays.copyOf(open, open.length * 2);
+                open[size++] = nx;
+                open[size++] = ny;
+            }
         }
     }
 
@@ -191,11 +204,15 @@ final class TexturePixels {
     }
 
     private void count(int argb, int change) {
-        if (argb >>> 24 != 0) this.counts.merge(argb, change, (count, added) -> count + added == 0 ? null : count + added);
+        if (this.counts != null && argb >>> 24 != 0) this.counts.merge(argb, change, (count, added) -> count + added == 0 ? null : count + added);
     }
 
-    /** The colors of the sheet that are not fully transparent, the most used first, at most {@code limit}. */
+    /**
+     * The colors of the sheet that are not fully transparent, the most used first, at most {@code limit}; none for a
+     * sheet larger than {@link #PALETTE_PIXELS}.
+     */
     List<Integer> palette(int limit) {
+        if (this.counts == null) return List.of();
         return this.counts.entrySet().stream()
                 .sorted(Map.Entry.<Integer, Integer>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
                 .limit(limit)

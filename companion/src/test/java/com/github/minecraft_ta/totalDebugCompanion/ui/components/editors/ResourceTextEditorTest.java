@@ -19,6 +19,7 @@ import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceTextEditorTest {
     private static final String LANG = "assets/testmod/lang/en_us.json";
@@ -90,10 +91,15 @@ class ResourceTextEditorTest {
         String edited = "{\"a\":\"edited\"}";
 
         ResourceTextEditor[] editor = new ResourceTextEditor[1];
-        SwingUtilities.invokeAndWait(() -> editor[0] = new ResourceTextEditor(LANG, "testmod.jar", null,
-                new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits));
+        SwingUtilities.invokeAndWait(() -> {
+            editor[0] = new ResourceTextEditor(LANG, "testmod.jar", null,
+                    new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits);
+            assertFalse(editor[0].textPanel().editorPane.isEditable(),
+                    "until the working pack's copy is read, typing would edit the mod's text and save it over that copy");
+        });
         try {
             awaitOnSwing(() -> editor[0].targetBox().getItemCount() == 2);
+            SwingUtilities.invokeAndWait(() -> assertTrue(editor[0].textPanel().editorPane.isEditable()));
             SwingUtilities.invokeAndWait(() -> {
                 editor[0].textPanel().editorPane.setText(edited);
                 editor[0].targetBox().setSelectedItem(mine);

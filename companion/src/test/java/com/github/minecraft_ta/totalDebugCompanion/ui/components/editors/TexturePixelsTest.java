@@ -104,6 +104,28 @@ class TexturePixelsTest {
     }
 
     @Test
+    void aLargeFillPaintsEveryPixelOnce() {
+        TexturePixels pixels = new TexturePixels(new BufferedImage(1024, 1024, BufferedImage.TYPE_INT_ARGB));
+        Rectangle all = new Rectangle(1024, 1024);
+        pixels.begin();
+        pixels.fill(512, 512, RED, all);
+        assertTrue(pixels.end());
+        assertEquals(List.of(RED, RED), List.of(pixels.color(0, 0), pixels.color(1023, 1023)));
+        assertEquals(List.of(RED), pixels.palette(16));
+        assertTrue(pixels.undo());
+        assertEquals(0, pixels.color(1023, 0));
+    }
+
+    @Test
+    void aSheetTooLargeToCountHasNoPalette() {
+        TexturePixels pixels = new TexturePixels(new BufferedImage(1025, 1024, BufferedImage.TYPE_INT_ARGB));
+        pixels.begin();
+        pixels.set(0, 0, RED, new Rectangle(1025, 1024));
+        pixels.end();
+        assertEquals(List.of(), pixels.palette(16), "counting a large sheet's colors could fill the memory");
+    }
+
+    @Test
     void aGrayTextureKeepsItsValuesAsTheGameReadsThem() {
         BufferedImage gray = new BufferedImage(2, 1, BufferedImage.TYPE_BYTE_GRAY);
         gray.getRaster().setSample(0, 0, 0, 128);

@@ -161,7 +161,9 @@ public final class ResourceViewPanel extends JPanel {
     /** An editor for a texture of the pack, otherwise the image. */
     private Component imageView(LoadedResource.Image image) {
         String path = this.edits == null ? null : ResourcePaths.of(this.source).orElse(null);
-        if (path == null || !ResourcePaths.editableImage(path)) return new ImageViewPanel(image, this::setMetadata);
+        if (path == null || !ResourcePaths.editableImage(path) || !TextureEditor.editable(image.value())) {
+            return new ImageViewPanel(image, this::setMetadata);
+        }
         return new TextureEditor(path, origin(), openedPack(), image, this.edits, this::setMetadata);
     }
 

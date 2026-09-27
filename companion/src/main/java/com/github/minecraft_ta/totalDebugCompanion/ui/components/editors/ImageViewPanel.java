@@ -49,7 +49,8 @@ public final class ImageViewPanel extends JPanel {
     private static final int GAME_TICK_MILLIS = 50;
 
     private BufferedImage image;
-    private final int byteCount;
+    /** The size of the file shown, or -1 once the image shown is no longer that file, such as another copy. */
+    private int byteCount;
     private final String animationProblem;
     /** Played frames whose index lies inside the sheet, in playing order. */
     private final List<TextureAnimation.Frame> frames;
@@ -184,6 +185,7 @@ public final class ImageViewPanel extends JPanel {
     /** Shows a new sheet, such as another copy of the texture, keeping the frame, and fitting it again while it fits. */
     void setSheet(BufferedImage sheet) {
         this.image = sheet;
+        this.byteCount = -1;
         this.canvas.setImage(shownImage());
         if (this.fitMode) fitImage();
         updateStatus();
@@ -456,8 +458,9 @@ public final class ImageViewPanel extends JPanel {
         if (isAnimated() && !this.wholeSheet.isSelected()) {
             status.append(", ").append(this.frames.size()).append(" frames");
         }
-        status.append("    PNG    ").append(formatBytes(this.byteCount))
-                .append("    ").append(Math.round(this.canvas.scale() * 100)).append('%');
+        status.append("    PNG");
+        if (this.byteCount >= 0) status.append("    ").append(formatBytes(this.byteCount));
+        status.append("    ").append(Math.round(this.canvas.scale() * 100)).append('%');
         Point pixel = this.hoveredPixel;
         if (pixel != null && pixel.x < shown.getWidth() && pixel.y < shown.getHeight()) {
             int argb = shown.getRGB(pixel.x, pixel.y);

@@ -155,6 +155,9 @@ abstract class PackResourceEditor<V> extends JPanel {
         return content;
     }
 
+    /** Lets the view be edited, or keeps it as it is while the pack's copy is not read yet. */
+    protected abstract void setEditable(boolean editable);
+
     /** Why the content cannot be written, after showing where the problem is; empty when it can. */
     protected Optional<String> check(V content) {
         return Optional.empty();
@@ -198,6 +201,9 @@ abstract class PackResourceEditor<V> extends JPanel {
         add(top, BorderLayout.NORTH);
         add(view, BorderLayout.CENTER);
         showState("");
+        // Until the pack's copy is read, an edit would be made to the opened file's content and saved over that copy.
+        setEditable(false);
+        this.following = true;
         changed();
         this.seen = recorded();
         readCopies(false);
@@ -303,6 +309,7 @@ abstract class PackResourceEditor<V> extends JPanel {
                 return;
             }
             this.following = false;
+            setEditable(true);
             showPack(found.pack());
             showTargets(found.targets(), found.pack());
             this.seen = found.recorded();
@@ -376,19 +383,20 @@ abstract class PackResourceEditor<V> extends JPanel {
             showNotice(problem.get(), ThemeColors::error);
             return;
         }
-        byte[] bytes;
-        try {
-            bytes = encode(edited);
-        } catch (IOException | RuntimeException unwritable) {
-            showNotice("Not saved: " + message(unwritable), ThemeColors::error);
-            return;
-        }
         this.writes++;
         this.busy = true;
         changed();
         this.state.setText("Reloading in the game");
         this.saving = edited;
-        this.edits.save(this.path, this.opened != null ? this.opened : this.pack, bytes)
+        Path into = this.opened != null ? this.opened : this.pack;
+        // Encoding a large texture takes a while, so it runs with the rest of the save.
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return encode(edited);
+            } catch (IOException exception) {
+                throw new CompletionException(exception);
+            }
+        }).thenCompose(bytes -> this.edits.save(this.path, into, bytes))
                 .whenComplete((saved, failure) -> SwingUtilities.invokeLater(() -> {
                     this.busy = false;
                     this.saving = null;

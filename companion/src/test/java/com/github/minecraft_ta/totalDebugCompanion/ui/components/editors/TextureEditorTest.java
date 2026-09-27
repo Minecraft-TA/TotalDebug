@@ -47,12 +47,15 @@ class TextureEditorTest {
         for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) gear.setRGB(x, y, GRAY);
 
         TextureEditor[] editor = new TextureEditor[1];
-        SwingUtilities.invokeAndWait(() -> editor[0] = new TextureEditor(TEXTURE, "testmod.jar", null,
-                new LoadedResource.Image(gear, 100), edits, ignored -> { }));
+        SwingUtilities.invokeAndWait(() -> {
+            editor[0] = new TextureEditor(TEXTURE, "testmod.jar", null, new LoadedResource.Image(gear, 100), edits, ignored -> { });
+            selectTool(editor[0], "Pencil");
+            assertFalse(editor[0].view().painter().paints(),
+                    "until the pack's copy is read, a stroke would be drawn on the mod's copy and saved over the pack's");
+        });
         try {
             awaitOnSwing(() -> editor[0].targetBox().getItemCount() > 0);
             SwingUtilities.invokeAndWait(() -> {
-                assertFalse(editor[0].view().painter().paints(), "without a tool, a drag moves the view");
                 selectTool(editor[0], "Eraser");
                 click(editor[0], new Point(1, 2), 0);
                 assertEquals(0, editor[0].shown().getRGB(1, 2));
@@ -93,7 +96,9 @@ class TextureEditorTest {
         SwingUtilities.invokeAndWait(() -> editor[0] = new TextureEditor(TEXTURE, "testmod.jar", null,
                 new LoadedResource.Image(gear, 100), edits, ignored -> { }));
         try {
+            awaitOnSwing(() -> editor[0].targetBox().getItemCount() > 0);
             SwingUtilities.invokeAndWait(() -> {
+                assertEquals(GRAY, editor[0].color(), "the pencil starts with the texture's most used color");
                 selectTool(editor[0], "Pencil");
                 click(editor[0], new Point(0, 1), 0);
                 assertEquals(GRAY, editor[0].shown().getRGB(0, 1));

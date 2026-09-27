@@ -68,6 +68,11 @@ final class ResourceTextEditor extends PackResourceEditor<String> {
     }
 
     @Override
+    protected void setEditable(boolean editable) {
+        this.text.setEditable(editable);
+    }
+
+    @Override
     protected String noun() {
         return "text";
     }

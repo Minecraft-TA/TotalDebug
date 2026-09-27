@@ -44,6 +44,8 @@ import java.util.function.Consumer;
 final class TextureEditor extends PackResourceEditor<BufferedImage> {
     /** How many of the texture's colors the palette offers, the most used in the whole sheet first. */
     private static final int PALETTE_SIZE = 16;
+    /** The most pixels a texture has that is edited; a larger one, far above what textures use, is shown only. */
+    private static final int EDITABLE_PIXELS = 2048 * 2048;
 
     private enum Tool {
         PENCIL, ERASER, FILL, PICKER
@@ -62,6 +64,10 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     private final JPanel palette = new JPanel(new FlowLayout(FlowLayout.LEFT, 1, 0));
     /** The color drawn with, as ARGB. */
     private int argb;
+    /** Whether the color was chosen, rather than taken from the texture's most used one. */
+    private boolean colorChosen;
+    /** Whether the pixels can be drawn on: the pack's copy was read. */
+    private boolean editable;
     /** The last pixel drawn, where Shift+click starts a line, or null. */
     private Point last;
     /** The content last loaded or saved, which the shown pixels are compared with; null for none. */
@@ -88,11 +94,21 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
                 action(this.redo, "Redo", "Ctrl+Shift+Z", this::redo));
         this.color.addActionListener(event -> chooseColor());
         this.view.setPainter(new Painter());
-        List<Integer> colors = this.pixels.palette(1);
-        setColor(colors.isEmpty() ? 0xFF000000 : colors.getFirst());
+        takeMostUsedColor();
         bindKeys();
         refresh();
         start(this.view);
+    }
+
+    /** Whether an image is small enough to edit here. */
+    static boolean editable(BufferedImage image) {
+        return (long) image.getWidth() * image.getHeight() <= EDITABLE_PIXELS;
+    }
+
+    /** Draws with the texture's most used color, until a color is chosen. */
+    private void takeMostUsedColor() {
+        List<Integer> colors = this.pixels.palette(1);
+        setColor(colors.isEmpty() ? 0xFF000000 : colors.getFirst());
     }
 
     /** The image view, for tests. */
@@ -187,7 +203,7 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
             button.setToolTipText(Tooltip.action("Use Color", null).text(ImageViewPanel.describeColor(swatch)).html());
             button.getAccessibleContext().setAccessibleName("Use Color");
             button.getAccessibleContext().setAccessibleDescription(ImageViewPanel.describeColor(swatch));
-            button.addActionListener(event -> setColor(swatch));
+            button.addActionListener(event -> choose(swatch));
             this.palette.add(button);
         }
         this.palette.revalidate();
@@ -196,7 +212,13 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
 
     private void chooseColor() {
         Color chosen = JColorChooser.showDialog(this, "Color", new Color(this.argb, true), true);
-        if (chosen != null) setColor(chosen.getRGB());
+        if (chosen != null) choose(chosen.getRGB());
+    }
+
+    /** Draws with {@code argb} from now on, as the player chose. */
+    private void choose(int argb) {
+        this.colorChosen = true;
+        setColor(argb);
     }
 
     private void setColor(int argb) {
@@ -221,7 +243,7 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
 
         @Override
         public boolean paints() {
-            return tool() != null;
+            return editable && tool() != null;
         }
 
         @Override
@@ -239,7 +261,8 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
             int drawn = tool == Tool.ERASER ? 0 : argb;
             if (tool == Tool.FILL) {
                 pixels.fill(pixel.x, pixel.y, drawn, region);
-            } else if (event.isShiftDown() && last != null) {
+            } else if (event.isShiftDown() && last != null && region.contains(last)) {
+                // A line starts only at a pixel of the frame shown.
                 pixels.line(last.x, last.y, pixel.x, pixel.y, drawn, region);
             } else {
                 pixels.set(pixel.x, pixel.y, drawn, region);
@@ -270,7 +293,7 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
         }
 
         private void pick(Point pixel, Rectangle region) {
-            if (region.contains(pixel)) setColor(pixels.color(pixel.x, pixel.y));
+            if (region.contains(pixel)) choose(pixels.color(pixel.x, pixel.y));
         }
     }
 
@@ -319,6 +342,7 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
         this.pixels.replace(content);
         this.last = null;
         this.view.setSheet(this.pixels.sheet());
+        if (!this.colorChosen) takeMostUsedColor();
         refresh();
     }
 
@@ -353,6 +377,12 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     @Override
     protected BufferedImage none() {
         return new BufferedImage(this.pixels.sheet().getWidth(), this.pixels.sheet().getHeight(), BufferedImage.TYPE_INT_ARGB);
+    }
+
+    @Override
+    protected void setEditable(boolean editable) {
+        this.editable = editable;
+        this.view.updateCursor();
     }
 
     @Override
