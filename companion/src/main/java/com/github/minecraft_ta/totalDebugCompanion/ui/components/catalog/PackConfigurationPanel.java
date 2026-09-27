@@ -31,8 +31,8 @@ import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
 /**
- * The settings of every mod under their mod, file and sections, edited like on a mod's Configuration tab. Only the
- * settings that differ from their default are shown at first. A server configuration is read from the world that
+ * The settings of every mod under their mod, file and sections, edited like on a mod's Configuration tab; Modified
+ * narrows them to the settings that differ from their default. A server configuration is read from the world that
  * changed it last. Files are read again whenever the page is shown, the catalog changes or an edit is written.
  */
 public final class PackConfigurationPanel extends JPanel {
@@ -50,7 +50,7 @@ public final class PackConfigurationPanel extends JPanel {
     private final Consumer<NavigationTarget> navigator;
     private final ConfigWriter writer;
     private final PageLoader<Loaded> loader;
-    private final JCheckBox modifiedOnly = new JCheckBox("Modified", true);
+    private final JCheckBox modifiedOnly = new JCheckBox("Modified");
     private final ConfigSettingsTable table = new ConfigSettingsTable();
     private final BrowserBody body;
     /** Where each listed setting is written, by row path. */

@@ -56,7 +56,7 @@ enum UiRenderScenario {
     MOD_CONFIGURATION("mod-configuration", "Configuration settings with a modified value"),
     MOD_RESOURCES("mod-resources", "Mod resources listed by category"),
     DEFINITION_PAGE("definition-page", "Block definition page with its files"),
-    PACK_CONFIGURATION("pack-configuration", "Every modified setting of the pack under its mod and file"),
+    PACK_CONFIGURATION("pack-configuration", "Every setting of the pack under its mod and file, one of them modified"),
     PACK_RESOURCES("pack-resources", "Every resource of the pack with the pack its copy comes from"),
     LOGS("logs", "The game's logs with a warning and an error"),
     LOGS_CRASH("logs-crash", "A crash report with its stack frames by mod"),
