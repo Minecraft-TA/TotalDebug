@@ -1,6 +1,6 @@
 # The Modpack tree
 
-Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Content, Configuration, Resources (its files; the Packs tab follows), Key bindings and Changes; the change record holds configuration settings, key bindings and resources. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
+Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Content, Configuration, Resources (its files; the Packs tab follows), Key bindings, Logs and Changes; the change record holds configuration settings, key bindings and resources. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
 
 ## Purpose
 
@@ -55,6 +55,15 @@ Every resource of the pack, each file once, in the copy the game uses:
 - **Rows:** a row names its namespace and folder and the pack its copy comes from; its tooltip lists the lower packs it hides. The filter matches the path and the pack's name. The list is read again when the game's packs change and after a save or revert has finished, keeping the selection. A pack that cannot be read is skipped.
 - **Opening:** opening a row opens the winning copy, which is also the one the resource editor saves over in the managed pack.
 - **Speed:** the join and its sort run off the Swing thread. The list has one row height and follows the view's width, so it never renders every row to measure itself. In All the Mods 10 To the Sky (352,924 resources on 2026-09-27), filtering takes about 30 ms per keystroke.
+
+## Logs
+
+The game's `logs/latest.log` and `logs/debug.log`, then its crash reports, the newest first. The page reads them again whenever it is shown, since the game writes them while it runs.
+
+- **A log** lists its warnings and errors, each with the lines that follow it, such as a stack trace, in its tooltip. A row opens the log at that line, reading the tab again if the game wrote to the log since. The file's row counts every warning and error; the page lists the first 2,000. A log larger than Companion opens (16 MiB) still lists its entries, with their text in their tooltips.
+- **A crash report** is listed by what happened and when, as the report says. It shows the mods that failed to load and why, from a crash report of failed mod loading, then each exception and its causes with their stack frames. A frame names the mod whose module holds it, as `TRANSFORMER/total_debug@2.0.0/...` says, or the mod whose mixin added a handler such as `handler$zfe000$sodium$onTick`, and opens its class; other rows open the report at that line.
+- **Reading:** a file is read again only when it changed, and the page keeps the selected file and row.
+- **Not yet:** archived logs (`.log.gz`), naming the mod behind a log line's logger, and pack health checks built on these.
 
 ## Content kinds
 

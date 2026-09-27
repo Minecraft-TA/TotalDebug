@@ -32,7 +32,7 @@ class ModTreeItemsTest {
     void capturedModsGroupTheirContentWithoutListingIt() throws Exception {
         Path jar = CatalogFixtures.modJar(this.directory);
         var snapshot = new ModTreeItems.Snapshot(
-                new PackCatalogService.Ready(new CatalogIndex(CatalogFixtures.catalog(jar))), sources(jar), 0);
+                new PackCatalogService.Ready(new CatalogIndex(CatalogFixtures.catalog(jar))), sources(jar), 0, false);
 
         List<TreeItem> mods = ModTreeItems.children(snapshot);
 
@@ -48,9 +48,14 @@ class ModTreeItemsTest {
                 content.stream().map(TreeItem::getName).toList());
         assertEquals("Fluids", content.getLast().getPresentation().primary());
         assertEquals(new NavigationTarget.Content(RegistryIds.ITEM), ((NavigableTreeItem) content.get(1)).navigationTarget());
-        List<TreeItem> changed = ModTreeItems.packChildren(new ModTreeItems.Snapshot(snapshot.state(), snapshot.sources(), 3));
+        List<TreeItem> changed = ModTreeItems.packChildren(new ModTreeItems.Snapshot(snapshot.state(), snapshot.sources(), 3, true));
         assertEquals(ModTreeItems.CHANGES, changed.getLast().getName(), "Changes appears once Companion changed something");
+        assertEquals(ModTreeItems.LOGS, changed.get(changed.size() - 2).getName(), "Logs appears once the game wrote any");
         assertEquals("3", changed.getLast().getPresentation().secondary());
+        List<TreeItem> logsOnly = ModTreeItems.packChildren(new ModTreeItems.Snapshot(new PackCatalogService.None(),
+                RuntimeSourceCatalog.empty(), 0, true));
+        assertEquals(List.of(ModTreeItems.LOGS), logsOnly.stream().map(TreeItem::getName).toList(),
+                "without a catalog or a runtime Mods would have nothing to list");
         assertEquals(List.of("neoforge", "testmod", ModTreeItems.OTHER_NAMESPACES), mods.stream().map(TreeItem::getName).toList());
         TreeItem testmod = mods.get(1);
         assertTrue(testmod.isActivatable());
@@ -77,7 +82,7 @@ class ModTreeItemsTest {
     @Test
     void beforeTheFirstCaptureModsComeFromTheRuntimeWithTheirResources() throws Exception {
         Path jar = CatalogFixtures.modJar(this.directory);
-        var snapshot = new ModTreeItems.Snapshot(new PackCatalogService.None(), sources(jar), 0);
+        var snapshot = new ModTreeItems.Snapshot(new PackCatalogService.None(), sources(jar), 0, false);
 
         List<TreeItem> mods = ModTreeItems.children(snapshot);
 
@@ -101,7 +106,7 @@ class ModTreeItemsTest {
             zip.putNextEntry(new ZipEntry("icon.png"));
             zip.closeEntry();
         }
-        var snapshot = new ModTreeItems.Snapshot(new PackCatalogService.None(), sources(jar), 0);
+        var snapshot = new ModTreeItems.Snapshot(new PackCatalogService.None(), sources(jar), 0, false);
 
         DirectoryTreeItem mod = (DirectoryTreeItem) ModTreeItems.children(snapshot).getFirst();
 

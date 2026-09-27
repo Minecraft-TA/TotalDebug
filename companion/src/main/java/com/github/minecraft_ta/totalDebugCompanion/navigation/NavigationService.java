@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ConfigFileView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
 import com.github.minecraft_ta.totalDebugCompanion.model.KeyBindingsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
+import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
@@ -131,6 +132,7 @@ public final class NavigationService {
             case NavigationTarget.ModPage ignored -> true;
             case NavigationTarget.PackConfiguration ignored -> true;
             case NavigationTarget.PackResources ignored -> true;
+            case NavigationTarget.Logs ignored -> true;
             case NavigationTarget.Changes ignored -> true;
             case NavigationTarget.KeyBindings ignored -> true;
             case NavigationTarget.Content ignored -> true;
@@ -149,6 +151,7 @@ public final class NavigationService {
                     case NavigationTarget.ModPage page -> requireRevealed(fileTree.revealModPage(page));
                     case NavigationTarget.PackConfiguration ignored -> requireRevealed(fileTree.revealPackConfiguration());
                     case NavigationTarget.PackResources ignored -> requireRevealed(fileTree.revealPackResources());
+                    case NavigationTarget.Logs ignored -> requireRevealed(fileTree.revealLogs());
                     case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges());
                     case NavigationTarget.KeyBindings ignored -> requireRevealed(fileTree.revealKeyBindings());
                     case NavigationTarget.Content content -> requireRevealed(fileTree.revealContent(content.registry()));
@@ -316,6 +319,11 @@ public final class NavigationService {
                         view -> true,
                         () -> new PackResourcesView(editors.get())
                 ).thenAccept(view -> view.show(resources.category())), activation);
+                case NavigationTarget.Logs logs -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        LogsView.class,
+                        view -> true,
+                        () -> new LogsView(editors.get())
+                ).thenAccept(view -> view.show(logs.file())), activation);
                 case NavigationTarget.Changes ignored -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         ChangesView.class,
                         view -> true,
@@ -648,17 +656,24 @@ public final class NavigationService {
                 if (target.offset() > 0) view.navigateToOffset(target.offset());
             }, SwingUtilities::invokeLater), activation);
         }
-        return openResource(new LocalFileSource(path), activation);
+        return openResource(new LocalFileSource(path), activation, target.offset());
     }
 
     private CompletableFuture<Void> openResource(ContentSource source, Activation activation) {
+        return openResource(source, activation, 0);
+    }
+
+    /** Opens a resource tab, showing its text at {@code offset} when it is above zero. */
+    private CompletableFuture<Void> openResource(ContentSource source, Activation activation, int offset) {
         RuntimeBinding installed = source instanceof ArchiveEntrySource entry && !isLocalModArchive(entry.archivePath())
                 ? captureContext().runtime() : null;
         return dispatchNavigation(() -> openRuntimeEditor(installed,
                 ResourceView.class,
                 view -> view.source().identity().equals(source.identity()),
                 () -> new ResourceView(editors.get(), source, installed)
-        ).thenApply(ignored -> null), activation);
+        ).thenAccept(view -> {
+            if (offset > 0) view.navigateToOffset(offset);
+        }), activation);
     }
 
     private boolean isLocalModArchive(Path archive) {
@@ -799,6 +814,7 @@ public final class NavigationService {
             case NavigationTarget.ModPage page -> "mod " + page.modId();
             case NavigationTarget.PackConfiguration ignored -> "modpack configuration";
             case NavigationTarget.PackResources ignored -> "modpack resources";
+            case NavigationTarget.Logs ignored -> "logs";
             case NavigationTarget.Changes ignored -> "changes";
             case NavigationTarget.KeyBindings ignored -> "key bindings";
             case NavigationTarget.Content content -> "modpack " + (content.registry().isEmpty() ? "content"

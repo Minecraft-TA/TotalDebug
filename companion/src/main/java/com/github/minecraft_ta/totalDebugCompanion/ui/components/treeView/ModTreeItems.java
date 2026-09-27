@@ -40,6 +40,7 @@ final class ModTreeItems {
     static final String CONFIGURATION = "configuration";
     static final String RESOURCES = "resources";
     static final String CHANGES = "changes";
+    static final String LOGS = "logs";
     static final String KEY_BINDINGS = "key-bindings";
     static final String CONTENT = "content";
     static final String OTHER_NAMESPACES = "other-namespaces";
@@ -57,7 +58,7 @@ final class ModTreeItems {
      * What the tree shows now: the captured catalog when ready, otherwise the runtime's modules, and how many changes
      * Companion made that are still in effect.
      */
-    record Snapshot(PackCatalogService.State state, RuntimeSourceCatalog sources, int changes) {
+    record Snapshot(PackCatalogService.State state, RuntimeSourceCatalog sources, int changes, boolean logs) {
         CatalogIndex index() {
             return this.state instanceof PackCatalogService.Ready ready ? ready.index() : null;
         }
@@ -93,13 +94,17 @@ final class ModTreeItems {
      */
     static List<TreeItem> packChildren(Snapshot snapshot) {
         List<TreeItem> children = new ArrayList<>();
-        children.add(new Mods(snapshot));
+        // Logs alone keep the root without a catalog or a runtime, and Mods then has nothing to list.
+        boolean mods = snapshot.index() != null || snapshot.sources().modules().stream().anyMatch(module ->
+                module.kind() == RuntimeInventory.ModuleKind.MOD || module.kind() == RuntimeInventory.ModuleKind.PLATFORM);
+        if (mods) children.add(new Mods(snapshot));
         if (snapshot.index() != null && !snapshot.index().entries().isEmpty()) children.add(new Content(null, snapshot.index().content()));
         if (snapshot.index() != null) children.add(new Configuration());
         if (snapshot.index() != null) children.add(new PackResources());
         if (snapshot.index() != null && !snapshot.index().catalog().keyBindings().isEmpty()) {
             children.add(new KeyBindings(snapshot.index().catalog().keyBindings().size()));
         }
+        if (snapshot.logs()) children.add(new Logs());
         if (snapshot.changes() > 0) children.add(new Changes(snapshot.changes()));
         return children;
     }
@@ -399,13 +404,33 @@ final class ModTreeItems {
         }
     }
 
+    /** Opens the game's logs and crash reports. */
+    static final class Logs extends TreeItem implements NavigableTreeItem {
+        Logs() {
+            super(LOGS);
+            setPresentation(PrimarySecondaryText.primary("Logs"));
+            setIcon(Icons.TEXT_FILE);
+            setSortPriority(5);
+        }
+
+        @Override
+        public String getTooltip() {
+            return "The game's logs and crash reports";
+        }
+
+        @Override
+        public NavigationTarget navigationTarget() {
+            return new NavigationTarget.Logs();
+        }
+    }
+
     /** Opens what Companion changed in the pack. */
     static final class Changes extends TreeItem implements NavigableTreeItem {
         Changes(int count) {
             super(CHANGES);
             setPresentation(new PrimarySecondaryText("Changes", NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
             setIcon(Icons.CHANGES);
-            setSortPriority(5);
+            setSortPriority(6);
         }
 
         @Override
