@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutionException;
@@ -243,7 +242,7 @@ class ResourceEditsTest {
     }
 
     @Test
-    void revertsQueuedTogetherTakeOneReload() throws Exception {
+    void revertingSeveralChangesTakesOneReload() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ExecutorService queue = Executors.newSingleThreadExecutor();
         try {
@@ -262,18 +261,8 @@ class ResourceEditsTest {
             edits.save("assets/testmod/textures/item/gear.png", bytes("png")).get(5, TimeUnit.SECONDS);
             sent.clear();
 
-            // As Revert All does: every revert is queued before the first has written its file.
-            CountDownLatch held = new CountDownLatch(1);
-            queue.execute(() -> {
-                try {
-                    held.await();
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                }
-            });
-            List<CompletableFuture<ResourceEdits.Saved>> reverts = record.changes().stream().map(edits::revert).toList();
-            held.countDown();
-            for (CompletableFuture<ResourceEdits.Saved> revert : reverts) revert.get(5, TimeUnit.SECONDS);
+            // As Revert All does, however soon the first revert is written.
+            for (CompletableFuture<ResourceEdits.Saved> revert : edits.revert(record.changes())) revert.get(5, TimeUnit.SECONDS);
 
             assertEquals(1, sent.size(), "one reload for both files");
             assertEquals(2, sent.getFirst().watched().size());

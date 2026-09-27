@@ -415,8 +415,26 @@ public final class ResourceEdits {
     }
 
     /**
+     * Reverts every change of {@code changes}, as {@link #revert(ChangeRecord.Change)} does, with one reload for all of
+     * them however fast each is written.
+     */
+    public List<CompletableFuture<Saved>> revert(List<ChangeRecord.Change> changes) {
+        // The batch counts as a write until every revert is queued, so the first to finish cannot reload alone.
+        synchronized (this) {
+            this.writing++;
+        }
+        try {
+            List<CompletableFuture<Saved>> reverts = new ArrayList<>();
+            for (ChangeRecord.Change change : changes) reverts.add(revert(change));
+            return reverts;
+        } finally {
+            wrote();
+        }
+    }
+
+    /**
      * Writes the file of {@code path} in the write queue, then tells when the game uses it. Writes queued together, such
-     * as Revert All or saves in quick succession, take one reload: it is asked for once the last of them has written.
+     * as saves in quick succession, take one reload: it is asked for once the last of them has written.
      */
     private CompletableFuture<Saved> writeAndApply(String path, Supplier<Path> write) {
         synchronized (this) {
