@@ -21,6 +21,10 @@ public final class UiMetrics {
     public static final int HEADER_ICON_SIZE = 64;
     /** Texture thumbnails in resource grids and on definition pages. */
     public static final int THUMBNAIL_SIZE = 48;
+    /** How narrow a sidebar can be dragged, before scaling, so its rows still read. */
+    public static final int SIDEBAR_MINIMUM_WIDTH = 120;
+    /** The default width of a two-pane browser's category list, before scaling. */
+    public static final int CATEGORY_LIST_WIDTH = 190;
 
     private UiMetrics() {
     }

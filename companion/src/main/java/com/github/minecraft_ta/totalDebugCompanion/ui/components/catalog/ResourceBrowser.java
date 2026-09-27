@@ -147,7 +147,7 @@ public final class ResourceBrowser extends JPanel {
         listScroll.getVerticalScrollBar().setUnitIncrement(16);
         this.body = new BrowserBody("Filter resources", listScroll, this.list, this::applyFilter);
         this.filter = this.body.filter();
-        this.sidebar = new Sidebar("resource-categories", 190, this.categoryScroll, this.body);
+        this.sidebar = new Sidebar("resource-categories", UiMetrics.CATEGORY_LIST_WIDTH, this.categoryScroll, this.body);
         add(this.sidebar, BorderLayout.CENTER);
         TypeToFilter.forwardTyping(this.categoryList, () -> this.filter);
     }

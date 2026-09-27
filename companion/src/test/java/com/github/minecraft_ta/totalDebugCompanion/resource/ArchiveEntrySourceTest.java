@@ -64,7 +64,7 @@ class ArchiveEntrySourceTest {
         write(archive, "extra.txt", "moves the entry", "lang/en_us.json", "new text");
         Files.setLastModifiedTime(archive, FileTime.fromMillis(Files.getLastModifiedTime(archive).toMillis() + 2_000));
         assertArrayEquals("new text".getBytes(StandardCharsets.UTF_8), source.read(1024),
-                "the reader keeps an archive's directory only while the archive is unchanged");
+                "each read opens the archive as it is now");
     }
 
     /** Writes an archive of names and texts; a null text makes a folder entry. */

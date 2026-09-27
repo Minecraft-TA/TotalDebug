@@ -68,7 +68,6 @@ final class ConfigPanel extends JPanel {
     private String problem = "";
     /** The outcome of the last edit, or why a typed value was refused. */
     private String status = "";
-    /** The file list's width, kept while Companion runs so every mod page opens with the width last dragged to. */
 
     /** File list rows are the files, under a heading per folder when the mod keeps them in one. */
     private final DefaultListModel<Object> fileModel = new DefaultListModel<>();

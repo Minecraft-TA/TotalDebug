@@ -103,7 +103,7 @@ The Project tree on the left, editor tabs in the middle, the status bar at the b
 
 ### Sidebars
 
-- A list beside its content, such as categories, files or frames, sits in a [`Sidebar`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/Sidebar.java). Its divider can be dragged, down to a width where the rows still read.
+- A list beside its content, such as categories or files, sits in a [`Sidebar`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/Sidebar.java). Its divider can be dragged, down to a width where the rows still read.
 - Every view of the same kind starts at the width its sidebar was last dragged to, across restarts, or at its default: all Resources views share one width, all Content views another.
 - A sidebar with nothing to choose between is hidden, and its content takes the whole width.
 
@@ -250,4 +250,6 @@ A component's own inner padding, such as a text field's or an editor's, and a ga
 
 ## Where the UI differs today
 
-Nothing known. Record a difference here when a change has to leave one behind.
+- The debugger's frames, the breakpoint manager's list and the Project tree beside the editor can be dragged, but do not remember their width, unlike a `Sidebar`.
+
+Record a difference here when a change has to leave one behind.

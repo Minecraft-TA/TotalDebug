@@ -74,7 +74,7 @@ public final class ContentBrowser extends JPanel {
             showSelected();
         });
         this.kindScroll.setBorder(BorderFactory.createEmptyBorder());
-        this.sidebar = new Sidebar("content-kinds", 190, this.kindScroll, this.table);
+        this.sidebar = new Sidebar("content-kinds", UiMetrics.CATEGORY_LIST_WIDTH, this.kindScroll, this.table);
         add(this.sidebar, BorderLayout.CENTER);
         TypeToFilter.forwardTyping(this.kindList, this::filterField);
     }
