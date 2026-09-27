@@ -79,6 +79,17 @@ class PackResourcesTest {
     }
 
     @Test
+    void twoPacksWithTheSameTitleStillHideOneAnother() throws Exception {
+        Path older = pack(this.directory.resolve("resourcepacks/Faithful 1"), TEXTURE);
+        Path newer = pack(this.directory.resolve("resourcepacks/Faithful 2"), TEXTURE);
+
+        PackResources.Joined joined = PackResources.join(List.of(
+                new PackResources.Source("file/Faithful 1", "Faithful", List.of(older)),
+                new PackResources.Source("file/Faithful 2", "Faithful", List.of(newer))), List.of());
+        assertEquals(List.of("Faithful"), joined.hidden().get(TEXTURE), "packs are told apart by id, not by the title they show");
+    }
+
+    @Test
     void optionsWithoutResourcePacksMeanTheGamesDefaults() throws Exception {
         assertEquals(List.of("vanilla", "mod_resources"), PackResources.enabledInOptions(this.directory.resolve("options.txt")));
         assertEquals("Faithful", PackResources.title("file/Faithful.zip"));

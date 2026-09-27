@@ -95,15 +95,17 @@ public final class PackResources {
         Map<String, ModResources.Resource> winners = new LinkedHashMap<>();
         Map<String, String> from = new HashMap<>();
         Map<String, List<String>> hidden = new HashMap<>();
-        stack(assets, "assets/", winners, from, hidden);
-        stack(data, "data/", winners, from, hidden);
+        Map<String, String> sources = new HashMap<>();
+        stack(assets, "assets/", winners, from, hidden, sources);
+        stack(data, "data/", winners, from, hidden, sources);
         List<ModResources.Resource> resources = new ArrayList<>(winners.values());
         resources.sort(Comparator.comparing(ModResources.Resource::path));
         return new Joined(resources, from, hidden);
     }
 
+    /** Stacks {@code sources} over {@code winners}; {@code ids} holds the id of each path's source, as two can share a title. */
     private static void stack(List<Source> sources, String root, Map<String, ModResources.Resource> winners,
-                              Map<String, String> from, Map<String, List<String>> hidden) {
+                              Map<String, String> from, Map<String, List<String>> hidden, Map<String, String> ids) {
         for (Source source : sources) {
             List<ModResources.Resource> listed;
             try {
@@ -115,7 +117,9 @@ public final class PackResources {
             for (ModResources.Resource resource : listed) {
                 if (!resource.path().startsWith(root)) continue;
                 String lower = from.put(resource.path(), source.title());
-                if (lower != null && !lower.equals(source.title())) {
+                String lowerId = ids.put(resource.path(), source.id());
+                // Another file of the same pack, such as a second jar of one mod, hides nothing.
+                if (lower != null && !lowerId.equals(source.id())) {
                     hidden.computeIfAbsent(resource.path(), ignored -> new ArrayList<>()).addFirst(lower);
                 }
                 winners.put(resource.path(), resource);

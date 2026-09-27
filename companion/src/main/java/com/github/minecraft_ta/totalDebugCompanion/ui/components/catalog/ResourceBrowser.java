@@ -34,6 +34,7 @@ import javax.swing.ToolTipManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics;
@@ -64,6 +65,8 @@ public final class ResourceBrowser extends JPanel {
     private static final String TEXTURES = "assets/textures";
     private static final int CELL_WIDTH = 92;
     private static final int CELL_HEIGHT = 84;
+    private static final String LIST_CARD = "list";
+    private static final String MESSAGE_CARD = "message";
     private static final Icon ANIMATED = Icons.RUN.derive(12, 12);
 
     private record Category(String key, String label, int count) {
@@ -87,6 +90,7 @@ public final class ResourceBrowser extends JPanel {
     private final ShownModel shown = new ShownModel();
     private final JList<ModResources.Resource> list = new JList<>(this.shown);
     private final JLabel empty = new JLabel();
+    private final JPanel body = new JPanel(new CardLayout());
     private final TextureThumbnails thumbnails = new TextureThumbnails(UiMetrics.previewPixels(UiMetrics.THUMBNAIL_SIZE));
     private final Consumer<String> categoryChanged;
     /** The resources in the order they are shown, and what the filter matches in each, in lowercase. */
@@ -160,10 +164,11 @@ public final class ResourceBrowser extends JPanel {
         listScroll.getVerticalScrollBar().setUnitIncrement(16);
         JPanel content = new JPanel(new BorderLayout());
         content.add(top, BorderLayout.NORTH);
-        content.add(listScroll, BorderLayout.CENTER);
         this.empty.setBorder(UiMetrics.messagePadding());
-        this.empty.setVisible(false);
-        content.add(this.empty, BorderLayout.SOUTH);
+        this.empty.setVerticalAlignment(SwingConstants.TOP);
+        this.body.add(listScroll, LIST_CARD);
+        this.body.add(this.empty, MESSAGE_CARD);
+        content.add(this.body, BorderLayout.CENTER);
         add(content, BorderLayout.CENTER);
         TypeToFilter.install(this.list, this.filter);
         TypeToFilter.forwardTyping(this.categoryList, () -> this.filter);
@@ -254,10 +259,10 @@ public final class ResourceBrowser extends JPanel {
         applyFilter();
     }
 
-    /** Shows a message instead of resources, for example why they could not be read. */
+    /** Shows a message in place of the resources, for example why they could not be read; empty shows the resources. */
     public void setMessage(String message) {
         this.empty.setText(message);
-        this.empty.setVisible(!message.isEmpty());
+        ((CardLayout) this.body.getLayout()).show(this.body, message.isEmpty() ? LIST_CARD : MESSAGE_CARD);
     }
 
     public void selectCategory(String key) {
@@ -414,7 +419,9 @@ public final class ResourceBrowser extends JPanel {
             name.setFont(list.getFont().deriveFont(list.getFont().getSize2D() - 1f));
             name.setForeground(selected ? list.getSelectionForeground() : ThemeColors.secondaryText());
             add(name, BorderLayout.SOUTH);
-            setToolTipText(tooltip(Tooltip.of(texture.relativePath() + (moving ? ", animated" : "")), texture));
+            // Across the whole pack, the same name can be in several namespaces.
+            String id = ResourceBrowser.this.from.isEmpty() ? texture.relativePath() : texture.namespace() + ":" + texture.relativePath();
+            setToolTipText(tooltip(Tooltip.of(id + (moving ? ", animated" : "")), texture));
         }
     }
 
