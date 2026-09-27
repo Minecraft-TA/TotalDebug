@@ -137,10 +137,13 @@ public final class PackResources {
         // The ids of the enabled packs, lowest first, with the titles the running game gives them.
         LinkedHashMap<String, String> enabled = new LinkedHashMap<>();
         if (stack == null) {
-            // The game drops a pack of the folder that is gone when it starts.
-            for (String id : enabledInOptions(workspace.resolve("options.txt"))) {
+            // The game drops a pack of the folder that is gone when it starts, and adds the required ones as assets() does.
+            List<String> ids = enabledInOptions(workspace.resolve("options.txt"));
+            if (!ids.contains(VANILLA)) enabled.put(VANILLA, "");
+            for (String id : ids) {
                 if (!id.startsWith("file/") || files.containsKey(id)) enabled.put(id, "");
             }
+            if (!ids.contains(MOD_RESOURCES)) enabled.put(MOD_RESOURCES, "");
         } else {
             for (PackStackPayload.Pack pack : stack.resourcePacks()) {
                 if (pack.id().startsWith("mod/")) enabled.putIfAbsent(MOD_RESOURCES, "");

@@ -117,9 +117,14 @@ class PackResourcesTest {
     @Test
     void withoutAGameAPackOfTheFolderThatIsGoneIsNotListed() throws Exception {
         Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"programmer_art\",\"file/Gone\"]\n");
-        assertEquals(List.of("programmer_art", "vanilla"),
+        assertEquals(List.of("mod_resources", "programmer_art", "vanilla"),
                 PackResources.resourcePacks(null, this.directory).stream().map(ListedPack::id).toList(),
                 "the game drops it when it starts; a built-in pack has no file of its own and stays");
+
+        Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"programmer_art\"]\n");
+        assertEquals(List.of("mod_resources", "programmer_art", "vanilla"),
+                PackResources.resourcePacks(null, this.directory).stream().map(ListedPack::id).toList(),
+                "the game adds the required packs options.txt leaves out: Minecraft's at the bottom, the mods' at the top");
     }
 
     @Test

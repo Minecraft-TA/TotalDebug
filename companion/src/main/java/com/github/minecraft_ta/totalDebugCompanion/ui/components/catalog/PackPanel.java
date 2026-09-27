@@ -52,6 +52,9 @@ public final class PackPanel extends JPanel {
         add(this.header, BorderLayout.NORTH);
         add(this.browser, BorderLayout.CENTER);
         this.loader = new PageLoader<>(() -> () -> read(file), this::show, failure -> {
+            // What was read before is not the pack any more.
+            this.header.setIcon(new PlateIcon(Icons.RESOURCES_ROOT, SubjectHeader.ICON_SIZE));
+            this.header.setSubtitle(List.of());
             this.browser.setResources(List.of());
             this.browser.setMessage(PackFolders.title(file) + " could not be read: " + failure.getMessage());
         }).whenShown(this);

@@ -119,23 +119,19 @@ public final class ResourceReloads {
     }
 
     /**
-     * Whether the running resource manager already reads every watched language file from the pack it was saved into:
-     * the managed pack, or with none named, the player's own folder pack whose copy is on top. A pack or namespace added
-     * since the last reload is only seen after a full reload.
+     * Whether the running resource manager already reads every watched language file from the managed pack. A pack or
+     * namespace added since the last reload is only seen after a full reload, and so is a save into the player's own
+     * pack: with no pack named, the copy on top may come from another of their packs.
      */
     private static boolean suppliedBy(String managedPack, List<String> watched) {
+        if (managedPack.isEmpty()) return false;
         for (String path : watched) {
             String[] parts = path.split("/", 3);
             if (parts.length < 3 || !parts[0].equals("assets")) return false;
             ResourceLocation location = ResourceLocation.tryBuild(parts[1], parts[2]);
             if (location == null) return false;
             List<Resource> stack = Minecraft.getInstance().getResourceManager().getResourceStack(location);
-            if (managedPack.isEmpty()) {
-                // The stack is lowest first; the copy on top is the one the game shows.
-                if (stack.isEmpty() || !stack.getLast().sourcePackId().startsWith("file/")) return false;
-            } else if (stack.stream().noneMatch(resource -> resource.sourcePackId().equals(managedPack))) {
-                return false;
-            }
+            if (stack.stream().noneMatch(resource -> resource.sourcePackId().equals(managedPack))) return false;
         }
         return true;
     }

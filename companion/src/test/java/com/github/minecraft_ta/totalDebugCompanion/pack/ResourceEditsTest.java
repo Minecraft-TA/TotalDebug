@@ -319,10 +319,11 @@ class ResourceEditsTest {
     void aDatapackAddedSinceTheWorldLoadedCountsAsUsedAsAReloadEnablesIt() throws Exception {
         Path world = this.directory.resolve("saves/World");
         Map<String, Object> data = LevelDatFixture.world("World");
-        data.put("DataPacks", Map.of("Enabled", List.of("vanilla"), "Disabled", List.of("file/Off")));
+        data.put("DataPacks", Map.of("Enabled", List.of("vanilla", "file/Live"), "Disabled", List.of("file/Off")));
         LevelDatFixture.write(world, data);
         Path added = LevelDatFixture.datapack(world, "Added");
         Path off = LevelDatFixture.datapack(world, "Off");
+        Path live = LevelDatFixture.datapack(world, "Live");
         Files.writeString(world.resolve("session.lock"), "x");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         edits.packStack(STACK);
@@ -333,6 +334,8 @@ class ResourceEditsTest {
             assertTrue(edits.unusedBecause(recipe, added).isEmpty(), "a reload enables it, as /reload does");
             assertEquals("The Off datapack of World is not enabled, so the game does not use this file",
                     edits.unusedBecause(recipe, off).orElseThrow(), "but not one the world disabled");
+            assertEquals("The Live datapack of World is not enabled, so the game does not use this file",
+                    edits.unusedBecause(recipe, live).orElseThrow(), "nor one disabled in the open world since level.dat was saved");
         }
     }
 

@@ -287,10 +287,10 @@ public final class ResourceEdits {
             if (packs.get(index).id().equals(id)) position = index;
         }
         if (position < 0) {
-            // The managed pack is enabled by the reload after a save, and so is a datapack the world has not disabled,
-            // as /reload does.
+            // The managed pack is enabled by the reload after a save, and so is a datapack the world does not know yet, as
+            // /reload does. One its level.dat lists, but the open world does not use, was disabled since.
             if (managed(pack)) return Optional.empty();
-            return assets ? Optional.of(notEnabled(pack)) : disabledOnDisk(path, pack);
+            return assets || !newToTheWorld(pack) ? Optional.of(notEnabled(pack)) : Optional.empty();
         }
         for (int index = packs.size() - 1; index > position; index--) {
             PackStackPayload.Pack above = packs.get(index);
@@ -318,6 +318,17 @@ public final class ResourceEdits {
             return disabled ? Optional.of(notEnabled(pack)) : Optional.empty();
         } catch (IOException | RuntimeException unreadable) {
             return Optional.empty();
+        }
+    }
+
+    /** Whether the datapack is in its world's folder but in neither of the lists its {@code level.dat} keeps. */
+    private static boolean newToTheWorld(Path pack) {
+        String id = "file/" + pack.getFileName();
+        try {
+            return CurrentWorld.read(pack.getParent().getParent()).datapacks().stream()
+                    .anyMatch(listed -> listed.id().equals(id) && listed.state() == ListedPack.State.NEW);
+        } catch (IOException | RuntimeException unreadable) {
+            return false;
         }
     }
 
