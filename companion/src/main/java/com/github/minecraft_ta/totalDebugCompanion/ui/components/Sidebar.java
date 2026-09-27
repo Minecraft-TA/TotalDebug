@@ -35,24 +35,41 @@ public final class Sidebar extends JPanel {
         this.kind = Objects.requireNonNull(kind, "kind");
         this.defaultWidth = defaultWidth;
         this.sidebar = Objects.requireNonNull(sidebar, "sidebar");
-        sidebar.setMinimumSize(new Dimension(UIScale.scale(UiMetrics.SIDEBAR_MINIMUM_WIDTH), 0));
         this.split = new ThinSplitPane(sidebar, Objects.requireNonNull(content, "content"));
-        this.split.setDividerLocation(width());
-        followDivider();
-        // A theme or font size change replaces the split's look, and with it the divider.
-        this.split.addPropertyChangeListener("UI", event -> followDivider());
+        scale();
+        // A theme or font size change replaces the split's look, and with it the divider, and may change the scale.
+        this.split.addPropertyChangeListener("UI", event -> scale());
         add(this.split, BorderLayout.CENTER);
     }
 
-    /** Remembers the width a drag of the divider leaves; the layout squeezing the sidebar in a narrow window is not a drag. */
+    /** Lays the sidebar out at the current scale and follows drags of the current divider. */
+    private void scale() {
+        this.sidebar.setMinimumSize(new Dimension(UIScale.scale(UiMetrics.SIDEBAR_MINIMUM_WIDTH), 0));
+        if (this.shown) this.split.setDividerLocation(width());
+        followDivider();
+    }
+
+    /**
+     * Remembers the width a drag of the divider leaves; the layout squeezing the sidebar in a narrow window is not a drag,
+     * nor is a click that leaves the divider where it was.
+     */
     private void followDivider() {
         if (!(this.split.getUI() instanceof BasicSplitPaneUI ui)) return;
         ui.getDivider().addMouseListener(new MouseAdapter() {
+            private int pressedAt = -1;
+
+            @Override
+            public void mousePressed(MouseEvent event) {
+                this.pressedAt = Sidebar.this.split.getDividerLocation();
+            }
+
             @Override
             public void mouseReleased(MouseEvent event) {
-                if (Sidebar.this.shown) {
-                    GlobalConfig.getInstance().setSidebarWidth(Sidebar.this.kind, UIScale.unscale(Sidebar.this.split.getDividerLocation()));
+                int location = Sidebar.this.split.getDividerLocation();
+                if (Sidebar.this.shown && this.pressedAt >= 0 && location != this.pressedAt) {
+                    GlobalConfig.getInstance().setSidebarWidth(Sidebar.this.kind, UIScale.unscale(location));
                 }
+                this.pressedAt = -1;
             }
         });
     }
