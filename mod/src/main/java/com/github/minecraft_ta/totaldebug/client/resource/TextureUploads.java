@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.resource;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.AbstractTexture;
@@ -16,9 +17,11 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.ResourceMetadata;
+import net.minecraft.util.GsonHelper;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Reader;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -69,6 +72,8 @@ final class TextureUploads {
         Map<ResourceLocation, AbstractTexture> textures = textures(minecraft.getTextureManager());
         if (textures == null) return false;
         Set<ResourceLocation> changed = new LinkedHashSet<>();
+        // Textures whose .mcmeta was edited: shown this way only where their animation changed, and nothing else.
+        Set<ResourceLocation> animated = new LinkedHashSet<>();
         for (String path : paths) {
             String[] parts = path.split("/", 3);
             ResourceLocation saved = ResourceLocation.tryBuild(parts[1], parts[2]);
@@ -76,19 +81,44 @@ final class TextureUploads {
             // A pack or namespace added since the last reload is not read yet; the copy shown would be another pack's.
             Optional<Resource> top = resources.getResource(saved);
             if (top.isEmpty() || !top.get().sourcePackId().equals(pack)) return false;
-            changed.add(path.endsWith(".mcmeta") ? saved.withPath(saved.getPath().substring(0, saved.getPath().length() - ".mcmeta".length())) : saved);
+            if (!path.endsWith(".mcmeta")) {
+                changed.add(saved);
+                continue;
+            }
+            // Sections other than the animation, such as a mod's, may be read when the atlas is stitched.
+            try (Reader reader = top.get().openAsReader()) {
+                if (!onlyAnimation(reader)) return false;
+            } catch (IOException unreadable) {
+                return false;
+            }
+            ResourceLocation texture = saved.withPath(saved.getPath().substring(0, saved.getPath().length() - ".mcmeta".length()));
+            changed.add(texture);
+            animated.add(texture);
         }
         for (ResourceLocation texture : changed) {
-            if (!upload(resources, textures, texture)) return false;
+            if (!upload(resources, textures, texture, animated.contains(texture))) return false;
         }
         return true;
     }
 
-    private static boolean upload(ResourceManager resources, Map<ResourceLocation, AbstractTexture> textures, ResourceLocation location) {
+    /** Whether a texture's {@code .mcmeta} holds nothing but an animation. */
+    static boolean onlyAnimation(Reader metadata) {
+        try {
+            JsonObject json = GsonHelper.parse(metadata);
+            return json.keySet().equals(Set.of(AnimationMetadataSection.SECTION_NAME));
+        } catch (RuntimeException unreadable) {
+            return false;
+        }
+    }
+
+    /** {@code animated} tells that the texture's {@code .mcmeta} was edited, which must have changed its animation. */
+    private static boolean upload(ResourceManager resources, Map<ResourceLocation, AbstractTexture> textures, ResourceLocation location,
+                                  boolean animated) {
         Optional<Resource> resource = resources.getResource(location);
         if (resource.isEmpty()) return false;
         boolean shown = false;
-        if (textures.get(location) instanceof SimpleTexture texture && texture.getClass() == SimpleTexture.class) {
+        // A texture of its own reads its .mcmeta for other sections than an animation, which the full reload covers.
+        if (!animated && textures.get(location) instanceof SimpleTexture texture && texture.getClass() == SimpleTexture.class) {
             try {
                 texture.load(resources);
             } catch (IOException exception) {
@@ -100,7 +130,7 @@ final class TextureUploads {
         ResourceLocation sprite = spriteOf(location);
         for (AbstractTexture texture : textures.values()) {
             if (!(texture instanceof TextureAtlas atlas) || !atlas.getTextures().containsKey(sprite)) continue;
-            if (!upload(atlas, atlas.getTextures().get(sprite), resource.get())) return false;
+            if (!upload(atlas, atlas.getTextures().get(sprite), resource.get(), animated)) return false;
             shown = true;
         }
         return shown;
@@ -110,7 +140,7 @@ final class TextureUploads {
      * Puts the resource into the sprite's place in its atlas: its pixels where only they changed, a new animation where
      * the frames did but not their size; false where the size changed.
      */
-    private static boolean upload(TextureAtlas atlas, TextureAtlasSprite sprite, Resource resource) {
+    private static boolean upload(TextureAtlas atlas, TextureAtlasSprite sprite, Resource resource, boolean animated) {
         SpriteContents contents = sprite.contents();
         NativeImage original = contents.getOriginalImage();
         NativeImage image;
@@ -123,8 +153,13 @@ final class TextureUploads {
             return false;
         }
         try {
-            if (image.getWidth() == original.getWidth() && image.getHeight() == original.getHeight()
-                    && animation(metadata, image).equals(animation(contents.metadata(), original))) {
+            boolean sameAnimation = animation(metadata, image).equals(animation(contents.metadata(), original));
+            // An edited .mcmeta with the same animation changed something else, which only the full reload shows.
+            if (animated && sameAnimation) {
+                image.close();
+                return false;
+            }
+            if (image.getWidth() == original.getWidth() && image.getHeight() == original.getHeight() && sameAnimation) {
                 original.copyFrom(image);
                 image.close();
                 // The smaller levels are made from the new pixels, as when the atlas was stitched; the first level is the image.
