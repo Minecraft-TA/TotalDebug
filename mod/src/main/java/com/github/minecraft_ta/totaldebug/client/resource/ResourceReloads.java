@@ -41,9 +41,10 @@ public final class ResourceReloads {
         // Data and resources reload independently, so one failing does not keep the other from the game.
         List<CompletableFuture<Void>> reloads = new ArrayList<>();
         if (request.kinds().contains(ReloadPayload.Kind.DATA)) reloads.add(attempt(() -> reloadData(request.managedPack())));
-        if (request.kinds().contains(ReloadPayload.Kind.RESOURCES) || request.kinds().contains(ReloadPayload.Kind.LANGUAGE)) {
-            boolean languageOnly = !request.kinds().contains(ReloadPayload.Kind.RESOURCES);
-            reloads.add(attempt(() -> reloadResources(request.managedPack(), languageOnly, request.watched())));
+        Set<ReloadPayload.Kind> kinds = request.kinds();
+        if (kinds.contains(ReloadPayload.Kind.RESOURCES) || kinds.contains(ReloadPayload.Kind.LANGUAGE)
+                || kinds.contains(ReloadPayload.Kind.TEXTURES)) {
+            reloads.add(attempt(() -> reloadResources(request.managedPack(), kinds, request.watched())));
         }
         CompletableFuture.allOf(reloads.toArray(CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
             List<ReloadResultPayload.Problem> found = problems.problems();
@@ -83,8 +84,12 @@ public final class ResourceReloads {
                 "The game could not load the resources and turned off every resource pack; its log names the cause"));
     }
 
-    /** Enables the managed pack and reloads the language alone when that shows the edit, otherwise every resource. */
-    private static CompletableFuture<Void> reloadResources(String managedPack, boolean languageOnly, List<String> watched) {
+    /**
+     * Enables the managed pack, then shows the edits the quick way when only the language or textures' pixels changed:
+     * the language reloaded alone, the textures put in place. Otherwise, or where that cannot show them, every resource
+     * is reloaded.
+     */
+    private static CompletableFuture<Void> reloadResources(String managedPack, Set<ReloadPayload.Kind> kinds, List<String> watched) {
         Minecraft minecraft = Minecraft.getInstance();
         boolean enabled = !managedPack.isEmpty() && enableOnTop(minecraft.getResourcePackRepository(), managedPack);
         if (enabled) {
@@ -98,9 +103,8 @@ public final class ResourceReloads {
             }
             minecraft.options.save();
         }
-        if (languageOnly && !enabled && suppliedBy(managedPack, watched)) {
-            minecraft.getLanguageManager().onResourceManagerReload(minecraft.getResourceManager());
-            // A full reload tells the catalog through its reload listener; this reload of the language alone does not.
+        if (!kinds.contains(ReloadPayload.Kind.RESOURCES) && !enabled && quickly(managedPack, kinds, watched)) {
+            // A full reload tells the catalog through its reload listener; these quick ones do not.
             TotalDebugClient.current().ifPresent(TotalDebugClient::resourcesReloaded);
             return CompletableFuture.completedFuture(null);
         }
@@ -119,12 +123,28 @@ public final class ResourceReloads {
     }
 
     /**
+     * Shows the watched language files and textures without a full reload, where the running game already reads them from
+     * the managed pack; returns false where it cannot. A save into the player's own pack names no pack, and the copy on
+     * top may then come from another of theirs, so it takes the full reload.
+     */
+    private static boolean quickly(String managedPack, Set<ReloadPayload.Kind> kinds, List<String> watched) {
+        if (managedPack.isEmpty()) return false;
+        List<String> textures = watched.stream().filter(TextureUploads::texture).toList();
+        List<String> language = watched.stream().filter(path -> !TextureUploads.texture(path)).toList();
+        if (kinds.contains(ReloadPayload.Kind.LANGUAGE) && !suppliedBy(managedPack, language)) return false;
+        if (kinds.contains(ReloadPayload.Kind.TEXTURES) && !TextureUploads.upload(textures, managedPack)) return false;
+        if (kinds.contains(ReloadPayload.Kind.LANGUAGE)) {
+            Minecraft minecraft = Minecraft.getInstance();
+            minecraft.getLanguageManager().onResourceManagerReload(minecraft.getResourceManager());
+        }
+        return true;
+    }
+
+    /**
      * Whether the running resource manager already reads every watched language file from the managed pack. A pack or
-     * namespace added since the last reload is only seen after a full reload, and so is a save into the player's own
-     * pack: with no pack named, the copy on top may come from another of their packs.
+     * namespace added since the last reload is only seen after a full reload.
      */
     private static boolean suppliedBy(String managedPack, List<String> watched) {
-        if (managedPack.isEmpty()) return false;
         for (String path : watched) {
             String[] parts = path.split("/", 3);
             if (parts.length < 3 || !parts[0].equals("assets")) return false;

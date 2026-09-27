@@ -28,7 +28,7 @@ class ResourceProtocolCodecTest {
 
     @Test
     void aReloadAndItsAnswerSurviveTheWire() {
-        ReloadPayload request = new ReloadPayload(3, EnumSet.of(ReloadPayload.Kind.LANGUAGE, ReloadPayload.Kind.DATA),
+        ReloadPayload request = new ReloadPayload(3, EnumSet.of(ReloadPayload.Kind.LANGUAGE, ReloadPayload.Kind.DATA, ReloadPayload.Kind.TEXTURES),
                 "file/TotalDebug", List.of("assets/testmod/lang/en_us.json"));
         ReloadMessage readRequest = new ReloadMessage();
         readRequest.read(new ByteBufferInputStream(written(new ReloadMessage(request))));
