@@ -39,6 +39,12 @@ public final class TabTitles {
     }
 
     /** Titles the tab at {@code index} with {@code title} and {@code count}, keeping the tab's icon. */
+    /** Shows {@code title} without a count, such as when what it counted could not be read. */
+    public static void setUncounted(JTabbedPane tabs, int index, String title) {
+        tabs.setTitleAt(index, title);
+        tabs.setTabComponentAt(index, null);
+    }
+
     public static void setCounted(JTabbedPane tabs, int index, String title, int count) {
         String counted = NumberFormat.getIntegerInstance(Locale.ROOT).format(count);
         // The plain title stays the tab's accessible name; the component draws it.

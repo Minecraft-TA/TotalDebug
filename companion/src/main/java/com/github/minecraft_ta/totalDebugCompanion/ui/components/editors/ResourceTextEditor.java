@@ -100,8 +100,11 @@ final class ResourceTextEditor extends JPanel {
     private boolean followAfterSave;
     /** Whether that change ends what the notice said, as a new working pack does; a pack stack change does not. */
     private boolean clearAfterSave;
-    /** Why the game does not use the shown copy, as the notice last said it, or null. */
-    private String usageNotice;
+    /**
+     * What a read of the copies last put in the notice, such as why the game does not use the shown copy, or null. The
+     * next read replaces it; a save's result stays.
+     */
+    private String readNotice;
     private boolean disposed;
 
     /**
@@ -254,7 +257,8 @@ final class ResourceTextEditor extends JPanel {
             if (this.disposed || this.writes != started || this.reads != read) return;
             // A read that fails leaves the pack to save into unknown, so saving waits for the next one.
             if (failure != null) {
-                showNotice(message(failure), ThemeColors::error);
+                this.readNotice = message(failure);
+                showNotice(this.readNotice, ThemeColors::error);
                 return;
             }
             this.following = false;
@@ -271,9 +275,11 @@ final class ResourceTextEditor extends JPanel {
             else this.text.markSaved(this.packText);
             showState("");
             // Why the game did not use the copy ends when it does now, such as after the player enabled the pack.
-            if (!changed && this.notice.getText().equals(this.usageNotice)) showNotice("", ThemeColors::secondaryText);
-            this.usageNotice = found.unused();
-            if (found.unused() != null) showNotice(found.unused(), ThemeColors::warning);
+            boolean replaceable = this.notice.getText().isEmpty() || this.notice.getText().equals(this.readNotice);
+            if (replaceable) showNotice("", ThemeColors::secondaryText);
+            this.readNotice = found.unused();
+            // A save's reload failure or problems stay: they tell why, such as a pack the game turned off after a failure.
+            if (found.unused() != null && replaceable) showNotice(found.unused(), ThemeColors::warning);
             changed();
             // A save or revert that came after the record was looked at is read again.
             if (!Objects.equals(recorded(), this.seen)) readCopies(true);
@@ -373,7 +379,7 @@ final class ResourceTextEditor extends JPanel {
                     showResult(saved.problems(), saved.reloadFailure());
                     if (saved.reloadFailure().isEmpty() && saved.problems().isEmpty() && !saved.unused().isEmpty()) {
                         showNotice(saved.unused(), ThemeColors::warning);
-                        this.usageNotice = saved.unused();
+                        this.readNotice = saved.unused();
                     }
                     changed();
                     followLater();

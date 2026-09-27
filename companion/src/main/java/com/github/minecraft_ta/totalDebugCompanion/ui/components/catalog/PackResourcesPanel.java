@@ -59,6 +59,7 @@ public final class PackResourcesPanel extends JPanel {
             this.browser.setMessage("");
             TabTitles.setCounted(this.tabs, 0, ResourcesTab.FILES.title(), prepared.resources().size());
         }, failure -> {
+            TabTitles.setUncounted(this.tabs, 0, ResourcesTab.FILES.title());
             this.browser.setResources(List.of());
             this.browser.setMessage("Resources could not be read: " + failure.getMessage());
         }).follow(catalog::addListener).follow(edits::addStackListener).follow(edits::addEditListener);
@@ -68,7 +69,10 @@ public final class PackResourcesPanel extends JPanel {
         }, listed -> {
             this.packs.setPacks(listed, this.catalog.index().orElse(null));
             TabTitles.setCounted(this.tabs, 1, ResourcesTab.PACKS.title(), listed.size());
-        }, failure -> this.packs.showFailure("The resource packs could not be listed: " + failure.getMessage()))
+        }, failure -> {
+            TabTitles.setUncounted(this.tabs, 1, ResourcesTab.PACKS.title());
+            this.packs.showFailure("The resource packs could not be listed: " + failure.getMessage());
+        })
                 .whenShown(this.packs).follow(edits::addStackListener).follow(catalog::addListener);
         load();
     }

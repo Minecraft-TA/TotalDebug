@@ -340,6 +340,16 @@ class ResourceEditsTest {
     }
 
     @Test
+    void withoutAGameAnUnreadableLevelDatSaysWhetherTheDatapackIsUsedIsUnknown() throws Exception {
+        Path world = Files.createDirectories(this.directory.resolve("saves/World"));
+        Files.writeString(world.resolve("level.dat"), "not nbt");
+        Path tweaks = LevelDatFixture.datapack(world, "Tweaks");
+
+        String reason = edits(ChangeRecord.inMemory()).unusedBecause("data/tweaks/recipe/gear.json", tweaks).orElseThrow();
+        assertTrue(reason.startsWith("Whether the game enables the Tweaks datapack of World could not be read: "), reason);
+    }
+
+    @Test
     void aPackOfTheirsThatIsGoneIsNotSavedInto() throws Exception {
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
         CompletableFuture<ResourceEdits.Saved> save = edits(ChangeRecord.inMemory()).save(LANG, mine, bytes("{}"));

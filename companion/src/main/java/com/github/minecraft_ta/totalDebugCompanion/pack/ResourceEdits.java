@@ -317,7 +317,7 @@ public final class ResourceEdits {
                     .anyMatch(listed -> listed.id().equals(id) && listed.state() == ListedPack.State.DISABLED);
             return disabled ? Optional.of(notEnabled(pack)) : Optional.empty();
         } catch (IOException | RuntimeException unreadable) {
-            return Optional.empty();
+            return Optional.of("Whether the game enables the " + PackFolders.label(pack) + " could not be read: " + unreadable.getMessage());
         }
     }
 
