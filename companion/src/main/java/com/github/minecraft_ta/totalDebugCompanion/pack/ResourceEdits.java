@@ -39,6 +39,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.zip.ZipFile;
@@ -100,7 +101,7 @@ public final class ResourceEdits {
     /** Run after a save or revert has written its file and the game used it, or failed to. */
     private final List<Runnable> editListeners = new CopyOnWriteArrayList<>();
     /** Run when a working pack is chosen, which changes where resource tabs save. */
-    private final List<Runnable> workingPackListeners = new CopyOnWriteArrayList<>();
+    private final List<Consumer<String>> workingPackListeners = new CopyOnWriteArrayList<>();
     private Batch running;
     private Batch next;
 
@@ -212,11 +213,11 @@ public final class ResourceEdits {
     public void setWorkingPack(String path, Path pack) {
         String name = pack.getFileName().toString();
         this.state.setWorkingPack(side(path), name.equals(PACK_NAME) ? "" : name);
-        this.workingPackListeners.forEach(Runnable::run);
+        this.workingPackListeners.forEach(listener -> listener.accept(side(path)));
     }
 
-    /** Runs {@code listener} whenever a working pack is chosen; returns what removes it. */
-    public Runnable addWorkingPackListener(Runnable listener) {
+    /** Runs {@code listener} with the side, as {@link #side} names it, whenever a working pack is chosen; returns what removes it. */
+    public Runnable addWorkingPackListener(Consumer<String> listener) {
         this.workingPackListeners.add(listener);
         return () -> this.workingPackListeners.remove(listener);
     }
@@ -235,7 +236,8 @@ public final class ResourceEdits {
         return world.resolve("datapacks");
     }
 
-    private static String side(String path) {
+    /** The side a resource belongs to: {@code assets} or {@code data}, each with a working pack of its own. */
+    public static String side(String path) {
         return path.startsWith("assets/") ? "assets" : "data";
     }
 

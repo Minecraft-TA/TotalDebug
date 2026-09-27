@@ -111,6 +111,32 @@ class ResourceTextEditorTest {
         }
     }
 
+    @Test
+    void theWarningThatTheGameDoesNotUseTheCopyEndsWhenItDoes() throws Exception {
+        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+                InstanceState.inMemory());
+        PackStackPayload.Pack managed = new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "");
+        edits.packStack(new PackStackPayload(34, 48, List.of(managed), List.of()));
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        edits.setWorkingPack(LANG, mine);
+        String inJar = "{\"a\":\"jar\"}";
+
+        ResourceTextEditor[] editor = new ResourceTextEditor[1];
+        SwingUtilities.invokeAndWait(() -> editor[0] = new ResourceTextEditor(LANG, "testmod.jar", null,
+                new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits));
+        try {
+            awaitOnSwing(() -> editor[0].noticeText().contains("not enabled"));
+            // The player enables the pack in the game.
+            edits.packStack(new PackStackPayload(34, 48, List.of(managed,
+                    new PackStackPayload.Pack("file/MyPack", "MyPack", mine.toString())), List.of()));
+            awaitOnSwing(() -> editor[0].noticeText().isEmpty());
+        } finally {
+            SwingUtilities.invokeAndWait(editor[0]::dispose);
+        }
+    }
+
     private static void awaitOnSwing(BooleanSupplier condition) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         boolean[] met = new boolean[1];

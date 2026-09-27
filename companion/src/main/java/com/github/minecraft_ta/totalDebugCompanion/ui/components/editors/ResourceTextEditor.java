@@ -98,6 +98,8 @@ final class ResourceTextEditor extends JPanel {
     private boolean following;
     /** The working pack or the current world changed during a save, and is followed once the save completes. */
     private boolean followAfterSave;
+    /** Why the game does not use the shown copy, as the notice last said it, or null. */
+    private String usageNotice;
     private boolean disposed;
 
     /**
@@ -160,7 +162,9 @@ final class ResourceTextEditor extends JPanel {
         // Another world opening changes the current world's datapack a data file is shown from and saved into.
         this.stopFollowingPacks = edits.addStackListener(() -> SwingUtilities.invokeLater(this::packsChanged));
         // A working pack chosen in another tab is where this one saves too.
-        this.stopFollowingWorkingPack = edits.addWorkingPackListener(() -> SwingUtilities.invokeLater(this::targetChanged));
+        this.stopFollowingWorkingPack = edits.addWorkingPackListener(side -> {
+            if (side.equals(ResourceEdits.side(path))) SwingUtilities.invokeLater(this::targetChanged);
+        });
     }
 
     /**
@@ -219,6 +223,10 @@ final class ResourceTextEditor extends JPanel {
         return this.target;
     }
 
+    String noticeText() {
+        return this.notice.getText();
+    }
+
     /**
      * Shows the managed pack's copy instead of the opened file's, and names a pack that overrides the managed one.
      * {@code changed} tells that the file itself changed, such as by a revert, which ends what the notice said about it.
@@ -259,6 +267,9 @@ final class ResourceTextEditor extends JPanel {
             if (!this.text.modified() && (this.managed || this.opened == null)) this.text.load(this.packText);
             else this.text.markSaved(this.packText);
             showState("");
+            // Why the game did not use the copy ends when it does now, such as after the player enabled the pack.
+            if (!changed && this.notice.getText().equals(this.usageNotice)) showNotice("", ThemeColors::secondaryText);
+            this.usageNotice = found.unused();
             if (found.unused() != null) showNotice(found.unused(), ThemeColors::warning);
             changed();
             // A save or revert that came after the record was looked at is read again.
@@ -359,6 +370,7 @@ final class ResourceTextEditor extends JPanel {
                     showResult(saved.problems(), saved.reloadFailure());
                     if (saved.reloadFailure().isEmpty() && saved.problems().isEmpty() && !saved.unused().isEmpty()) {
                         showNotice(saved.unused(), ThemeColors::warning);
+                        this.usageNotice = saved.unused();
                     }
                     changed();
                     followLater();

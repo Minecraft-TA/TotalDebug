@@ -17,6 +17,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PackResourcesTest {
     private static final String TEXTURE = "assets/testmod/textures/item/widget.png";
@@ -119,6 +120,15 @@ class PackResourcesTest {
         assertEquals(List.of("programmer_art", "vanilla"),
                 PackResources.resourcePacks(null, this.directory).stream().map(ListedPack::id).toList(),
                 "the game drops it when it starts; a built-in pack has no file of its own and stays");
+    }
+
+    @Test
+    void withoutAGameAnUnreadableLevelDatFailsRatherThanLeavingTheWorldsPacksOut() throws Exception {
+        CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
+        Path world = Files.createDirectories(this.directory.resolve("saves/World"));
+        Files.writeString(world.resolve("level.dat"), "not nbt");
+
+        assertThrows(IOException.class, () -> PackResources.data(null, index, this.directory));
     }
 
     @Test

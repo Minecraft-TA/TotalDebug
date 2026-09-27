@@ -88,7 +88,7 @@ public final class PackResources {
      * current world's {@code level.dat} names them; a pack the game builds in memory, such as one a mod generates, adds
      * nothing Companion can read. Blocking.
      */
-    public static List<Source> data(PackStackPayload stack, CatalogIndex index, Path workspace) {
+    public static List<Source> data(PackStackPayload stack, CatalogIndex index, Path workspace) throws IOException {
         if (stack != null) return stack.dataPacks().stream().map(pack -> source(pack, index)).toList();
         // The game enables a new pack of the world's folder above the others when it loads the world.
         List<ListedPack> listed = worldDatapacks(workspace);
@@ -112,14 +112,17 @@ public final class PackResources {
         return sources;
     }
 
-    /** The current world's datapacks, or none without a world or when it cannot be read. Blocking. */
-    private static List<ListedPack> worldDatapacks(Path workspace) {
+    /**
+     * The current world's datapacks, or none without a world. A {@code level.dat} that cannot be read fails, rather than
+     * leaving the world's packs out of what the game uses. Blocking.
+     */
+    private static List<ListedPack> worldDatapacks(Path workspace) throws IOException {
         Optional<Path> world = CurrentWorld.directory(workspace);
         if (world.isEmpty()) return List.of();
         try {
             return CurrentWorld.read(world.get()).datapacks();
-        } catch (IOException | RuntimeException unreadable) {
-            return List.of();
+        } catch (RuntimeException malformed) {
+            throw new IOException("The level.dat of " + world.get().getFileName() + " is malformed: " + malformed.getMessage(), malformed);
         }
     }
 
