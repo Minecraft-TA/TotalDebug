@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -29,18 +28,6 @@ public final class CurrentWorld {
     public record Spawn(int x, int y, int z) {
     }
 
-    /** Whether the game applies a datapack. */
-    public enum PackState {
-        ENABLED,
-        DISABLED,
-        /** In the world's {@code datapacks} folder but in neither list: the game enables it when it loads the world next. */
-        NEW
-    }
-
-    /** A datapack of the world, with its file when it is in the world's {@code datapacks} folder, or null. */
-    public record Datapack(String id, PackState state, Path file) {
-    }
-
     /**
      * A world's saved state: its folder, whether the game has it open and when {@code level.dat} was saved, its name,
      * seed, game mode, difficulty and rules, its time and weather, its spawn, the version that saved it, and its
@@ -50,7 +37,7 @@ public final class CurrentWorld {
     public record Saved(Path directory, boolean open, FileTime saved, String name, Long seed, String gameMode,
                         String difficulty, boolean difficultyLocked, boolean hardcore, boolean commands, long dayTime,
                         boolean raining, boolean thundering, Spawn spawn, String version, Instant lastPlayed,
-                        Map<String, String> gameRules, List<Datapack> datapacks) {
+                        Map<String, String> gameRules, List<ListedPack> datapacks) {
         public Saved {
             gameRules = Collections.unmodifiableMap(new TreeMap<>(gameRules));
             datapacks = List.copyOf(datapacks);
@@ -118,25 +105,14 @@ public final class CurrentWorld {
 
     /**
      * The world's datapacks. The game names a pack in the world's {@code datapacks} folder {@code file/} and its file
-     * name, and takes a folder with a {@code pack.mcmeta} or a file ending in {@code .zip}.
+     * name (see {@link PackFolders}).
      */
-    private static List<Datapack> datapacks(Path world, List<String> enabled, List<String> disabled) throws IOException {
-        Map<String, Path> files = new TreeMap<>();
-        Path folder = world.resolve("datapacks");
-        if (Files.isDirectory(folder)) {
-            try (DirectoryStream<Path> entries = Files.newDirectoryStream(folder)) {
-                for (Path entry : entries) {
-                    String name = entry.getFileName().toString();
-                    boolean pack = Files.isDirectory(entry) ? Files.isRegularFile(entry.resolve("pack.mcmeta"))
-                            : Files.isRegularFile(entry) && name.endsWith(".zip");
-                    if (pack) files.put("file/" + name, entry);
-                }
-            }
-        }
-        List<Datapack> packs = new ArrayList<>();
-        for (String id : enabled.reversed()) packs.add(new Datapack(id, PackState.ENABLED, files.remove(id)));
-        for (String id : disabled) packs.add(new Datapack(id, PackState.DISABLED, files.remove(id)));
-        files.forEach((id, file) -> packs.add(new Datapack(id, PackState.NEW, file)));
+    private static List<ListedPack> datapacks(Path world, List<String> enabled, List<String> disabled) throws IOException {
+        Map<String, Path> files = PackFolders.list(world.resolve("datapacks"));
+        List<ListedPack> packs = new ArrayList<>();
+        for (String id : enabled.reversed()) packs.add(new ListedPack(id, ListedPack.State.ENABLED, files.remove(id)));
+        for (String id : disabled) packs.add(new ListedPack(id, ListedPack.State.DISABLED, files.remove(id)));
+        files.forEach((id, file) -> packs.add(new ListedPack(id, ListedPack.State.NEW, file)));
         return packs;
     }
 

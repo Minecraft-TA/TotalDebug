@@ -7,10 +7,12 @@ import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
+import com.github.minecraft_ta.totalDebugCompanion.model.PackView;
 import com.github.minecraft_ta.totalDebugCompanion.model.WorldView;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.ResourcesTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ContentBrowser;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.LogsPanel;
@@ -571,6 +573,10 @@ final class UiScenarioDriver {
                 writeWorldFile("level.dat", new byte[]{1, 2, 3});
                 navigate(new NavigationTarget.World(WorldTab.OVERVIEW));
             });
+            case PACK_PAGE -> context.once("pack-page", () -> navigate(new NavigationTarget.Pack(mainWindow.editorContext().project()
+                    .profile().workspaceDirectory().resolve("saves/Test World/datapacks/Tweaks"))));
+            case RESOURCE_PACKS -> context.once("resource-packs", () ->
+                    navigate(new NavigationTarget.PackResources(ResourcesTab.PACKS, "")));
             case WORLD_NONE -> context.once("world-none", () -> {
                 Path saves = mainWindow.editorContext().project().profile().workspaceDirectory().resolve("saves");
                 try {
@@ -671,6 +677,12 @@ final class UiScenarioDriver {
             case WORLD_NO_MATCH -> showsMessage("No game rule matches the filter.");
             case WORLD_UNREADABLE -> showsMessage("The world Test World could not be read");
             case WORLD_NONE -> showsMessage("No world has been played in this instance yet.");
+            case PACK_PAGE -> {
+                ResourceBrowser browser = findComponent(mainWindow, ResourceBrowser.class);
+                yield mainWindow.getEditorTabs().getSelectedEditor() instanceof PackView && browser != null
+                        && browser.isShowing() && browser.rowCount() > 0;
+            }
+            case RESOURCE_PACKS -> showsTable("Resources", "Pack");
             case CONTENT -> {
                 ContentBrowser browser = findComponent(mainWindow, ContentBrowser.class);
                 yield mainWindow.getEditorTabs().getSelectedEditor() instanceof ContentView && browser != null

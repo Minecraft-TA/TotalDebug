@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
 import com.github.minecraft_ta.totalDebugCompanion.model.KeyBindingsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
+import com.github.minecraft_ta.totalDebugCompanion.model.PackView;
 import com.github.minecraft_ta.totalDebugCompanion.model.WorldView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
@@ -321,7 +322,7 @@ public final class NavigationService {
                         PackResourcesView.class,
                         view -> true,
                         () -> new PackResourcesView(editors.get())
-                ).thenAccept(view -> view.show(resources.category())), activation);
+                ).thenAccept(view -> view.show(resources)), activation);
                 case NavigationTarget.Logs logs -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         LogsView.class,
                         view -> true,
@@ -345,6 +346,11 @@ public final class NavigationService {
                     view.refresh();
                     view.show(keys.binding());
                 }), activation);
+                case NavigationTarget.Pack pack -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        PackView.class,
+                        view -> view.file().equals(pack.file()),
+                        () -> new PackView(editors.get(), pack.file())
+                ).thenApply(ignored -> null), activation);
                 case NavigationTarget.World world -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         WorldView.class,
                         view -> true,
@@ -826,6 +832,7 @@ public final class NavigationService {
             case NavigationTarget.Changes ignored -> "changes";
             case NavigationTarget.KeyBindings ignored -> "key bindings";
             case NavigationTarget.World ignored -> "world";
+            case NavigationTarget.Pack pack -> "pack " + pack.file().getFileName();
             case NavigationTarget.Content content -> "modpack " + (content.registry().isEmpty() ? "content"
                     : ContentKinds.of(content.registry()).plural().toLowerCase(Locale.ROOT));
             case NavigationTarget.Definition definition -> definition.subject().format();

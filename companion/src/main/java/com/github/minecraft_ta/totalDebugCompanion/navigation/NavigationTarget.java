@@ -32,6 +32,7 @@ public sealed interface NavigationTarget permits
         NavigationTarget.Changes,
         NavigationTarget.KeyBindings,
         NavigationTarget.World,
+        NavigationTarget.Pack,
         NavigationTarget.Content,
         NavigationTarget.Definition,
         NavigationTarget.RuntimeModuleNode {
@@ -67,6 +68,13 @@ public sealed interface NavigationTarget permits
         }
     }
 
+    /** A resource pack or datapack of its own folder or zip file. */
+    record Pack(Path file) implements NavigationTarget {
+        public Pack {
+            file = Objects.requireNonNull(file, "file").toAbsolutePath().normalize();
+        }
+    }
+
     /** The current world: the one the game has open, or the one played last. */
     record World(WorldTab tab) implements NavigationTarget {
         public World {
@@ -82,10 +90,18 @@ public sealed interface NavigationTarget permits
     record PackConfiguration() implements NavigationTarget {
     }
 
-    /** Every resource of the pack as the game uses it; {@code category}, such as {@code assets/textures}, selects a kind, empty all. */
-    record PackResources(String category) implements NavigationTarget {
+    /**
+     * Every resource of the pack as the game uses it, or its resource packs. On the Files tab, {@code category}, such as
+     * {@code assets/textures}, selects a kind, empty all.
+     */
+    record PackResources(ResourcesTab tab, String category) implements NavigationTarget {
         public PackResources {
+            Objects.requireNonNull(tab, "tab");
             category = Objects.requireNonNullElse(category, "");
+        }
+
+        public PackResources(String category) {
+            this(ResourcesTab.FILES, category);
         }
     }
 

@@ -68,6 +68,8 @@ enum UiRenderScenario {
     WORLD_NO_MATCH("world-no-match", "The current world's game rules with a filter nothing matches"),
     WORLD_UNREADABLE("world-unreadable", "The World page when the current world's level.dat cannot be read"),
     WORLD_NONE("world-none", "The World page before any world was played"),
+    PACK_PAGE("pack-page", "A datapack of the world's folder with its files"),
+    RESOURCE_PACKS("resource-packs", "The resource packs on the Resources page, one enabled above the mods and one not"),
     INSPECTION("inspection", "A block read from the game with storage that differs by face");
 
     private final String id;

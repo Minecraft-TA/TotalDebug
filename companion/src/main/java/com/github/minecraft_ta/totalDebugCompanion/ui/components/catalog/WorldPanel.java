@@ -79,7 +79,7 @@ public final class WorldPanel extends JPanel {
     private final Map<WorldTab, Component> tabContent = new EnumMap<>(WorldTab.class);
     private final JPanel overview = new JPanel(new BorderLayout());
     private final GameRulesPanel rules = new GameRulesPanel();
-    private final DatapacksPanel datapacks;
+    private final PacksPanel datapacks;
     private final JLabel message = new JLabel();
     private final JPanel cards = new JPanel(new CardLayout());
     private CurrentWorld.Saved saved;
@@ -97,7 +97,7 @@ public final class WorldPanel extends JPanel {
         this.readings = Objects.requireNonNull(readings, "readings");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         this.icons = Objects.requireNonNull(icons, "icons");
-        this.datapacks = new DatapacksPanel(Objects.requireNonNull(navigator, "navigator"));
+        this.datapacks = new PacksPanel(PacksPanel.Side.DATA, Objects.requireNonNull(navigator, "navigator"));
 
         this.tabContent.put(WorldTab.OVERVIEW, scroll(this.overview));
         this.tabContent.put(WorldTab.GAME_RULES, this.rules);
@@ -270,7 +270,7 @@ public final class WorldPanel extends JPanel {
         return this.rules;
     }
 
-    DatapacksPanel datapacks() {
+    PacksPanel datapacks() {
         return this.datapacks;
     }
 
