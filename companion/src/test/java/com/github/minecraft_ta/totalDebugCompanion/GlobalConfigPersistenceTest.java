@@ -51,7 +51,9 @@ class GlobalConfigPersistenceTest {
         Path file = new AppPaths(this.home).settings();
         for (String invalid : List.of("{bad", "{\"version\":999}", "{\"version\":1}",
                 "{\"version\":1,\"theme\":\"islands-dark\",\"editorFontSize\":14,\"uiFontSize\":13,\"debuggerInlineValues\":true,"
-                        + "\"automaticDebuggerPreviews\":true,\"sidebarWidths\":{\"log-files\":-3}}")) {
+                        + "\"automaticDebuggerPreviews\":true,\"sidebarWidths\":{\"log-files\":-3}}",
+                "{\"version\":1,\"theme\":\"islands-dark\",\"editorFontSize\":14,\"uiFontSize\":13,\"debuggerInlineValues\":true,"
+                        + "\"automaticDebuggerPreviews\":true,\"sidebarWidths\":{\"log-files\":2147483648}}")) {
             Files.writeString(file, invalid);
             assertThrows(IOException.class, () -> new GlobalConfig().loadFrom(this.home));
             assertEquals(invalid, Files.readString(file));

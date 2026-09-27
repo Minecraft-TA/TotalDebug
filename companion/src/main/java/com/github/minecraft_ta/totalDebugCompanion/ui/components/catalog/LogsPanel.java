@@ -98,6 +98,7 @@ public final class LogsPanel extends JPanel {
     private final DefaultListModel<Row> shown = new DefaultListModel<>();
     private final JList<Row> rows = new JList<>(this.shown);
     private final BrowserBody body;
+    private final Sidebar sidebar;
     private final PageLoader<List<Listed>> loader;
     /** Read files by path, guarded by itself. */
     private final Map<Path, Parsed> parsed = new HashMap<>();
@@ -163,7 +164,8 @@ public final class LogsPanel extends JPanel {
         });
         ContextMenus.installList(this.rows, this::menu);
         this.body = new BrowserBody("Filter messages, loggers and mods", BrowserBody.scroll(this.rows), this.rows, this::applyFilter);
-        add(new Sidebar("log-files", 300, fileScroll, this.body), BorderLayout.CENTER);
+        this.sidebar = new Sidebar("log-files", 300, fileScroll, this.body);
+        add(this.sidebar, BorderLayout.CENTER);
 
         // The game writes its logs while it runs, so the page reads them again whenever it is shown.
         this.rowLoader = new PageLoader<>(this::prepareRows, this::showRead, failure -> showMessage(
@@ -208,6 +210,8 @@ public final class LogsPanel extends JPanel {
 
     /** Shows the listed files, replacing the list only when it changed, and the selected file's rows. */
     private void showFiles(List<Listed> listed) {
+        // A single file needs no list to choose from; its rows say what it holds.
+        this.sidebar.setSidebarShown(listed.size() > 1);
         Listed selected = this.fileList.getSelectedValue();
         Path requested = this.wanted;
         Path keep = requested != null ? requested : selected == null ? null : selected.file().path();

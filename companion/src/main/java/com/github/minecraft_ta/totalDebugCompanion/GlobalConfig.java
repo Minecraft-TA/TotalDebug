@@ -223,7 +223,7 @@ public final class GlobalConfig {
                     if (!widths.isJsonObject()) throw new IllegalArgumentException("Invalid sidebar widths");
                     for (var width : widths.getAsJsonObject().entrySet()) {
                         if (!width.getValue().isJsonPrimitive() || !width.getValue().getAsJsonPrimitive().isNumber()
-                                || width.getValue().getAsDouble() < 1 || width.getValue().getAsDouble() != Math.rint(width.getValue().getAsDouble())) {
+                                || width.getValue().getAsBigDecimal().intValueExact() < 1) {
                             throw new IllegalArgumentException("Invalid sidebar width: " + width.getKey());
                         }
                     }

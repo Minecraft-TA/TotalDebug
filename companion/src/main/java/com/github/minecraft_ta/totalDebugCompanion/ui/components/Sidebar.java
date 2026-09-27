@@ -38,18 +38,23 @@ public final class Sidebar extends JPanel {
         sidebar.setMinimumSize(new Dimension(UIScale.scale(UiMetrics.SIDEBAR_MINIMUM_WIDTH), 0));
         this.split = new ThinSplitPane(sidebar, Objects.requireNonNull(content, "content"));
         this.split.setDividerLocation(width());
-        // Only a drag is remembered; the layout squeezing the sidebar in a narrow window is not.
-        if (this.split.getUI() instanceof BasicSplitPaneUI ui) {
-            ui.getDivider().addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseReleased(MouseEvent event) {
-                    if (Sidebar.this.shown) {
-                        GlobalConfig.getInstance().setSidebarWidth(Sidebar.this.kind, UIScale.unscale(Sidebar.this.split.getDividerLocation()));
-                    }
-                }
-            });
-        }
+        followDivider();
+        // A theme or font size change replaces the split's look, and with it the divider.
+        this.split.addPropertyChangeListener("UI", event -> followDivider());
         add(this.split, BorderLayout.CENTER);
+    }
+
+    /** Remembers the width a drag of the divider leaves; the layout squeezing the sidebar in a narrow window is not a drag. */
+    private void followDivider() {
+        if (!(this.split.getUI() instanceof BasicSplitPaneUI ui)) return;
+        ui.getDivider().addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                if (Sidebar.this.shown) {
+                    GlobalConfig.getInstance().setSidebarWidth(Sidebar.this.kind, UIScale.unscale(Sidebar.this.split.getDividerLocation()));
+                }
+            }
+        });
     }
 
     /**
