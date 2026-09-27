@@ -264,7 +264,7 @@ public abstract class AbstractTextViewPanel extends JPanel {
         }
         this.disposed = true;
         if (this.searchManager != null) {
-            this.searchManager.stopThread();
+            this.searchManager.stop();
         }
         GlobalConfig.getInstance().removeEditorFontSizeListener(this.fontSizeListener);
         ThemeManager.removeThemeChangeListener(this.themeListener);

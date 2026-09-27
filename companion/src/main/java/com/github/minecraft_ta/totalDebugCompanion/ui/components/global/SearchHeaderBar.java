@@ -11,9 +11,12 @@ import javax.swing.*;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import java.awt.*;
+import java.awt.event.HierarchyEvent;
 import java.util.function.Consumer;
 
 public class SearchHeaderBar extends JPanel {
+    /** Stops the match count following the search, or null while the bar is not shown. */
+    private Runnable stopCounting;
 
     public SearchHeaderBar(SearchManager searchManager) {
         super();
@@ -44,12 +47,16 @@ public class SearchHeaderBar extends JPanel {
         add(createFlatButton("Next", Icons.NEXT_OCCURRENCE, searchManager::focusNextMatch));
 
         JLabel indexLabel = new JLabel("");
-        searchManager.addFocusedIndexChangedListener(i -> {
-            if (searchManager.getMatchCount() == 0) {
-                indexLabel.setText("");
-                return;
+        Runnable count = () -> indexLabel.setText(searchManager.getMatchCount() == 0 ? ""
+                : (searchManager.getFocusedIndex() + 1) + "/" + searchManager.getMatchCount());
+        // The editor outlives its search bars; a closed bar stops counting.
+        addHierarchyListener(event -> {
+            if ((event.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
+            if (isDisplayable() && this.stopCounting == null) this.stopCounting = searchManager.addMatchesChangedListener(count);
+            if (!isDisplayable() && this.stopCounting != null) {
+                this.stopCounting.run();
+                this.stopCounting = null;
             }
-            indexLabel.setText((i + 1) + "/" + searchManager.getMatchCount());
         });
         add(indexLabel);
         add(Box.createHorizontalGlue());
