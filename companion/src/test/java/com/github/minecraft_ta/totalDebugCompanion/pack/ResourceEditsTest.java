@@ -26,6 +26,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -237,6 +240,46 @@ class ResourceEditsTest {
         assertEquals(List.of("Unable to load model testmod:block/gear"), second.get(5, TimeUnit.SECONDS).problems());
         assertEquals(ConfigChanges.Effect.NOW, third.get(5, TimeUnit.SECONDS).effect());
         assertEquals(List.of(), third.get(5, TimeUnit.SECONDS).problems(), "the model's problem is not the language file's");
+    }
+
+    @Test
+    void revertsQueuedTogetherTakeOneReload() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ExecutorService queue = Executors.newSingleThreadExecutor();
+        try {
+            ResourceEdits edits = new ResourceEdits(this.directory, record,
+                    new ResourceOriginals(this.directory.resolve("total-debug/originals")), queue, () -> false, InstanceState.inMemory());
+            edits.packStack(STACK);
+            List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+            edits.gameConnected(message -> {
+                if (message instanceof ReloadMessage reload) {
+                    sent.add(reload.payload());
+                    edits.answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(), ""));
+                }
+                return true;
+            });
+            edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
+            edits.save("assets/testmod/textures/item/gear.png", bytes("png")).get(5, TimeUnit.SECONDS);
+            sent.clear();
+
+            // As Revert All does: every revert is queued before the first has written its file.
+            CountDownLatch held = new CountDownLatch(1);
+            queue.execute(() -> {
+                try {
+                    held.await();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            List<CompletableFuture<ResourceEdits.Saved>> reverts = record.changes().stream().map(edits::revert).toList();
+            held.countDown();
+            for (CompletableFuture<ResourceEdits.Saved> revert : reverts) revert.get(5, TimeUnit.SECONDS);
+
+            assertEquals(1, sent.size(), "one reload for both files");
+            assertEquals(2, sent.getFirst().watched().size());
+        } finally {
+            queue.shutdownNow();
+        }
     }
 
     @Test

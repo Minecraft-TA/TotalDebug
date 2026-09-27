@@ -40,6 +40,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.zip.ZipFile;
@@ -104,6 +105,8 @@ public final class ResourceEdits {
     private final List<Consumer<String>> workingPackListeners = new CopyOnWriteArrayList<>();
     private Batch running;
     private Batch next;
+    /** Saves and reverts queued but not yet past asking for their reload; the next reload waits for them. */
+    private int writing;
 
     /**
      * {@code workspace} is the game directory, {@code writes} the project's write queue, {@code gameRunning} tells
@@ -357,7 +360,7 @@ public final class ResourceEdits {
      */
     public CompletableFuture<Saved> save(String path, Path into, byte[] content) {
         Objects.requireNonNull(content, "content");
-        return finished(write(() -> {
+        return finished(writeAndApply(path, () -> {
             try {
                 Path pack = into != null ? into : pack(path);
                 if (managed(pack)) preparePack(pack, path.startsWith("assets/"));
@@ -375,7 +378,7 @@ public final class ResourceEdits {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }).thenCompose(pack -> apply(path, pack))
+        })
                 // A pack of the player's that is not enabled or lies below another keeps its copy unused, reloaded or not.
                 .thenApply(saved -> new Saved(saved.effect(), saved.pack(), saved.problems(), saved.reloadFailure(),
                         unusedBecause(path, saved.pack()).orElse(""))));
@@ -389,7 +392,7 @@ public final class ResourceEdits {
         if (!(change.target() instanceof ChangeRecord.Resource target)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Not a resource in the managed pack"));
         }
-        return finished(write(() -> {
+        return finished(writeAndApply(target.path(), () -> {
             try {
                 // Reverted already, such as twice from the Changes page before it refreshed.
                 if (!change.equals(this.record.change(target))) return target.location();
@@ -408,7 +411,30 @@ public final class ResourceEdits {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }).thenCompose(pack -> apply(target.path(), pack)));
+        }));
+    }
+
+    /**
+     * Writes the file of {@code path} in the write queue, then tells when the game uses it. Writes queued together, such
+     * as Revert All or saves in quick succession, take one reload: it is asked for once the last of them has written.
+     */
+    private CompletableFuture<Saved> writeAndApply(String path, Supplier<Path> write) {
+        synchronized (this) {
+            this.writing++;
+        }
+        return write(write).handle((pack, failure) -> {
+            try {
+                return failure != null ? CompletableFuture.<Saved>failedFuture(failure) : apply(path, pack);
+            } finally {
+                wrote();
+            }
+        }).thenCompose(Function.identity());
+    }
+
+    /** Sends the reload the writes asked for once none is left in the queue. */
+    private synchronized void wrote() {
+        this.writing--;
+        if (this.writing == 0 && this.running == null && this.next != null) sendNext();
     }
 
     /** Runs {@code write} in the project's write queue; refused once the project closes. */
@@ -523,7 +549,8 @@ public final class ResourceEdits {
         this.next.watched.add(path);
         this.next.managed |= managed;
         CompletableFuture<ReloadResultPayload> result = this.next.result;
-        if (this.running == null) sendNext();
+        // A write still queued joins this reload rather than taking another after it.
+        if (this.running == null && this.writing == 0) sendNext();
         return result;
     }
 
@@ -547,7 +574,7 @@ public final class ResourceEdits {
             synchronized (this) {
                 if (this.running == batch) {
                     this.running = null;
-                    if (this.next != null) sendNext();
+                    if (this.next != null && this.writing == 0) sendNext();
                 }
             }
         });
