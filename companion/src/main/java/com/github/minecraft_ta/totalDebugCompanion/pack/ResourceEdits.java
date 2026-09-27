@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.Worlds;
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
@@ -40,11 +42,13 @@ import java.util.function.Supplier;
 import java.util.zip.ZipFile;
 
 /**
- * Writes edited resources into the packs Companion manages, enters them in the change record and makes the game use
- * them (see docs/RESOURCE_EDITING.md). Assets go to
- * {@code resourcepacks/TotalDebug}, data to {@code datapacks/TotalDebug} of the current world: the open one, or the one
- * played last while none is open. Files are written in the project's write queue, so the record holds every write
- * before it closes. Reloads asked for while one runs are merged into one more reload after it.
+ * Writes edited resources into packs, enters them in the change record and makes the game use them (see
+ * docs/RESOURCE_EDITING.md). A file opened from a folder pack is saved in that pack. Any other file is saved into the
+ * working pack of its side: the pack Companion manages unless another folder pack was chosen, which for assets is
+ * {@code resourcepacks/TotalDebug} and for data {@code datapacks/TotalDebug} of the current world, the open one or the
+ * one played last while none is open. Only the managed pack is enabled and placed on top; the player's own packs keep
+ * their place. Files are written in the project's write queue, so the record holds every write before it closes.
+ * Reloads asked for while one runs are merged into one more reload after it.
  */
 public final class ResourceEdits {
     public static final String PACK_NAME = "TotalDebug";
@@ -68,6 +72,8 @@ public final class ResourceEdits {
         final Set<ReloadPayload.Kind> kinds = EnumSet.noneOf(ReloadPayload.Kind.class);
         final Set<String> watched = new LinkedHashSet<>();
         final CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
+        /** Whether a save in the batch went into the managed pack, which the game then enables on top. */
+        boolean managed;
     }
 
     private final Path workspace;
@@ -75,6 +81,7 @@ public final class ResourceEdits {
     private final ResourceOriginals originals;
     private final Executor writes;
     private final BooleanSupplier gameRunning;
+    private final InstanceState state;
     private final AtomicInteger requests = new AtomicInteger();
     private final Map<Integer, CompletableFuture<ReloadResultPayload>> waiting = new ConcurrentHashMap<>();
     private volatile Predicate<AbstractMessage> game;
@@ -87,16 +94,17 @@ public final class ResourceEdits {
     private Batch next;
 
     /**
-     * {@code workspace} is the game directory, {@code writes} the project's write queue, and {@code gameRunning} tells
-     * whether a game runs in the instance, connected or not.
+     * {@code workspace} is the game directory, {@code writes} the project's write queue, {@code gameRunning} tells
+     * whether a game runs in the instance, connected or not, and {@code state} keeps the working pack of each side.
      */
     public ResourceEdits(Path workspace, ChangeRecord record, ResourceOriginals originals, Executor writes,
-                         BooleanSupplier gameRunning) {
+                         BooleanSupplier gameRunning, InstanceState state) {
         this.workspace = Objects.requireNonNull(workspace, "workspace").toAbsolutePath().normalize();
         this.record = Objects.requireNonNull(record, "record");
         this.originals = Objects.requireNonNull(originals, "originals");
         this.writes = Objects.requireNonNull(writes, "writes");
         this.gameRunning = Objects.requireNonNull(gameRunning, "gameRunning");
+        this.state = Objects.requireNonNull(state, "state");
     }
 
     public ChangeRecord record() {
@@ -159,29 +167,70 @@ public final class ResourceEdits {
     }
 
     /**
-     * The managed pack folder a resource is written to. Data belongs to a world: the open one, or the one played last.
-     * Blocking.
+     * The pack a resource opened from a mod or another archive is written to: the working pack of its side, the pack
+     * Companion manages unless another folder pack was chosen and still exists. Data belongs to a world: the open one,
+     * or the one played last. Blocking.
      */
     public Path pack(String path) throws IOException {
-        if (path.startsWith("assets/")) return this.workspace.resolve("resourcepacks").resolve(PACK_NAME);
-        Path world = Worlds.open(this.workspace);
-        if (world == null) world = Worlds.lastPlayed(this.workspace);
-        if (world == null) throw new IOException("Data is written into a world's datapacks, and this game has no world yet");
-        return world.resolve("datapacks").resolve(PACK_NAME);
+        Path folder = packFolder(path);
+        String working = this.state.workingPack(side(path));
+        if (!working.isEmpty() && Files.isDirectory(folder.resolve(working))) return folder.resolve(working);
+        return folder.resolve(PACK_NAME);
     }
 
     /**
-     * The managed pack holding {@code file}, such as a data file of another world's TotalDebug datapack opened from the
-     * Changes page, or empty for a file outside the managed packs.
+     * The folder packs a resource opened from a mod or another archive can be saved into, the managed pack first, then
+     * the others of its side by name. Blocking.
+     */
+    public List<Path> packs(String path) throws IOException {
+        Path folder = packFolder(path);
+        List<Path> packs = new ArrayList<>(List.of(folder.resolve(PACK_NAME)));
+        for (Path pack : PackFolders.list(folder).values()) {
+            if (Files.isDirectory(pack) && !pack.getFileName().toString().equals(PACK_NAME)) packs.add(pack);
+        }
+        return packs;
+    }
+
+    /** Saves the resources of {@code path}'s side into {@code pack} from now on, when they come from a mod or an archive. */
+    public void setWorkingPack(String path, Path pack) {
+        String name = pack.getFileName().toString();
+        this.state.setWorkingPack(side(path), name.equals(PACK_NAME) ? "" : name);
+    }
+
+    /** Whether {@code pack} is a pack Companion manages, which it creates, enables and places on top. */
+    public static boolean managed(Path pack) {
+        return pack.getFileName().toString().equals(PACK_NAME);
+    }
+
+    /** The folder holding the packs of {@code path}'s side: {@code resourcepacks}, or the current world's datapacks. */
+    private Path packFolder(String path) throws IOException {
+        if (path.startsWith("assets/")) return this.workspace.resolve("resourcepacks");
+        Path world = Worlds.open(this.workspace);
+        if (world == null) world = Worlds.lastPlayed(this.workspace);
+        if (world == null) throw new IOException("Data is written into a world's datapacks, and this game has no world yet");
+        return world.resolve("datapacks");
+    }
+
+    private static String side(String path) {
+        return path.startsWith("assets/") ? "assets" : "data";
+    }
+
+    /**
+     * The folder pack holding {@code file}: a resource pack in {@code resourcepacks/} or a datapack of any world, such
+     * as the player's own pack or a data file of another world's TotalDebug datapack opened from the Changes page; empty
+     * for a file outside them.
      */
     public Optional<Path> packOf(Path file) {
         Path normalized = file.toAbsolutePath().normalize();
-        Path resources = this.workspace.resolve("resourcepacks").resolve(PACK_NAME);
-        if (normalized.startsWith(resources)) return Optional.of(resources);
+        Path resources = this.workspace.resolve("resourcepacks");
+        if (normalized.startsWith(resources) && resources.relativize(normalized).getNameCount() >= 2) {
+            Path pack = resources.resolve(resources.relativize(normalized).getName(0));
+            return managed(pack) || PackFolders.isPack(pack) ? Optional.of(pack) : Optional.empty();
+        }
         Path saves = this.workspace.resolve("saves");
         if (!normalized.startsWith(saves) || saves.relativize(normalized).getNameCount() < 4) return Optional.empty();
         Path pack = saves.resolve(saves.relativize(normalized).subpath(0, 3));
-        return pack.getFileName().toString().equals(PACK_NAME) && pack.getParent().getFileName().toString().equals("datapacks")
+        return pack.getParent().getFileName().toString().equals("datapacks") && (managed(pack) || PackFolders.isPack(pack))
                 ? Optional.of(pack) : Optional.empty();
     }
 
@@ -192,21 +241,30 @@ public final class ResourceEdits {
     }
 
     /**
-     * The title of an enabled pack above the managed pack that also supplies {@code path}, whose copy the game uses
-     * instead; empty when none does or the game has not named its packs. Blocking.
+     * Why the game does not use {@code pack}'s copy of {@code path}: an enabled pack above it that supplies the path too,
+     * or the pack not being enabled; empty when it uses it, or the game has not named its packs. The managed pack is
+     * enabled by the reload after a save, so only the packs above it count. Blocking.
      */
-    public Optional<String> overriddenBy(String path) {
+    public Optional<String> unusedBecause(String path, Path pack) {
         PackStackPayload current = this.stack;
         if (current == null) return Optional.empty();
         List<PackStackPayload.Pack> packs = path.startsWith("assets/") ? current.resourcePacks() : current.dataPacks();
-        int managed = -1;
+        String id = "file/" + pack.getFileName();
+        int position = -1;
         for (int index = 0; index < packs.size(); index++) {
-            if (packs.get(index).id().equals(PACK_ID)) managed = index;
+            if (packs.get(index).id().equals(id)) position = index;
         }
-        if (managed < 0) return Optional.empty();
-        for (int index = packs.size() - 1; index > managed; index--) {
-            PackStackPayload.Pack pack = packs.get(index);
-            if (!pack.source().isEmpty() && contains(Path.of(pack.source()), path)) return Optional.of(pack.title());
+        String name = "The " + PackFolders.label(pack);
+        if (position < 0) {
+            // A world that is not open has no datapacks in the game; the managed pack is enabled when it is saved to.
+            boolean elsewhere = !path.startsWith("assets/") && !Worlds.isOpen(pack.getParent().getParent());
+            return managed(pack) || elsewhere ? Optional.empty() : Optional.of(name + " is not enabled, so the game does not use this file");
+        }
+        for (int index = packs.size() - 1; index > position; index--) {
+            PackStackPayload.Pack above = packs.get(index);
+            if (!above.source().isEmpty() && contains(Path.of(above.source()), path)) {
+                return Optional.of(above.title() + " is above the " + PackFolders.label(pack) + " and supplies this file too, so the game shows its copy");
+            }
         }
         return Optional.empty();
     }
@@ -227,15 +285,15 @@ public final class ResourceEdits {
     }
 
     /**
-     * Writes {@code content} into {@code into}, a managed pack, or into the current world's when it is null, and makes
-     * the game use it.
+     * Writes {@code content} into {@code into}, a folder pack, or into the working pack of its side when it is null, and
+     * makes the game use it.
      */
     public CompletableFuture<Saved> save(String path, Path into, byte[] content) {
         Objects.requireNonNull(content, "content");
         return finished(write(() -> {
             try {
                 Path pack = into != null ? into : pack(path);
-                preparePack(pack, path.startsWith("assets/"));
+                if (managed(pack)) preparePack(pack, path.startsWith("assets/"));
                 Path file = pack.resolve(path);
                 byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
                 ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
@@ -353,7 +411,7 @@ public final class ResourceEdits {
                         : ConfigChanges.Effect.WORLD_OPENS, pack, List.of(),
                         "The game is running but not connected to Companion; connect it to use the change"));
             }
-            if (assets) {
+            if (assets && managed(pack)) {
                 try {
                     enableOffline();
                 } catch (IOException | RuntimeException exception) {
@@ -374,7 +432,7 @@ public final class ResourceEdits {
                 return CompletableFuture.completedFuture(new Saved(ConfigChanges.Effect.REJOIN, pack, List.of(), ""));
             }
         }
-        return reload(kind(path), path).handle((result, failure) -> {
+        return reload(kind(path), path, managed(pack)).handle((result, failure) -> {
             if (failure != null) {
                 return new Saved(assets ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS, pack,
                         List.of(), message(failure));
@@ -385,10 +443,11 @@ public final class ResourceEdits {
     }
 
     /** Asks the game to reload {@code kind}, merged into the next reload while one runs. */
-    private synchronized CompletableFuture<ReloadResultPayload> reload(ReloadPayload.Kind kind, String path) {
+    private synchronized CompletableFuture<ReloadResultPayload> reload(ReloadPayload.Kind kind, String path, boolean managed) {
         if (this.next == null) this.next = new Batch();
         this.next.kinds.add(kind);
         this.next.watched.add(path);
+        this.next.managed |= managed;
         CompletableFuture<ReloadResultPayload> result = this.next.result;
         if (this.running == null) sendNext();
         return result;
@@ -405,7 +464,7 @@ public final class ResourceEdits {
         this.waiting.put(id, batch.result);
         List<String> watched = new ArrayList<>(batch.watched);
         if (watched.size() > ReloadPayload.MAX_WATCHED) watched = watched.subList(0, ReloadPayload.MAX_WATCHED);
-        if (send == null || !send.test(new ReloadMessage(new ReloadPayload(id, batch.kinds, PACK_ID, watched)))) {
+        if (send == null || !send.test(new ReloadMessage(new ReloadPayload(id, batch.kinds, batch.managed ? PACK_ID : "", watched)))) {
             this.waiting.remove(id);
             batch.result.completeExceptionally(new IOException("The game is not connected"));
         }

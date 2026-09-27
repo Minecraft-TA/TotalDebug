@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -26,7 +27,8 @@ class ResourceTextEditorTest {
     void aRevertElsewhereShowsTheOpenedFileAgain() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = new ResourceEdits(this.directory, record,
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false);
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+                InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
         String saved = "{\"a\":\"saved\"}";
@@ -51,7 +53,8 @@ class ResourceTextEditorTest {
     void aDeletedFileOfTheManagedPackStaysAsUnsavedText() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = new ResourceEdits(this.directory, record,
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false);
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+                InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
         String added = "{\"a\":\"added\"}";

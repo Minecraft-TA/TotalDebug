@@ -99,6 +99,7 @@ import javax.swing.JTable;
 import javax.swing.AbstractButton;
 import javax.swing.Action;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -575,6 +576,10 @@ final class UiScenarioDriver {
             });
             case PACK_PAGE -> context.once("pack-page", () -> navigate(new NavigationTarget.Pack(mainWindow.editorContext().project()
                     .profile().workspaceDirectory().resolve("saves/Test World/datapacks/Tweaks"))));
+            case SAVE_INTO -> context.once("save-into", () -> {
+                var mod = mainWindow.editorContext().project().catalog().index().orElseThrow().mod("testmod").orElseThrow();
+                navigate(new NavigationTarget.ArchiveEntry(Path.of(mod.file()), "assets/testmod/models/item/widget.json"));
+            });
             case RESOURCE_PACKS -> context.once("resource-packs", () ->
                     navigate(new NavigationTarget.PackResources(ResourcesTab.PACKS, "")));
             case WORLD_NONE -> context.once("world-none", () -> {
@@ -683,6 +688,7 @@ final class UiScenarioDriver {
                         && browser.isShowing() && browser.rowCount() > 0;
             }
             case RESOURCE_PACKS -> showsTable("Resources", "Pack");
+            case SAVE_INTO -> findComponents(mainWindow, JComboBox.class).stream().anyMatch(box -> box.isShowing() && box.getItemCount() > 1);
             case CONTENT -> {
                 ContentBrowser browser = findComponent(mainWindow, ContentBrowser.class);
                 yield mainWindow.getEditorTabs().getSelectedEditor() instanceof ContentView && browser != null
