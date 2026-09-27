@@ -24,12 +24,18 @@ final class TexturePixels {
     private record Stroke(int[] pixels, int[] before, int[] after) {
     }
 
+    /** The most changed pixels the strokes that can be undone keep together; the oldest strokes go first. */
+    static final int HISTORY_PIXELS = 16 * 1024 * 1024;
+
     /** The most pixels a sheet has whose colors are counted for the palette; a larger one offers none. */
     static final int PALETTE_PIXELS = 1024 * 1024;
 
     private BufferedImage sheet;
     private final Deque<Stroke> undone = new ArrayDeque<>();
     private final Deque<Stroke> done = new ArrayDeque<>();
+    /** How many changed pixels the strokes in {@code done} and {@code undone} keep, and how many they may. */
+    private long kept;
+    private final long history;
     /**
      * How many pixels have each color that is not fully transparent, kept up to date by every change; null for a sheet
      * larger than {@link #PALETTE_PIXELS}, whose colors could fill the memory.
@@ -47,6 +53,12 @@ final class TexturePixels {
 
     /** Edits a copy of {@code image}. */
     TexturePixels(BufferedImage image) {
+        this(image, HISTORY_PIXELS);
+    }
+
+    /** Edits a copy of {@code image}, keeping strokes to undo up to {@code history} changed pixels. */
+    TexturePixels(BufferedImage image, long history) {
+        this.history = history;
         replace(image);
     }
 
@@ -60,6 +72,7 @@ final class TexturePixels {
         this.sheet = copy(image);
         this.done.clear();
         this.undone.clear();
+        this.kept = 0;
         this.strokeId = 0;
         this.stamps = null;
         this.counts = (long) this.sheet.getWidth() * this.sheet.getHeight() <= PALETTE_PIXELS ? new HashMap<>() : null;
@@ -167,8 +180,12 @@ final class TexturePixels {
         for (int position = 0; position < this.changed; position++) {
             after[position] = this.sheet.getRGB(pixels[position] % width, pixels[position] / width);
         }
-        this.done.push(new Stroke(pixels, before, after));
+        this.undone.forEach(dropped -> this.kept -= dropped.pixels().length);
         this.undone.clear();
+        this.done.push(new Stroke(pixels, before, after));
+        this.kept += pixels.length;
+        // A long history of large fills could fill the memory; the oldest strokes are the ones given up.
+        while (this.kept > this.history && this.done.size() > 1) this.kept -= this.done.removeLast().pixels().length;
         return true;
     }
 

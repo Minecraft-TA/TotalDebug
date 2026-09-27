@@ -190,12 +190,13 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
 
     /** Takes back the last stroke; a stroke being drawn is finished first. */
     private void undo() {
-        if (this.pixels.undo()) edited();
+        // While another pack's copy is read, an undo would be kept over that copy.
+        if (this.editable && this.pixels.undo()) edited();
     }
 
     /** Draws the last stroke taken back again; a stroke being drawn is finished first. */
     private void redo() {
-        if (this.pixels.redo()) edited();
+        if (this.editable && this.pixels.redo()) edited();
     }
 
     /** Shows the pixels after a stroke, undo or redo changed them. */
@@ -207,8 +208,8 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
 
     /** Shows what can be undone and the colors of the shown pixels. */
     private void refresh() {
-        this.undo.setEnabled(this.pixels.canUndo());
-        this.redo.setEnabled(this.pixels.canRedo());
+        this.undo.setEnabled(this.editable && this.pixels.canUndo());
+        this.redo.setEnabled(this.editable && this.pixels.canRedo());
         this.palette.removeAll();
         for (int swatch : this.pixels.palette(PALETTE_SIZE)) {
             FlatIconButton button = new FlatIconButton(new Swatch(swatch, 10), false);
@@ -411,6 +412,7 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     protected void setEditable(boolean editable) {
         this.editable = editable;
         this.view.updateCursor();
+        refresh();
     }
 
     @Override

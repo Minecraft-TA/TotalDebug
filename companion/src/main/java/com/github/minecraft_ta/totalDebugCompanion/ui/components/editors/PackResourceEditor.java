@@ -227,7 +227,9 @@ abstract class PackResourceEditor<V> extends JPanel {
      * too, then shows the new pack's copy.
      */
     private void chooseTarget() {
-        if (this.listingTargets || !(this.target.getSelectedItem() instanceof Path chosen) || chosen.equals(this.pack)) return;
+        if (this.listingTargets || !(this.target.getSelectedItem() instanceof Path chosen)) return;
+        // After a pack whose copy could not be read, choosing the one shown before goes back to it.
+        if (chosen.equals(this.pack) && !this.following) return;
         this.following = true;
         setEditable(false);
         changed();

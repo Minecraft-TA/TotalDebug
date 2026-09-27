@@ -117,6 +117,20 @@ class TexturePixelsTest {
     }
 
     @Test
+    void theOldestStrokesAreGivenUpWhenTheHistoryGrowsTooLarge() {
+        TexturePixels pixels = new TexturePixels(new BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB), 32);
+        for (int color : new int[]{RED, BLUE, RED}) {
+            pixels.begin();
+            pixels.fill(0, 0, color, ALL);
+            pixels.end();
+        }
+        assertTrue(pixels.undo());
+        assertTrue(pixels.undo());
+        assertEquals(RED, pixels.color(0, 0), "two fills of 16 pixels fit, the first was given up");
+        assertFalse(pixels.undo());
+    }
+
+    @Test
     void aSheetTooLargeToCountHasNoPalette() {
         TexturePixels pixels = new TexturePixels(new BufferedImage(1025, 1024, BufferedImage.TYPE_INT_ARGB));
         pixels.begin();
