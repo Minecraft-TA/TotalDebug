@@ -25,6 +25,7 @@ import java.awt.FlowLayout;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -153,6 +154,14 @@ abstract class PackResourceEditor<V> extends JPanel {
     /** A copy of the shown content that later edits of the view leave alone; content that never changes in place is its own. */
     protected V copy(V content) {
         return content;
+    }
+
+    /**
+     * Files the resource needs beside it in the pack it is saved into, by pack path, written only where that pack has
+     * none, such as a texture's animation; none by default.
+     */
+    protected Map<String, byte[]> alongside() {
+        return Map.of();
     }
 
     /** Lets the view be edited, or keeps it as it is while the pack's copy is not read yet. */
@@ -395,6 +404,7 @@ abstract class PackResourceEditor<V> extends JPanel {
         this.state.setText("Reloading in the game");
         this.saving = edited;
         Path into = this.opened != null ? this.opened : this.pack;
+        Map<String, byte[]> alongside = alongside();
         // Encoding a large texture takes a while, so it runs with the rest of the save.
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -402,7 +412,7 @@ abstract class PackResourceEditor<V> extends JPanel {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }).thenCompose(bytes -> this.edits.save(this.path, into, bytes))
+        }).thenCompose(bytes -> this.edits.save(this.path, into, bytes, alongside))
                 .whenComplete((saved, failure) -> SwingUtilities.invokeLater(() -> {
                     this.busy = false;
                     this.saving = null;

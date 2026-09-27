@@ -275,6 +275,53 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aTexturesAnimationIsWrittenBesideItWhereThePackHasNone() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        edits.packStack(STACK);
+        String texture = "assets/testmod/textures/block/gear.png";
+        byte[] animation = bytes("{\"animation\":{\"frametime\":2}}");
+
+        Path pack = edits.save(texture, null, bytes("png"), Map.of(texture + ".mcmeta", animation)).get(5, TimeUnit.SECONDS).pack();
+        assertEquals("{\"animation\":{\"frametime\":2}}", Files.readString(pack.resolve(texture + ".mcmeta")),
+                "the game reads a texture's animation only from its own pack or one above it");
+        assertEquals(2, record.changes().size(), "the animation is a change of its own, reverted by deleting it");
+
+        Files.writeString(pack.resolve(texture + ".mcmeta"), "{\"animation\":{\"frametime\":5}}");
+        edits.save(texture, null, bytes("png2"), Map.of(texture + ".mcmeta", animation)).get(5, TimeUnit.SECONDS);
+        assertEquals("{\"animation\":{\"frametime\":5}}", Files.readString(pack.resolve(texture + ".mcmeta")),
+                "the pack's own animation stays");
+
+        Files.delete(pack.resolve(texture + ".mcmeta"));
+        edits.save(texture, null, bytes("png3"), Map.of(texture + ".mcmeta", animation)).get(5, TimeUnit.SECONDS);
+        assertFalse(Files.exists(pack.resolve(texture + ".mcmeta")),
+                "a copy the pack had already, static here, is not given the opened file's animation");
+    }
+
+    @Test
+    void anAnimationWrittenBesideATextureIsReloadedWithIt() throws Exception {
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packStack(STACK);
+        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        edits.gameConnected(message -> {
+            if (message instanceof ReloadMessage reload) {
+                sent.add(reload.payload());
+                edits.answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(new ReloadResultPayload.Problem(
+                        "assets/testmod/textures/block/gear.png.mcmeta", "Bad section")), ""));
+            }
+            return true;
+        });
+        String texture = "assets/testmod/textures/block/gear.png";
+
+        ResourceEdits.Saved saved = edits.save(texture, null, bytes("png"), Map.of(texture + ".mcmeta", bytes("{}")))
+                .get(5, TimeUnit.SECONDS);
+        assertEquals(1, sent.size());
+        assertEquals(Set.of(texture, texture + ".mcmeta"), Set.copyOf(sent.getFirst().watched()),
+                "the game takes the new animation into account, not only the pixels");
+        assertTrue(saved.problems().contains("Bad section"), "a problem with the animation is the save's own");
+    }
+
+    @Test
     void aFileOfAnotherWorldsPackIsSavedIntoThatPack() throws Exception {
         Path older = world("Older");
         world("Newer");

@@ -35,6 +35,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -78,6 +79,8 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     private boolean editable;
     /** The last pixel drawn, where Shift+click starts a line, or null. */
     private Point last;
+    /** The texture's animation file as it was read beside the opened texture, or null without one. */
+    private final byte[] metadata;
     /** The content last loaded or saved, which the shown pixels are compared with; null for none. */
     private BufferedImage saved;
 
@@ -91,6 +94,7 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     private TextureEditor(String path, String origin, Path pack, LoadedResource.Image content, BufferedImage opened,
                           ResourceEdits edits, Consumer<String> metadata) {
         super(path, origin, pack, opened, edits);
+        this.metadata = content.metadata();
         this.pixels = new TexturePixels(opened);
         this.saved = opened;
         this.view = new ImageViewPanel(new LoadedResource.Image(this.pixels.sheet(), content.byteCount(), content.animation(),
@@ -335,6 +339,15 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
         public int getIconHeight() {
             return this.size;
         }
+    }
+
+    /**
+     * The opened texture's animation, which the game reads only from the pack that supplies the texture or one above it:
+     * without a copy beside the saved texture, the game would show every frame at once.
+     */
+    @Override
+    protected Map<String, byte[]> alongside() {
+        return this.metadata == null ? Map.of() : Map.of(path() + ".mcmeta", this.metadata);
     }
 
     @Override
