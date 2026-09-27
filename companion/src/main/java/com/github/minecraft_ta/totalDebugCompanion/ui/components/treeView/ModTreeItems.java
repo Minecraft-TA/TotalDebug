@@ -94,7 +94,10 @@ final class ModTreeItems {
      */
     static List<TreeItem> packChildren(Snapshot snapshot) {
         List<TreeItem> children = new ArrayList<>();
-        children.add(new Mods(snapshot));
+        // Logs alone keep the root without a catalog or a runtime, and Mods then has nothing to list.
+        boolean mods = snapshot.index() != null || snapshot.sources().modules().stream().anyMatch(module ->
+                module.kind() == RuntimeInventory.ModuleKind.MOD || module.kind() == RuntimeInventory.ModuleKind.PLATFORM);
+        if (mods) children.add(new Mods(snapshot));
         if (snapshot.index() != null && !snapshot.index().entries().isEmpty()) children.add(new Content(null, snapshot.index().content()));
         if (snapshot.index() != null) children.add(new Configuration());
         if (snapshot.index() != null) children.add(new PackResources());

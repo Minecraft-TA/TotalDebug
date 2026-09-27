@@ -98,6 +98,7 @@ public final class LogsPanel extends JPanel {
 
     private final PackCatalogService catalog;
     private final Path workspace;
+    private final Runnable removeCatalogListener;
     private final Consumer<NavigationTarget> navigator;
     private final DefaultListModel<Listed> files = new DefaultListModel<>();
     private final JList<Listed> fileList = new JList<>(this.files);
@@ -206,6 +207,12 @@ public final class LogsPanel extends JPanel {
         addHierarchyListener(event -> {
             if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing()) load();
         });
+        // Rows name the mods behind frames and failures as the catalog knows them.
+        this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(() -> {
+            if (this.disposed) return;
+            this.rowsOf = null;
+            showRows();
+        }));
     }
 
     private static PrimarySecondaryLabel label(JList<?> list, boolean selected, Icon icon, PrimarySecondaryText text, int indent) {
@@ -283,6 +290,8 @@ public final class LogsPanel extends JPanel {
         }
         if (listed.isEmpty()) {
             this.rowsOf = null;
+            // A file still being read must not bring its rows back.
+            this.rowGeneration++;
             this.all = List.of();
             showMessage("The game has written no log or crash report yet.");
             return;
@@ -484,5 +493,6 @@ public final class LogsPanel extends JPanel {
 
     public void dispose() {
         this.disposed = true;
+        this.removeCatalogListener.run();
     }
 }

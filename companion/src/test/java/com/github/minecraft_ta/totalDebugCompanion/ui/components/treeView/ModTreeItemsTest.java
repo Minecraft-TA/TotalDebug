@@ -52,6 +52,10 @@ class ModTreeItemsTest {
         assertEquals(ModTreeItems.CHANGES, changed.getLast().getName(), "Changes appears once Companion changed something");
         assertEquals(ModTreeItems.LOGS, changed.get(changed.size() - 2).getName(), "Logs appears once the game wrote any");
         assertEquals("3", changed.getLast().getPresentation().secondary());
+        List<TreeItem> logsOnly = ModTreeItems.packChildren(new ModTreeItems.Snapshot(new PackCatalogService.None(),
+                RuntimeSourceCatalog.empty(), 0, true));
+        assertEquals(List.of(ModTreeItems.LOGS), logsOnly.stream().map(TreeItem::getName).toList(),
+                "without a catalog or a runtime Mods would have nothing to list");
         assertEquals(List.of("neoforge", "testmod", ModTreeItems.OTHER_NAMESPACES), mods.stream().map(TreeItem::getName).toList());
         TreeItem testmod = mods.get(1);
         assertTrue(testmod.isActivatable());
