@@ -123,6 +123,29 @@ class TextureEditorTest {
         }
     }
 
+    @Test
+    void aWorkingPackCopyTooLargeToEditIsRefusedBeforeItIsDecoded() throws Exception {
+        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+                InstanceState.inMemory());
+        Path copy = edits.pack(TEXTURE).resolve(TEXTURE);
+        Files.createDirectories(copy.getParent());
+        ImageIO.write(new BufferedImage(2049, 2048, BufferedImage.TYPE_INT_ARGB), "png", copy.toFile());
+
+        TextureEditor[] editor = new TextureEditor[1];
+        SwingUtilities.invokeAndWait(() -> editor[0] = new TextureEditor(TEXTURE, "testmod.jar", null,
+                new LoadedResource.Image(new BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB), 100), edits, ignored -> { }));
+        try {
+            awaitOnSwing(() -> editor[0].noticeText().contains("2049 x 2048"));
+            SwingUtilities.invokeAndWait(() -> {
+                selectTool(editor[0], "Pencil");
+                assertFalse(editor[0].view().painter().paints(), "a copy that cannot be read is not drawn over");
+            });
+        } finally {
+            SwingUtilities.invokeAndWait(editor[0]::dispose);
+        }
+    }
+
     /** Clicks the toolbar button with the accessible name {@code name}. */
     private static void selectTool(TextureEditor editor, String name) {
         for (Component component : allComponents(editor.view())) {

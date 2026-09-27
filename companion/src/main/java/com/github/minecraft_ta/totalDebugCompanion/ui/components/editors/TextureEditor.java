@@ -8,6 +8,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
 import javax.swing.Box;
@@ -31,6 +33,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Iterator;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -46,6 +49,11 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     private static final int PALETTE_SIZE = 16;
     /** The most pixels a texture has that is edited; a larger one, far above what textures use, is shown only. */
     private static final int EDITABLE_PIXELS = 2048 * 2048;
+    /**
+     * The content when the pack holds no copy and the opened file cannot supply one. It differs from every image, even a
+     * transparent one: whatever is shown then is unsaved.
+     */
+    private static final BufferedImage NONE = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
 
     private enum Tool {
         PENCIL, ERASER, FILL, PICKER
@@ -102,7 +110,11 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
 
     /** Whether an image is small enough to edit here. */
     static boolean editable(BufferedImage image) {
-        return (long) image.getWidth() * image.getHeight() <= EDITABLE_PIXELS;
+        return editable(image.getWidth(), image.getHeight());
+    }
+
+    private static boolean editable(int width, int height) {
+        return (long) width * height <= EDITABLE_PIXELS;
     }
 
     /** Draws with the texture's most used color, until a color is chosen. */
@@ -331,6 +343,7 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
 
     @Override
     protected boolean same(BufferedImage first, BufferedImage second) {
+        if (first == NONE || second == NONE) return first == second;
         return TexturePixels.same(first, second);
     }
 
@@ -338,8 +351,10 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     protected void load(BufferedImage content) {
         this.saved = content;
         // The same pixels keep what can be undone.
-        if (TexturePixels.same(this.pixels.sheet(), content)) return;
-        this.pixels.replace(content);
+        if (same(this.pixels.sheet(), content)) return;
+        // With no copy left, Discard leaves transparent pixels, as text is left empty.
+        this.pixels.replace(content == NONE ? new BufferedImage(this.pixels.sheet().getWidth(), this.pixels.sheet().getHeight(),
+                BufferedImage.TYPE_INT_ARGB) : content);
         this.last = null;
         this.view.setSheet(this.pixels.sheet());
         if (!this.colorChosen) takeMostUsedColor();
@@ -353,14 +368,28 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
 
     @Override
     protected boolean modified() {
-        return !TexturePixels.same(this.pixels.sheet(), this.saved);
+        return !same(this.pixels.sheet(), this.saved);
     }
 
+    /** The pack's copy, refused unreadable or too large to edit before it is decoded. */
     @Override
     protected BufferedImage decode(byte[] bytes) throws IOException {
-        BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
-        if (image == null) throw new IOException("The copy in the pack is not a PNG image");
-        return TexturePixels.copy(image);
+        try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            Iterator<ImageReader> readers = input == null ? null : ImageIO.getImageReaders(input);
+            if (readers == null || !readers.hasNext()) throw new IOException("The copy in the pack is not a PNG image");
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(input, true, true);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                if (!editable(width, height)) {
+                    throw new IOException("The copy in the pack is " + width + " x " + height + ", larger than the 2048 x 2048 edited here");
+                }
+                return TexturePixels.copy(reader.read(0));
+            } finally {
+                reader.dispose();
+            }
+        }
     }
 
     @Override
@@ -373,10 +402,9 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
         return TexturePixels.copy(content);
     }
 
-    /** Transparent pixels of the texture's size, as a text resource with no copy left is empty text. */
     @Override
     protected BufferedImage none() {
-        return new BufferedImage(this.pixels.sheet().getWidth(), this.pixels.sheet().getHeight(), BufferedImage.TYPE_INT_ARGB);
+        return NONE;
     }
 
     @Override

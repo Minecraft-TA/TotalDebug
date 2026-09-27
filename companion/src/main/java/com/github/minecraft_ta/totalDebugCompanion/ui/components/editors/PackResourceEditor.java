@@ -229,6 +229,7 @@ abstract class PackResourceEditor<V> extends JPanel {
     private void chooseTarget() {
         if (this.listingTargets || !(this.target.getSelectedItem() instanceof Path chosen) || chosen.equals(this.pack)) return;
         this.following = true;
+        setEditable(false);
         changed();
         this.edits.setWorkingPack(this.path, chosen);
     }
@@ -252,6 +253,9 @@ abstract class PackResourceEditor<V> extends JPanel {
             return;
         }
         this.following = true;
+        // A new working pack's copy is read before anything is edited, as when the tab opened. A pack stack change, which
+        // comes after every reload and rarely changes the pack, leaves typing and drawing alone.
+        if (changed) setEditable(false);
         changed();
         readCopies(changed);
     }

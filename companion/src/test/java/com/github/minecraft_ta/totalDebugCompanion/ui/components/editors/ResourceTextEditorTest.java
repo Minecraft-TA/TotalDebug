@@ -103,6 +103,7 @@ class ResourceTextEditorTest {
             SwingUtilities.invokeAndWait(() -> {
                 editor[0].textPanel().editorPane.setText(edited);
                 editor[0].targetBox().setSelectedItem(mine);
+                assertFalse(editor[0].textPanel().editorPane.isEditable(), "the chosen pack's copy is read before typing goes on");
                 // Before the chosen pack's copy is read, the tab still shows the last pack's.
                 editor[0].save();
             });

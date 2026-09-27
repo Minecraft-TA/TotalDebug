@@ -12,7 +12,6 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,8 +35,15 @@ final class TexturePixels {
      * larger than {@link #PALETTE_PIXELS}, whose colors could fill the memory.
      */
     private Map<Integer, Integer> counts;
-    /** The colors before the stroke under way changed them, by pixel index in the order they changed; null between strokes. */
-    private Map<Integer, Integer> stroke;
+    /** The stroke each pixel was last changed by, so a stroke records a pixel's color before it once; made on the first stroke. */
+    private int[] stamps;
+    /** The stroke under way, counted from 1, or 0 between strokes. */
+    private int strokeId;
+    private int strokes;
+    /** The pixels the stroke under way changed, by index into the sheet, and their colors before it; {@code changed} of them are used. */
+    private int[] changedPixels = new int[64];
+    private int[] changedBefore = new int[64];
+    private int changed;
 
     /** Edits a copy of {@code image}. */
     TexturePixels(BufferedImage image) {
@@ -54,7 +60,8 @@ final class TexturePixels {
         this.sheet = copy(image);
         this.done.clear();
         this.undone.clear();
-        this.stroke = null;
+        this.strokeId = 0;
+        this.stamps = null;
         this.counts = (long) this.sheet.getWidth() * this.sheet.getHeight() <= PALETTE_PIXELS ? new HashMap<>() : null;
         if (this.counts == null) return;
         int width = this.sheet.getWidth();
@@ -71,20 +78,27 @@ final class TexturePixels {
 
     /** Starts a stroke; the changes until {@link #end()} are undone as one. */
     void begin() {
-        this.stroke = new LinkedHashMap<>();
-    }
-
-    /** Whether a stroke is under way. */
-    boolean drawing() {
-        return this.stroke != null;
+        if (this.stamps == null) this.stamps = new int[this.sheet.getWidth() * this.sheet.getHeight()];
+        this.strokeId = ++this.strokes;
+        this.changed = 0;
     }
 
     /** Sets one pixel inside {@code bounds} to {@code argb} as part of the stroke under way; one outside is left alone. */
     void set(int x, int y, int argb, Rectangle bounds) {
-        if (this.stroke == null || !bounds.contains(x, y)) return;
+        if (this.strokeId == 0 || !bounds.contains(x, y)) return;
         int before = this.sheet.getRGB(x, y);
         if (before == argb) return;
-        this.stroke.putIfAbsent(y * this.sheet.getWidth() + x, before);
+        int index = y * this.sheet.getWidth() + x;
+        if (this.stamps[index] != this.strokeId) {
+            this.stamps[index] = this.strokeId;
+            if (this.changed == this.changedPixels.length) {
+                this.changedPixels = Arrays.copyOf(this.changedPixels, this.changed * 2);
+                this.changedBefore = Arrays.copyOf(this.changedBefore, this.changed * 2);
+            }
+            this.changedPixels[this.changed] = index;
+            this.changedBefore[this.changed] = before;
+            this.changed++;
+        }
         write(x, y, before, argb);
     }
 
@@ -143,19 +157,15 @@ final class TexturePixels {
 
     /** Ends the stroke under way; returns whether it changed a pixel. */
     boolean end() {
-        Map<Integer, Integer> changed = this.stroke;
-        this.stroke = null;
-        if (changed == null || changed.isEmpty()) return false;
-        int[] pixels = new int[changed.size()];
-        int[] before = new int[changed.size()];
-        int[] after = new int[changed.size()];
-        int position = 0;
-        for (Map.Entry<Integer, Integer> entry : changed.entrySet()) {
-            int index = entry.getKey();
-            pixels[position] = index;
-            before[position] = entry.getValue();
-            after[position] = this.sheet.getRGB(index % this.sheet.getWidth(), index / this.sheet.getWidth());
-            position++;
+        boolean drawing = this.strokeId != 0;
+        this.strokeId = 0;
+        if (!drawing || this.changed == 0) return false;
+        int[] pixels = Arrays.copyOf(this.changedPixels, this.changed);
+        int[] before = Arrays.copyOf(this.changedBefore, this.changed);
+        int[] after = new int[this.changed];
+        int width = this.sheet.getWidth();
+        for (int position = 0; position < this.changed; position++) {
+            after[position] = this.sheet.getRGB(pixels[position] % width, pixels[position] / width);
         }
         this.done.push(new Stroke(pixels, before, after));
         this.undone.clear();
@@ -163,11 +173,11 @@ final class TexturePixels {
     }
 
     boolean canUndo() {
-        return this.stroke == null && !this.done.isEmpty();
+        return this.strokeId == 0 && !this.done.isEmpty();
     }
 
     boolean canRedo() {
-        return this.stroke == null && !this.undone.isEmpty();
+        return this.strokeId == 0 && !this.undone.isEmpty();
     }
 
     /** Takes back the last stroke; returns whether there was one. A stroke under way is finished first. */
