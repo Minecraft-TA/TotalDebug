@@ -14,12 +14,10 @@ import java.util.regex.Pattern;
 final class ResourceTextEditor extends PackResourceEditor<String> {
     private static final Pattern LINE = Pattern.compile("line (\\d+)");
 
-    private final String path;
     private final EditableTextPanel text;
 
     ResourceTextEditor(String path, String origin, Path pack, LoadedResource.Text content, ResourceEdits edits) {
         super(path, origin, pack, content.value(), edits);
-        this.path = path;
         this.text = new EditableTextPanel(content.syntaxStyle(), this::changed, this::save);
         this.text.load(content.value());
         start(this.text);
@@ -77,7 +75,7 @@ final class ResourceTextEditor extends PackResourceEditor<String> {
     /** Checks the text as the game parses it, and moves to the line a problem names. */
     @Override
     protected Optional<String> check(String content) {
-        Optional<String> problem = ResourcePaths.check(this.path, content);
+        Optional<String> problem = ResourcePaths.check(path(), content);
         problem.map(LINE::matcher).filter(Matcher::find).ifPresent(line -> this.text.goToLine(Integer.parseInt(line.group(1))));
         return problem;
     }

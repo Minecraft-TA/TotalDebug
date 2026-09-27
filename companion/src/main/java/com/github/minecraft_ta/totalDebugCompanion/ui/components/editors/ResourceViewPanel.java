@@ -144,20 +144,25 @@ public final class ResourceViewPanel extends JPanel {
         String path = this.edits == null ? null : ResourcePaths.of(this.source).orElse(null);
         if (path == null) return new TextFileViewPanel(text, this.fileType, this::setMetadata);
         setMetadata(this.fileType.description());
-        String origin = this.source instanceof ArchiveEntrySource entry
+        return new ResourceTextEditor(path, origin(), openedPack(), text, this.edits);
+    }
+
+    /** The file an editor names as where the resource comes from, such as a mod's JAR. */
+    private String origin() {
+        return this.source instanceof ArchiveEntrySource entry
                 ? entry.archivePath().getFileName().toString() : this.source.displayName();
-        Path pack = this.source instanceof LocalFileSource file ? this.edits.packOf(file.path()).orElse(null) : null;
-        return new ResourceTextEditor(path, origin, pack, text, this.edits);
+    }
+
+    /** The folder pack the opened file lies in, which an editor saves into, or null for a file of a mod or archive. */
+    private Path openedPack() {
+        return this.source instanceof LocalFileSource file ? this.edits.packOf(file.path()).orElse(null) : null;
     }
 
     /** An editor for a texture of the pack, otherwise the image. */
     private Component imageView(LoadedResource.Image image) {
         String path = this.edits == null ? null : ResourcePaths.of(this.source).orElse(null);
         if (path == null || !ResourcePaths.editableImage(path)) return new ImageViewPanel(image, this::setMetadata);
-        String origin = this.source instanceof ArchiveEntrySource entry
-                ? entry.archivePath().getFileName().toString() : this.source.displayName();
-        Path pack = this.source instanceof LocalFileSource file ? this.edits.packOf(file.path()).orElse(null) : null;
-        return new TextureEditor(path, origin, pack, image, this.edits, this::setMetadata);
+        return new TextureEditor(path, origin(), openedPack(), image, this.edits, this::setMetadata);
     }
 
     /** Whether the tab can close: an edited resource has no unsaved changes, or they were discarded after asking. */
@@ -206,6 +211,7 @@ public final class ResourceViewPanel extends JPanel {
     @Override
     public boolean requestFocusInWindow() {
         if (this.activeView instanceof ResourceTextEditor editor) return editor.textPanel().requestFocusInWindow();
+        if (this.activeView instanceof TextureEditor editor && editor.focusImage()) return true;
         return this.activeView instanceof AbstractTextViewPanel textView
                 ? textView.requestFocusInWindow() : super.requestFocusInWindow();
     }
@@ -213,6 +219,7 @@ public final class ResourceViewPanel extends JPanel {
     @Override
     public boolean requestFocusInWindow(FocusEvent.Cause cause) {
         if (this.activeView instanceof ResourceTextEditor editor) return editor.textPanel().requestFocusInWindow(cause);
+        if (this.activeView instanceof TextureEditor editor && editor.focusImage()) return true;
         return this.activeView instanceof AbstractTextViewPanel textView
                 ? textView.requestFocusInWindow(cause) : super.requestFocusInWindow(cause);
     }

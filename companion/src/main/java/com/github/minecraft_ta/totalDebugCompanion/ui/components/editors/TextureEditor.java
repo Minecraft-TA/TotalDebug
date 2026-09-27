@@ -32,7 +32,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -71,9 +70,15 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     /** {@code metadata} receives the status line: size, zoom and the pixel under the mouse. */
     TextureEditor(String path, String origin, Path pack, LoadedResource.Image content, ResourceEdits edits,
                   Consumer<String> metadata) {
-        super(path, origin, pack, content.value(), edits);
-        this.pixels = new TexturePixels(content.value());
-        this.saved = content.value();
+        // Gray textures are read as the game reads them, once, so every copy compares alike.
+        this(path, origin, pack, content, TexturePixels.copy(content.value()), edits, metadata);
+    }
+
+    private TextureEditor(String path, String origin, Path pack, LoadedResource.Image content, BufferedImage opened,
+                          ResourceEdits edits, Consumer<String> metadata) {
+        super(path, origin, pack, opened, edits);
+        this.pixels = new TexturePixels(opened);
+        this.saved = opened;
         this.view = new ImageViewPanel(new LoadedResource.Image(this.pixels.sheet(), content.byteCount(), content.animation(),
                 content.animationProblem()), metadata);
         this.view.addTools(tool(this.pencil, Tool.PENCIL, "Pencil", "B"), tool(this.eraser, Tool.ERASER, "Eraser", "E"),
@@ -83,7 +88,7 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
                 action(this.redo, "Redo", "Ctrl+Shift+Z", this::redo));
         this.color.addActionListener(event -> chooseColor());
         this.view.setPainter(new Painter());
-        List<Integer> colors = this.pixels.palette(sheetBounds(), 1);
+        List<Integer> colors = this.pixels.palette(1);
         setColor(colors.isEmpty() ? 0xFF000000 : colors.getFirst());
         bindKeys();
         refresh();
@@ -93,6 +98,11 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     /** The image view, for tests. */
     ImageViewPanel view() {
         return this.view;
+    }
+
+    /** Gives the image the keyboard focus, where the tool keys work. */
+    boolean focusImage() {
+        return this.view.focusImage();
     }
 
     private Component tool(FlatIconButton button, Tool tool, String name, String key) {
@@ -150,10 +160,12 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
         });
     }
 
+    /** Takes back the last stroke; a stroke being drawn is finished first. */
     private void undo() {
         if (this.pixels.undo()) edited();
     }
 
+    /** Draws the last stroke taken back again; a stroke being drawn is finished first. */
     private void redo() {
         if (this.pixels.redo()) edited();
     }
@@ -170,19 +182,16 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
         this.undo.setEnabled(this.pixels.canUndo());
         this.redo.setEnabled(this.pixels.canRedo());
         this.palette.removeAll();
-        for (int swatch : this.pixels.palette(sheetBounds(), PALETTE_SIZE)) {
+        for (int swatch : this.pixels.palette(PALETTE_SIZE)) {
             FlatIconButton button = new FlatIconButton(new Swatch(swatch, 10), false);
-            button.setToolTipText(Tooltip.of(describe(swatch)).html());
-            button.getAccessibleContext().setAccessibleName(describe(swatch));
+            button.setToolTipText(Tooltip.action("Use Color", null).text(ImageViewPanel.describeColor(swatch)).html());
+            button.getAccessibleContext().setAccessibleName("Use Color");
+            button.getAccessibleContext().setAccessibleDescription(ImageViewPanel.describeColor(swatch));
             button.addActionListener(event -> setColor(swatch));
             this.palette.add(button);
         }
         this.palette.revalidate();
         this.palette.repaint();
-    }
-
-    private Rectangle sheetBounds() {
-        return new Rectangle(this.pixels.sheet().getWidth(), this.pixels.sheet().getHeight());
     }
 
     private void chooseColor() {
@@ -193,18 +202,23 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     private void setColor(int argb) {
         this.argb = argb;
         this.color.setIcon(new Swatch(argb, 16));
-        String description = describe(argb);
-        this.color.setToolTipText(Tooltip.of("Color").text(description + ". Click to choose another").html());
-        this.color.getAccessibleContext().setAccessibleName("Color " + description);
+        this.color.setToolTipText(Tooltip.action("Choose Color", null).text("Draws with " + ImageViewPanel.describeColor(argb)).html());
+        this.color.getAccessibleContext().setAccessibleName("Choose Color");
+        this.color.getAccessibleContext().setAccessibleDescription(ImageViewPanel.describeColor(argb));
     }
 
-    /** A color as the status line names a pixel's, such as {@code #3F76E4, alpha 255}. */
-    static String describe(int argb) {
-        return "#" + String.format(Locale.ROOT, "%06X", argb & 0xFFFFFF) + ", alpha " + (argb >>> 24);
+    /** The color drawn with, as ARGB, for tests. */
+    int color() {
+        return this.argb;
     }
 
-    /** Draws with the chosen tool in pixels of the sheet, one stroke per press. */
+    /** Draws with the chosen tool in pixels of the sheet, one stroke per press; a stroke keeps the tool it started with. */
     private final class Painter implements ImageViewPanel.Painter {
+        /** The tool of the press under way, or null between presses. */
+        private Tool pressed;
+        /** Whether the press under way picks colors rather than drawing. */
+        private boolean picking;
+
         @Override
         public boolean paints() {
             return tool() != null;
@@ -213,11 +227,15 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
         @Override
         public void press(Point pixel, Rectangle region, MouseEvent event) {
             Tool tool = tool();
-            if (tool == Tool.PICKER || tool == Tool.PENCIL && event.isAltDown()) {
+            this.pressed = tool;
+            this.picking = tool == Tool.PICKER || tool == Tool.PENCIL && event.isAltDown();
+            if (this.picking) {
                 pick(pixel, region);
                 return;
             }
             pixels.begin();
+            undo.setEnabled(false);
+            redo.setEnabled(false);
             int drawn = tool == Tool.ERASER ? 0 : argb;
             if (tool == Tool.FILL) {
                 pixels.fill(pixel.x, pixel.y, drawn, region);
@@ -232,12 +250,12 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
 
         @Override
         public void drag(Point pixel, Rectangle region, MouseEvent event) {
-            Tool tool = tool();
-            if (tool == Tool.PICKER || tool == Tool.PENCIL && event.isAltDown()) {
+            Tool tool = this.pressed;
+            if (this.picking) {
                 pick(pixel, region);
                 return;
             }
-            if (tool == Tool.FILL || last == null || last.equals(pixel)) return;
+            if (tool == null || tool == Tool.FILL || last == null || last.equals(pixel)) return;
             pixels.line(last.x, last.y, pixel.x, pixel.y, tool == Tool.ERASER ? 0 : argb, region);
             last = pixel;
             view.pixelsChanged();
@@ -245,7 +263,10 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
 
         @Override
         public void release() {
+            this.pressed = null;
+            if (this.picking) return;
             if (pixels.end()) edited();
+            else refresh();
         }
 
         private void pick(Point pixel, Rectangle region) {
@@ -293,8 +314,8 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     @Override
     protected void load(BufferedImage content) {
         this.saved = content;
-        // Nothing left to show keeps the pixels on screen, unsaved; the same pixels keep what can be undone.
-        if (content == null || TexturePixels.same(this.pixels.sheet(), content)) return;
+        // The same pixels keep what can be undone.
+        if (TexturePixels.same(this.pixels.sheet(), content)) return;
         this.pixels.replace(content);
         this.last = null;
         this.view.setSheet(this.pixels.sheet());
@@ -315,7 +336,7 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     protected BufferedImage decode(byte[] bytes) throws IOException {
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
         if (image == null) throw new IOException("The copy in the pack is not a PNG image");
-        return image;
+        return TexturePixels.copy(image);
     }
 
     @Override
@@ -328,9 +349,10 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
         return TexturePixels.copy(content);
     }
 
+    /** Transparent pixels of the texture's size, as a text resource with no copy left is empty text. */
     @Override
     protected BufferedImage none() {
-        return null;
+        return new BufferedImage(this.pixels.sheet().getWidth(), this.pixels.sheet().getHeight(), BufferedImage.TYPE_INT_ARGB);
     }
 
     @Override

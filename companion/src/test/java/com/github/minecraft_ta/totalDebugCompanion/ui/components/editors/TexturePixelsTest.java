@@ -69,13 +69,49 @@ class TexturePixelsTest {
     }
 
     @Test
-    void thePaletteListsTheMostUsedVisibleColorsFirst() {
+    void thePaletteListsTheMostUsedVisibleColorsFirstAndFollowsStrokes() {
         BufferedImage image = new BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB);
         image.setRGB(0, 0, BLUE);
         image.setRGB(1, 0, RED);
         image.setRGB(2, 0, RED);
-        assertEquals(List.of(RED, BLUE), new TexturePixels(image).palette(ALL, 16), "transparent pixels are no color");
-        assertEquals(List.of(RED), new TexturePixels(image).palette(ALL, 1));
+        TexturePixels pixels = new TexturePixels(image);
+        assertEquals(List.of(RED, BLUE), pixels.palette(16), "transparent pixels are no color");
+        assertEquals(List.of(RED), pixels.palette(1));
+
+        pixels.begin();
+        pixels.line(0, 1, 3, 1, BLUE, ALL);
+        pixels.set(1, 0, 0, ALL);
+        pixels.end();
+        assertEquals(List.of(BLUE, RED), pixels.palette(16));
+        pixels.undo();
+        assertEquals(List.of(RED, BLUE), pixels.palette(16), "an undone stroke takes its colors back");
+    }
+
+    @Test
+    void nothingIsUndoneWhileAStrokeIsBeingDrawn() {
+        TexturePixels pixels = new TexturePixels(new BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB));
+        pixels.begin();
+        pixels.set(0, 0, RED, ALL);
+        pixels.end();
+        pixels.begin();
+        pixels.set(0, 0, BLUE, ALL);
+        assertFalse(pixels.undo(), "the stroke being drawn has the pixel's color before it already");
+        pixels.end();
+        assertTrue(pixels.undo());
+        assertEquals(RED, pixels.color(0, 0));
+        assertTrue(pixels.undo());
+        assertEquals(0, pixels.color(0, 0));
+    }
+
+    @Test
+    void aGrayTextureKeepsItsValuesAsTheGameReadsThem() {
+        BufferedImage gray = new BufferedImage(2, 1, BufferedImage.TYPE_BYTE_GRAY);
+        gray.getRaster().setSample(0, 0, 0, 128);
+        gray.getRaster().setSample(1, 0, 0, 255);
+        BufferedImage copy = TexturePixels.copy(gray);
+
+        assertEquals(0xFF808080, copy.getRGB(0, 0), "Java would read 128 as linear light and brighten it");
+        assertEquals(0xFFFFFFFF, copy.getRGB(1, 0));
     }
 
     @Test

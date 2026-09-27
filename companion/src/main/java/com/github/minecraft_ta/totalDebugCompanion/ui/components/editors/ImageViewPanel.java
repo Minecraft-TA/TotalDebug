@@ -181,11 +181,22 @@ public final class ImageViewPanel extends JPanel {
         return this.painter;
     }
 
-    /** Shows a new sheet, such as another copy of the texture, keeping the zoom and the frame. */
+    /** Shows a new sheet, such as another copy of the texture, keeping the frame, and fitting it again while it fits. */
     void setSheet(BufferedImage sheet) {
         this.image = sheet;
         this.canvas.setImage(shownImage());
+        if (this.fitMode) fitImage();
         updateStatus();
+    }
+
+    /** Gives the image the keyboard focus, as a click on it does. */
+    boolean focusImage() {
+        return this.canvas.isFocusable() && this.canvas.requestFocusInWindow();
+    }
+
+    /** A color as the status line names a pixel's, such as {@code #3F76E4, alpha 255}. */
+    static String describeColor(int argb) {
+        return "#" + String.format(Locale.ROOT, "%06X", argb & 0xFFFFFF) + ", alpha " + (argb >>> 24);
     }
 
     /** Shows the sheet's pixels again after they were changed in place. */
@@ -218,8 +229,10 @@ public final class ImageViewPanel extends JPanel {
 
             @Override
             public void mousePressed(MouseEvent event) {
-                if (painting() && SwingUtilities.isLeftMouseButton(event)) {
-                    canvas.requestFocusInWindow();
+                // Another button pressed during a stroke neither starts one nor moves the view.
+                if (this.drawing) return;
+                if (painter != null) canvas.requestFocusInWindow();
+                if (painting() && event.getButton() == MouseEvent.BUTTON1) {
                     // The frame being drawn on stays shown.
                     if (play.isSelected()) setPlaying(false);
                     this.drawing = true;
@@ -248,6 +261,7 @@ public final class ImageViewPanel extends JPanel {
             @Override
             public void mouseReleased(MouseEvent event) {
                 if (this.drawing) {
+                    if (event.getButton() != MouseEvent.BUTTON1) return;
                     this.drawing = false;
                     painter.release();
                     return;
@@ -447,9 +461,7 @@ public final class ImageViewPanel extends JPanel {
         Point pixel = this.hoveredPixel;
         if (pixel != null && pixel.x < shown.getWidth() && pixel.y < shown.getHeight()) {
             int argb = shown.getRGB(pixel.x, pixel.y);
-            status.append("    ").append(pixel.x).append(", ").append(pixel.y)
-                    .append("  #").append(String.format(Locale.ROOT, "%06X", argb & 0xFFFFFF))
-                    .append(", alpha ").append(argb >>> 24);
+            status.append("    ").append(pixel.x).append(", ").append(pixel.y).append("  ").append(describeColor(argb));
         }
         if (!this.animationProblem.isEmpty()) {
             status.append("    ").append(this.animationProblem);

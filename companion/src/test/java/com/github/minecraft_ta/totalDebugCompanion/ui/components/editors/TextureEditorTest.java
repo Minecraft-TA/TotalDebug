@@ -103,6 +103,15 @@ class TextureEditorTest {
                 assertEquals(0xFFFF0000, editor[0].shown().getRGB(0, 0), "the pencil draws with the picked color");
                 selectTool(editor[0], "Undo");
                 assertEquals(GRAY, editor[0].shown().getRGB(0, 0), "Undo takes the stroke back");
+
+                // A stroke keeps the tool it started with, whatever is chosen while it is drawn.
+                selectTool(editor[0], "Eraser");
+                ImageViewPanel.Painter painter = editor[0].view().painter();
+                painter.press(new Point(1, 1), editor[0].view().shownRegion(), press(editor[0], 0));
+                selectTool(editor[0], "Pencil");
+                painter.drag(new Point(2, 1), editor[0].view().shownRegion(), press(editor[0], 0));
+                painter.release();
+                assertEquals(List.of(0, 0), List.of(editor[0].shown().getRGB(1, 1), editor[0].shown().getRGB(2, 1)));
             });
         } finally {
             SwingUtilities.invokeAndWait(editor[0]::dispose);
@@ -132,10 +141,13 @@ class TextureEditorTest {
     /** Presses and releases the left button on a pixel of the sheet, as the image view hands it to the painter. */
     private static void click(TextureEditor editor, Point pixel, int modifiers) {
         ImageViewPanel.Painter painter = editor.view().painter();
-        MouseEvent press = new MouseEvent(editor.view(), MouseEvent.MOUSE_PRESSED, 0,
-                modifiers | InputEvent.BUTTON1_DOWN_MASK, 0, 0, 1, false, MouseEvent.BUTTON1);
-        painter.press(pixel, editor.view().shownRegion(), press);
+        painter.press(pixel, editor.view().shownRegion(), press(editor, modifiers));
         painter.release();
+    }
+
+    private static MouseEvent press(TextureEditor editor, int modifiers) {
+        return new MouseEvent(editor.view(), MouseEvent.MOUSE_PRESSED, 0,
+                modifiers | InputEvent.BUTTON1_DOWN_MASK, 0, 0, 1, false, MouseEvent.BUTTON1);
     }
 
     private static void awaitOnSwing(BooleanSupplier condition) throws Exception {
