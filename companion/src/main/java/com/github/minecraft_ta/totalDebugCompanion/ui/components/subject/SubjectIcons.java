@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.subject;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 
@@ -18,6 +19,14 @@ public final class SubjectIcons {
             case CONFIGURATION -> Icons.CONFIG_FILE;
             case KEY_BINDINGS -> Icons.KEYBOARD;
             case RESOURCES -> Icons.RESOURCES_ROOT;
+        };
+    }
+
+    public static Icon tab(WorldTab tab) {
+        return switch (tab) {
+            case OVERVIEW -> Icons.WORLD;
+            case GAME_RULES -> Icons.SETTINGS;
+            case DATAPACKS -> Icons.RESOURCES_ROOT;
         };
     }
 

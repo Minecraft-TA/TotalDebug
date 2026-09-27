@@ -13,6 +13,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
@@ -237,6 +238,9 @@ public class FileTreeView extends JScrollPane {
         if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent() || scope.changes().size() > 0 || logs) {
             rootItems.add(mods);
         }
+        if (Files.isDirectory(scope.profile().workspaceDirectory().resolve("saves"))) {
+            rootItems.add(new WorldTreeItems.Root(scope.profile().workspaceDirectory()));
+        }
         if (binding != null && !catalog.modules().isEmpty()) {
             rootItems.add(new DecompiledSourcesTreeItem(this.tree, binding.decompiler()));
         }
@@ -354,6 +358,16 @@ public class FileTreeView extends JScrollPane {
     /** Selects the Key bindings row of the Modpack tree. */
     public CompletableFuture<Boolean> revealKeyBindings() {
         return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.KEY_BINDINGS));
+    }
+
+    /**
+     * Selects the row of one of the World page's tabs, or the World root for the Overview and for a tab the tree has no
+     * row for, since the tree read the world before the page did.
+     */
+    public CompletableFuture<Boolean> revealWorld(WorldTab tab) {
+        if (tab == WorldTab.OVERVIEW) return this.tree.revealItemPath(WorldTreeItems.ROOT, List.of());
+        return this.tree.revealItemPath(WorldTreeItems.ROOT, List.of(WorldTreeItems.rowName(tab))).thenCompose(revealed ->
+                revealed ? CompletableFuture.completedFuture(true) : this.tree.revealItemPath(WorldTreeItems.ROOT, List.of()));
     }
 
     /** Selects the Changes row of the Modpack tree. */

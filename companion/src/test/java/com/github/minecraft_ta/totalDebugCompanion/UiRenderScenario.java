@@ -62,6 +62,9 @@ enum UiRenderScenario {
     LOGS_CRASH("logs-crash", "A crash report with its stack frames by mod"),
     KEY_BINDINGS("key-bindings", "The pack's key bindings with a changed key that collides"),
     CONTENT("content", "The pack's registered content with every kind listed together"),
+    WORLD("world", "The current world's overview as its level.dat saved it"),
+    WORLD_RULES("world-rules", "The current world's game rules"),
+    WORLD_DATAPACKS("world-datapacks", "The current world's datapacks, enabled, disabled and new"),
     INSPECTION("inspection", "A block read from the game with storage that differs by face");
 
     private final String id;

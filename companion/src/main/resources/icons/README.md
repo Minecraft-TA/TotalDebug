@@ -5,6 +5,7 @@ See [INTELLIJ_LICENSE.txt](INTELLIJ_LICENSE.txt).
 
 `mod.svg` and `mod_dark.svg` are custom extension-piece icons.
 `modpack.svg` and `modpack_dark.svg` are custom as well: the extension piece rising out of an open box.
+`world.svg` and `world_dark.svg` are custom as well: hills under the sun, for the current world.
 `save.svg` (`general/save`), `revert.svg` (`vcs/revert`), `changes.svg` (`general/history`, used for Companion's
 change record) and `keyboard.svg` (`general/keyboard`), each with its `_dark` pair, are unchanged copies from `platform/icons/src/expui` in
 [intellij-community](https://github.com/JetBrains/intellij-community/tree/master/platform/icons/src/expui).

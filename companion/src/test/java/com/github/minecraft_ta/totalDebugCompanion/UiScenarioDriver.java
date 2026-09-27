@@ -7,9 +7,11 @@ import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
+import com.github.minecraft_ta.totalDebugCompanion.model.WorldView;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ContentBrowser;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.LogsPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ResourceBrowser;
@@ -554,6 +556,9 @@ final class UiScenarioDriver {
                     .profile().workspaceDirectory().resolve("crash-reports/crash-2026-09-27_10.00.00-client.txt"))));
             case KEY_BINDINGS -> context.once("key-bindings", () -> navigate(new NavigationTarget.KeyBindings("")));
             case CONTENT -> context.once("content", () -> navigate(new NavigationTarget.Content("")));
+            case WORLD -> context.once("world", () -> navigate(new NavigationTarget.World(WorldTab.OVERVIEW)));
+            case WORLD_RULES -> context.once("world-rules", () -> navigate(new NavigationTarget.World(WorldTab.GAME_RULES)));
+            case WORLD_DATAPACKS -> context.once("world-datapacks", () -> navigate(new NavigationTarget.World(WorldTab.DATAPACKS)));
             case INSPECTION -> {
                 context.once("inspection", () -> navigate(new NavigationTarget.Inspection(InspectionSample.SUBJECT)));
                 SubjectPanel panel = findComponent(mainWindow, SubjectPanel.class);
@@ -623,6 +628,10 @@ final class UiScenarioDriver {
                         && panel.rowCount() > 0;
             }
             case KEY_BINDINGS -> showsTable("Key bindings", "Action");
+            case WORLD -> mainWindow.getEditorTabs().getSelectedEditor() instanceof WorldView view
+                    && "Test World".equals(view.getTitle());
+            case WORLD_RULES -> showsTable("Test World", "Rule");
+            case WORLD_DATAPACKS -> showsTable("Test World", "Pack");
             case CONTENT -> {
                 ContentBrowser browser = findComponent(mainWindow, ContentBrowser.class);
                 yield mainWindow.getEditorTabs().getSelectedEditor() instanceof ContentView && browser != null

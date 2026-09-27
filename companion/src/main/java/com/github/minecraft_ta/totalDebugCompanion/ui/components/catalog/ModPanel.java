@@ -224,21 +224,8 @@ public final class ModPanel extends JPanel {
 
     /** Shows a tab with its count, or hides it while it has nothing to show. */
     private void setTab(ModTab tab, int count) {
-        Component content = this.tabContent.get(tab);
-        int index = this.tabs.indexOfComponent(content);
-        if (count == 0) {
-            if (index > 0) this.tabs.removeTabAt(index);
-            return;
-        }
-        if (index < 0) {
-            index = 0;
-            for (ModTab earlier : ModTab.values()) {
-                if (earlier == tab) break;
-                if (this.tabs.indexOfComponent(this.tabContent.get(earlier)) >= 0) index++;
-            }
-            this.tabs.insertTab(tab.title(), SubjectIcons.tab(tab), content, null, index);
-        }
-        TabTitles.setCounted(this.tabs, index, tab.title(), count);
+        TabTitles.setShown(this.tabs, List.copyOf(this.tabContent.values()), this.tabContent.get(tab), tab.title(),
+                SubjectIcons.tab(tab), count);
     }
 
     private JComponent overviewContent(PackCatalog.Mod mod, String unavailable) {
