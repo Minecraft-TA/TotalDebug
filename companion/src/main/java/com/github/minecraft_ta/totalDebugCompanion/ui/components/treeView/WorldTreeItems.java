@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
@@ -19,7 +20,8 @@ import java.util.Optional;
 
 /**
  * The World tree: the current world, which opens its page, with rows for its game rules and datapacks. The world is
- * read when the tree loads its rows, in the background.
+ * read when the tree loads its rows, in the background; the tree loads them again when the World page read something
+ * else (see {@link WorldReadings}).
  */
 final class WorldTreeItems {
     static final String ROOT = "world";
@@ -34,10 +36,12 @@ final class WorldTreeItems {
 
     static final class Root extends DirectoryTreeItem implements NavigableTreeItem {
         private final Path workspace;
+        private final WorldReadings readings;
 
-        Root(Path workspace) {
+        Root(Path workspace, WorldReadings readings) {
             super(ROOT);
             this.workspace = workspace;
+            this.readings = readings;
             setPresentation(PrimarySecondaryText.primary("World"));
             setIcon(Icons.WORLD);
         }
@@ -60,14 +64,14 @@ final class WorldTreeItems {
         @Override
         public List<TreeItem> loadChildren() {
             Optional<Path> world = CurrentWorld.directory(this.workspace);
-            if (world.isEmpty()) return List.of();
-            CurrentWorld.Saved saved;
+            CurrentWorld.Saved saved = null;
             try {
-                saved = CurrentWorld.read(world.get());
+                if (world.isPresent()) saved = CurrentWorld.read(world.get());
             } catch (IOException | RuntimeException unreadable) {
                 // The page says why the world could not be read.
-                return List.of();
             }
+            this.readings.shown(WorldReadings.Summary.of(saved));
+            if (saved == null) return List.of();
             List<TreeItem> children = new ArrayList<>();
             if (!saved.gameRules().isEmpty()) children.add(new Tab(WorldTab.GAME_RULES, saved.gameRules().size()));
             if (!saved.datapacks().isEmpty()) children.add(new Tab(WorldTab.DATAPACKS, saved.datapacks().size()));

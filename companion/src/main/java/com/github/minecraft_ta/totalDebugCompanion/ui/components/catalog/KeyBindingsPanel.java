@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.GroupedRowCell;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
@@ -13,7 +15,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerShortcuts;
@@ -21,28 +22,21 @@ import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
-import javax.swing.BorderFactory;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
-import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.FlowLayout;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
 import java.awt.event.ActionEvent;
@@ -50,7 +44,6 @@ import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -61,8 +54,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
+import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -77,8 +69,6 @@ import java.util.function.Predicate;
  * the page is shown.
  */
 public final class KeyBindingsPanel extends JPanel {
-    private static final String TABLE_CARD = "table";
-    private static final String MESSAGE_CARD = "message";
     private static final String PLACEHOLDER = "Filter by action, mod or key, such as ctrl+g";
     private static final KeyBindings.Assignment NOT_BOUND = new KeyBindings.Assignment(KeyBindings.UNBOUND, "NONE");
 
@@ -86,18 +76,22 @@ public final class KeyBindingsPanel extends JPanel {
     private record Row(String category, KeyBindings.Binding binding, int count) {
     }
 
+    /** The keys read from {@code options.txt}, with the catalog they were read against. */
+    private record Loaded(CatalogIndex index, KeyBindings bindings) {
+    }
+
     private final PackCatalogService catalog;
     private final KeyBindingControl control;
     private final Consumer<NavigationTarget> navigator;
     /** The mod whose bindings are shown, or empty for every mod. */
     private final String modId;
-    private final Runnable removeCatalogListener;
-    private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
+    private final PageLoader<Loaded> loader;
+    private final BrowserBody body;
+    private final FlatIconTextField filter;
     private final FlatIconButton pressToSearch = new FlatIconButton(Icons.KEYBOARD, true);
     private final JCheckBox changedOnly = new JCheckBox("Changed");
     private final JCheckBox collisionsOnly = new JCheckBox("Collisions");
     private final JCheckBox unboundOnly = new JCheckBox("Not bound");
-    private final JLabel notice = new JLabel();
     private final BindingsModel model = new BindingsModel();
     private final JTable table = new JTable(this.model) {
         @Override
@@ -106,8 +100,6 @@ public final class KeyBindingsPanel extends JPanel {
             return row < 0 ? null : tooltip(KeyBindingsPanel.this.model.shown.get(row));
         }
     };
-    private final JLabel message = new JLabel();
-    private final JPanel cards = new JPanel(new CardLayout());
     private final Set<String> collapsed = new HashSet<>();
     private final KeyEventDispatcher capture = this::capture;
     /** Receives the next key while one is awaited, for the filter or for {@link #editing}; null otherwise. */
@@ -115,11 +107,12 @@ public final class KeyBindingsPanel extends JPanel {
     /** The binding waiting for its new key, or null. */
     private String editing;
     private String problem = "";
+    /** Why no key can be listed, such as a catalog that is not captured yet; empty while the keys are read. */
+    private String unavailable = "";
     private String status = "";
     private CatalogIndex index;
     private KeyBindings bindings;
     private String selectAfterLoad;
-    private long generation;
     /** A modifier pressed while capturing, taken as the key itself when it is released alone. */
     private KeyEvent heldModifier;
 
@@ -131,13 +124,12 @@ public final class KeyBindingsPanel extends JPanel {
         this.control = Objects.requireNonNull(control, "control");
         this.modId = Objects.requireNonNull(modId, "modId");
         this.navigator = Objects.requireNonNull(navigator, "navigator");
+        this.model.fireTableStructureChanged();
+        configureTable();
+        this.body = new BrowserBody(PLACEHOLDER, BrowserBody.scroll(this.table), this.table, this::applyFilter);
+        this.filter = this.body.filter();
+        add(this.body, BorderLayout.CENTER);
 
-        this.filter.putClientProperty("JTextField.placeholderText", PLACEHOLDER);
-        this.filter.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent event) { applyFilter(); }
-            @Override public void removeUpdate(DocumentEvent event) { applyFilter(); }
-            @Override public void changedUpdate(DocumentEvent event) { applyFilter(); }
-        });
         this.pressToSearch.setToolTipText(Tooltip.of("Search by Key")
                 .text("Press a key, a combination or mouse button 3 to 5 to find what it does").html());
         this.pressToSearch.getAccessibleContext().setAccessibleName("Search by Key");
@@ -162,38 +154,15 @@ public final class KeyBindingsPanel extends JPanel {
         // Inside the field, like IntelliJ's search options.
         this.pressToSearch.setMargin(UiMetrics.compactButtonMargin());
         this.filter.putClientProperty("JTextField.trailingComponent", this.pressToSearch);
-        JPanel toggles = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
-        toggles.add(this.changedOnly);
-        toggles.add(this.collisionsOnly);
-        toggles.add(this.unboundOnly);
-        JPanel bar = new JPanel(new BorderLayout(10, 0));
-        bar.setBorder(UiMetrics.barPadding());
-        bar.add(this.filter, BorderLayout.CENTER);
-        bar.add(toggles, BorderLayout.EAST);
-        ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
-        this.notice.setBorder(UiMetrics.noticePadding());
-        this.notice.setVisible(false);
-        JPanel top = new JPanel(new BorderLayout());
-        top.add(bar, BorderLayout.NORTH);
-        top.add(this.notice, BorderLayout.SOUTH);
-        add(top, BorderLayout.NORTH);
+        this.body.addOption(this.changedOnly);
+        this.body.addOption(this.collisionsOnly);
+        this.body.addOption(this.unboundOnly);
 
-        this.model.fireTableStructureChanged();
-        configureTable();
-        JScrollPane scroll = new JScrollPane(this.table);
-        scroll.setBorder(BorderFactory.createEmptyBorder());
-        this.cards.add(scroll, TABLE_CARD);
-        this.message.setVerticalAlignment(JLabel.TOP);
-        this.message.setBorder(UiMetrics.messagePadding());
-        this.cards.add(this.message, MESSAGE_CARD);
-        add(this.cards, BorderLayout.CENTER);
-
-        TypeToFilter.install(this.table, this.filter);
-        this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(this::load));
+        this.loader = new PageLoader<>(this::prepareLoad, loaded -> show(loaded.index(), loaded.bindings(), ""),
+                failure -> show(this.catalog.index().orElse(null), null, "Could not read options.txt: " + failure.getMessage()))
+                .whenShown(this).follow(catalog::addListener);
         addHierarchyListener(event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) return;
-            if (isShowing()) load();
-            else stopCapture();
+            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !isShowing()) stopCapture();
         });
         load();
     }
@@ -255,29 +224,19 @@ public final class KeyBindingsPanel extends JPanel {
 
     /** Reads the keys again. */
     public void load() {
+        this.loader.load();
+    }
+
+    /** Reads {@code options.txt} against the captured catalog; without one there is nothing to read. */
+    private Callable<Loaded> prepareLoad() {
         CatalogIndex index = this.catalog.index().orElse(null);
-        long current = ++this.generation;
         if (index == null) {
             show(null, null, "The pack catalog is not captured yet.");
-            return;
+            return null;
         }
         PackCatalog captured = index.catalog();
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                return new KeyBindings(captured.keyBindings(), captured.keyContexts(), KeyBindings.readOptions(this.control.options()),
-                        captured.keyNames());
-            } catch (IOException exception) {
-                throw new CompletionException(exception);
-            }
-        }).whenComplete((bindings, failure) -> SwingUtilities.invokeLater(() -> {
-            if (current != this.generation) return;
-            if (failure != null) {
-                Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
-                show(index, null, "Could not read options.txt: " + cause.getMessage());
-            } else {
-                show(index, bindings, "");
-            }
-        }));
+        return () -> new Loaded(index, new KeyBindings(captured.keyBindings(), captured.keyContexts(),
+                KeyBindings.readOptions(this.control.options()), captured.keyNames()));
     }
 
     /** Shows the binding named {@code name}, such as {@code key.jump}, once the keys are read. */
@@ -328,7 +287,7 @@ public final class KeyBindingsPanel extends JPanel {
             });
         }
         this.model.setRows(rows);
-        this.message.setText(bindings == null ? problem : "");
+        this.unavailable = bindings == null ? problem : "";
         applyFilter();
         selectPending();
     }
@@ -353,13 +312,15 @@ public final class KeyBindingsPanel extends JPanel {
                 && (!changed || binding.changed())
                 && (!collisions || !collisions(binding).isEmpty())
                 && (!unbound || binding.current().unbound()));
-        boolean empty = this.model.getRowCount() == 0;
-        if (this.bindings != null && empty) {
-            this.message.setText(this.model.all.isEmpty()
+        if (this.model.getRowCount() > 0) {
+            this.body.showContent();
+        } else if (this.bindings == null) {
+            this.body.showMessage(this.unavailable);
+        } else {
+            this.body.showMessage(this.model.all.isEmpty()
                     ? this.modId.isEmpty() ? "The pack has no key bindings." : "This mod has no key bindings."
                     : "No key binding matches the filter.");
         }
-        ((CardLayout) this.cards.getLayout()).show(this.cards, empty ? MESSAGE_CARD : TABLE_CARD);
     }
 
     private boolean matches(KeyBindings.Binding binding, String query) {
@@ -668,9 +629,7 @@ public final class KeyBindingsPanel extends JPanel {
     }
 
     private void showNotice() {
-        String text = this.problem.isEmpty() ? this.status : this.problem;
-        this.notice.setText(text);
-        this.notice.setVisible(!text.isEmpty());
+        this.body.showNotice(this.problem.isEmpty() ? this.status : this.problem);
     }
 
     /** The field that filters the bindings. */
@@ -680,7 +639,7 @@ public final class KeyBindingsPanel extends JPanel {
 
     public void dispose() {
         stopCapture();
-        this.removeCatalogListener.run();
+        this.loader.dispose();
     }
 
     private final class BindingsModel extends AbstractTableModel {

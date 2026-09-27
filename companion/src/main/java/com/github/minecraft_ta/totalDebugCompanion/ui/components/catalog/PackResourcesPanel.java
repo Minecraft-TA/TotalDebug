@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -8,13 +9,11 @@ import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 
 import javax.swing.JPanel;
-import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
+import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
 /**
@@ -26,13 +25,9 @@ public final class PackResourcesPanel extends JPanel {
     private final ResourceEdits edits;
     private final Path workspace;
     private final ResourceBrowser browser;
-    private final Runnable removeCatalogListener;
-    private final Runnable removeStackListener;
-    private final Runnable removeEditListener;
+    private final PageLoader<ResourceBrowser.Prepared> loader;
     /** The kind of resource shown, such as {@code assets/textures}; empty for all. */
     private String category = "";
-    private long generation;
-    private boolean disposed;
 
     public PackResourcesPanel(PackCatalogService catalog, ResourceEdits edits, Path workspace,
                               Consumer<NavigationTarget> navigator) {
@@ -42,44 +37,38 @@ public final class PackResourcesPanel extends JPanel {
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.browser = new ResourceBrowser(navigator, category -> this.category = category);
         add(this.browser, BorderLayout.CENTER);
-        this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(this::load));
-        this.removeStackListener = edits.addStackListener(() -> SwingUtilities.invokeLater(this::load));
+        // Joining every pack is too slow to repeat whenever the page is shown, so only a change in a source reads it again.
         // A save or revert in the managed pack changes which copy wins, once it has enabled the pack.
-        this.removeEditListener = edits.addEditListener(() -> SwingUtilities.invokeLater(this::load));
+        this.loader = new PageLoader<>(this::prepareJoin, prepared -> {
+            this.browser.setResources(prepared);
+            this.browser.setMessage("");
+        }, failure -> {
+            this.browser.setResources(List.of());
+            this.browser.setMessage("Resources could not be read: " + failure.getMessage());
+        }).follow(catalog::addListener).follow(edits::addStackListener).follow(edits::addEditListener);
         load();
     }
 
     /** Joins the packs' resources again. */
     public void load() {
-        if (this.disposed) return;
-        long current = ++this.generation;
+        this.loader.load();
+    }
+
+    /** Joins the packs the game or {@code options.txt} names; without a catalog there is nothing to join. */
+    private Callable<ResourceBrowser.Prepared> prepareJoin() {
         CatalogIndex index = this.catalog.index().orElse(null);
         if (index == null) {
             this.browser.setResources(List.of());
             this.browser.setMessage("The pack catalog is not captured yet.");
-            return;
+            return null;
         }
         PackStackPayload stack = this.edits.packStack();
         if (this.browser.rowCount() == 0) this.browser.setMessage("Reading the resources of every pack");
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                PackResources.Joined joined = PackResources.join(PackResources.assets(stack, index, this.workspace),
-                        PackResources.data(stack, index));
-                return ResourceBrowser.prepare(joined.resources(), joined.from(), joined.hidden());
-            } catch (Exception exception) {
-                throw new CompletionException(exception);
-            }
-        }).whenComplete((prepared, failure) -> SwingUtilities.invokeLater(() -> {
-            if (this.disposed || current != this.generation) return;
-            if (failure != null) {
-                Throwable cause = failure.getCause() == null ? failure : failure.getCause();
-                this.browser.setResources(List.of());
-                this.browser.setMessage("Resources could not be read: " + cause.getMessage());
-                return;
-            }
-            this.browser.setResources(prepared);
-            this.browser.setMessage("");
-        }));
+        return () -> {
+            PackResources.Joined joined = PackResources.join(PackResources.assets(stack, index, this.workspace),
+                    PackResources.data(stack, index));
+            return ResourceBrowser.prepare(joined.resources(), joined.from(), joined.hidden());
+        };
     }
 
     public void selectCategory(String key) {
@@ -97,10 +86,7 @@ public final class PackResourcesPanel extends JPanel {
     }
 
     public void dispose() {
-        this.disposed = true;
-        this.removeCatalogListener.run();
-        this.removeStackListener.run();
-        this.removeEditListener.run();
+        this.loader.dispose();
         this.browser.dispose();
     }
 }

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
@@ -31,10 +32,7 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.ToolTipManager;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
-import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics;
@@ -65,8 +63,6 @@ public final class ResourceBrowser extends JPanel {
     private static final String TEXTURES = "assets/textures";
     private static final int CELL_WIDTH = 92;
     private static final int CELL_HEIGHT = 84;
-    private static final String LIST_CARD = "list";
-    private static final String MESSAGE_CARD = "message";
     private static final Icon ANIMATED = Icons.RUN.derive(12, 12);
 
     private record Category(String key, String label, int count) {
@@ -86,11 +82,10 @@ public final class ResourceBrowser extends JPanel {
     private DefaultListModel<Category> categories = new DefaultListModel<>();
     private final JList<Category> categoryList = new JList<>(this.categories);
     private final JScrollPane categoryScroll = new JScrollPane(this.categoryList);
-    private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
+    private final BrowserBody body;
+    private final FlatIconTextField filter;
     private final ShownModel shown = new ShownModel();
     private final JList<ModResources.Resource> list = new JList<>(this.shown);
-    private final JLabel empty = new JLabel();
-    private final JPanel body = new JPanel(new CardLayout());
     private final TextureThumbnails thumbnails = new TextureThumbnails(UiMetrics.previewPixels(UiMetrics.THUMBNAIL_SIZE));
     private final Consumer<String> categoryChanged;
     /** The resources in the order they are shown, and what the filter matches in each, in lowercase. */
@@ -128,12 +123,6 @@ public final class ResourceBrowser extends JPanel {
         this.categoryScroll.setPreferredSize(new Dimension(190, 0));
         add(this.categoryScroll, BorderLayout.WEST);
 
-        this.filter.putClientProperty("JTextField.placeholderText", "Filter resources");
-        this.filter.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent event) { applyFilter(); }
-            @Override public void removeUpdate(DocumentEvent event) { applyFilter(); }
-            @Override public void changedUpdate(DocumentEvent event) { applyFilter(); }
-        });
         this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.list.setCellRenderer(this::render);
         ToolTipManager.sharedInstance().registerComponent(this.list);
@@ -156,21 +145,11 @@ public final class ResourceBrowser extends JPanel {
         });
         ContextMenus.installList(this.list, this::menu);
 
-        JPanel top = new JPanel(new BorderLayout());
-        top.setBorder(UiMetrics.barPadding());
-        top.add(this.filter, BorderLayout.CENTER);
-        JScrollPane listScroll = new JScrollPane(this.list);
-        listScroll.setBorder(BorderFactory.createEmptyBorder());
+        JScrollPane listScroll = BrowserBody.scroll(this.list);
         listScroll.getVerticalScrollBar().setUnitIncrement(16);
-        JPanel content = new JPanel(new BorderLayout());
-        content.add(top, BorderLayout.NORTH);
-        this.empty.setBorder(UiMetrics.messagePadding());
-        this.empty.setVerticalAlignment(SwingConstants.TOP);
-        this.body.add(listScroll, LIST_CARD);
-        this.body.add(this.empty, MESSAGE_CARD);
-        content.add(this.body, BorderLayout.CENTER);
-        add(content, BorderLayout.CENTER);
-        TypeToFilter.install(this.list, this.filter);
+        this.body = new BrowserBody("Filter resources", listScroll, this.list, this::applyFilter);
+        this.filter = this.body.filter();
+        add(this.body, BorderLayout.CENTER);
         TypeToFilter.forwardTyping(this.categoryList, () -> this.filter);
     }
 
@@ -261,8 +240,8 @@ public final class ResourceBrowser extends JPanel {
 
     /** Shows a message in place of the resources, for example why they could not be read; empty shows the resources. */
     public void setMessage(String message) {
-        this.empty.setText(message);
-        ((CardLayout) this.body.getLayout()).show(this.body, message.isEmpty() ? LIST_CARD : MESSAGE_CARD);
+        if (message.isEmpty()) this.body.showContent();
+        else this.body.showMessage(message);
     }
 
     public void selectCategory(String key) {

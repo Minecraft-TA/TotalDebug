@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.SegmentedToggle;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ThinSplitPane;
@@ -31,7 +32,6 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.ListSelectionModel;
-import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.JTextComponent;
@@ -40,7 +40,6 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.event.HierarchyEvent;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -48,8 +47,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
+import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
 /**
@@ -94,8 +92,9 @@ final class ConfigPanel extends JPanel {
     private final ConfigTextEditor textEditor;
     private final JLabel message = new JLabel();
     private final JPanel cards = new JPanel(new CardLayout());
-    private long generation;
-    private long sourceGeneration;
+    /** Reads the selected copy's values, and lists a server configuration's copies in the worlds. */
+    private final PageLoader<ValuesRead> values;
+    private final PageLoader<SourcesRead> sources;
     private boolean updating;
     /** The world whose file is shown, restored when leaving unsaved text is cancelled. */
     private Object shownSource;
@@ -108,6 +107,11 @@ final class ConfigPanel extends JPanel {
         this.writer = new ConfigWriter(changes, this::setStatus, this::load);
         this.textEditor = new ConfigTextEditor(this.writer, this::setStatus, this::load);
         this.navigator = Objects.requireNonNull(navigator, "navigator");
+        this.values = new PageLoader<>(this::prepareValues, read -> show(read.file(), read.values(),
+                read.values() == null ? "" : read.values().text(), read.problem()),
+                failure -> showFailure("Could not read the file: " + failure.getMessage())).whenShown(this);
+        this.sources = new PageLoader<>(this::prepareSources, read -> showSources(read.file(), read.found(), true),
+                failure -> showFailure("Could not list the worlds' copies: " + failure.getMessage()));
         configureFiles();
         this.content.add(toolbar(), BorderLayout.NORTH);
         JPanel settings = new JPanel(new BorderLayout());
@@ -137,9 +141,14 @@ final class ConfigPanel extends JPanel {
         this.writer.bindUndo(this.table);
         TypeToFilter.install(this.table, this.filter);
         TypeToFilter.forwardTyping(this.fileList, () -> this.filter);
-        addHierarchyListener(event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing()) load();
-        });
+    }
+
+    /** The values of a copy of {@code file} at {@code path}, or why they could not be read. */
+    private record ValuesRead(PackCatalog.ConfigFile file, ConfigValues values, String problem) {
+    }
+
+    /** The copies of a server configuration in the worlds. */
+    private record SourcesRead(PackCatalog.ConfigFile file, List<ConfigSources.Source> found) {
     }
 
     private void configureFiles() {
@@ -313,7 +322,7 @@ final class ConfigPanel extends JPanel {
 
     private void showFile() {
         PackCatalog.ConfigFile file = selectedFile();
-        long current = ++this.sourceGeneration;
+        this.sources.cancel();
         this.modifiedOnly.setVisible(file != null && !file.settings().isEmpty());
         if (file == null || file.type() != PackCatalog.ConfigType.SERVER) {
             showSources(file, file == null ? List.of() : ConfigSources.of(this.workspace, file), true);
@@ -321,11 +330,16 @@ final class ConfigPanel extends JPanel {
         }
         // A server configuration's copies are found by listing the worlds, which reads the disk. Until they are known,
         // the previous file's copies and values leave the page, so nothing can be edited into the wrong file.
-        this.generation++;
+        this.values.cancel();
         showSources(file, List.of(), false);
-        CompletableFuture.supplyAsync(() -> ConfigSources.of(this.workspace, file)).whenComplete((found, failure) -> SwingUtilities.invokeLater(() -> {
-            if (current == this.sourceGeneration) showSources(file, found == null ? List.of() : found, true);
-        }));
+        this.sources.load();
+    }
+
+    /** Lists the copies of the selected server configuration in the worlds. */
+    private Callable<SourcesRead> prepareSources() {
+        PackCatalog.ConfigFile file = selectedFile();
+        if (file == null) return null;
+        return () -> new SourcesRead(file, ConfigSources.of(this.workspace, file));
     }
 
     /** Shows {@code file}'s copies; {@code known} tells whether they are all listed, so its values can be read. */
@@ -348,35 +362,38 @@ final class ConfigPanel extends JPanel {
         return selected == null ? null : selected.path();
     }
 
+    /** Shows why the selected file's values could not be read, in place of the previous file's. */
+    private void showFailure(String problem) {
+        PackCatalog.ConfigFile file = selectedFile();
+        if (file != null) show(file, null, "", problem);
+    }
+
     /** Reads the selected file again. */
     void load() {
+        this.values.load();
+    }
+
+    /** Reads the selected copy of the selected file; a file no one has created yet shows its defaults at once. */
+    private Callable<ValuesRead> prepareValues() {
         PackCatalog.ConfigFile file = selectedFile();
-        long current = ++this.generation;
         Path path = selectedPath();
         this.open.setVisible(path != null);
-        if (file == null) return;
+        if (file == null) return null;
         if (path == null) {
+            this.values.cancel();
             show(file, null, "", file.type() == PackCatalog.ConfigType.SERVER
                     ? "No world has created this file yet. A world creates it with these defaults."
                     : "This file does not exist yet. The game creates it with these defaults.");
-            return;
+            return null;
         }
-        CompletableFuture.supplyAsync(() -> {
+        return () -> {
             try {
                 this.writer.refreshPending();
-                return ConfigValues.read(path);
+                return new ValuesRead(file, ConfigValues.read(path), "");
             } catch (IOException exception) {
-                throw new CompletionException(exception);
+                return new ValuesRead(file, null, "Could not read " + path.getFileName() + ": " + exception.getMessage());
             }
-        }).whenComplete((values, failure) -> SwingUtilities.invokeLater(() -> {
-            if (current != this.generation) return;
-            if (failure == null) {
-                show(file, values, values.text(), "");
-            } else {
-                Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
-                show(file, null, "", "Could not read " + path.getFileName() + ": " + cause.getMessage());
-            }
-        }));
+        };
     }
 
     private void show(PackCatalog.ConfigFile file, ConfigValues values, String fileText, String problem) {

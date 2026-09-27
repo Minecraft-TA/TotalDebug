@@ -13,6 +13,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
@@ -38,7 +39,7 @@ import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -47,6 +48,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -72,18 +74,17 @@ public final class DefinitionDetails {
     private final Services services;
     private final Runnable changed;
     private final Runnable removeCatalogListener;
-    private final Runnable removeIconListener;
     private final JPanel extras = new JPanel();
     private PackCatalogService.State state;
     private CatalogIndex index;
     private CatalogIndex.Entry entry;
-    private long generation;
-    private long appearanceGeneration;
+    /** Reads the definition's appearance from the resource snapshot, and lists its mod's data files. */
+    private final PageLoader<Appearance> appearanceLoader;
+    private final PageLoader<List<ModResources.Resource>> resourceLoader;
     private ModelAppearance appearance;
     private List<Icon> appearancePreviews = List.of();
     private List<ModResources.Resource> matched = List.of();
     private List<ModResources.Resource> owned = List.of();
-    private CompletableFuture<?> resourceLoad = CompletableFuture.completedFuture(null);
     private int labelWidth;
     private boolean disposed;
 
@@ -92,8 +93,21 @@ public final class DefinitionDetails {
         this.services = Objects.requireNonNull(services, "services");
         this.changed = Objects.requireNonNull(changed, "changed");
         this.extras.setLayout(new BoxLayout(this.extras, BoxLayout.Y_AXIS));
+        this.appearanceLoader = new PageLoader<>(this::prepareAppearance, found -> {
+            this.appearance = found.appearance();
+            this.appearancePreviews = found.previews();
+            showExtras();
+        }, failure -> { }).follow(services.icons()::addListener);
+        this.resourceLoader = new PageLoader<>(this::prepareResources, list -> {
+            this.owned = list;
+            this.matched = matching(this.owned, this.subject.namespace(), resourceName());
+            showExtras();
+        }, failure -> {
+            this.owned = List.of();
+            this.matched = List.of();
+            showExtras();
+        });
         this.removeCatalogListener = services.catalog().addListener(this::reload);
-        this.removeIconListener = services.icons().addListener(this::loadAppearance);
         read();
         loadAppearance();
         loadResources();
@@ -186,8 +200,14 @@ public final class DefinitionDetails {
      * item that places a block is drawn by its own model.
      */
     private void loadAppearance() {
-        if (this.disposed) return;
-        long current = ++this.appearanceGeneration;
+        this.appearanceLoader.load();
+    }
+
+    /** A model appearance with a thumbnail of each of its textures; neither when there is no model. */
+    private record Appearance(ModelAppearance appearance, List<Icon> previews) {
+    }
+
+    private Callable<Appearance> prepareAppearance() {
         String blockId = "";
         String itemModel = "";
         if (this.index != null) {
@@ -203,48 +223,42 @@ public final class DefinitionDetails {
             }
         }
         if (blockId.isEmpty() && itemModel.isEmpty()) {
+            this.appearanceLoader.cancel();
             this.appearance = null;
             showExtras();
-            return;
+            return null;
         }
+        String block = blockId;
+        String item = itemModel;
         // Textures are scaled to thumbnails off the Swing thread; a texture can be large.
-        this.services.icons().appearance(blockId, itemModel).thenAcceptAsync(found -> {
-            List<Icon> previews = found.map(DefinitionDetails::previews).orElse(List.of());
-            SwingUtilities.invokeLater(() -> {
-                if (this.disposed || current != this.appearanceGeneration) return;
-                this.appearance = found.orElse(null);
-                this.appearancePreviews = previews;
-                showExtras();
-            });
-        });
+        return () -> {
+            Optional<ModelAppearance> found = this.services.icons().appearance(block, item).join();
+            return new Appearance(found.orElse(null), found.map(DefinitionDetails::previews).orElse(List.of()));
+        };
     }
 
     /** Data files of the owning mod named like the definition, such as its loot table and recipes. */
     private void loadResources() {
-        long current = ++this.generation;
-        Optional<ModSummary> owner = ModSummary.resolve(this.subject.namespace(), this.index, this.services.sources().get());
+        this.resourceLoader.load();
+    }
+
+    /** The definition's name without its folders, such as {@code oak_log} for {@code minecraft:block/oak_log}. */
+    private String resourceName() {
         String path = this.subject.id().substring(this.subject.id().indexOf(':') + 1);
-        String name = path.substring(path.lastIndexOf('/') + 1);
+        return path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    private Callable<List<ModResources.Resource>> prepareResources() {
+        Optional<ModSummary> owner = ModSummary.resolve(this.subject.namespace(), this.index, this.services.sources().get());
         if (owner.isEmpty() || owner.get().files().isEmpty()) {
+            this.resourceLoader.cancel();
             this.matched = List.of();
             this.owned = List.of();
             showExtras();
-            return;
+            return null;
         }
-        CompletableFuture<List<ModResources.Resource>> loading = CompletableFuture.supplyAsync(() -> {
-            try {
-                return ModResources.list(owner.get().files());
-            } catch (IOException exception) {
-                throw new IllegalStateException(exception.getMessage(), exception);
-            }
-        });
-        this.resourceLoad = loading;
-        loading.whenComplete((list, failure) -> SwingUtilities.invokeLater(() -> {
-            if (this.disposed || current != this.generation) return;
-            this.owned = failure == null ? list : List.of();
-            this.matched = matching(this.owned, this.subject.namespace(), name);
-            showExtras();
-        }));
+        List<Path> files = owner.get().files();
+        return () -> ModResources.list(files);
     }
 
     /** A thumbnail for each of the appearance's textures, in order. Not on the Swing thread. */
@@ -372,12 +386,13 @@ public final class DefinitionDetails {
 
     /** The listing of the definition's resources that runs or ran last; mod files stay open while it runs. */
     public CompletableFuture<?> resourceLoad() {
-        return this.resourceLoad;
+        return this.resourceLoader.current();
     }
 
     public void dispose() {
         this.disposed = true;
+        this.appearanceLoader.dispose();
+        this.resourceLoader.dispose();
         this.removeCatalogListener.run();
-        this.removeIconListener.run();
     }
 }
