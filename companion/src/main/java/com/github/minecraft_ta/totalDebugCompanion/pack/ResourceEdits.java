@@ -379,8 +379,10 @@ public final class ResourceEdits {
                 else if (!PackFolders.isPack(pack)) {
                     throw new IOException("The " + PackFolders.label(pack) + " is gone or has no pack.mcmeta, so the game does not load it");
                 }
+                Path file = pack.resolve(path);
+                // Only a copy the save makes gets them: a pack's own copy without them, such as a static texture, stays so.
                 // Written first: should one fail, the resource itself is left as it was, and the save fails whole.
-                for (Map.Entry<String, byte[]> companion : alongside.entrySet()) {
+                for (Map.Entry<String, byte[]> companion : Files.exists(file) ? Map.<String, byte[]>of().entrySet() : alongside.entrySet()) {
                     Path companionFile = pack.resolve(companion.getKey());
                     // The pack's own copy, even a different one, stays.
                     if (Files.exists(companionFile)) continue;
@@ -390,7 +392,6 @@ public final class ResourceEdits {
                     this.record.changed(beside, ResourceOriginals.hash(null), ResourceOriginals.hash(companion.getValue()));
                     added.add(companion.getKey());
                 }
-                Path file = pack.resolve(path);
                 byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
                 ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
                 if (this.record.change(target) == null) this.originals.keep(previous);
@@ -522,9 +523,12 @@ public final class ResourceEdits {
         }
     }
 
-    /** The problems a reload logged about {@code path}; saves merged into one reload each see only their own. */
-    private static List<String> problemsOf(ReloadResultPayload result, String path) {
-        return result.problems().stream().filter(problem -> problem.path().equals(path))
+    /**
+     * The problems a reload logged about {@code path} or a file written beside it; saves merged into one reload each see
+     * only their own.
+     */
+    private static List<String> problemsOf(ReloadResultPayload result, String path, List<String> beside) {
+        return result.problems().stream().filter(problem -> problem.path().equals(path) || beside.contains(problem.path()))
                 .map(ReloadResultPayload.Problem::message).toList();
     }
 
@@ -582,7 +586,7 @@ public final class ResourceEdits {
                         List.of(), message(failure));
             }
             return new Saved(result.error().isEmpty() ? ConfigChanges.Effect.NOW : assets ? ConfigChanges.Effect.GAME_STARTS
-                    : ConfigChanges.Effect.WORLD_OPENS, pack, problemsOf(result, path), result.error());
+                    : ConfigChanges.Effect.WORLD_OPENS, pack, problemsOf(result, path, alsoWatched), result.error());
         });
     }
 

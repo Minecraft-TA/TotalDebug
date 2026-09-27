@@ -291,6 +291,11 @@ class ResourceEditsTest {
         edits.save(texture, null, bytes("png2"), Map.of(texture + ".mcmeta", animation)).get(5, TimeUnit.SECONDS);
         assertEquals("{\"animation\":{\"frametime\":5}}", Files.readString(pack.resolve(texture + ".mcmeta")),
                 "the pack's own animation stays");
+
+        Files.delete(pack.resolve(texture + ".mcmeta"));
+        edits.save(texture, null, bytes("png3"), Map.of(texture + ".mcmeta", animation)).get(5, TimeUnit.SECONDS);
+        assertFalse(Files.exists(pack.resolve(texture + ".mcmeta")),
+                "a copy the pack had already, static here, is not given the opened file's animation");
     }
 
     @Test
@@ -301,16 +306,19 @@ class ResourceEditsTest {
         edits.gameConnected(message -> {
             if (message instanceof ReloadMessage reload) {
                 sent.add(reload.payload());
-                edits.answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(), ""));
+                edits.answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(new ReloadResultPayload.Problem(
+                        "assets/testmod/textures/block/gear.png.mcmeta", "Bad section")), ""));
             }
             return true;
         });
         String texture = "assets/testmod/textures/block/gear.png";
 
-        edits.save(texture, null, bytes("png"), Map.of(texture + ".mcmeta", bytes("{}"))).get(5, TimeUnit.SECONDS);
+        ResourceEdits.Saved saved = edits.save(texture, null, bytes("png"), Map.of(texture + ".mcmeta", bytes("{}")))
+                .get(5, TimeUnit.SECONDS);
         assertEquals(1, sent.size());
         assertEquals(Set.of(texture, texture + ".mcmeta"), Set.copyOf(sent.getFirst().watched()),
                 "the game takes the new animation into account, not only the pixels");
+        assertTrue(saved.problems().contains("Bad section"), "a problem with the animation is the save's own");
     }
 
     @Test
