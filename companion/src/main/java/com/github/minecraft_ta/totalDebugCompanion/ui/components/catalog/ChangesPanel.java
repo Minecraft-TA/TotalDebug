@@ -323,8 +323,8 @@ public final class ChangesPanel extends JPanel {
 
     /** Puts back what the managed packs held before Companion changed them; completes with what failed, or empty. */
     private CompletableFuture<String> revertResources(List<ResourceChange> reverted) {
-        List<CompletableFuture<ResourceEdits.Saved>> requests = new ArrayList<>();
-        for (ResourceChange change : reverted) requests.add(this.resourceEdits.revert(change.change()));
+        List<CompletableFuture<ResourceEdits.Saved>> requests =
+                this.resourceEdits.revert(reverted.stream().map(ResourceChange::change).toList());
         return CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).handle((ignored, failure) -> {
             List<String> failed = new ArrayList<>();
             for (int index = 0; index < requests.size(); index++) {

@@ -65,7 +65,7 @@ Each resource kind has a reload that makes the running game use it. The change s
 | Data read when a world loads: worldgen, dimension types, damage types, other dynamic registries | None | After rejoining the world; generated chunks keep their content |
 | Resources a mod reads from its JAR or only at startup | None | After restarting the game |
 
-- Requests made during a reload are merged into one more reload after it ends.
+- Requests made during a reload are merged into one more reload after it ends, and writes queued together, such as Revert All on the Changes page, ask for one reload once the last of them is written.
 - **Problems:** during a reload the mod collects warnings and errors that name an edited path or resource location whole, such as a model that failed to parse, and returns them with the result. The resource tab shows them on the edited file.
 - **Offline checks:** before writing, Companion reads JSON the way the game does: models and data strictly, language files leniently. A language file is one object whose values are text, or lists of components as NeoForge allows.
 - **Singleplayer only for data:** data reloads need a singleplayer world. A dedicated server is not covered yet; it would take the forwarded server channel and the server's script policy.
