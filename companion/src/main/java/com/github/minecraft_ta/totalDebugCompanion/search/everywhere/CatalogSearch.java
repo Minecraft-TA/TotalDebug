@@ -1,9 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
+import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.PackResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Category;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.DefinitionResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.KeyBindingResult;
@@ -98,6 +101,12 @@ public final class CatalogSearch {
                         owner == null ? ownerId : owner.title()));
             }
         }
+        // The player's packs belong to no module.
+        if (moduleIds == null && (category == Category.ALL || category == Category.RESOURCES)) {
+            for (PackResult pack : packs()) {
+                if (PackFolders.title(pack.file()).toLowerCase(Locale.ROOT).contains(folded)) results.add(pack);
+            }
+        }
         if (category == Category.RESOURCES) {
             for (ModResources.Resource resource : resources()) {
                 if (!resource.path().toLowerCase(Locale.ROOT).contains(folded)) continue;
@@ -112,6 +121,27 @@ public final class CatalogSearch {
                 .sorted(Comparator.comparingInt((Result result) -> SearchEverywhereSearch.rank(result, query)))
                 .limit(limit)
                 .toList();
+    }
+
+    /**
+     * The resource packs in {@code resourcepacks/} and the current world's datapacks, listed again for every search as
+     * the player adds packs or opens another world; none without a game directory. Blocking.
+     */
+    private List<PackResult> packs() {
+        List<PackResult> packs = new ArrayList<>();
+        Path workspace = this.options == null ? null : this.options.getParent();
+        if (workspace == null) return packs;
+        addPacks(workspace.resolve("resourcepacks"), "Resource pack", packs);
+        CurrentWorld.directory(workspace).ifPresent(world -> addPacks(world.resolve("datapacks"), "Datapack", packs));
+        return packs;
+    }
+
+    private static void addPacks(Path folder, String kind, List<PackResult> packs) {
+        try {
+            PackFolders.list(folder).values().forEach(file -> packs.add(new PackResult(file, kind)));
+        } catch (IOException unreadable) {
+            // Packs of a folder that cannot be listed are not found; the rest of the search still is.
+        }
     }
 
     /** The bindings with the keys {@code options.txt} gives them now, or their defaults when it cannot be read. Blocking. */

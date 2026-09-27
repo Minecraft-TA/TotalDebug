@@ -7,10 +7,12 @@ import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
+import com.github.minecraft_ta.totalDebugCompanion.model.PackView;
 import com.github.minecraft_ta.totalDebugCompanion.model.WorldView;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.ResourcesTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ContentBrowser;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.LogsPanel;
@@ -97,6 +99,7 @@ import javax.swing.JTable;
 import javax.swing.AbstractButton;
 import javax.swing.Action;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -571,6 +574,14 @@ final class UiScenarioDriver {
                 writeWorldFile("level.dat", new byte[]{1, 2, 3});
                 navigate(new NavigationTarget.World(WorldTab.OVERVIEW));
             });
+            case PACK_PAGE -> context.once("pack-page", () -> navigate(new NavigationTarget.Pack(mainWindow.editorContext().project()
+                    .profile().workspaceDirectory().resolve("saves/Test World/datapacks/Tweaks"))));
+            case SAVE_INTO -> context.once("save-into", () -> {
+                var mod = mainWindow.editorContext().project().catalog().index().orElseThrow().mod("testmod").orElseThrow();
+                navigate(new NavigationTarget.ArchiveEntry(Path.of(mod.file()), "assets/testmod/models/item/widget.json"));
+            });
+            case RESOURCE_PACKS -> context.once("resource-packs", () ->
+                    navigate(new NavigationTarget.PackResources(ResourcesTab.PACKS, "")));
             case WORLD_NONE -> context.once("world-none", () -> {
                 Path saves = mainWindow.editorContext().project().profile().workspaceDirectory().resolve("saves");
                 try {
@@ -671,6 +682,13 @@ final class UiScenarioDriver {
             case WORLD_NO_MATCH -> showsMessage("No game rule matches the filter.");
             case WORLD_UNREADABLE -> showsMessage("The world Test World could not be read");
             case WORLD_NONE -> showsMessage("No world has been played in this instance yet.");
+            case PACK_PAGE -> {
+                ResourceBrowser browser = findComponent(mainWindow, ResourceBrowser.class);
+                yield mainWindow.getEditorTabs().getSelectedEditor() instanceof PackView && browser != null
+                        && browser.isShowing() && browser.rowCount() > 0;
+            }
+            case RESOURCE_PACKS -> showsTable("Resources", "Pack");
+            case SAVE_INTO -> findComponents(mainWindow, JComboBox.class).stream().anyMatch(box -> box.isShowing() && box.getItemCount() > 1);
             case CONTENT -> {
                 ContentBrowser browser = findComponent(mainWindow, ContentBrowser.class);
                 yield mainWindow.getEditorTabs().getSelectedEditor() instanceof ContentView && browser != null

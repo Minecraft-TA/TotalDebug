@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
@@ -50,8 +51,23 @@ class WorldPanelTest {
         assertEquals("Rain", value(sections.getLast(), "Weather"));
     }
 
+    @Test
+    void aResourcePackIsNamedByWhereItComesFromToo() {
+        PacksPanel.Row faithful = PacksPanel.row(new ListedPack("file/Faithful.zip", ListedPack.State.DISABLED,
+                this.directory.resolve("resourcepacks/Faithful.zip")), null, PacksPanel.Side.RESOURCES);
+        assertEquals(List.of("Faithful.zip", "Resource packs folder"), List.of(faithful.name(), faithful.from()));
+        assertEquals("Minecraft", PacksPanel.row(new ListedPack("programmer_art", ListedPack.State.ENABLED, null), null,
+                PacksPanel.Side.RESOURCES).from());
+        assertEquals("Every mod", PacksPanel.row(new ListedPack("mod_resources", ListedPack.State.ENABLED, null), null,
+                PacksPanel.Side.RESOURCES).from());
+        PacksPanel.Row programmerArt = PacksPanel.row(new ListedPack("programmer_art", ListedPack.State.ENABLED, null,
+                "Programmer Art"), null, PacksPanel.Side.RESOURCES);
+        assertEquals(List.of("Programmer Art", "Minecraft"), List.of(programmerArt.name(), programmerArt.from()),
+                "the running game's title names it");
+    }
+
     private static List<String> row(String id, CatalogIndex index) {
-        DatapacksPanel.Row row = DatapacksPanel.row(new CurrentWorld.Datapack(id, CurrentWorld.PackState.ENABLED, null), index);
+        PacksPanel.Row row = PacksPanel.row(new ListedPack(id, ListedPack.State.ENABLED, null), index, PacksPanel.Side.DATA);
         return List.of(row.name(), row.from(), row.modId());
     }
 

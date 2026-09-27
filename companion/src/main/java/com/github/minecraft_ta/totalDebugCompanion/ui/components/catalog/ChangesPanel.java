@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigEdit;
@@ -465,14 +466,9 @@ public final class ChangesPanel extends JPanel {
         return new Loaded(rows, targets, changes, sections, keys, bindings, resources, problems);
     }
 
-    /** The managed pack a folder is: the resource pack, or the datapack of a world. */
+    /** The pack a change was saved into, such as {@code MyPack datapack of World}. */
     private static String packName(Path pack) {
-        Path parent = pack.getParent();
-        if (parent != null && parent.getFileName() != null && parent.getFileName().toString().equals("datapacks")
-                && parent.getParent() != null) {
-            return "Datapack of " + parent.getParent().getFileName();
-        }
-        return "Resource pack";
+        return PackFolders.label(pack);
     }
 
     private static ChangeRecord.Setting setting(ChangeRecord.Change change) {

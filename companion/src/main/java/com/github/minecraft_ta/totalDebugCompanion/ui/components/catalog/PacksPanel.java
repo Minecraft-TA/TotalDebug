@@ -1,7 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
@@ -37,30 +38,49 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * The world's datapacks as the game's pack screen lists them: enabled ones with the highest first, then disabled ones,
- * then packs in the world's folder the game enables when it loads the world next. Opening a pack a mod brings opens the
- * mod's page; opening a pack in the world's folder shows it in Explorer.
+ * Resource packs or datapacks as the game's pack screen lists them: enabled ones with the highest first, then the rest,
+ * and for datapacks the packs in the world's folder the game enables when it loads the world next. Opening a pack of its
+ * own folder or zip file opens its page; opening a pack a mod brings opens the mod's page.
  */
-final class DatapacksPanel extends JPanel {
-    private static final Set<String> MINECRAFT = Set.of("vanilla", "bundle", "trade_rebalance");
+final class PacksPanel extends JPanel {
+    /** Packs Minecraft itself brings: vanilla and its optional feature and resource packs. */
+    private static final Set<String> MINECRAFT = Set.of("vanilla", "bundle", "trade_rebalance", "programmer_art", "high_contrast");
 
-    /** A pack with its name, where it comes from, and the mod it belongs to, or empty. */
-    record Row(CurrentWorld.Datapack pack, String name, String from, String modId) {
+    /** Which packs a list shows, with the folder they are kept in and how its empty list reads. */
+    enum Side {
+        RESOURCES("Resource packs folder", "The instance has no resource packs.", "No resource pack matches the filter."),
+        DATA("World folder", "The world has no datapacks.", "No datapack matches the filter.");
+
+        private final String folder;
+        private final String none;
+        private final String noMatch;
+
+        Side(String folder, String none, String noMatch) {
+            this.folder = folder;
+            this.none = none;
+            this.noMatch = noMatch;
+        }
     }
 
+    /** A pack with its name, where it comes from, and the mod it belongs to, or empty. */
+    record Row(ListedPack pack, String name, String from, String modId) {
+    }
+
+    private final Side side;
     private final Consumer<NavigationTarget> navigator;
     private final PacksModel model = new PacksModel();
     private final JTable table = new JTable(this.model) {
         @Override
         public String getToolTipText(MouseEvent event) {
             int row = rowAtPoint(event.getPoint());
-            return row < 0 ? null : tooltip(DatapacksPanel.this.model.shown.get(row));
+            return row < 0 ? null : tooltip(PacksPanel.this.model.shown.get(row));
         }
     };
     private final BrowserBody body;
 
-    DatapacksPanel(Consumer<NavigationTarget> navigator) {
+    PacksPanel(Side side, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
+        this.side = side;
         this.navigator = navigator;
         this.table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         Tables.configure(this.table);
@@ -70,9 +90,9 @@ final class DatapacksPanel extends JPanel {
         this.table.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
-                int row = DatapacksPanel.this.table.rowAtPoint(event.getPoint());
+                int row = PacksPanel.this.table.rowAtPoint(event.getPoint());
                 if (row >= 0 && event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
-                    open(DatapacksPanel.this.model.shown.get(row));
+                    open(PacksPanel.this.model.shown.get(row));
                 }
             }
         });
@@ -80,8 +100,8 @@ final class DatapacksPanel extends JPanel {
         this.table.getActionMap().put("openPack", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent event) {
-                int row = DatapacksPanel.this.table.getSelectedRow();
-                if (row >= 0) open(DatapacksPanel.this.model.shown.get(row));
+                int row = PacksPanel.this.table.getSelectedRow();
+                if (row >= 0) open(PacksPanel.this.model.shown.get(row));
             }
         });
         int[] weights = {45, 35, 20};
@@ -93,11 +113,11 @@ final class DatapacksPanel extends JPanel {
     }
 
     /** Shows the packs, naming their mods from {@code index} when it is captured; the selected ones stay selected. */
-    void setPacks(List<CurrentWorld.Datapack> packs, CatalogIndex index) {
+    void setPacks(List<ListedPack> packs, CatalogIndex index) {
         Set<String> selected = new HashSet<>();
         for (int row : this.table.getSelectedRows()) selected.add(this.model.shown.get(row).pack().id());
         List<Row> rows = new ArrayList<>();
-        for (CurrentWorld.Datapack pack : packs) rows.add(row(pack, index));
+        for (ListedPack pack : packs) rows.add(row(pack, index, this.side));
         this.model.all = List.copyOf(rows);
         applyFilter();
         for (int row = 0; row < this.model.shown.size(); row++) {
@@ -106,15 +126,22 @@ final class DatapacksPanel extends JPanel {
     }
 
     /**
-     * A pack's name and origin from its id: {@code file/} and a file name for the world's folder, {@code mod/} and
-     * the ids of a mod file for a pack a mod brings, {@code mod_data} for the data of every mod, and a namespace
-     * before a colon for a pack a mod adds in code.
+     * A pack's name and origin from its id: {@code file/} and a file name for the side's folder, {@code mod/} and
+     * the ids of a mod file for a pack a mod brings, {@code mod_resources} and {@code mod_data} for the resources and
+     * data of every mod, and a namespace before a colon for a pack a mod adds in code.
      */
-    static Row row(CurrentWorld.Datapack pack, CatalogIndex index) {
+    static Row row(ListedPack pack, CatalogIndex index, Side side) {
+        Row row = fromId(pack, index, side);
+        // The running game's title, such as Programmer Art, names a pack better than its id; a file's name names its own.
+        return pack.file() != null || pack.title().isEmpty() ? row : new Row(pack, pack.title(), row.from(), row.modId());
+    }
+
+    private static Row fromId(ListedPack pack, CatalogIndex index, Side side) {
         String id = pack.id();
-        if (id.startsWith("file/")) return new Row(pack, id.substring("file/".length()), "World folder", "");
+        if (pack.file() != null) return new Row(pack, PackFolders.title(pack.file()), side.folder, "");
+        if (id.startsWith("file/")) return new Row(pack, id.substring("file/".length()), side.folder, "");
         if (MINECRAFT.contains(id)) return new Row(pack, id, "Minecraft", "");
-        if (id.equals("mod_data")) return new Row(pack, id, "Every mod", "");
+        if (id.equals("mod_resources") || id.equals("mod_data")) return new Row(pack, id, "Every mod", "");
         String name = id;
         String owner = "";
         if (id.startsWith("mod/")) {
@@ -129,7 +156,15 @@ final class DatapacksPanel extends JPanel {
         return new Row(pack, name, index.mod(owner).map(PackCatalog.Mod::title).orElse(owner), owner);
     }
 
-    static String state(CurrentWorld.PackState state) {
+    /** Shows why the packs could not be listed, in place of the list. */
+    void showFailure(String message) {
+        this.model.all = List.of();
+        this.model.shown = List.of();
+        this.model.fireTableDataChanged();
+        this.body.showMessage(message);
+    }
+
+    static String state(ListedPack.State state) {
         return switch (state) {
             case ENABLED -> "Enabled";
             case DISABLED -> "Disabled";
@@ -141,7 +176,8 @@ final class DatapacksPanel extends JPanel {
         String query = this.body.query().toLowerCase(Locale.ROOT);
         List<Row> shown = new ArrayList<>();
         for (Row row : this.model.all) {
-            if (query.isEmpty() || row.pack().id().toLowerCase(Locale.ROOT).contains(query)
+            if (query.isEmpty() || row.name().toLowerCase(Locale.ROOT).contains(query)
+                    || row.pack().id().toLowerCase(Locale.ROOT).contains(query)
                     || row.from().toLowerCase(Locale.ROOT).contains(query)
                     || state(row.pack().state()).toLowerCase(Locale.ROOT).contains(query)) {
                 shown.add(row);
@@ -150,14 +186,14 @@ final class DatapacksPanel extends JPanel {
         this.model.shown = List.copyOf(shown);
         this.model.fireTableDataChanged();
         boolean empty = shown.isEmpty();
-        if (empty) this.body.showMessage(this.model.all.isEmpty() ? "The world has no datapacks." : "No datapack matches the filter.");
+        if (empty) this.body.showMessage(this.model.all.isEmpty() ? this.side.none : this.side.noMatch);
         else this.body.showContent();
     }
 
-    /** Opens the mod a pack comes from, or shows a pack in the world's folder in Explorer. */
+    /** Opens a pack of its own folder or zip file, or the mod a pack comes from. */
     private void open(Row row) {
-        if (!row.modId().isEmpty()) this.navigator.accept(new NavigationTarget.ModPage(row.modId()));
-        else if (row.pack().file() != null) Explorer.show(row.pack().file());
+        if (row.pack().file() != null) this.navigator.accept(new NavigationTarget.Pack(row.pack().file()));
+        else if (!row.modId().isEmpty()) this.navigator.accept(new NavigationTarget.ModPage(row.modId()));
     }
 
     private String tooltip(Row row) {
@@ -179,10 +215,11 @@ final class DatapacksPanel extends JPanel {
             return menu;
         }
         Row row = selected.getFirst();
-        if (!row.modId().isEmpty()) menu.add(ContextMenus.action("Open " + row.from(), null, "ENTER", () -> open(row)));
         if (row.pack().file() != null) {
-            menu.add(ContextMenus.action("Show in Explorer", null, row.modId().isEmpty() ? "ENTER" : null,
-                    () -> Explorer.show(row.pack().file())));
+            menu.add(ContextMenus.action("Open", null, "ENTER", () -> open(row)));
+            menu.add(ContextMenus.action("Show in Explorer", null, null, () -> Explorer.show(row.pack().file())));
+        } else if (!row.modId().isEmpty()) {
+            menu.add(ContextMenus.action("Open " + row.from(), null, "ENTER", () -> open(row)));
         }
         if (menu.getComponentCount() > 0) menu.addSeparator();
         menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy ID", row.pack().id())));

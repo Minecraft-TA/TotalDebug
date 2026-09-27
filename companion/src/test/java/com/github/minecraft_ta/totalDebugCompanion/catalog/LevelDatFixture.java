@@ -3,12 +3,15 @@ package com.github.minecraft_ta.totalDebugCompanion.catalog;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.GZIPOutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * Writes a world's {@code level.dat} as the game does: gzipped NBT under a named root. Values are bytes, ints, longs,
@@ -51,6 +54,17 @@ public final class LevelDatFixture {
         Path pack = Files.createDirectories(world.resolve("datapacks").resolve(name));
         Files.writeString(pack.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":48,\"description\":\"" + name + "\"}}");
         return pack;
+    }
+
+    /** A zip datapack named {@code name}, ending in {@code .zip}, in {@code world}'s {@code datapacks} folder. */
+    public static Path zipDatapack(Path world, String name) throws IOException {
+        Path zip = Files.createDirectories(world.resolve("datapacks")).resolve(name);
+        try (ZipOutputStream output = new ZipOutputStream(Files.newOutputStream(zip))) {
+            output.putNextEntry(new ZipEntry("pack.mcmeta"));
+            output.write("{\"pack\":{\"pack_format\":48,\"description\":\"\"}}".getBytes(StandardCharsets.UTF_8));
+            output.closeEntry();
+        }
+        return zip;
     }
 
     /** Writes {@code data} as the world's data into {@code world}'s {@code level.dat}. */

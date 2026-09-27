@@ -17,9 +17,9 @@ public final class PackResourcesView implements IEditorPanel {
                 context.project().profile().workspaceDirectory(), context.navigation()::navigate);
     }
 
-    /** Selects a kind of resource, such as {@code assets/textures}; empty selects all. */
-    public void show(String category) {
-        this.panel.selectCategory(category);
+    /** Selects a tab, and on Files a kind of resource, such as {@code assets/textures}; empty selects all. */
+    public void show(NavigationTarget.PackResources target) {
+        this.panel.show(target);
     }
 
     @Override
@@ -29,7 +29,7 @@ public final class PackResourcesView implements IEditorPanel {
 
     @Override
     public String getTooltip() {
-        return "Resources of every mod and pack, as the game uses them";
+        return "Resources of every mod and pack, as the game uses them, and the resource packs";
     }
 
     @Override
@@ -44,7 +44,7 @@ public final class PackResourcesView implements IEditorPanel {
 
     @Override
     public NavigationTarget getNavigationTarget() {
-        return new NavigationTarget.PackResources(this.panel.category());
+        return this.panel.target();
     }
 
     @Override

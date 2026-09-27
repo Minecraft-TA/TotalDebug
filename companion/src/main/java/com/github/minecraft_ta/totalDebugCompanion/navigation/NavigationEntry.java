@@ -35,6 +35,7 @@ record NavigationEntry(
             case NavigationTarget.Changes ignored -> false;
             case NavigationTarget.KeyBindings ignored -> false;
             case NavigationTarget.World ignored -> false;
+            case NavigationTarget.Pack ignored -> false;
             case NavigationTarget.Content ignored -> false;
             case NavigationTarget.Definition ignored -> false;
             case NavigationTarget.RuntimeModuleNode ignored -> false;

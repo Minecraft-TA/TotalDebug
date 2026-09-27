@@ -1,7 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import com.google.gson.JsonElement;
@@ -16,9 +19,9 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Every resource of the pack joined as the game uses it: for each pack path, the copy of the highest pack that supplies
@@ -31,6 +34,7 @@ import java.util.Objects;
 public final class PackResources {
     private static final String VANILLA = "vanilla";
     private static final String MOD_RESOURCES = "mod_resources";
+    private static final String MOD_DATA = "mod_data";
 
     /** A pack as the game stacks it: its id, the title shown, and the files it reads from, none when Companion cannot read them. */
     public record Source(String id, String title, List<Path> files) {
@@ -80,14 +84,78 @@ public final class PackResources {
 
     /**
      * The packs data comes from, lowest first. {@code stack} is what the running game named, or null. A game at its menu
-     * or on a server names no datapacks, since no data of its own is loaded, so none are listed then.
+     * or on a server names no datapacks, since no data of its own is loaded, so none are listed then. Without a game, the
+     * current world's {@code level.dat} names them; a pack the game builds in memory, such as one a mod generates, adds
+     * nothing Companion can read. Blocking.
      */
-    public static List<Source> data(PackStackPayload stack, CatalogIndex index) {
+    public static List<Source> data(PackStackPayload stack, CatalogIndex index, Path workspace) throws IOException {
         if (stack != null) return stack.dataPacks().stream().map(pack -> source(pack, index)).toList();
+        // The game enables a new pack of the world's folder above the others when it loads the world.
+        List<ListedPack> listed = worldDatapacks(workspace);
+        List<ListedPack> enabled = new ArrayList<>(listed.stream().filter(pack -> pack.state() == ListedPack.State.ENABLED).toList().reversed());
+        enabled.addAll(listed.stream().filter(pack -> pack.state() == ListedPack.State.NEW).toList());
         List<Source> sources = new ArrayList<>();
-        sources.add(vanilla(index));
-        sources.addAll(mods(index));
+        for (ListedPack pack : enabled) {
+            switch (pack.id()) {
+                case VANILLA -> sources.add(vanilla(index));
+                case MOD_DATA -> sources.addAll(mods(index));
+                default -> {
+                    if (pack.file() != null) sources.add(new Source(pack.id(), PackFolders.title(pack.file()), List.of(pack.file())));
+                }
+            }
+        }
+        // The game adds a required pack the world does not list where it goes by default: Minecraft's at the bottom, the
+        // mods' data at the top.
+        List<String> ids = enabled.stream().map(ListedPack::id).toList();
+        if (!ids.contains(VANILLA)) sources.addFirst(vanilla(index));
+        if (!ids.contains(MOD_DATA)) sources.addAll(mods(index));
         return sources;
+    }
+
+    /**
+     * The current world's datapacks, or none without a world. A {@code level.dat} that cannot be read fails, rather than
+     * leaving the world's packs out of what the game uses. Blocking.
+     */
+    private static List<ListedPack> worldDatapacks(Path workspace) throws IOException {
+        Optional<Path> world = CurrentWorld.directory(workspace);
+        if (world.isEmpty()) return List.of();
+        try {
+            return CurrentWorld.read(world.get()).datapacks();
+        } catch (RuntimeException malformed) {
+            throw new IOException("The level.dat of " + world.get().getFileName() + " is malformed: " + malformed.getMessage(), malformed);
+        }
+    }
+
+    /**
+     * The resource packs as the game's pack screen lists them: enabled ones with the highest first, then those in
+     * {@code resourcepacks/} that are not. With a game connected they follow the stack it named, where each mod file is
+     * a pack of its own, shown together as the mods' resources as the game shows them; without one, {@code options.txt}.
+     * Blocking.
+     */
+    public static List<ListedPack> resourcePacks(PackStackPayload stack, Path workspace) throws IOException {
+        Map<String, Path> files = PackFolders.list(workspace.resolve("resourcepacks"));
+        // The ids of the enabled packs, lowest first, with the titles the running game gives them.
+        LinkedHashMap<String, String> enabled = new LinkedHashMap<>();
+        if (stack == null) {
+            // The game drops a pack of the folder that is gone when it starts, and adds the required ones as assets() does.
+            List<String> ids = enabledInOptions(workspace.resolve("options.txt"));
+            if (!ids.contains(VANILLA)) enabled.put(VANILLA, "");
+            for (String id : ids) {
+                if (!id.startsWith("file/") || files.containsKey(id)) enabled.put(id, "");
+            }
+            if (!ids.contains(MOD_RESOURCES)) enabled.put(MOD_RESOURCES, "");
+        } else {
+            for (PackStackPayload.Pack pack : stack.resourcePacks()) {
+                if (pack.id().startsWith("mod/")) enabled.putIfAbsent(MOD_RESOURCES, "");
+                else enabled.putIfAbsent(pack.id(), pack.title());
+            }
+        }
+        List<ListedPack> packs = new ArrayList<>();
+        for (String id : enabled.sequencedKeySet().reversed()) {
+            packs.add(new ListedPack(id, ListedPack.State.ENABLED, files.remove(id), enabled.get(id)));
+        }
+        files.forEach((id, file) -> packs.add(new ListedPack(id, ListedPack.State.DISABLED, file)));
+        return packs;
     }
 
     /** Joins {@code assets} and {@code data}, each lowest first, into the copies the game uses. Blocking. */
@@ -163,7 +231,7 @@ public final class PackResources {
     }
 
     /** The resource packs {@code options.txt} enables, lowest first; the game's defaults when it lists none. */
-    static List<String> enabledInOptions(Path options) throws IOException {
+    public static List<String> enabledInOptions(Path options) throws IOException {
         if (!Files.isRegularFile(options)) return List.of(VANILLA, MOD_RESOURCES);
         for (String line : Files.readAllLines(options, StandardCharsets.UTF_8)) {
             if (!line.startsWith("resourcePacks:")) continue;
@@ -180,9 +248,8 @@ public final class PackResources {
         return List.of(VANILLA, MOD_RESOURCES);
     }
 
-    /** A title for a pack the running game has not named: its folder or file name. */
+    /** A title for a pack the running game has not named: its folder or file name, as the game titles it. */
     static String title(String id) {
-        String name = id.startsWith("file/") ? id.substring("file/".length()) : id;
-        return name.toLowerCase(Locale.ROOT).endsWith(".zip") ? name.substring(0, name.length() - 4) : name;
+        return id.startsWith("file/") ? id.substring("file/".length()) : id;
     }
 }

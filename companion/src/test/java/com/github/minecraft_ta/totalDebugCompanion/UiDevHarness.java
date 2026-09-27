@@ -122,8 +122,19 @@ public final class UiDevHarness {
                 	mode = "FAST"
                 """);
         // The test mod's Spin binding moved to Q, where it collides with dropping an item.
+        // Faithful, enabled above the mods, supplies its own copy of the test mod's widget texture.
         Files.writeString(scope.profile().workspaceDirectory().resolve("options.txt"),
-                "key_key.testmod.spin:key.keyboard.q\nkey_key.drop:key.keyboard.q\n");
+                "key_key.testmod.spin:key.keyboard.q\nkey_key.drop:key.keyboard.q\n"
+                        + "resourcePacks:[\"vanilla\",\"mod_resources\",\"file/Faithful\"]\n");
+        Path faithful = Files.createDirectories(scope.profile().workspaceDirectory().resolve("resourcepacks/Faithful"));
+        Files.writeString(faithful.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"Faithful 32x\"}}");
+        Path texture = Files.createDirectories(faithful.resolve("assets/testmod/textures/item")).resolve("widget.png");
+        BufferedImage pixels = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        for (int x = 0; x < 16; x++) for (int y = 0; y < 16; y++) pixels.setRGB(x, y, (x + y) % 2 == 0 ? 0xFF4A7A3C : 0xFF6FA05A);
+        ImageIO.write(pixels, "png", texture.toFile());
+        Files.createDirectories(scope.profile().workspaceDirectory().resolve("resourcepacks/Programmer Tweaks"));
+        Files.writeString(scope.profile().workspaceDirectory().resolve("resourcepacks/Programmer Tweaks/pack.mcmeta"),
+                "{\"pack\":{\"pack_format\":34,\"description\":\"Not enabled\"}}");
         // A crash report whose top frame belongs to the test mod, for the Logs page.
         Path crashes = Files.createDirectories(scope.profile().workspaceDirectory().resolve("crash-reports"));
         Files.writeString(crashes.resolve("crash-2026-09-27_10.00.00-client.txt"), """
@@ -145,7 +156,9 @@ public final class UiDevHarness {
         // A world with a pack in its folder the game enables when it loads the world next.
         Path world = scope.profile().workspaceDirectory().resolve("saves/Test World");
         LevelDatFixture.write(world, LevelDatFixture.world("Test World"));
-        LevelDatFixture.datapack(world, "Tweaks");
+        Path tweaks = LevelDatFixture.datapack(world, "Tweaks");
+        Path recipe = Files.createDirectories(tweaks.resolve("data/tweaks/recipe")).resolve("widget_from_goo.json");
+        Files.writeString(recipe, "{\"type\":\"minecraft:crafting_shapeless\",\"ingredients\":[],\"result\":{\"id\":\"testmod:widget\"}}");
         LevelDatFixture.datapack(world, "Structures");
         Path file = scope.paths().catalog();
         Files.createDirectories(file.getParent());

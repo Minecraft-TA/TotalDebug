@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
@@ -35,6 +36,7 @@ import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEvery
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.DefinitionResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.KeyBindingResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ModResult;
+import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.PackResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ResourceResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Result;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.SymbolResult;
@@ -687,6 +689,7 @@ public class SearchEverywherePopup extends JFrame {
             case DefinitionResult definition -> navigator.accept(new NavigationTarget.Definition(definition.entry().subject()));
             case ResourceResult resource -> navigator.accept(resource.resource().target());
             case KeyBindingResult key -> navigator.accept(new NavigationTarget.KeyBindings(key.name()));
+            case PackResult pack -> navigator.accept(new NavigationTarget.Pack(pack.file()));
         }
     }
 
@@ -716,6 +719,7 @@ public class SearchEverywherePopup extends JFrame {
             case DefinitionResult definition -> definition.entry().id();
             case ResourceResult resource -> resource.resource().path();
             case KeyBindingResult key -> key.name();
+            case PackResult pack -> pack.file().toString();
         };
     }
 
@@ -728,6 +732,7 @@ public class SearchEverywherePopup extends JFrame {
             case DefinitionResult ignored -> null;
             case ResourceResult ignored -> null;
             case KeyBindingResult ignored -> null;
+            case PackResult ignored -> null;
         };
         if (sourceIds == null) return catalogSummary(result);
         var sources = Arrays.stream(sourceIds)
@@ -755,6 +760,7 @@ public class SearchEverywherePopup extends JFrame {
             case DefinitionResult definition -> "D:" + definition.entry().subject().format();
             case ResourceResult resource -> "R:" + resource.resource().file() + "!" + resource.resource().path();
             case KeyBindingResult key -> "K:" + key.name();
+            case PackResult pack -> "P:" + pack.file();
         };
     }
 
@@ -766,6 +772,7 @@ public class SearchEverywherePopup extends JFrame {
                     ContentKinds.of(definition.entry().registry()).singular());
             case ResourceResult resource -> new PrimarySecondaryText(resource.owner(), "Resource");
             case KeyBindingResult key -> new PrimarySecondaryText(key.owner(), "Key binding");
+            case PackResult pack -> PrimarySecondaryText.primary(pack.kind());
             default -> PrimarySecondaryText.primary("");
         };
         return new ModuleSummary(text, (text.primary() + "  " + text.secondary()).strip());
@@ -857,6 +864,10 @@ public class SearchEverywherePopup extends JFrame {
                 case KeyBindingResult key -> {
                     presentation = new PrimarySecondaryText(key.action(), key.key());
                     icon = Icons.KEYBOARD;
+                }
+                case PackResult pack -> {
+                    presentation = new PrimarySecondaryText(PackFolders.title(pack.file()), Tooltip.shortPath(pack.file()));
+                    icon = Icons.RESOURCES_ROOT;
                 }
             }
 

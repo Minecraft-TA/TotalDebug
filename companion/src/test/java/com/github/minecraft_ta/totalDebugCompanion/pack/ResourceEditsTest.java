@@ -1,28 +1,38 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceEditsTest {
@@ -143,7 +153,8 @@ class ResourceEditsTest {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "resourcePacks:[\"vanilla\"]\n");
         ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> true);
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> true,
+                InstanceState.inMemory());
         edits.packStack(STACK);
 
         ResourceEdits.Saved saved = edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
@@ -270,13 +281,180 @@ class ResourceEditsTest {
                 new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""),
                 new PackStackPayload.Pack("file/Faithful", "Faithful", above.toString())), List.of()));
 
-        assertEquals("Faithful", edits.overriddenBy(LANG).orElseThrow());
-        assertTrue(edits.overriddenBy("assets/testmod/lang/de_de.json").isEmpty());
+        Path managed = this.directory.resolve("resourcepacks/TotalDebug");
+        assertEquals("Faithful is above the TotalDebug resource pack and supplies this file too, so the game shows its copy",
+                edits.unusedBecause(LANG, managed).orElseThrow());
+        assertTrue(edits.unusedBecause("assets/testmod/lang/de_de.json", managed).isEmpty());
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        assertEquals("The MyPack resource pack is not enabled, so the game does not use this file",
+                edits.unusedBecause(LANG, mine).orElseThrow(), "only the managed pack is enabled by a save");
+    }
+
+    @Test
+    void withoutAGameADisabledPackOfTheirsIsNamedFromTheFilesThatEnableIt() throws Exception {
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
+        assertEquals("The MyPack resource pack is not enabled, so the game does not use this file",
+                edits.unusedBecause(LANG, mine).orElseThrow(), "options.txt does not enable it");
+        Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\",\"file/MyPack\"]\n");
+        assertTrue(edits.unusedBecause(LANG, mine).isEmpty());
+        assertTrue(edits.unusedBecause(LANG, this.directory.resolve("resourcepacks/TotalDebug")).isEmpty(),
+                "the managed pack is enabled when it is saved to");
+
+        Path world = this.directory.resolve("saves/World");
+        Map<String, Object> data = LevelDatFixture.world("World");
+        data.put("DataPacks", Map.of("Enabled", List.of("vanilla"), "Disabled", List.of("file/Old")));
+        LevelDatFixture.write(world, data);
+        Path old = LevelDatFixture.datapack(world, "Old");
+        Path added = LevelDatFixture.datapack(world, "Added");
+        String recipe = "data/testmod/recipe/gear.json";
+        assertEquals("The Old datapack of World is not enabled, so the game does not use this file",
+                edits.unusedBecause(recipe, old).orElseThrow());
+        assertTrue(edits.unusedBecause(recipe, added).isEmpty(), "a new pack of the world's folder is enabled when the world loads");
+    }
+
+    @Test
+    void aDatapackAddedSinceTheWorldLoadedCountsAsUsedAsAReloadEnablesIt() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        Map<String, Object> data = LevelDatFixture.world("World");
+        data.put("DataPacks", Map.of("Enabled", List.of("vanilla", "file/Live"), "Disabled", List.of("file/Off")));
+        LevelDatFixture.write(world, data);
+        Path added = LevelDatFixture.datapack(world, "Added");
+        Path off = LevelDatFixture.datapack(world, "Off");
+        Path live = LevelDatFixture.datapack(world, "Live");
+        Files.writeString(world.resolve("session.lock"), "x");
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packStack(STACK);
+        String recipe = "data/tweaks/recipe/gear.json";
+
+        try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.WRITE);
+             FileLock ignored = channel.lock()) {
+            assertTrue(edits.unusedBecause(recipe, added).isEmpty(), "a reload enables it, as /reload does");
+            assertEquals("The Off datapack of World is not enabled, so the game does not use this file",
+                    edits.unusedBecause(recipe, off).orElseThrow(), "but not one the world disabled");
+            assertEquals("The Live datapack of World is not enabled, so the game does not use this file",
+                    edits.unusedBecause(recipe, live).orElseThrow(), "nor one disabled in the open world since level.dat was saved");
+        }
+    }
+
+    @Test
+    void withoutAGameAnUnreadableLevelDatSaysWhetherTheDatapackIsUsedIsUnknown() throws Exception {
+        Path world = Files.createDirectories(this.directory.resolve("saves/World"));
+        Files.writeString(world.resolve("level.dat"), "not nbt");
+        Path tweaks = LevelDatFixture.datapack(world, "Tweaks");
+
+        String reason = edits(ChangeRecord.inMemory()).unusedBecause("data/tweaks/recipe/gear.json", tweaks).orElseThrow();
+        assertTrue(reason.startsWith("Whether the game enables the Tweaks datapack of World could not be read: "), reason);
+    }
+
+    @Test
+    void aPackOfTheirsThatIsGoneIsNotSavedInto() throws Exception {
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        CompletableFuture<ResourceEdits.Saved> save = edits(ChangeRecord.inMemory()).save(LANG, mine, bytes("{}"));
+
+        Throwable failure = assertThrows(ExecutionException.class, () -> save.get(5, TimeUnit.SECONDS));
+        while (failure.getCause() != null) failure = failure.getCause();
+        assertEquals("The MyPack resource pack is gone or has no pack.mcmeta, so the game does not load it", failure.getMessage());
+        assertFalse(Files.exists(mine.resolve(LANG)));
+    }
+
+    @Test
+    void aSaveIntoADisabledPackOfTheirsSaysTheGameDoesNotUseIt() throws Exception {
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
+        ResourceEdits.Saved saved = edits(ChangeRecord.inMemory()).save(LANG, mine, bytes("{}")).get(5, TimeUnit.SECONDS);
+
+        assertEquals("The MyPack resource pack is not enabled, so the game does not use this file", saved.unused(),
+                "saving writes the file but does not enable the player's pack");
+        ResourceEdits named = edits(ChangeRecord.inMemory());
+        named.packStack(STACK);
+        assertTrue(named.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS).unused().isEmpty(),
+                "the managed pack is enabled when it is saved to");
+    }
+
+    @Test
+    void aFileOnTheSideAPackIsNotReadForIsNotSavedInThatPack() throws Exception {
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Path world = Files.createDirectories(this.directory.resolve("saves/World"));
+        Path datapack = LevelDatFixture.datapack(world, "Tweaks");
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+
+        assertTrue(edits.packOf(mine.resolve("data/mypack/recipe/gear.json")).isEmpty(), "the game reads no data from a resource pack");
+        assertTrue(edits.packOf(datapack.resolve("assets/mypack/lang/en_us.json")).isEmpty(), "nor assets from a datapack");
+        assertEquals(mine, edits.packOf(mine.resolve(LANG)).orElseThrow());
+        assertEquals(datapack, edits.packOf(datapack.resolve("data/tweaks/recipe/gear.json")).orElseThrow());
+    }
+
+    @Test
+    void aFileOfTheirOwnPackIsSavedInPlaceWithoutMovingThatPack() throws Exception {
+        Path world = world("World");
+        Path mine = Files.createDirectories(world.resolve("datapacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":48,\"description\":\"\"}}");
+        Path recipe = Files.createDirectories(mine.resolve("data/mypack/recipe")).resolve("gear.json");
+        Files.writeString(recipe, "{}");
+        Files.createDirectories(world.resolve("datapacks/notapack/data"));
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        assertEquals(mine, edits.packOf(recipe).orElseThrow());
+        assertTrue(edits.packOf(world.resolve("datapacks/notapack/data/x.json")).isEmpty(), "a folder without pack.mcmeta is no pack");
+
+        edits.save("data/mypack/recipe/gear.json", mine, bytes("{\"type\":\"x\"}")).get(5, TimeUnit.SECONDS);
+        assertEquals("{\"type\":\"x\"}", Files.readString(recipe));
+        assertTrue(record.change(new ChangeRecord.Resource("data/mypack/recipe/gear.json", mine)) != null,
+                "an edit of their own pack can be reverted from Changes like any other");
+        assertTrue(Files.notExists(world.resolve("datapacks/TotalDebug")), "the managed pack is not created for it");
+    }
+
+    @Test
+    void theWorkingPackTakesFilesOfModsUntilItIsGone() throws Exception {
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Files.writeString(this.directory.resolve("resourcepacks/Faithful.zip"), "");
+        InstanceState state = InstanceState.inMemory();
+        ResourceEdits edits = edits(ChangeRecord.inMemory(), state);
+        Path managed = this.directory.resolve("resourcepacks/TotalDebug");
+        assertEquals(List.of(managed, mine), edits.packs(LANG), "the managed pack first, then folder packs; a zip cannot be written");
+        assertEquals(managed, edits.pack(LANG));
+
+        edits.setWorkingPack(LANG, mine);
+        assertEquals(mine, edits.pack(LANG));
+        assertEquals("MyPack", state.workingPack("assets"));
+        assertEquals("", state.workingPack("data"), "each side has its own working pack");
+
+        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        edits.gameConnected(message -> {
+            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
+            return true;
+        });
+        CompletableFuture<ResourceEdits.Saved> saved = edits.save(LANG, bytes("{}"));
+        awaitSent(sent, 1);
+        assertEquals("", sent.getFirst().managedPack(), "the game reloads without enabling or moving any pack");
+        edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
+        assertEquals(mine, saved.get(5, TimeUnit.SECONDS).pack());
+        assertTrue(Files.isRegularFile(mine.resolve(LANG)));
+        assertTrue(Files.notExists(managed), "saving into their own pack does not create the managed one");
+
+        try (Stream<Path> files = Files.walk(mine)) {
+            for (Path file : files.sorted(Comparator.reverseOrder()).toList()) Files.delete(file);
+        }
+        assertEquals(managed, edits.pack(LANG), "a working pack that is gone falls back to the managed pack");
+        Files.createDirectories(mine);
+        assertEquals(managed, edits.pack(LANG), "so does a folder the game does not take as a pack, without pack.mcmeta");
+        edits.setWorkingPack(LANG, managed);
+        assertEquals("", state.workingPack("assets"));
     }
 
     private ResourceEdits edits(ChangeRecord record) {
+        return edits(record, InstanceState.inMemory());
+    }
+
+    private ResourceEdits edits(ChangeRecord record, InstanceState state) {
         return new ResourceEdits(this.directory, record, new ResourceOriginals(this.directory.resolve("total-debug/originals")),
-                Runnable::run, () -> false);
+                Runnable::run, () -> false, state);
     }
 
     private Path world(String name) throws IOException {

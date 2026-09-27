@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourcePaths;
@@ -9,12 +10,16 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
+import javax.swing.JList;
+import javax.swing.JComboBox;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import java.awt.Component;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
@@ -30,19 +35,21 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * A text resource of the pack, edited in place. It shows the copy the game uses: the managed pack's, or the file that
- * was opened. Save (Ctrl+S) checks the text, writes it into the pack Companion manages and reloads what the game needs;
- * the bar tells where the text comes from, when the game uses it and what its reload reported. The Changes page
- * reverts a saved edit, and the editor follows it.
+ * A text resource of the pack, edited in place. A file opened from a folder pack is saved in that pack; a file of a
+ * mod or another archive is saved into the working pack of its side, chosen under Save into: the pack Companion
+ * manages, or a folder pack of the player's own. The editor shows the copy the game uses: the target pack's, or the
+ * file that was opened. Save (Ctrl+S) checks the text, writes it and reloads what the game needs; the bar tells where
+ * the text comes from, when the game uses it and what its reload reported. The Changes page reverts a saved edit, and
+ * the editor follows it.
  */
 final class ResourceTextEditor extends JPanel {
     private static final Pattern LINE = Pattern.compile("line (\\d+)");
 
     /**
-     * The managed pack the text is saved in, its entry in the change record when the copy was read, its copy there or
-     * null, and a pack above it that supplies the file too, or null.
+     * The pack the text is saved in, its entry in the change record when the copy was read, its copy there or null, why
+     * the game does not use that copy or null, and the packs it could be saved into instead, empty for an opened pack.
      */
-    private record Found(Path pack, ChangeRecord.Change recorded, String managed, String overriddenBy) {
+    private record Found(Path pack, ChangeRecord.Change recorded, String managed, String unused, List<Path> targets) {
     }
 
     private final String path;
@@ -53,6 +60,10 @@ final class ResourceTextEditor extends JPanel {
     private final JLabel notice = new JLabel();
     private final JButton save = new JButton("Save", Icons.SAVE);
     private final JButton discard = new JButton("Discard", Icons.REVERT);
+    private final JLabel targetLabel = new JLabel("Save into");
+    private final JComboBox<Path> target = new JComboBox<>();
+    /** Set while the target list is filled, so that filling it does not count as a choice. */
+    private boolean listingTargets;
     private Supplier<Color> noticeColor = ThemeColors::secondaryText;
     /** The text of the file that was opened, which the pack supplies while the managed pack holds no copy. */
     private final String openedText;
@@ -60,29 +71,45 @@ final class ResourceTextEditor extends JPanel {
     private final Runnable stopListening;
     /** Stops following the game's packs. */
     private final Runnable stopFollowingPacks;
+    /** Stops following the choice of working pack. */
+    private final Runnable stopFollowingWorkingPack;
     /** The text a save under way writes, or null. */
     private String saving;
-    /** The managed pack the opened file lies in, which stays the target, or null to save into the current world's. */
+    /** The folder pack the opened file lies in, which stays the target, or null to save into the working pack. */
     private final Path opened;
     /** The text the pack supplies: the managed pack's copy, or the opened file's. */
     private String packText;
     /** This resource's entry in the change record when the copies were last read, or null. */
     private ChangeRecord.Change seen;
-    /** The managed pack the shown copy was read from, or null until it is read. */
+    /** The pack the shown copy was read from, or null until it is read. */
     private Path pack;
-    /** The managed pack the text is saved in, as the bar names it. */
-    private String packName = "the TotalDebug pack";
+    /** The pack the text is saved in, as the bar names it. */
+    private String packName = "the working pack";
     /** Counts writes, so the copies read when the tab opened never replace the text of a later write. */
     private int writes;
     /** Counts reads of the copies; only the latest may show its result, since reads can finish out of order. */
     private int reads;
     private boolean managed;
     private boolean busy;
+    /**
+     * The working pack or the current world changed and its copy is being read; a save waits for it, so it goes into the
+     * pack the tab shows.
+     */
+    private boolean following;
+    /** The working pack or the current world changed during a save, and is followed once the save completes. */
+    private boolean followAfterSave;
+    /** Whether that change ends what the notice said, as a new working pack does; a pack stack change does not. */
+    private boolean clearAfterSave;
+    /**
+     * What a read of the copies last put in the notice, such as why the game does not use the shown copy, or null. The
+     * next read replaces it; a save's result stays.
+     */
+    private String readNotice;
     private boolean disposed;
 
     /**
-     * {@code origin} names the file that was opened, such as a mod's JAR, and {@code pack} is the managed pack it lies in,
-     * which stays the target, or null to save into the current world's.
+     * {@code origin} names the file that was opened, such as a mod's JAR, and {@code pack} is the folder pack it lies in,
+     * which stays the target, or null to save into the working pack of its side.
      */
     ResourceTextEditor(String path, String origin, Path pack, LoadedResource.Text content, ResourceEdits edits) {
         super(new BorderLayout());
@@ -96,13 +123,25 @@ final class ResourceTextEditor extends JPanel {
         this.text = new EditableTextPanel(content.syntaxStyle(), this::changed, this::save);
         this.text.load(content.value());
 
-        this.save.setToolTipText(Tooltip.action("Save", "Ctrl+S").text(path.startsWith("assets/")
-                ? "Checks the text, writes it into the TotalDebug resource pack and reloads it in the game"
-                : "Checks the text, writes it into the TotalDebug datapack of the current world and reloads it in the game").html());
+        this.save.setToolTipText(Tooltip.action("Save", "Ctrl+S").text("Checks the text, writes it into the working pack and reloads it in the game").html());
         this.save.addActionListener(event -> save());
         this.discard.setToolTipText(Tooltip.action("Discard", null).text("Drops the unsaved changes to the text").html());
         this.discard.addActionListener(event -> discard());
+        this.target.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focused) {
+                super.getListCellRendererComponent(list, value, index, selected, focused);
+                if (value instanceof Path pack) setText(PackFolders.title(pack));
+                return this;
+            }
+        });
+        this.target.setToolTipText(Tooltip.of("Save into").text("The pack a file of a mod is saved into, the TotalDebug pack or one of your own").html());
+        this.target.addActionListener(event -> chooseTarget());
+        this.targetLabel.setVisible(false);
+        this.target.setVisible(false);
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        actions.add(this.targetLabel);
+        actions.add(this.target);
         actions.add(this.save);
         actions.add(this.discard);
         ThemeColors.keepForeground(this.state, ThemeColors::secondaryText);
@@ -127,11 +166,44 @@ final class ResourceTextEditor extends JPanel {
         this.stopListening = edits.record().addListener(() -> SwingUtilities.invokeLater(this::recordChanged));
         // Another world opening changes the current world's datapack a data file is shown from and saved into.
         this.stopFollowingPacks = edits.addStackListener(() -> SwingUtilities.invokeLater(this::packsChanged));
+        // A working pack chosen in another tab is where this one saves too.
+        this.stopFollowingWorkingPack = edits.addWorkingPackListener(side -> {
+            if (side.equals(ResourceEdits.side(path))) SwingUtilities.invokeLater(this::targetChanged);
+        });
+    }
+
+    /**
+     * Saves into the chosen pack from now on, for this file and every file of a mod on its side; every open tab, this one
+     * too, then shows the new pack's copy.
+     */
+    private void chooseTarget() {
+        if (this.listingTargets || !(this.target.getSelectedItem() instanceof Path chosen) || chosen.equals(this.pack)) return;
+        this.following = true;
+        changed();
+        this.edits.setWorkingPack(this.path, chosen);
+    }
+
+    /** Shows the copy of the working pack chosen now, whose notice replaces the last pack's. */
+    private void targetChanged() {
+        follow(true);
     }
 
     /** Reads the copies again when the tab follows the current world, which may have changed. */
     private void packsChanged() {
-        if (!this.disposed && this.opened == null && !this.busy) readCopies(false);
+        follow(false);
+    }
+
+    /** Reads the working pack's copy again, once a save under way completes; {@code changed} as for {@link #readCopies}. */
+    private void follow(boolean changed) {
+        if (this.disposed || this.opened != null) return;
+        if (this.busy) {
+            this.followAfterSave = true;
+            this.clearAfterSave |= changed;
+            return;
+        }
+        this.following = true;
+        changed();
+        readCopies(changed);
     }
 
     /** Reads the copies again when this resource's entry in the change record changed. */
@@ -153,6 +225,14 @@ final class ResourceTextEditor extends JPanel {
         return this.text;
     }
 
+    JComboBox<Path> targetBox() {
+        return this.target;
+    }
+
+    String noticeText() {
+        return this.notice.getText();
+    }
+
     /**
      * Shows the managed pack's copy instead of the opened file's, and names a pack that overrides the managed one.
      * {@code changed} tells that the file itself changed, such as by a revert, which ends what the notice said about it.
@@ -162,22 +242,28 @@ final class ResourceTextEditor extends JPanel {
         int read = ++this.reads;
         CompletableFuture.supplyAsync(() -> {
             try {
-                // Without an opened pack, the current world's is looked up each time: the player can open another world.
+                // Without an opened pack, the working pack is looked up each time: the player can open another world or
+                // choose another pack.
                 Path pack = this.opened != null ? this.opened : this.edits.pack(this.path);
                 // The record is looked at before the file, so a change between the two is caught afterwards.
                 ChangeRecord.Change recorded = this.edits.record().change(new ChangeRecord.Resource(this.path, pack));
                 return new Found(pack, recorded, this.edits.managed(pack, this.path).map(ResourceTextEditor::text).orElse(null),
-                        this.edits.overriddenBy(this.path).orElse(null));
+                        this.edits.unusedBecause(this.path, pack).orElse(null),
+                        this.opened != null ? List.of() : this.edits.packs(this.path));
             } catch (Exception exception) {
                 throw new CompletionException(exception);
             }
         }).whenComplete((found, failure) -> SwingUtilities.invokeLater(() -> {
             if (this.disposed || this.writes != started || this.reads != read) return;
+            // A read that fails leaves the pack to save into unknown, so saving waits for the next one.
             if (failure != null) {
-                showNotice(message(failure), ThemeColors::error);
+                this.readNotice = message(failure);
+                showNotice(this.readNotice, ThemeColors::error);
                 return;
             }
+            this.following = false;
             showPack(found.pack());
+            showTargets(found.targets(), found.pack());
             this.seen = found.recorded();
             if (changed) showNotice("", ThemeColors::secondaryText);
             // Without a managed copy, such as after a revert, the pack supplies the opened file's text again, unless the
@@ -188,17 +274,33 @@ final class ResourceTextEditor extends JPanel {
             if (!this.text.modified() && (this.managed || this.opened == null)) this.text.load(this.packText);
             else this.text.markSaved(this.packText);
             showState("");
-            if (found.overriddenBy() != null) {
-                showNotice(found.overriddenBy() + " is above the TotalDebug pack and supplies this file too, so the game shows its copy",
-                        ThemeColors::warning);
-            }
+            // Why the game did not use the copy ends when it does now, such as after the player enabled the pack.
+            boolean replaceable = this.notice.getText().isEmpty() || this.notice.getText().equals(this.readNotice);
+            if (replaceable) showNotice("", ThemeColors::secondaryText);
+            this.readNotice = found.unused();
+            // A save's reload failure or problems stay: they tell why, such as a pack the game turned off after a failure.
+            if (found.unused() != null && replaceable) showNotice(found.unused(), ThemeColors::warning);
             changed();
             // A save or revert that came after the record was looked at is read again.
             if (!Objects.equals(recorded(), this.seen)) readCopies(true);
         }));
     }
 
-    /** Names the managed pack the shown text belongs to, and follows its entry in the change record. */
+    /** Lists the packs the text could be saved into, the current one selected; an opened pack's file shows none. */
+    private void showTargets(List<Path> targets, Path current) {
+        this.listingTargets = true;
+        try {
+            this.target.removeAllItems();
+            targets.forEach(this.target::addItem);
+            this.target.setSelectedItem(current);
+        } finally {
+            this.listingTargets = false;
+        }
+        this.targetLabel.setVisible(!targets.isEmpty());
+        this.target.setVisible(!targets.isEmpty());
+    }
+
+    /** Names the pack the shown text belongs to, and follows its entry in the change record. */
     private void showPack(Path pack) {
         this.pack = pack;
         this.packName = packName(pack);
@@ -207,13 +309,9 @@ final class ResourceTextEditor extends JPanel {
                 .text("Checks the text, writes it into " + this.packName + " and reloads it in the game").html());
     }
 
-    /** A managed pack as the bar names it: the resource pack, or the datapack of a world by its folder. */
+    /** A pack as the bar names it, such as {@code the MyPack datapack of World}. */
     private static String packName(Path pack) {
-        Path datapacks = pack.getParent();
-        if (datapacks == null || !datapacks.getFileName().toString().equals("datapacks") || datapacks.getParent() == null) {
-            return "the TotalDebug pack";
-        }
-        return "the TotalDebug datapack of " + datapacks.getParent().getFileName();
+        return "the " + PackFolders.label(pack);
     }
 
     private static String text(byte[] content) {
@@ -224,13 +322,15 @@ final class ResourceTextEditor extends JPanel {
         boolean edited = !this.text.text().equals(this.packText);
         this.save.setVisible(edited);
         this.discard.setVisible(edited);
-        this.save.setEnabled(!this.busy);
+        this.save.setEnabled(!this.busy && !this.following);
         this.discard.setEnabled(!this.busy);
+        this.target.setEnabled(!this.busy);
     }
 
     /** Names where the text comes from, followed by {@code detail} when it is not empty. */
     private void showState(String detail) {
-        String source = this.managed ? "Edited in " + this.packName
+        // A copy Companion did not write, such as a file of the player's own pack, is in the pack but not edited.
+        String source = this.managed ? (this.seen != null ? "Edited in " : "In ") + this.packName
                 : this.opened != null ? "Not in " + this.packName + " any more" : "From " + this.origin;
         this.state.setText(detail.isEmpty() ? source : source + ", " + detail);
     }
@@ -248,7 +348,7 @@ final class ResourceTextEditor extends JPanel {
 
     /** Checks the text, writes it into the managed pack, then shows what the game uses and what its reload reported. */
     void save() {
-        if (this.busy || this.text.text().equals(this.packText)) return;
+        if (this.busy || this.following || this.text.text().equals(this.packText)) return;
         String edited = checked();
         if (edited == null) return;
         this.writes++;
@@ -265,6 +365,7 @@ final class ResourceTextEditor extends JPanel {
                         showState("");
                         showNotice("Not saved: " + message(failure), ThemeColors::error);
                         changed();
+                        followLater();
                         return;
                     }
                     boolean keepEdits = !this.text.text().equals(edited);
@@ -273,10 +374,25 @@ final class ResourceTextEditor extends JPanel {
                     this.managed = true;
                     if (keepEdits) this.text.markSaved(edited);
                     else this.text.load(edited);
-                    showState(saved.reloadFailure().isEmpty() ? saved.effect().description() : "");
+                    // A copy the game does not use does not apply, however the reload went.
+                    showState(saved.reloadFailure().isEmpty() && saved.unused().isEmpty() ? saved.effect().description() : "");
                     showResult(saved.problems(), saved.reloadFailure());
+                    if (saved.reloadFailure().isEmpty() && saved.problems().isEmpty() && !saved.unused().isEmpty()) {
+                        showNotice(saved.unused(), ThemeColors::warning);
+                        this.readNotice = saved.unused();
+                    }
                     changed();
+                    followLater();
                 }));
+    }
+
+    /** Follows a working pack or world change that came during the save just completed. */
+    private void followLater() {
+        if (!this.followAfterSave) return;
+        boolean changed = this.clearAfterSave;
+        this.followAfterSave = false;
+        this.clearAfterSave = false;
+        follow(changed);
     }
 
     private void showResult(List<String> problems, String reloadFailure) {
@@ -329,6 +445,7 @@ final class ResourceTextEditor extends JPanel {
         this.disposed = true;
         this.stopListening.run();
         this.stopFollowingPacks.run();
+        this.stopFollowingWorkingPack.run();
         this.text.dispose();
     }
 }

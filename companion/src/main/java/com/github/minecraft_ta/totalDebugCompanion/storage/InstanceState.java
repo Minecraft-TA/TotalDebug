@@ -15,13 +15,15 @@ import java.util.Objects;
 import java.util.function.UnaryOperator;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.BreakpointAction;
 
-/** One instance's debugger intent and evaluator input recall. */
+/** One instance's debugger intent, evaluator input recall, and the packs its resource edits are saved into. */
 public final class InstanceState implements AutoCloseable {
     private List<String> debuggerWatches = List.of();
     private Map<String, List<PersistedBreakpoint>> debuggerBreakpoints = Map.of();
     private boolean debuggerBreakpointsMuted;
     private boolean breakOnCaughtExceptions;
     private boolean breakOnUncaughtExceptions;
+    /** The folder name of the pack edits of each side are saved into, {@code assets} or {@code data}, where one was chosen. */
+    private Map<String, String> workingPacks = Map.of();
     private List<ExpressionHistory.Entry> historyEntries = List.of();
     private ExpressionHistory history;
     private final JsonStateWriter writer;
@@ -53,6 +55,15 @@ public final class InstanceState implements AutoCloseable {
             state.breakOnUncaughtExceptions = JsonFiles.bool(json, "breakOnUncaughtExceptions");
             Persisted data = JsonFiles.GSON.fromJson(json, Persisted.class);
             state.debuggerWatches = normalizeWatches(Objects.requireNonNull(data.debuggerWatches));
+            if (json.has("workingPacks")) {
+                JsonFiles.object(json, "workingPacks").entrySet().forEach(entry -> {
+                    if (!entry.getKey().equals("assets") && !entry.getKey().equals("data")) {
+                        throw new IllegalArgumentException("Unknown side of working packs: " + entry.getKey());
+                    }
+                    JsonFiles.string(json.getAsJsonObject("workingPacks"), entry.getKey());
+                });
+                state.workingPacks = Map.copyOf(data.workingPacks);
+            }
             Map<String, List<PersistedBreakpoint>> breakpoints = new HashMap<>();
             data.debuggerBreakpoints.forEach((key, value) -> {
                 if (key.isBlank()) {
@@ -141,6 +152,21 @@ public final class InstanceState implements AutoCloseable {
         if (!updated.equals(debuggerBreakpoints)) { debuggerBreakpoints = Map.copyOf(updated); scheduleSave(); }
     }
 
+    /** The folder name of the pack edits of {@code side}, {@code assets} or {@code data}, are saved into, or empty. */
+    public synchronized String workingPack(String side) {
+        return this.workingPacks.getOrDefault(side, "");
+    }
+
+    /** Saves edits of {@code side} into the pack of folder {@code name}; empty goes back to the pack Companion manages. */
+    public synchronized void setWorkingPack(String side, String name) {
+        if (workingPack(side).equals(name)) return;
+        Map<String, String> updated = new HashMap<>(this.workingPacks);
+        if (name.isEmpty()) updated.remove(side);
+        else updated.put(side, name);
+        this.workingPacks = Map.copyOf(updated);
+        scheduleSave();
+    }
+
     public synchronized boolean debuggerBreakpointsMuted() {
         return this.debuggerBreakpointsMuted;
     }
@@ -200,7 +226,8 @@ public final class InstanceState implements AutoCloseable {
         if (this.writer != null) {
             this.writer.schedule(JsonFiles.GSON.toJsonTree(new Persisted(2, this.debuggerWatches,
                     this.debuggerBreakpoints, this.debuggerBreakpointsMuted,
-                    this.breakOnCaughtExceptions, this.breakOnUncaughtExceptions, this.historyEntries)));
+                    this.breakOnCaughtExceptions, this.breakOnUncaughtExceptions, this.historyEntries,
+                    this.workingPacks.isEmpty() ? null : this.workingPacks)));
         }
     }
 
@@ -220,7 +247,8 @@ public final class InstanceState implements AutoCloseable {
     private record Persisted(int format, List<String> debuggerWatches,
                              Map<String, List<PersistedBreakpoint>> debuggerBreakpoints,
                              boolean debuggerBreakpointsMuted, boolean breakOnCaughtExceptions,
-                             boolean breakOnUncaughtExceptions, List<ExpressionHistory.Entry> history) { }
+                             boolean breakOnUncaughtExceptions, List<ExpressionHistory.Entry> history,
+                             Map<String, String> workingPacks) { }
 
     public record PersistedBreakpoint(
             String sourceUri,
