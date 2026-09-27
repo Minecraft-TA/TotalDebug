@@ -230,7 +230,7 @@ public class FileTreeView extends JScrollPane {
             rootItems.add(scripts);
         }
         var mods = new ModTreeItems.Root(() -> new ModTreeItems.Snapshot(scope.catalog().state(), scope.sources(),
-                scope.changes().size()));
+                scope.changes().size(), hasLogs(scope.profile().workspaceDirectory())));
         // Recorded changes alone keep the root, since Changes is where they are reverted.
         if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent() || scope.changes().size() > 0) {
             rootItems.add(mods);
@@ -341,6 +341,16 @@ public class FileTreeView extends JScrollPane {
     /** Selects the Resources row of the Modpack tree. */
     public CompletableFuture<Boolean> revealPackResources() {
         return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.RESOURCES));
+    }
+
+    /** Selects the Logs row of the Modpack tree. */
+    public CompletableFuture<Boolean> revealLogs() {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.LOGS));
+    }
+
+    /** Whether the game has written logs or crash reports into its directory. */
+    private static boolean hasLogs(Path workspace) {
+        return workspace != null && (Files.isDirectory(workspace.resolve("logs")) || Files.isDirectory(workspace.resolve("crash-reports")));
     }
 
     /** Selects the Key bindings row of the Modpack tree. */

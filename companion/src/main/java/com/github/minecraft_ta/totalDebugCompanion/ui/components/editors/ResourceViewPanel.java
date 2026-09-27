@@ -10,7 +10,10 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.beans.PropertyChangeListener;
@@ -39,6 +42,10 @@ public final class ResourceViewPanel extends JPanel {
 
     private CompletableFuture<LoadedResource> loadTask;
     private Component activeView;
+    /** Where to show the text once it has loaded, or -1. */
+    private int pendingOffset = -1;
+    /** When a local file was last read, so an offset into a file written since reads it again first; null otherwise. */
+    private FileTime loadedModified;
     private boolean disposed;
 
     /** {@code edits} writes text resources of the pack into the managed pack, or is null where they stay read-only. */
@@ -61,6 +68,7 @@ public final class ResourceViewPanel extends JPanel {
         }
         showCenteredMessage("Loading " + this.source.displayName() + "...", null);
         setMetadata("");
+        this.loadedModified = modified();
         CompletableFuture<LoadedResource> task = CompletableFuture.supplyAsync(() -> {
             try {
                 return ResourceLoader.load(this.source, this.fileType);
@@ -93,6 +101,37 @@ public final class ResourceViewPanel extends JPanel {
         if (view instanceof AbstractTextViewPanel text) text.installNavigationHistoryMenu(navigation);
         if (view instanceof ResourceTextEditor editor) editor.textPanel().installNavigationHistoryMenu(navigation);
         replaceActiveView(view);
+        if (this.pendingOffset >= 0) {
+            int offset = this.pendingOffset;
+            this.pendingOffset = -1;
+            navigateToOffset(offset);
+        }
+    }
+
+    /**
+     * Shows the text at {@code offset}, once it has loaded. A local file written since it was read, such as a log the
+     * game keeps writing, is read again first, so the offset points into what the file holds now.
+     */
+    public void navigateToOffset(int offset) {
+        if (this.disposed) return;
+        if (this.loadedModified != null && !this.loadedModified.equals(modified())) {
+            this.pendingOffset = offset;
+            reload();
+            return;
+        }
+        if (this.activeView instanceof AbstractTextViewPanel text) text.navigateToOffset(offset);
+        else if (this.activeView instanceof ResourceTextEditor editor) editor.textPanel().navigateToOffset(offset);
+        else this.pendingOffset = offset;
+    }
+
+    /** When a local file was last written, or null for another source or a file that cannot be read. */
+    private FileTime modified() {
+        if (!(this.source instanceof LocalFileSource file)) return null;
+        try {
+            return Files.getLastModifiedTime(file.path());
+        } catch (IOException unreadable) {
+            return null;
+        }
     }
 
     /** An editor for a text resource of the pack, otherwise the read-only text. */

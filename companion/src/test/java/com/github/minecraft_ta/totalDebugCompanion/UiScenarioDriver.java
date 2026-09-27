@@ -4,12 +4,14 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.HtmlText;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
 import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
+import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ContentBrowser;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.LogsPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ResourceBrowser;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.SubjectPanel;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
@@ -547,6 +549,9 @@ final class UiScenarioDriver {
             case MOD_PAGE -> context.once("mod-page", () -> navigate(new NavigationTarget.ModPage("testmod")));
             case PACK_CONFIGURATION -> context.once("pack-configuration", () -> navigate(new NavigationTarget.PackConfiguration()));
             case PACK_RESOURCES -> context.once("pack-resources", () -> navigate(new NavigationTarget.PackResources("")));
+            case LOGS -> context.once("logs", () -> navigate(new NavigationTarget.Logs()));
+            case LOGS_CRASH -> context.once("logs-crash", () -> navigate(new NavigationTarget.Logs(mainWindow.editorContext().project()
+                    .profile().workspaceDirectory().resolve("crash-reports/crash-2026-09-27_10.00.00-client.txt"))));
             case KEY_BINDINGS -> context.once("key-bindings", () -> navigate(new NavigationTarget.KeyBindings("")));
             case CONTENT -> context.once("content", () -> navigate(new NavigationTarget.Content("")));
             case INSPECTION -> {
@@ -611,6 +616,11 @@ final class UiScenarioDriver {
                 ResourceBrowser browser = findComponent(mainWindow, ResourceBrowser.class);
                 yield mainWindow.getEditorTabs().getSelectedEditor() instanceof PackResourcesView && browser != null
                         && browser.isShowing() && browser.rowCount() > 0;
+            }
+            case LOGS, LOGS_CRASH -> {
+                LogsPanel panel = findComponent(mainWindow, LogsPanel.class);
+                yield mainWindow.getEditorTabs().getSelectedEditor() instanceof LogsView && panel != null && panel.isShowing()
+                        && panel.rowCount() > 0;
             }
             case KEY_BINDINGS -> showsTable("Key bindings", "Action");
             case CONTENT -> {

@@ -122,6 +122,24 @@ public final class UiDevHarness {
         // The test mod's Spin binding moved to Q, where it collides with dropping an item.
         Files.writeString(scope.profile().workspaceDirectory().resolve("options.txt"),
                 "key_key.testmod.spin:key.keyboard.q\nkey_key.drop:key.keyboard.q\n");
+        // A crash report whose top frame belongs to the test mod, for the Logs page.
+        Path crashes = Files.createDirectories(scope.profile().workspaceDirectory().resolve("crash-reports"));
+        Files.writeString(crashes.resolve("crash-2026-09-27_10.00.00-client.txt"), """
+                ---- Minecraft Crash Report ----
+                Time: 2026-09-27 10:00:00
+                Description: Ticking block entity
+
+                java.lang.NullPointerException: Cannot invoke "Widget.spin()" because "widget" is null
+                \tat TRANSFORMER/testmod@1.0.0/testmod.WidgetBlockEntity.tick(WidgetBlockEntity.java:42) ~[testmod.jar%2311!/:?] {}
+                \tat TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.Level.tickBlockEntities(Level.java:510) ~[client.jar%2309!/:?] {}
+                \tat java.base/java.lang.Thread.run(Thread.java:1583) ~[?:?] {}
+                """);
+        Path logs = Files.createDirectories(scope.profile().workspaceDirectory().resolve("logs"));
+        Files.writeString(logs.resolve("latest.log"), """
+                [27Sept2026 10:00:00.000] [main/INFO] [net.neoforged.fml.loading/]: Loading mods
+                [27Sept2026 10:00:01.000] [Render thread/WARN] [net.minecraft.client.resources.model.ModelBakery/]: Missing model testmod:block/widget_block
+                [27Sept2026 10:00:02.000] [Server thread/ERROR] [testmod.WidgetBlockEntity/]: Widget failed to spin
+                """);
         Path file = scope.paths().catalog();
         Files.createDirectories(file.getParent());
         CatalogFixtures.catalog(jar).write(file);

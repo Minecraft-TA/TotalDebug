@@ -28,6 +28,7 @@ public sealed interface NavigationTarget permits
         NavigationTarget.ModPage,
         NavigationTarget.PackConfiguration,
         NavigationTarget.PackResources,
+        NavigationTarget.Logs,
         NavigationTarget.Changes,
         NavigationTarget.KeyBindings,
         NavigationTarget.Content,
@@ -77,6 +78,17 @@ public sealed interface NavigationTarget permits
     record PackResources(String category) implements NavigationTarget {
         public PackResources {
             category = Objects.requireNonNullElse(category, "");
+        }
+    }
+
+    /** The game's logs and crash reports; {@code file}, a log or crash report, is selected when not null. */
+    record Logs(Path file) implements NavigationTarget {
+        public Logs {
+            if (file != null) file = file.toAbsolutePath().normalize();
+        }
+
+        public Logs() {
+            this(null);
         }
     }
 

@@ -35,6 +35,11 @@ public final class ResourceView implements IEditorPanel {
         this.panel = new ResourceViewPanel(source, this.fileType, context.navigation(), context.project().resources());
     }
 
+    /** Shows the text at {@code offset} once it has loaded, reading a local file again when it changed. */
+    public void navigateToOffset(int offset) {
+        this.panel.navigateToOffset(offset);
+    }
+
     public ContentSource source() {
         return this.source;
     }
