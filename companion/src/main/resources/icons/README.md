@@ -9,6 +9,7 @@ See [INTELLIJ_LICENSE.txt](INTELLIJ_LICENSE.txt).
 `save.svg` (`general/save`), `revert.svg` (`vcs/revert`), `changes.svg` (`general/history`, used for Companion's
 change record) and `keyboard.svg` (`general/keyboard`), each with its `_dark` pair, are unchanged copies from `platform/icons/src/expui` in
 [intellij-community](https://github.com/JetBrains/intellij-community/tree/master/platform/icons/src/expui).
+`pencil.svg` (`general/edit`), `colorPicker.svg` (`image/colorPicker`), `undo.svg` (`general/undo`) and `redo.svg` (`general/redo`), each with its `_dark` pair, are unchanged copies from the same set; they are the texture editor's tools. Its `eraser.svg` and `fill.svg` (a tipped bucket with a drop) are custom, with `_dark` pairs.
 `item.svg` and `item_dark.svg` are custom item-tag icons, `fluid.svg` a custom droplet and `sound.svg` a custom speaker, each with its `_dark` pair. `grid.svg` (the image viewer's pixel grid) and `pause.svg` (pausing texture animations) are custom as well. All of them use the existing icon set's stroke weights and palette.
 
 Completion modifier/visibility icons (`finalMark`, `staticMark`, `accessPrivate`, `accessProtected`,

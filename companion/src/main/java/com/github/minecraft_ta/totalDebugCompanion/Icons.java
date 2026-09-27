@@ -158,6 +158,12 @@ public class Icons {
     public static final FlatSVGIcon ACTUAL_ZOOM = new FlatSVGIcon("icons/actualZoom.svg");
     public static final FlatSVGIcon PIXEL_GRID = new FlatSVGIcon("icons/grid.svg");
     public static final FlatSVGIcon PAUSE = new FlatSVGIcon("icons/pause.svg");
+    public static final FlatSVGIcon PENCIL = new FlatSVGIcon("icons/pencil.svg");
+    public static final FlatSVGIcon ERASER = new FlatSVGIcon("icons/eraser.svg");
+    public static final FlatSVGIcon FILL = new FlatSVGIcon("icons/fill.svg");
+    public static final FlatSVGIcon COLOR_PICKER = new FlatSVGIcon("icons/colorPicker.svg");
+    public static final FlatSVGIcon UNDO = new FlatSVGIcon("icons/undo.svg");
+    public static final FlatSVGIcon REDO = new FlatSVGIcon("icons/redo.svg");
     public static final FlatSVGIcon REFORMAT_CODE = new FlatSVGIcon("icons/reformatCode.svg");
     public static final FlatSVGIcon FIELD = new FlatSVGIcon("icons/field.svg");
 

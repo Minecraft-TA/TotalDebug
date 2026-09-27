@@ -66,6 +66,10 @@ public final class EditableTextPanel extends AbstractTextViewPanel {
         this.editorPane.discardAllEdits();
     }
 
+    public void setEditable(boolean editable) {
+        this.editorPane.setEditable(editable);
+    }
+
     /** Takes the current text as saved. */
     public void markSaved(String text) {
         this.saved = text;

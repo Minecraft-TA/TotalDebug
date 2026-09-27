@@ -76,6 +76,11 @@ public final class ResourcePaths {
         return Optional.of(path);
     }
 
+    /** Whether the resource at {@code path} is an image the game reads from a resource pack, such as a texture. */
+    public static boolean editableImage(String path) {
+        return path.startsWith("assets/") && path.endsWith(".png");
+    }
+
     /** What makes the running game use the resource at {@code path}. */
     public static Apply apply(String path) {
         String[] parts = path.split("/", 4);

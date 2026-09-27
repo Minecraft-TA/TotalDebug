@@ -1,6 +1,6 @@
 # Resource editing
 
-Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`, protocol 27); the change record holds all three and reverts them. Not yet: the Packs tab of Resources, texture editing and forced values.
+Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`, protocol 27); textures drawn pixel by pixel and saved the same way; the change record holds all of them and reverts them. Not yet: ordering and enabling packs, uploading an edited texture into the game's atlas without a reload, and forced values.
 
 ## Goal
 
@@ -15,7 +15,7 @@ This design covers the **pack's content**: what ships with the pack and is the s
 | Configuration settings, as values and as file text | Done |
 | Key bindings | Done |
 | Text resources: models, blockstates, language files, atlases, sounds, and data such as recipes, tags and loot tables | Done |
-| Textures, including animation frames | Next step |
+| Textures, including animation frames | Pixel editing done; upload into the atlas without a reload next |
 | Forced configuration values that a reload does not reach | Step after textures |
 
 **Not in scope:** the state of a running world. It lives in the world save, differs per world, and has no pack-level file to revert to.
@@ -60,7 +60,7 @@ Each resource kind has a reload that makes the running game use it. The change s
 |---|---|---|
 | `assets/*/lang/*.json` | Language only | Now, in about a second |
 | Other assets: models, blockstates, textures, atlases, sounds, fonts, particles, shaders | Full client resource reload | Now, after the reload |
-| Textures of a stitched atlas | Upload into the atlas (texture editing step) | Now, without a reload |
+| Textures of a stitched atlas | Upload into the atlas (next step; until then a full client resource reload) | Now, without a reload |
 | Data: recipes, tags, loot tables, advancements, functions, predicates, item modifiers, data maps, mods' own reload listeners | Server data reload, as `/reload` | Now, after the reload |
 | Data read when a world loads: worldgen, dimension types, damage types, other dynamic registries | None | After rejoining the world; generated chunks keep their content |
 | Resources a mod reads from its JAR or only at startup | None | After restarting the game |
@@ -153,8 +153,9 @@ Extensions contribute through two points once the extension API exists: a **relo
 Wording follows [UI_GUIDE.md](UI_GUIDE.md).
 
 - **Resource tab:** text resources (JSON, `.mcmeta`, `.lang`, `.mcfunction`, `.snbt`) are editable, showing the copy the game uses: the managed pack's, or the opened file. The bar names that source and when the game uses it; Save and Discard appear while the text has unsaved changes. A pack above the managed one that supplies the file too is named in a warning. An open tab follows reverts made on the Changes page.
+- **Texture tab:** a PNG under `assets/` opens in the image viewer with drawing tools, saved like a text resource, with the same bar, Save into and notices. The tools draw on the frame shown, or on the whole sheet: Pencil (B), Eraser (E), Fill (G), which fills the pixels of one color that touch by an edge, and Color Picker (I); Escape leaves the tools, and a drag then moves the view, as the middle button always does. With the pencil, Alt+click picks the color under it and Shift+click draws a line from the last pixel drawn. The color button opens a chooser with transparency; beside it are the texture's 16 most used colors. Ctrl+Z undoes a whole stroke, Ctrl+Shift+Z or Ctrl+Y redoes it. A texture is saved as a PNG with red, green, blue and alpha, at its size; resizing and editing the animation's `.mcmeta` as text stay separate.
 - **Changes page:** a Resources tab for resources in the managed packs, beside Configuration and Key bindings. Revert, or Delete, reverts the selected rows; reverting a file Companion added deletes it, and Delete asks first. Revert All reports every failure in one status.
-- **Modpack tree:** the Resources row lists every resource as the game uses it ([MODPACK.md](MODPACK.md#resources)); its Packs tab is the next step, then the World root for the current world.
+- **Modpack tree:** the Resources row lists every resource as the game uses it ([MODPACK.md](MODPACK.md#resources)); its Packs tab lists the resource packs, and the World root the current world's datapacks; ordering and enabling them is a later step.
 
 ## Order
 
@@ -163,7 +164,7 @@ Later steps:
 | Step | Content |
 |---|---|
 | Packs tab of Resources | Order and enable packs |
-| Texture editing | Pixel tools in the image viewer with animation frames, live atlas upload, saved into the managed pack |
+| Live texture upload | An edited texture of a stitched atlas uploaded into the atlas without a resource reload, its frames too; a full reload where the size or animation changed |
 | Forced values | Read-site analysis, verification after reloads, Force; its own design for writes into the game's memory |
 | Catalog and program insights | As planned in [MODPACK.md](MODPACK.md#order) |
 | World data editing | NBT of block entities, entities and item stacks from the inspection page; own design first |
