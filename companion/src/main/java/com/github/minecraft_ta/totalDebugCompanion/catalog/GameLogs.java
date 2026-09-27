@@ -112,6 +112,22 @@ public final class GameLogs {
     private GameLogs() {
     }
 
+    /** Whether the game directory holds a current log or a crash report; it stops at the first. */
+    public static boolean any(Path workspace) {
+        if (workspace == null) return false;
+        for (String name : List.of("latest.log", "debug.log")) {
+            if (Files.isRegularFile(workspace.resolve("logs").resolve(name))) return true;
+        }
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(workspace.resolve("crash-reports"), "*.txt")) {
+            for (Path report : entries) {
+                if (Files.isRegularFile(report)) return true;
+            }
+        } catch (IOException noReports) {
+            // Without the folder there is no crash report.
+        }
+        return false;
+    }
+
     /** The game's current logs, then its crash reports, the newest first. None without a game directory. */
     public static List<LogFile> list(Path workspace) throws IOException {
         List<LogFile> files = new ArrayList<>();

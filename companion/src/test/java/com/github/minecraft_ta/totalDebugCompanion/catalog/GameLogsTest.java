@@ -124,6 +124,16 @@ class GameLogsTest {
     }
 
     @Test
+    void emptyFoldersHoldNoLogs() throws Exception {
+        Files.createDirectories(this.directory.resolve("logs"));
+        Files.writeString(Files.createDirectories(this.directory.resolve("crash-reports")).resolve("notes.md"), "");
+        assertEquals(false, GameLogs.any(this.directory), "the Logs row would open an empty page");
+
+        Files.writeString(this.directory.resolve("crash-reports/crash-2026-09-27_10.00.00-client.txt"), "");
+        assertEquals(true, GameLogs.any(this.directory));
+    }
+
+    @Test
     void theCurrentLogsComeFirstThenTheNewestCrashReports() throws Exception {
         Path logs = Files.createDirectories(this.directory.resolve("logs"));
         Files.writeString(logs.resolve("latest.log"), "");

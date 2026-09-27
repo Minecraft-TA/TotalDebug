@@ -79,8 +79,11 @@ public final class LogsPanel extends JPanel {
         }
     }
 
-    /** A read file, kept while it is unchanged; neither part is set when it could not be read. */
-    private record Parsed(FileTime modified, long size, GameLogs.Log log, GameLogs.CrashReport report) {
+    /**
+     * A read file, kept while it is unchanged. A file that could not be read has neither part but the reason, and is
+     * not kept, so it is read again next time.
+     */
+    private record Parsed(FileTime modified, long size, GameLogs.Log log, GameLogs.CrashReport report, String problem) {
         boolean current(GameLogs.LogFile file) {
             return this.modified.equals(file.modified()) && this.size == file.size();
         }
@@ -102,6 +105,7 @@ public final class LogsPanel extends JPanel {
     private final DefaultListModel<Row> shown = new DefaultListModel<>();
     private final JList<Row> rows = new JList<>(this.shown);
     private final JLabel message = new JLabel();
+    private final JLabel notice = new JLabel();
     private final JPanel cards = new JPanel(new CardLayout());
     /** Read files by path, guarded by itself. */
     private final Map<Path, Parsed> parsed = new HashMap<>();
@@ -112,6 +116,9 @@ public final class LogsPanel extends JPanel {
     private Path wanted;
     private boolean updatingFiles;
     private long generation;
+    /** Whether the files are being listed, and whether they are to be listed again once that is done. */
+    private boolean listing;
+    private boolean listAgain;
     private long rowGeneration;
     private boolean disposed;
 
@@ -132,7 +139,9 @@ public final class LogsPanel extends JPanel {
         // Both lists follow the view's width: a long row ends at the edge, and its tooltip has all of it.
         this.fileList.setFixedCellWidth(1);
         this.fileList.addListSelectionListener(event -> {
-            if (!event.getValueIsAdjusting() && !this.updatingFiles) showRows();
+            if (event.getValueIsAdjusting() || this.updatingFiles) return;
+            showNotice("");
+            showRows();
         });
         JScrollPane fileScroll = new JScrollPane(this.fileList);
         fileScroll.setBorder(DynamicMatteBorder.rule(0, 0, 0, 1));
@@ -172,9 +181,15 @@ public final class LogsPanel extends JPanel {
             }
         });
         ContextMenus.installList(this.rows, this::menu);
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBorder(UiMetrics.barPadding());
+        bar.add(this.filter, BorderLayout.CENTER);
+        ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
+        this.notice.setBorder(UiMetrics.noticePadding());
+        this.notice.setVisible(false);
         JPanel top = new JPanel(new BorderLayout());
-        top.setBorder(UiMetrics.barPadding());
-        top.add(this.filter, BorderLayout.CENTER);
+        top.add(bar, BorderLayout.NORTH);
+        top.add(this.notice, BorderLayout.SOUTH);
         JScrollPane rowScroll = new JScrollPane(this.rows);
         rowScroll.setBorder(BorderFactory.createEmptyBorder());
         this.cards.add(rowScroll, ROWS_CARD);
@@ -209,9 +224,17 @@ public final class LogsPanel extends JPanel {
         this.wanted = file == null ? null : file.toAbsolutePath().normalize();
     }
 
-    /** Lists the logs and crash reports again, reading only files that changed, and keeps the selection. */
+    /**
+     * Lists the logs and crash reports again, reading only files that changed, and keeps the selection. A request while
+     * they are being listed lists them once more afterwards, rather than reading the same files twice at once.
+     */
     public void load() {
         if (this.disposed) return;
+        if (this.listing) {
+            this.listAgain = true;
+            return;
+        }
+        this.listing = true;
         long current = ++this.generation;
         CompletableFuture.supplyAsync(() -> {
             List<Listed> listed = new ArrayList<>();
@@ -222,19 +245,25 @@ public final class LogsPanel extends JPanel {
             }
             return listed;
         }).whenComplete((listed, failure) -> SwingUtilities.invokeLater(() -> {
+            this.listing = false;
             if (this.disposed || current != this.generation) return;
             if (failure != null) {
                 showMessage("The logs could not be listed: " + (failure.getCause() == null ? failure : failure.getCause()).getMessage());
-                return;
+            } else {
+                showFiles(listed);
             }
-            showFiles(listed);
+            if (this.listAgain) {
+                this.listAgain = false;
+                load();
+            }
         }));
     }
 
     /** Shows the listed files, replacing the list only when it changed, and the selected file's rows. */
     private void showFiles(List<Listed> listed) {
         Listed selected = this.fileList.getSelectedValue();
-        Path keep = this.wanted != null ? this.wanted : selected == null ? null : selected.file().path();
+        Path requested = this.wanted;
+        Path keep = requested != null ? requested : selected == null ? null : selected.file().path();
         this.wanted = null;
         List<Listed> before = new ArrayList<>();
         for (int index = 0; index < this.files.size(); index++) before.add(this.files.get(index));
@@ -244,13 +273,13 @@ public final class LogsPanel extends JPanel {
                 this.files.clear();
                 this.files.addAll(listed);
             }
-            int index = 0;
-            for (int candidate = 0; keep != null && candidate < listed.size(); candidate++) {
-                if (listed.get(candidate).file().path().toAbsolutePath().normalize().equals(keep.toAbsolutePath().normalize())) index = candidate;
-            }
-            if (!listed.isEmpty()) this.fileList.setSelectedIndex(index);
+            int index = keep == null ? -1 : index(listed, keep);
+            if (!listed.isEmpty()) this.fileList.setSelectedIndex(Math.max(index, 0));
         } finally {
             this.updatingFiles = false;
+        }
+        if (requested != null) {
+            showNotice(index(listed, requested) >= 0 ? "" : requested.getFileName() + " is not among the current logs and crash reports.");
         }
         if (listed.isEmpty()) {
             this.rowsOf = null;
@@ -259,6 +288,15 @@ public final class LogsPanel extends JPanel {
             return;
         }
         showRows();
+    }
+
+    /** Where {@code file} is in {@code listed}, or -1. */
+    private static int index(List<Listed> listed, Path file) {
+        Path wanted = file.toAbsolutePath().normalize();
+        for (int index = 0; index < listed.size(); index++) {
+            if (listed.get(index).file().path().toAbsolutePath().normalize().equals(wanted)) return index;
+        }
+        return -1;
     }
 
     /** A file as read before, or read now when it changed. Blocking. */
@@ -270,10 +308,11 @@ public final class LogsPanel extends JPanel {
         Parsed read;
         try {
             read = file.kind() == GameLogs.Kind.LOG
-                    ? new Parsed(file.modified(), file.size(), GameLogs.readLog(file.path()), null)
-                    : new Parsed(file.modified(), file.size(), null, GameLogs.readCrashReport(file.path()));
+                    ? new Parsed(file.modified(), file.size(), GameLogs.readLog(file.path()), null, null)
+                    : new Parsed(file.modified(), file.size(), null, GameLogs.readCrashReport(file.path()), null);
         } catch (Exception unreadable) {
-            read = new Parsed(file.modified(), file.size(), null, null);
+            // A file the game holds or is replacing may be readable a moment later.
+            return new Parsed(file.modified(), file.size(), null, null, String.valueOf(unreadable.getMessage()));
         }
         synchronized (this.parsed) {
             this.parsed.put(file.path(), read);
@@ -291,7 +330,7 @@ public final class LogsPanel extends JPanel {
             return new Listed(file, description.isEmpty() ? file.name() : description, happened(parsed.report().time(), written),
                     tooltip.html());
         }
-        if (parsed.log() == null) return new Listed(file, file.name(), "Could not be read", tooltip.html());
+        if (parsed.log() == null) return new Listed(file, file.name(), "Could not be read", tooltip.text(parsed.problem()).html());
         GameLogs.Log log = parsed.log();
         List<String> counts = new ArrayList<>();
         if (log.errors() > 0) counts.add(count(log.errors(), "error"));
@@ -351,6 +390,7 @@ public final class LogsPanel extends JPanel {
     }
 
     private static List<Row> rows(GameLogs.LogFile file, Parsed parsed, CatalogIndex index) {
+        if (parsed.problem() != null) throw new IllegalStateException(parsed.problem());
         boolean opens = !tooLarge(file);
         List<Row> rows = new ArrayList<>();
         if (parsed.log() != null) {
@@ -416,7 +456,7 @@ public final class LogsPanel extends JPanel {
         Row row = selected.getFirst();
         JPopupMenu menu = new JPopupMenu();
         if (row.target() != null) {
-            menu.add(ContextMenus.action(row.target() instanceof NavigationTarget.RuntimeClass ? "Jump to Source" : "Show in File",
+            menu.add(ContextMenus.action(row.target() instanceof NavigationTarget.RuntimeClass ? "Open Source" : "Show in File",
                     null, "ENTER", () -> open(row)));
             menu.addSeparator();
         }
@@ -424,6 +464,12 @@ public final class LogsPanel extends JPanel {
         menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction(messages.size() == 1 ? "Copy Message"
                 : "Copy " + messages.size() + " Messages", String.join("\n", messages))));
         return menu;
+    }
+
+    /** A line under the filter for what went wrong after it was asked for, until another file is chosen; empty hides it. */
+    private void showNotice(String text) {
+        this.notice.setText(text);
+        this.notice.setVisible(!text.isEmpty());
     }
 
     private void showMessage(String text) {

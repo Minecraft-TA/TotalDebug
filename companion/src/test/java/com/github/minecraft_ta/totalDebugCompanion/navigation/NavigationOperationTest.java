@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.model.JavaEditorContext;
+import com.github.minecraft_ta.totalDebugCompanion.model.KeyBindingsView;
+import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
@@ -169,6 +171,23 @@ class NavigationOperationTest {
             fixture.navigation.goBack().get(5, TimeUnit.SECONDS);
 
             assertInstanceOf(ModView.class, edt(fixture.tabs::getSelectedEditor));
+        }
+    }
+
+    @Test void aSingleTabPageOpenedOnSomethingInItTakesPartInHistory() throws Exception {
+        try (var fixture = new Fixture()) {
+            Path log = Files.writeString(Files.createDirectories(directory.resolve("game/logs")).resolve("latest.log"), "");
+            fixture.navigation.navigate(new NavigationTarget.Logs(log), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
+            fixture.navigation.navigate(new NavigationTarget.KeyBindings("key.jump"), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
+            SubjectRef.Definition stone = new SubjectRef.Definition(RegistryIds.BLOCK, "minecraft:stone");
+            fixture.navigation.navigate(new NavigationTarget.Definition(stone), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
+
+            fixture.navigation.goBack().get(5, TimeUnit.SECONDS);
+            assertInstanceOf(KeyBindingsView.class, edt(fixture.tabs::getSelectedEditor), "the tab shows the binding it was opened on");
+            fixture.navigation.goBack().get(5, TimeUnit.SECONDS);
+            assertInstanceOf(LogsView.class, edt(fixture.tabs::getSelectedEditor), "the tab shows the log it was opened on");
+            fixture.navigation.goForward().get(5, TimeUnit.SECONDS);
+            assertInstanceOf(KeyBindingsView.class, edt(fixture.tabs::getSelectedEditor));
         }
     }
 

@@ -104,7 +104,8 @@ public final class ResourceViewPanel extends JPanel {
         if (this.pendingOffset >= 0) {
             int offset = this.pendingOffset;
             this.pendingOffset = -1;
-            navigateToOffset(offset);
+            // The text was just read; a log the game wrote to meanwhile still shows at the offset instead of reading again.
+            showOffset(offset);
         }
     }
 
@@ -119,6 +120,10 @@ public final class ResourceViewPanel extends JPanel {
             reload();
             return;
         }
+        showOffset(offset);
+    }
+
+    private void showOffset(int offset) {
         if (this.activeView instanceof AbstractTextViewPanel text) text.navigateToOffset(offset);
         else if (this.activeView instanceof ResourceTextEditor editor) editor.textPanel().navigateToOffset(offset);
         else this.pendingOffset = offset;

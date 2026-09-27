@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.Objects;
 import java.util.function.Supplier;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.GameLogs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
@@ -229,10 +230,11 @@ public class FileTreeView extends JScrollPane {
             scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
             rootItems.add(scripts);
         }
+        boolean logs = GameLogs.any(scope.profile().workspaceDirectory());
         var mods = new ModTreeItems.Root(() -> new ModTreeItems.Snapshot(scope.catalog().state(), scope.sources(),
-                scope.changes().size(), hasLogs(scope.profile().workspaceDirectory())));
-        // Recorded changes alone keep the root, since Changes is where they are reverted.
-        if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent() || scope.changes().size() > 0) {
+                scope.changes().size(), logs));
+        // Recorded changes alone keep the root, since Changes is where they are reverted; logs alone keep it for Logs.
+        if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent() || scope.changes().size() > 0 || logs) {
             rootItems.add(mods);
         }
         if (binding != null && !catalog.modules().isEmpty()) {
@@ -349,10 +351,6 @@ public class FileTreeView extends JScrollPane {
     }
 
     /** Whether the game has written logs or crash reports into its directory. */
-    private static boolean hasLogs(Path workspace) {
-        return workspace != null && (Files.isDirectory(workspace.resolve("logs")) || Files.isDirectory(workspace.resolve("crash-reports")));
-    }
-
     /** Selects the Key bindings row of the Modpack tree. */
     public CompletableFuture<Boolean> revealKeyBindings() {
         return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.KEY_BINDINGS));

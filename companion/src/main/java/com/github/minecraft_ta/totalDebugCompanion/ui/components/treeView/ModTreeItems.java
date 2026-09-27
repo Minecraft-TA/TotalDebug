@@ -407,7 +407,7 @@ final class ModTreeItems {
             super(LOGS);
             setPresentation(PrimarySecondaryText.primary("Logs"));
             setIcon(Icons.TEXT_FILE);
-            setSortPriority(4);
+            setSortPriority(5);
         }
 
         @Override
@@ -427,7 +427,7 @@ final class ModTreeItems {
             super(CHANGES);
             setPresentation(new PrimarySecondaryText("Changes", NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
             setIcon(Icons.CHANGES);
-            setSortPriority(5);
+            setSortPriority(6);
         }
 
         @Override
