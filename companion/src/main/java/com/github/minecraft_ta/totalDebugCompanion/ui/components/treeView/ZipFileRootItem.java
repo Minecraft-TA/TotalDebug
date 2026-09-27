@@ -5,8 +5,6 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
-import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
-import org.apache.commons.compress.archivers.zip.ZipFile;
 
 import javax.swing.*;
 import java.io.IOException;
@@ -14,6 +12,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 public class ZipFileRootItem extends DirectoryTreeItem {
 
@@ -51,9 +51,9 @@ public class ZipFileRootItem extends DirectoryTreeItem {
     }
 
     private void indexZipFile(Path path) {
-        try (ZipFile file = ZipFile.builder().setPath(path).get()) {
-            var enumeration = file.getEntries();
-            ZipArchiveEntry el;
+        try (ZipFile file = new ZipFile(path.toFile())) {
+            var enumeration = file.entries();
+            ZipEntry el;
             while (enumeration.hasMoreElements()) {
                 el = enumeration.nextElement();
 

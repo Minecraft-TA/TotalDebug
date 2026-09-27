@@ -27,7 +27,7 @@ class PackConfigurationPanelTest {
     @TempDir Path directory;
 
     @Test
-    void listsModifiedSettingsUnderTheirModFileAndSectionThenAll() throws Exception {
+    void listsEverySettingUnderItsModFileAndSectionThenTheModifiedOnes() throws Exception {
         Path jar = CatalogFixtures.modJar(this.directory);
         Path file = Files.createDirectories(jar.resolveSibling("config")).resolve("testmod-common.toml");
         Files.writeString(file, """
@@ -44,6 +44,9 @@ class PackConfigurationPanelTest {
                 new ConfigChanges(this.directory, ChangeRecord.inMemory()), target -> { }));
         ConfigSettingsTable table = table(panel[0]);
         try {
+            awaitOnSwing(() -> table.getRowCount() == 5 && "mode".equals(table.row(4).name()));
+            // Modified narrows the list to the settings that differ from their default.
+            SwingUtilities.invokeAndWait(() -> component(panel[0], JCheckBox.class).doClick());
             awaitOnSwing(() -> table.getRowCount() == 4);
             SwingUtilities.invokeAndWait(() -> {
                 assertEquals(List.of("Test Mod", "testmod-common.toml", "widgets", "speed"),
@@ -60,10 +63,6 @@ class PackConfigurationPanelTest {
             SwingUtilities.invokeAndWait(() -> table.getActionMap().get("undoConfigEdit").actionPerformed(null));
             awaitOnSwing(() -> table.getRowCount() == 4);
             assertTrue(Files.readString(file).contains("\tspeed = 9\n"));
-
-            // Without the Modified filter every setting is listed.
-            SwingUtilities.invokeAndWait(() -> component(panel[0], JCheckBox.class).doClick());
-            awaitOnSwing(() -> table.getRowCount() == 5 && "mode".equals(table.row(4).name()));
         } finally {
             SwingUtilities.invokeAndWait(panel[0]::dispose);
         }

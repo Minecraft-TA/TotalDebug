@@ -96,10 +96,16 @@ The Project tree on the left, editor tabs in the middle, the status bar at the b
   - **Table or list** below the bar.
   - **Empty or failed state:** replaces the table in the same place.
 - **Two-pane browser:**
-  - Categories with muted counts in a 190 px list on the left, All first, then the entries of the selected category ([`ContentBrowser`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/catalog/ContentBrowser.java), `ResourceBrowser`).
+  - Categories with muted counts in a sidebar on the left, 190 px wide by default, All first, then the entries of the selected category ([`ContentBrowser`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/catalog/ContentBrowser.java), `ResourceBrowser`).
   - The category list is left out when there is only one category.
   - All shows a column naming each entry's category.
 - **Pack-wide and per-mod views are one component:** the pack-wide one adds a Mod column. A new pack-wide view reuses the per-mod component, or the other way round.
+
+### Sidebars
+
+- A list beside its content, such as categories or files, sits in a [`Sidebar`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/Sidebar.java). Its divider can be dragged, down to a width where the rows still read.
+- Every view of the same kind starts at the width its sidebar was last dragged to, across restarts, or at its default: all Resources views share one width, all Content views another.
+- A sidebar with nothing to choose between is hidden, and its content takes the whole width.
 
 ### Where details go
 
@@ -122,7 +128,7 @@ The Project tree on the left, editor tabs in the middle, the status bar at the b
 | Small icon button in a popup or beside a value | margin 2, 3, 2, 3 | `compactButtonMargin()` |
 | Status bar widget | margin 0, 6, 0, 6 | `statusWidgetMargin()` |
 | Indent per tree or group level | 16 | |
-| Width of a category list | 190 | |
+| Default width of a category list | 190 | |
 
 A component's own inner padding, such as a text field's or an editor's, and a gap between two parts of one control are not page spacing; they stay with the component. Rows are 24 px for text (`UiMetrics.TREE_ROW_HEIGHT`) and the preview size plus 6 when a row shows a preview. A value used in more than one place becomes a constant in [`UiMetrics`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/UiMetrics.java). A row without an icon among rows with icons uses `Icons.NONE` to stay level.
 
@@ -244,4 +250,6 @@ A component's own inner padding, such as a text field's or an editor's, and a ga
 
 ## Where the UI differs today
 
-Nothing known. Record a difference here when a change has to leave one behind.
+- The debugger's frames, the breakpoint manager's list and the Project tree beside the editor can be dragged, but do not remember their width, unlike a `Sidebar`.
+
+Record a difference here when a change has to leave one behind.

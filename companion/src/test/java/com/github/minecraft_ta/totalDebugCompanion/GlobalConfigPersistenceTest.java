@@ -26,6 +26,7 @@ class GlobalConfigPersistenceTest {
         config.setDebuggerInlineValues(false);
         config.setAutomaticDebuggerPreviews(false);
         config.setInlineDiagnostics(false);
+        config.setSidebarWidth("resource-categories", 260);
         config.saveNow();
 
         GlobalConfig restored = new GlobalConfig();
@@ -37,6 +38,8 @@ class GlobalConfigPersistenceTest {
         assertFalse(restored.debuggerInlineValues());
         assertFalse(restored.automaticDebuggerPreviews());
         assertFalse(restored.inlineDiagnostics());
+        assertEquals(260, restored.sidebarWidth("resource-categories"), "a dragged sidebar keeps its width across restarts");
+        assertNull(restored.sidebarWidth("log-files"), "a sidebar never dragged starts at its default");
         var json = JsonFiles.read(new AppPaths(this.home).settings());
         assertFalse(json.has("debuggerWatches"));
         assertFalse(json.has("debuggerBreakpoints"));
@@ -46,7 +49,11 @@ class GlobalConfigPersistenceTest {
     @Test
     void rejectsCorruptAndUnsupportedSettingsWithoutOverwritingThem() throws Exception {
         Path file = new AppPaths(this.home).settings();
-        for (String invalid : List.of("{bad", "{\"version\":999}", "{\"version\":1}")) {
+        for (String invalid : List.of("{bad", "{\"version\":999}", "{\"version\":1}",
+                "{\"version\":1,\"theme\":\"islands-dark\",\"editorFontSize\":14,\"uiFontSize\":13,\"debuggerInlineValues\":true,"
+                        + "\"automaticDebuggerPreviews\":true,\"sidebarWidths\":{\"log-files\":-3}}",
+                "{\"version\":1,\"theme\":\"islands-dark\",\"editorFontSize\":14,\"uiFontSize\":13,\"debuggerInlineValues\":true,"
+                        + "\"automaticDebuggerPreviews\":true,\"sidebarWidths\":{\"log-files\":2147483648}}")) {
             Files.writeString(file, invalid);
             assertThrows(IOException.class, () -> new GlobalConfig().loadFrom(this.home));
             assertEquals(invalid, Files.readString(file));

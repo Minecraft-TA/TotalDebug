@@ -10,11 +10,11 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Sidebar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
@@ -33,7 +33,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import java.io.IOException;
 import java.awt.BorderLayout;
-import java.awt.Dimension;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -99,6 +98,7 @@ public final class LogsPanel extends JPanel {
     private final DefaultListModel<Row> shown = new DefaultListModel<>();
     private final JList<Row> rows = new JList<>(this.shown);
     private final BrowserBody body;
+    private final Sidebar sidebar;
     private final PageLoader<List<Listed>> loader;
     /** Read files by path, guarded by itself. */
     private final Map<Path, Parsed> parsed = new HashMap<>();
@@ -134,9 +134,7 @@ public final class LogsPanel extends JPanel {
             showRows();
         });
         JScrollPane fileScroll = new JScrollPane(this.fileList);
-        fileScroll.setBorder(DynamicMatteBorder.rule(0, 0, 0, 1));
-        fileScroll.setPreferredSize(new Dimension(UIScale.scale(300), 0));
-        add(fileScroll, BorderLayout.WEST);
+        fileScroll.setBorder(BorderFactory.createEmptyBorder());
 
         this.rows.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         this.rows.setFixedCellWidth(1);
@@ -166,7 +164,8 @@ public final class LogsPanel extends JPanel {
         });
         ContextMenus.installList(this.rows, this::menu);
         this.body = new BrowserBody("Filter messages, loggers and mods", BrowserBody.scroll(this.rows), this.rows, this::applyFilter);
-        add(this.body, BorderLayout.CENTER);
+        this.sidebar = new Sidebar("log-files", 300, fileScroll, this.body);
+        add(this.sidebar, BorderLayout.CENTER);
 
         // The game writes its logs while it runs, so the page reads them again whenever it is shown.
         this.rowLoader = new PageLoader<>(this::prepareRows, this::showRead, failure -> showMessage(
@@ -211,6 +210,8 @@ public final class LogsPanel extends JPanel {
 
     /** Shows the listed files, replacing the list only when it changed, and the selected file's rows. */
     private void showFiles(List<Listed> listed) {
+        // A single file needs no list to choose from; its rows say what it holds.
+        this.sidebar.setSidebarShown(listed.size() > 1);
         Listed selected = this.fileList.getSelectedValue();
         Path requested = this.wanted;
         Path keep = requested != null ? requested : selected == null ? null : selected.file().path();

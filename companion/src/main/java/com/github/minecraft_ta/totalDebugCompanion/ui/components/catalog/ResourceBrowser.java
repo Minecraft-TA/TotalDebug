@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Sidebar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -13,7 +14,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.text.JTextComponent;
@@ -34,7 +34,6 @@ import javax.swing.SwingConstants;
 import javax.swing.ToolTipManager;
 import java.awt.BorderLayout;
 import java.awt.Component;
-import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
@@ -83,6 +82,7 @@ public final class ResourceBrowser extends JPanel {
     private final JList<Category> categoryList = new JList<>(this.categories);
     private final JScrollPane categoryScroll = new JScrollPane(this.categoryList);
     private final BrowserBody body;
+    private final Sidebar sidebar;
     private final FlatIconTextField filter;
     private final ShownModel shown = new ShownModel();
     private final JList<ModResources.Resource> list = new JList<>(this.shown);
@@ -119,9 +119,7 @@ public final class ResourceBrowser extends JPanel {
             applyFilter();
             this.categoryChanged.accept(selectedCategory());
         });
-        this.categoryScroll.setBorder(DynamicMatteBorder.rule(0, 0, 0, 1));
-        this.categoryScroll.setPreferredSize(new Dimension(190, 0));
-        add(this.categoryScroll, BorderLayout.WEST);
+        this.categoryScroll.setBorder(BorderFactory.createEmptyBorder());
 
         this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.list.setCellRenderer(this::render);
@@ -149,7 +147,8 @@ public final class ResourceBrowser extends JPanel {
         listScroll.getVerticalScrollBar().setUnitIncrement(16);
         this.body = new BrowserBody("Filter resources", listScroll, this.list, this::applyFilter);
         this.filter = this.body.filter();
-        add(this.body, BorderLayout.CENTER);
+        this.sidebar = new Sidebar("resource-categories", UiMetrics.CATEGORY_LIST_WIDTH, this.categoryScroll, this.body);
+        add(this.sidebar, BorderLayout.CENTER);
         TypeToFilter.forwardTyping(this.categoryList, () -> this.filter);
     }
 
@@ -230,7 +229,7 @@ public final class ResourceBrowser extends JPanel {
             prepared.counts().forEach((key, count) -> categories.addElement(new Category(key, label(key), count)));
             this.categories = categories;
             this.categoryList.setModel(categories);
-            this.categoryScroll.setVisible(prepared.counts().size() > 1);
+            this.sidebar.setSidebarShown(prepared.counts().size() > 1);
             selectKey(this.pendingCategory);
         } finally {
             this.updating = false;

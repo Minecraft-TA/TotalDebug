@@ -12,7 +12,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Application wide, user facing settings.
@@ -45,6 +48,8 @@ public final class GlobalConfig {
     private volatile boolean debuggerInlineValues = true;
     private volatile boolean inlineDiagnostics = true;
     private volatile boolean automaticDebuggerPreviews = true;
+    /** The width each kind of sidebar was last dragged to, by kind, such as {@code resource-categories}. */
+    private final Map<String, Integer> sidebarWidths = new ConcurrentHashMap<>();
     private JsonStateWriter writer;
 
     GlobalConfig() {
@@ -102,6 +107,17 @@ public final class GlobalConfig {
             return;
         }
         this.debuggerWindowBounds = replacement;
+        scheduleSave();
+    }
+
+    /** The width a kind of sidebar was last dragged to, or null before it was dragged. */
+    public Integer sidebarWidth(String kind) {
+        return this.sidebarWidths.get(kind);
+    }
+
+    public synchronized void setSidebarWidth(String kind, int width) {
+        if (width < 1 || Objects.equals(this.sidebarWidths.get(kind), width)) return;
+        this.sidebarWidths.put(kind, width);
         scheduleSave();
     }
 
@@ -202,6 +218,16 @@ public final class GlobalConfig {
                         throw new IllegalArgumentException("Invalid font size: " + font);
                     }
                 }
+                if (json.has("sidebarWidths")) {
+                    var widths = json.get("sidebarWidths");
+                    if (!widths.isJsonObject()) throw new IllegalArgumentException("Invalid sidebar widths");
+                    for (var width : widths.getAsJsonObject().entrySet()) {
+                        if (!width.getValue().isJsonPrimitive() || !width.getValue().getAsJsonPrimitive().isNumber()
+                                || width.getValue().getAsBigDecimal().intValueExact() < 1) {
+                            throw new IllegalArgumentException("Invalid sidebar width: " + width.getKey());
+                        }
+                    }
+                }
                 persisted = GSON.fromJson(json, PersistedSettings.class);
                 var bounds = List.of("debuggerWindowX", "debuggerWindowY",
                         "debuggerWindowWidth", "debuggerWindowHeight");
@@ -228,6 +254,8 @@ public final class GlobalConfig {
         this.debuggerInlineValues = persisted.debuggerInlineValues;
         this.automaticDebuggerPreviews = persisted.automaticDebuggerPreviews;
         this.inlineDiagnostics = persisted.inlineDiagnostics == null || persisted.inlineDiagnostics;
+        this.sidebarWidths.clear();
+        if (persisted.sidebarWidths != null) this.sidebarWidths.putAll(persisted.sidebarWidths);
         this.debuggerWindowBounds = persisted.debuggerWindowX == null ? null : new Rectangle(
                 persisted.debuggerWindowX, persisted.debuggerWindowY,
                 persisted.debuggerWindowWidth, persisted.debuggerWindowHeight);
@@ -256,7 +284,8 @@ public final class GlobalConfig {
                 debuggerBounds == null ? null : debuggerBounds.height,
                 this.debuggerInlineValues,
                 this.automaticDebuggerPreviews,
-                this.inlineDiagnostics
+                this.inlineDiagnostics,
+                new TreeMap<>(this.sidebarWidths)
         );
 
         this.writer.schedule(GSON.toJsonTree(snapshot));
@@ -281,7 +310,8 @@ public final class GlobalConfig {
             Integer debuggerWindowHeight,
             Boolean debuggerInlineValues,
             Boolean automaticDebuggerPreviews,
-            Boolean inlineDiagnostics
+            Boolean inlineDiagnostics,
+            Map<String, Integer> sidebarWidths
     ) {
     }
 
