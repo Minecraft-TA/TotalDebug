@@ -78,7 +78,8 @@ public final class MixinsPanel extends JPanel {
     record Entry(Mixins.Mixin mixin, String kind) {
     }
 
-    private record Loaded(CatalogIndex index, List<Row> rows) {
+    /** The rows read, and why files or classes could not be read. */
+    private record Loaded(CatalogIndex index, List<Row> rows, List<String> problems) {
     }
 
     private final PackCatalogService catalog;
@@ -148,13 +149,16 @@ public final class MixinsPanel extends JPanel {
         CatalogIndex captured = this.catalog.index().orElse(null);
         if (captured == null) {
             String reason = CatalogMessages.unavailable(this.catalog.state());
-            show(new Loaded(null, List.of()));
+            show(new Loaded(null, List.of(), List.of()));
             this.unavailable = reason.isEmpty() ? "The pack catalog is not captured yet." : reason;
             applyFilter();
             return null;
         }
         if (this.all.isEmpty()) this.body.showMessage("Reading the mixins of every mod");
-        return () -> new Loaded(captured, rows(Mixins.read(captured)));
+        return () -> {
+            Mixins.Read read = Mixins.read(captured);
+            return new Loaded(captured, rows(read.mixins()), read.problems());
+        };
     }
 
     /** One row per changed member of each target, targets by their name as shown, then package, and members by name. */
@@ -163,6 +167,8 @@ public final class MixinsPanel extends JPanel {
         for (Mixins.Mixin mixin : mixins) {
             for (String target : mixin.targets()) {
                 for (Mixins.Change change : mixin.changes()) {
+                    // A selector naming its owner changes only that one of the mixin's targets.
+                    if (!change.appliesTo(target)) continue;
                     byTarget.computeIfAbsent(target, ignored -> new LinkedHashMap<>())
                             .computeIfAbsent(change.member(), ignored -> new ArrayList<>()).add(new Entry(mixin, change.kind()));
                 }
@@ -178,6 +184,10 @@ public final class MixinsPanel extends JPanel {
         this.index = loaded.index();
         this.all = loaded.rows();
         this.unavailable = "";
+        // The list leaves out what could not be read, which the line under the bar names.
+        List<String> problems = loaded.problems();
+        this.body.showNotice(problems.isEmpty() ? "" : "Not read: " + String.join("; ", problems.subList(0, Math.min(3, problems.size())))
+                + (problems.size() > 3 ? " and " + (problems.size() - 3) + " more" : ""));
         applyFilter();
     }
 
@@ -244,12 +254,12 @@ public final class MixinsPanel extends JPanel {
             return menu;
         }
         Row row = selected.getFirst();
-        menu.add(ContextMenus.action("Open " + simple(row.target()), null, "ENTER", () -> openTarget(row)));
+        menu.add(ContextMenus.action("Open Source", null, "ENTER", () -> openTarget(row)));
         Set<String> opened = new LinkedHashSet<>();
         for (Entry entry : row.entries()) {
             String mixin = entry.mixin().className();
             if (opened.add(mixin)) {
-                menu.add(ContextMenus.action("Open " + simple(mixin), null, null,
+                menu.add(ContextMenus.action("Open Source of " + simple(mixin), null, null,
                         () -> this.navigator.accept(new NavigationTarget.RuntimeClass(mixin))));
             }
         }

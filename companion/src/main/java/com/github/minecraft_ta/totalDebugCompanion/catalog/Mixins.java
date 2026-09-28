@@ -38,9 +38,13 @@ import java.util.regex.Pattern;
 public final class Mixins {
     private static final int MAXIMUM_CONFIG_BYTES = 1024 * 1024;
     private static final int MAXIMUM_CLASS_BYTES = 4 * 1024 * 1024;
-    private static final Pattern MIXIN_TABLE = Pattern.compile("(?m)^\\s*\\[\\[\\s*mixins\\s*]]\\s*$");
-    private static final Pattern CONFIG = Pattern.compile("(?m)^\\s*config\\s*=\\s*\"([^\"]+)\"");
+    private static final int DEFAULT_PRIORITY = 1000;
+    /** A {@code [[mixins]]} table header, which a comment may follow. */
+    private static final Pattern MIXIN_TABLE = Pattern.compile("(?m)^\\s*\\[\\[\\s*mixins\\s*]]\\s*(#.*)?$");
+    /** A table's {@code config} key, as a basic or a literal string. */
+    private static final Pattern CONFIG = Pattern.compile("(?m)^\\s*config\\s*=\\s*(?:\"([^\"]+)\"|'([^']+)')");
     private static final String MIXIN = "Lorg/spongepowered/asm/mixin/Mixin;";
+    private static final String DESC = "Lorg/spongepowered/asm/mixin/injection/Desc;";
     /** What a method annotation of Mixin or MixinExtras does to its target, by the annotation's descriptor. */
     private static final Map<String, String> KINDS = Map.ofEntries(
             Map.entry("Lorg/spongepowered/asm/mixin/injection/Inject;", "Inject"),
@@ -77,11 +81,24 @@ public final class Mixins {
         }
     }
 
-    /** One change a mixin makes: how, such as {@code Inject}, and to which member of its targets, or empty for the class. */
-    public record Change(String kind, String member) {
+    /**
+     * One change a mixin makes: how, such as {@code Inject}, to which member, empty for the class itself, and the target
+     * class its selector names by binary name, or empty for every target of the mixin.
+     */
+    public record Change(String kind, String member, String owner) {
         public Change {
             Objects.requireNonNull(kind, "kind");
             Objects.requireNonNull(member, "member");
+            Objects.requireNonNull(owner, "owner");
+        }
+
+        public Change(String kind, String member) {
+            this(kind, member, "");
+        }
+
+        /** Whether the change applies to {@code target}, one of the mixin's targets. */
+        public boolean appliesTo(String target) {
+            return this.owner.isEmpty() || this.owner.equals(target);
         }
     }
 
@@ -97,42 +114,63 @@ public final class Mixins {
         }
     }
 
+    /** The mixins read, and why a file or class could not be read, each naming it. */
+    public record Read(List<Mixin> mixins, List<String> problems) {
+        public Read {
+            mixins = List.copyOf(mixins);
+            problems = List.copyOf(problems);
+        }
+    }
+
     private Mixins() {
     }
 
-    /** Every mixin of the mods {@code index} knows, file by file; a file that cannot be read adds nothing. */
-    public static List<Mixin> read(CatalogIndex index) {
+    /** Every mixin of the mods {@code index} knows, file by file; a file or class that cannot be read is named. */
+    public static Read read(CatalogIndex index) {
         List<Mixin> mixins = new ArrayList<>();
+        List<String> problems = new ArrayList<>();
         Map<URI, List<String>> byFile = new LinkedHashMap<>();
         for (PackCatalog.Mod mod : index.mods()) byFile.computeIfAbsent(mod.file(), ignored -> new ArrayList<>()).add(mod.id());
         byFile.forEach((file, mods) -> {
             try {
-                mixins.addAll(read(file, mods));
+                Read read = read(file, mods);
+                mixins.addAll(read.mixins());
+                problems.addAll(read.problems());
             } catch (IOException | RuntimeException unreadable) {
-                // A broken or removed file adds nothing; the others still count.
+                problems.add(name(file) + ": " + message(unreadable));
             }
         });
-        return mixins;
+        return new Read(mixins, problems);
     }
 
     /** The mixins of one mod file, credited to the mod whose id the configuration's name starts with, or its first mod. */
-    static List<Mixin> read(URI file, List<String> mods) throws IOException {
+    static Read read(URI file, List<String> mods) throws IOException {
         Optional<ModFiles.Archive> opened = ModFiles.open(file);
-        if (opened.isEmpty()) return List.of();
+        if (opened.isEmpty()) throw new IOException("the file is gone");
+        List<Mixin> mixins = new ArrayList<>();
+        List<String> problems = new ArrayList<>();
         try (ModFiles.Archive archive = opened.get()) {
-            List<Mixin> mixins = new ArrayList<>();
             for (String config : configs(archive)) {
                 Optional<byte[]> json = archive.read(config, MAXIMUM_CONFIG_BYTES);
-                if (json.isEmpty()) continue;
+                if (json.isEmpty()) {
+                    problems.add(name(file) + ": " + config + " is missing");
+                    continue;
+                }
                 JsonObject root;
                 try {
-                    if (!(JsonParser.parseString(new String(json.get(), StandardCharsets.UTF_8)) instanceof JsonObject object)) continue;
+                    if (!(JsonParser.parseString(new String(json.get(), StandardCharsets.UTF_8)) instanceof JsonObject object)) {
+                        throw new IllegalArgumentException("not a JSON object");
+                    }
                     root = object;
                 } catch (RuntimeException malformed) {
+                    problems.add(name(file) + ": " + config + " could not be read: " + message(malformed));
                     continue;
                 }
                 String owner = owner(config, mods);
                 String pkg = root.get("package") instanceof JsonElement element && element.isJsonPrimitive() ? element.getAsString() : "";
+                // A class without its own priority takes its configuration's.
+                int priority = root.get("mixinPriority") instanceof JsonElement element && element.isJsonPrimitive()
+                        && element.getAsJsonPrimitive().isNumber() ? element.getAsInt() : DEFAULT_PRIORITY;
                 for (Side side : Side.values()) {
                     String list = switch (side) {
                         case BOTH -> "mixins";
@@ -144,13 +182,18 @@ public final class Mixins {
                         if (!name.isJsonPrimitive()) continue;
                         String className = pkg.isEmpty() ? name.getAsString() : pkg + "." + name.getAsString();
                         Optional<byte[]> bytes = archive.read(className.replace('.', '/') + ".class", MAXIMUM_CLASS_BYTES);
+                        // A listed class the file does not hold is one the configuration names for another version.
                         if (bytes.isEmpty()) continue;
-                        mixin(owner, config, className, side, bytes.get()).ifPresent(mixins::add);
+                        try {
+                            mixin(owner, config, className, side, priority, bytes.get()).ifPresent(mixins::add);
+                        } catch (RuntimeException malformed) {
+                            problems.add(name(file) + ": " + className + " could not be read: " + message(malformed));
+                        }
                     }
                 }
             }
-            return mixins;
         }
+        return new Read(mixins, problems);
     }
 
     /** The mixin configurations a file names, in its {@code neoforge.mods.toml} and its manifest. */
@@ -164,7 +207,7 @@ public final class Mixins {
                 // The table's keys run to the next table.
                 int end = text.indexOf("\n[", table.end());
                 Matcher config = CONFIG.matcher(text.substring(table.end(), end < 0 ? text.length() : end));
-                if (config.find()) configs.add(config.group(1));
+                if (config.find()) configs.add(config.group(1) != null ? config.group(1) : config.group(2));
             }
         }
         Optional<byte[]> manifest = archive.read("META-INF/MANIFEST.MF", MAXIMUM_CONFIG_BYTES);
@@ -187,11 +230,11 @@ public final class Mixins {
         return mods.getFirst();
     }
 
-    /** The mixin a class declares, or empty for a class without {@code @Mixin}. */
-    static Optional<Mixin> mixin(String modId, String config, String className, Side side, byte[] bytes) {
+    /** The mixin a class declares, or empty for a class without {@code @Mixin}; {@code priority} is its configuration's. */
+    static Optional<Mixin> mixin(String modId, String config, String className, Side side, int priority, byte[] bytes) {
         List<String> targets = new ArrayList<>();
         List<Change> changes = new ArrayList<>();
-        int[] priority = {1000};
+        int[] effective = {priority};
         boolean[] annotated = {false};
         new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
             @Override
@@ -201,7 +244,7 @@ public final class Mixins {
                 return new AnnotationVisitor(Opcodes.ASM9) {
                     @Override
                     public void visit(String name, Object value) {
-                        if ("priority".equals(name) && value instanceof Integer number) priority[0] = number;
+                        if ("priority".equals(name) && value instanceof Integer number) effective[0] = number;
                     }
 
                     @Override
@@ -224,43 +267,90 @@ public final class Mixins {
                     public AnnotationVisitor visitAnnotation(String annotation, boolean visible) {
                         String kind = KINDS.get(annotation);
                         if (kind == null) return null;
-                        List<String> named = new ArrayList<>();
-                        return new AnnotationVisitor(Opcodes.ASM9) {
-                            @Override
-                            public void visit(String name, Object value) {
-                                if (("value".equals(name) || "method".equals(name)) && value instanceof String text) named.add(text);
-                            }
-
-                            @Override
-                            public AnnotationVisitor visitArray(String name) {
-                                if (!"method".equals(name) && !"value".equals(name)) return null;
-                                return new AnnotationVisitor(Opcodes.ASM9) {
-                                    @Override
-                                    public void visit(String ignored, Object value) {
-                                        if (value instanceof String text) named.add(text);
-                                    }
-                                };
-                            }
-
-                            @Override
-                            public void visitEnd() {
-                                switch (kind) {
-                                    case "Overwrite" -> changes.add(new Change(kind, methodName));
-                                    case "Accessor", "Invoker" -> changes.add(new Change(kind,
-                                            named.isEmpty() ? accessed(kind, methodName) : member(named.getFirst())));
-                                    default -> {
-                                        for (String target : named) changes.add(new Change(kind, member(target)));
-                                    }
-                                }
-                            }
-                        };
+                        return new SelectorVisitor(kind, methodName, changes);
                     }
                 };
             }
         }, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
         if (!annotated[0] || targets.isEmpty()) return Optional.empty();
         if (changes.isEmpty()) changes.add(new Change("Adds", ""));
-        return Optional.of(new Mixin(modId, config, className, targets, side, priority[0], changes.stream().distinct().toList()));
+        return Optional.of(new Mixin(modId, config, className, targets, side, effective[0], changes.stream().distinct().toList()));
+    }
+
+    /**
+     * Reads the members an injector, overwrite, accessor or invoker names: its {@code method} or {@code value} selectors,
+     * and its {@code target} descriptors, each with the owner it names, if any.
+     */
+    private static final class SelectorVisitor extends AnnotationVisitor {
+        private final String kind;
+        private final String methodName;
+        private final List<Change> changes;
+        private final List<Change> named = new ArrayList<>();
+
+        SelectorVisitor(String kind, String methodName, List<Change> changes) {
+            super(Opcodes.ASM9);
+            this.kind = kind;
+            this.methodName = methodName;
+            this.changes = changes;
+        }
+
+        @Override
+        public void visit(String name, Object value) {
+            if (("value".equals(name) || "method".equals(name)) && value instanceof String text) this.named.add(selected(text));
+        }
+
+        @Override
+        public AnnotationVisitor visitArray(String name) {
+            if ("target".equals(name)) {
+                return new AnnotationVisitor(Opcodes.ASM9) {
+                    @Override
+                    public AnnotationVisitor visitAnnotation(String ignored, String descriptor) {
+                        return DESC.equals(descriptor) ? described() : null;
+                    }
+                };
+            }
+            if (!"method".equals(name) && !"value".equals(name)) return null;
+            return new AnnotationVisitor(Opcodes.ASM9) {
+                @Override
+                public void visit(String ignored, Object value) {
+                    if (value instanceof String text) SelectorVisitor.this.named.add(selected(text));
+                }
+            };
+        }
+
+        /** A {@code @Desc}: the member's name as its value, and its owner when it names one. */
+        private AnnotationVisitor described() {
+            String[] member = {""};
+            String[] owner = {""};
+            return new AnnotationVisitor(Opcodes.ASM9) {
+                @Override
+                public void visit(String name, Object value) {
+                    if ("value".equals(name) && value instanceof String text) member[0] = text;
+                    if ("owner".equals(name) && value instanceof Type type) owner[0] = type.getClassName();
+                }
+
+                @Override
+                public void visitEnd() {
+                    if (!member[0].isEmpty()) SelectorVisitor.this.named.add(new Change("", member[0], owner[0]));
+                }
+            };
+        }
+
+        private Change selected(String selector) {
+            return new Change("", member(selector), owner(selector));
+        }
+
+        @Override
+        public void visitEnd() {
+            switch (this.kind) {
+                case "Overwrite" -> this.changes.add(new Change(this.kind, this.methodName));
+                case "Accessor", "Invoker" -> this.changes.add(this.named.isEmpty() ? new Change(this.kind, accessed(this.kind, this.methodName))
+                        : new Change(this.kind, this.named.getFirst().member(), this.named.getFirst().owner()));
+                default -> {
+                    for (Change target : this.named) this.changes.add(new Change(this.kind, target.member(), target.owner()));
+                }
+            }
+        }
     }
 
     /**
@@ -279,9 +369,25 @@ public final class Mixins {
         return member.strip();
     }
 
-    /** The member an accessor or invoker without a name reaches: {@code getSpeed} reaches {@code speed}. */
+    /** The class a selector such as {@code Lnet/minecraft/world/level/Level;tick()V} names by binary name, or empty. */
+    static String owner(String selector) {
+        String text = selector.strip();
+        int end = text.indexOf(';');
+        return text.startsWith("L") && end > 0 ? text.substring(1, end).replace('/', '.') : "";
+    }
+
+    /**
+     * The member an accessor or invoker without a name reaches: {@code getSpeed} reaches {@code speed}, and an invoker
+     * named {@code newWidget} or {@code createWidget} makes an object, so it reaches the constructor.
+     */
     private static String accessed(String kind, String methodName) {
-        String[] prefixes = kind.equals("Accessor") ? new String[]{"get", "set", "is"} : new String[]{"call", "invoke", "new", "create"};
+        if (kind.equals("Invoker")) {
+            for (String factory : new String[]{"new", "create"}) {
+                if (methodName.startsWith(factory) && methodName.length() > factory.length()
+                        && Character.isUpperCase(methodName.charAt(factory.length()))) return "<init>";
+            }
+        }
+        String[] prefixes = kind.equals("Accessor") ? new String[]{"get", "set", "is"} : new String[]{"call", "invoke"};
         for (String prefix : prefixes) {
             if (methodName.startsWith(prefix) && methodName.length() > prefix.length()) {
                 String rest = methodName.substring(prefix.length());
@@ -289,5 +395,15 @@ public final class Mixins {
             }
         }
         return methodName;
+    }
+
+    /** A file's name for a problem: its file name, or the nested file's for a file inside another. */
+    private static String name(URI file) {
+        String text = file.toString();
+        return text.substring(text.lastIndexOf('/') + 1).replaceFirst("%23\\d+$", "");
+    }
+
+    private static String message(Throwable failure) {
+        return failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
     }
 }

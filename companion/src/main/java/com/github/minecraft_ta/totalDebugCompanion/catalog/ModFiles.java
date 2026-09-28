@@ -9,10 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -63,8 +60,8 @@ public final class ModFiles {
     }
 
     /**
-     * Opens the mod file for many reads: a JAR stays open, and a nested JAR is read into memory once. Empty when the
-     * file does not exist. Blocking.
+     * Opens the mod file for many reads: a JAR stays open, and a nested JAR is copied to a temporary file once, which is
+     * read entry by entry and deleted on close. Empty when the file does not exist. Blocking.
      */
     public static Optional<Archive> open(URI modFile) throws IOException {
         if ("file".equalsIgnoreCase(modFile.getScheme())) {
@@ -114,22 +111,33 @@ public final class ModFiles {
             if (nested.isEmpty()) return Optional.empty();
             jar = nested.get();
         }
-        // Every entry at once: a nested JAR can only be read from its start.
-        Map<String, byte[]> entries = new HashMap<>();
-        try (ZipInputStream input = new ZipInputStream(new ByteArrayInputStream(jar))) {
-            for (ZipEntry entry = input.getNextEntry(); entry != null; entry = input.getNextEntry()) {
-                if (!entry.isDirectory()) entries.put(entry.getName(), input.readNBytes(MAXIMUM_NESTED_JAR_BYTES));
-            }
+        // A copy on disk is read like any JAR, one entry at a time, however much its entries would expand to.
+        Path copy = Files.createTempFile("totaldebug-nested", ".jar");
+        ZipFile archive;
+        try {
+            Files.write(copy, jar);
+            archive = new ZipFile(copy.toFile());
+        } catch (IOException | RuntimeException failed) {
+            Files.deleteIfExists(copy);
+            throw failed;
         }
         return Optional.of(new Archive() {
             @Override
-            public Optional<byte[]> read(String entry, int maximumBytes) {
-                byte[] bytes = entries.get(entry);
-                return bytes == null ? Optional.empty() : Optional.of(bytes.length <= maximumBytes ? bytes : Arrays.copyOf(bytes, maximumBytes));
+            public Optional<byte[]> read(String entry, int maximumBytes) throws IOException {
+                ZipEntry found = archive.getEntry(entry);
+                if (found == null || found.isDirectory()) return Optional.empty();
+                try (InputStream input = archive.getInputStream(found)) {
+                    return Optional.of(input.readNBytes(maximumBytes));
+                }
             }
 
             @Override
-            public void close() {
+            public void close() throws IOException {
+                try {
+                    archive.close();
+                } finally {
+                    Files.deleteIfExists(copy);
+                }
             }
         });
     }

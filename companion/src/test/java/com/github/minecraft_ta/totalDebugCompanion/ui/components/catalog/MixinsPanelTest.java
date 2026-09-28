@@ -29,4 +29,13 @@ class MixinsPanelTest {
         assertEquals("Inject, Overwrite", tick.kinds());
         assertFalse(rows.get(1).shared());
     }
+
+    @Test
+    void aSelectorNamingItsOwnerChangesOnlyThatTarget() {
+        List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.Both",
+                List.of(LEVEL, "net.minecraft.server.level.ServerLevel"), Mixins.Side.BOTH, 1000,
+                List.of(new Mixins.Change("Inject", "tick", LEVEL), new Mixins.Change("Inject", "save")))));
+        assertEquals(List.of("Level#save", "Level#tick", "ServerLevel#save"), rows.stream()
+                .map(row -> row.target().substring(row.target().lastIndexOf('.') + 1) + "#" + row.member()).toList());
+    }
 }
