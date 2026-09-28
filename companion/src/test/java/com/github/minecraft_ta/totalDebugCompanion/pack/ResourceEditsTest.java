@@ -308,6 +308,38 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aTexturesAnimationComesFromTheHighestPackThatSuppliesIt() throws Exception {
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        String texture = "assets/testmod/textures/block/gear.png";
+        Path managed = edits.pack(texture);
+        Files.createDirectories(managed.resolve(texture).getParent());
+        Files.writeString(managed.resolve(texture + ".mcmeta"), "{\"animation\":{\"frametime\":1}}");
+        Path top = Files.createDirectories(this.directory.resolve("resourcepacks/Top"));
+        Files.createDirectories(top.resolve(texture).getParent());
+        Files.writeString(top.resolve(texture + ".mcmeta"), "{\"animation\":{\"frametime\":9}}");
+
+        assertEquals("{\"animation\":{\"frametime\":1}}", new String(edits.metadata(texture, managed, 1024).orElseThrow(),
+                StandardCharsets.UTF_8), "without the game's stack, the pack's own");
+        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""),
+                new PackStackPayload.Pack("file/Top", "Top", top.toString())), List.of()));
+        assertEquals("{\"animation\":{\"frametime\":9}}", new String(edits.metadata(texture, managed, 1024).orElseThrow(),
+                StandardCharsets.UTF_8), "a pack above that supplies it wins, as in the game");
+        assertThrows(IOException.class, () -> edits.metadata(texture, managed, 8), "larger than an animation needs");
+    }
+
+    @Test
+    void aRevertIntoATotalDebugPackWithoutMetadataSaysSo() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        edits.packStack(STACK);
+        Path pack = edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS).pack();
+        Files.delete(pack.resolve("pack.mcmeta"));
+
+        ResourceEdits.Saved reverted = edits.revert(record.changes().getFirst()).get(5, TimeUnit.SECONDS);
+        assertTrue(reverted.unused().startsWith("The TotalDebug resource pack is gone or has no readable pack.mcmeta"), reverted.unused());
+    }
+
+    @Test
     void aRevertIntoAPackTheGameSkipsSaysSo() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);

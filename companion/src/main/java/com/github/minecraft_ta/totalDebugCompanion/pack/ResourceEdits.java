@@ -380,6 +380,44 @@ public final class ResourceEdits {
         return "The " + PackFolders.label(pack) + " is not enabled, so the game does not use this file";
     }
 
+    /**
+     * The {@code .mcmeta} the game reads for {@code path} of {@code pack}: the one of the highest enabled pack from
+     * {@code pack} up that supplies it, as the game takes a resource's metadata from its own pack or one above; with the
+     * pack not in the game's stack, its own. Empty without one, and refused when larger than {@code limit}. Blocking.
+     */
+    public Optional<byte[]> metadata(String path, Path pack, int limit) throws IOException {
+        String name = path + ".mcmeta";
+        PackStackPayload current = this.stack;
+        if (current != null) {
+            List<PackStackPayload.Pack> packs = path.startsWith("assets/") ? current.resourcePacks() : current.dataPacks();
+            int position = position(packs, pack);
+            for (int index = packs.size() - 1; position >= 0 && index > position; index--) {
+                String source = packs.get(index).source();
+                if (!source.isEmpty() && contains(Path.of(source), name)) return Optional.of(read(Path.of(source), name, limit));
+            }
+        }
+        return contains(pack, name) ? Optional.of(read(pack, name, limit)) : Optional.empty();
+    }
+
+    /** The bytes of {@code path} in a folder or zip pack, at most {@code limit}. */
+    private static byte[] read(Path source, String path, int limit) throws IOException {
+        if (Files.isDirectory(source)) {
+            Path file = source.resolve(path);
+            if (Files.size(file) > limit) throw new IOException(path + " is larger than " + limit / 1024 + " KiB");
+            return Files.readAllBytes(file);
+        }
+        try (ZipFile zip = new ZipFile(source.toFile())) {
+            var entry = zip.getEntry(path);
+            if (entry == null) throw new IOException(path + " is gone");
+            if (entry.getSize() > limit) throw new IOException(path + " is larger than " + limit / 1024 + " KiB");
+            try (var input = zip.getInputStream(entry)) {
+                byte[] bytes = input.readNBytes(limit + 1);
+                if (bytes.length > limit) throw new IOException(path + " is larger than " + limit / 1024 + " KiB");
+                return bytes;
+            }
+        }
+    }
+
     private static boolean contains(Path source, String path) {
         if (Files.isDirectory(source)) return Files.isRegularFile(source.resolve(path));
         if (!Files.isRegularFile(source)) return false;
@@ -500,9 +538,10 @@ public final class ResourceEdits {
                 throw new CompletionException(exception);
             }
         })).thenApply(saved -> {
-            // The file is put back either way, so the change leaves the record; a pack the game skips does not use it.
+            // The file is put back either way, so the change leaves the record; a pack the game skips does not use it, the
+            // TotalDebug pack included.
             Path pack = saved.pack();
-            return managed(pack) || PackFolders.isPack(pack) ? saved : new Saved(saved.effect(), pack, saved.problems(),
+            return PackFolders.isPack(pack) ? saved : new Saved(saved.effect(), pack, saved.problems(),
                     saved.reloadFailure(), "The " + PackFolders.label(pack) + " is gone or has no readable pack.mcmeta, so the game does not load it");
         });
     }

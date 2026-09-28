@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -42,8 +43,10 @@ public final class PackFolders {
         if (!Files.isDirectory(entry) && !(Files.isRegularFile(entry) && entry.getFileName().toString().endsWith(".zip"))) {
             return false;
         }
+        // The description is a text component: text, a list or an object; null or a number is none.
         return section(entry).filter(section -> section.get("pack_format") instanceof JsonPrimitive format && format.isNumber()
-                && section.has("description")).isPresent();
+                && (section.get("description") instanceof JsonPrimitive text && text.isString()
+                || section.get("description") instanceof JsonArray || section.get("description") instanceof JsonObject)).isPresent();
     }
 
     /** The {@code pack} section of a pack's {@code pack.mcmeta}, or empty without one it can read. */

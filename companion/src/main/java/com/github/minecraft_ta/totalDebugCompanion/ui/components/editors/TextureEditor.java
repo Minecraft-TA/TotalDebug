@@ -33,7 +33,6 @@ import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.List;
@@ -381,7 +380,8 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
     protected void load(Texture content) {
         this.saved = content;
         // Another copy plays its own animation, or none; with no copy left the shown one stays.
-        if (content != NONE && !Objects.equals(content.animation(), this.animation)) {
+        if (content != NONE && !(Objects.equals(content.animation(), this.animation)
+                && content.animationProblem().equals(this.animationProblem))) {
             this.animation = content.animation();
             this.animationProblem = content.animationProblem();
             this.view.setAnimation(this.animation, this.animationProblem);
@@ -413,18 +413,17 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
     }
 
     /**
-     * {@code pack}'s copy with the animation it plays: its own {@code .mcmeta}, as the game reads a texture's animation
-     * from the pack that supplies the texture, or none without one.
+     * {@code pack}'s copy with the animation the game plays for it: the {@code .mcmeta} of the highest enabled pack from
+     * {@code pack} up that supplies one, or none.
      */
     @Override
     protected Texture decode(byte[] bytes, Path pack) throws IOException {
         BufferedImage image = pixels(bytes);
-        Path file = pack.resolve(path() + ".mcmeta");
-        if (!Files.isRegularFile(file)) return new Texture(image, null, "");
         try {
             // As when a texture opens: a file larger than an animation needs is not read.
-            if (Files.size(file) > 1024 * 1024) return new Texture(image, null, "The animation file is larger than 1 MiB");
-            TextureAnimation animation = TextureAnimation.read(Files.readAllBytes(file), image.getWidth(), image.getHeight()).orElse(null);
+            var metadata = edits().metadata(path(), pack, 1024 * 1024);
+            if (metadata.isEmpty()) return new Texture(image, null, "");
+            TextureAnimation animation = TextureAnimation.read(metadata.get(), image.getWidth(), image.getHeight()).orElse(null);
             if (animation != null && animation.frames().stream().noneMatch(frame -> animation.contains(frame.index()))) {
                 return new Texture(image, null, "Animation frames lie outside the texture");
             }

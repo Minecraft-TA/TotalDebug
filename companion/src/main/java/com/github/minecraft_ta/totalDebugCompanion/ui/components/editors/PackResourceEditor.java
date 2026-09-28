@@ -133,6 +133,10 @@ abstract class PackResourceEditor<V> extends JPanel {
         this.packContent = content;
     }
 
+    protected final ResourceEdits edits() {
+        return this.edits;
+    }
+
     /** The resource's pack path, such as {@code assets/ns/lang/en_us.json}. */
     protected final String path() {
         return this.path;

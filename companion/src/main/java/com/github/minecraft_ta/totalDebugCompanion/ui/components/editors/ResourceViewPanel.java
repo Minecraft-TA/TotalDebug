@@ -40,7 +40,13 @@ public final class ResourceViewPanel extends JPanel {
     private final ResourceEdits edits;
     private String metadata = "";
 
-    private CompletableFuture<LoadedResource> loadTask;
+    /** What a load read: the content, and the folder pack a local file lies in, or null. */
+    private record Opened(LoadedResource content, Path pack) {
+    }
+
+    private CompletableFuture<Opened> loadTask;
+    /** The folder pack the loaded file lies in, which its editor saves into, or null for a file of a mod or archive. */
+    private Path openedPack;
     private Component activeView;
     /** Where to show the text once it has loaded, or -1. */
     private int pendingOffset = -1;
@@ -69,17 +75,21 @@ public final class ResourceViewPanel extends JPanel {
         showCenteredMessage("Loading " + this.source.displayName() + "...", null);
         setMetadata("");
         this.loadedModified = modified();
-        CompletableFuture<LoadedResource> task = CompletableFuture.supplyAsync(() -> {
+        CompletableFuture<Opened> task = CompletableFuture.supplyAsync(() -> {
             try {
-                return ResourceLoader.load(this.source, this.fileType);
+                LoadedResource content = ResourceLoader.load(this.source, this.fileType);
+                // Reading the pack's metadata to tell whether the file lies in a pack happens here, off the Swing thread.
+                Path pack = this.edits != null && this.source instanceof LocalFileSource file
+                        ? this.edits.packOf(file.path()).orElse(null) : null;
+                return new Opened(content, pack);
             } catch (Exception exception) {
                 throw new CompletionException(exception);
             }
         }, LOADER);
         this.loadTask = task;
-        task.whenComplete((content, failure) -> SwingUtilities.invokeLater(() -> {
+        task.whenComplete((opened, failure) -> SwingUtilities.invokeLater(() -> {
             if (this.disposed || this.loadTask != task) {
-                if (content instanceof LoadedResource.Image image) {
+                if (opened != null && opened.content() instanceof LoadedResource.Image image) {
                     image.value().flush();
                 }
                 return;
@@ -89,7 +99,8 @@ public final class ResourceViewPanel extends JPanel {
                 showCenteredMessage(messageFor(cause), this::reload);
                 return;
             }
-            showContent(content);
+            this.openedPack = opened.pack();
+            showContent(opened.content());
         }));
     }
 
@@ -155,7 +166,7 @@ public final class ResourceViewPanel extends JPanel {
 
     /** The folder pack the opened file lies in, which an editor saves into, or null for a file of a mod or archive. */
     private Path openedPack() {
-        return this.source instanceof LocalFileSource file ? this.edits.packOf(file.path()).orElse(null) : null;
+        return this.openedPack;
     }
 
     /** An editor for a texture of the pack, otherwise the image. */

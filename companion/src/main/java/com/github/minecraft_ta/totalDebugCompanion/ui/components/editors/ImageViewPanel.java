@@ -182,6 +182,8 @@ public final class ImageViewPanel extends JPanel {
         this.framePosition = 0;
         this.frameTicks = 0;
         this.wholeSheet.setSelected(false);
+        this.frameSlider.setEnabled(true);
+        this.play.setEnabled(true);
         showAnimationControls();
         this.canvas.setImage(shownImage());
         setPlaying(isAnimated());

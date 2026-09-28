@@ -29,6 +29,8 @@ class PackFoldersTest {
         }
         Files.createDirectories(folder.resolve("Broken"));
         Files.writeString(folder.resolve("Broken/pack.mcmeta"), "{\"pack\":{\"description\":\"No format\"}}");
+        Files.createDirectories(folder.resolve("Nameless"));
+        Files.writeString(folder.resolve("Nameless/pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":null}}");
         try (ZipOutputStream output = new ZipOutputStream(Files.newOutputStream(folder.resolve("Nested.zip")))) {
             output.putNextEntry(new ZipEntry("Nested/pack.mcmeta"));
             output.closeEntry();
