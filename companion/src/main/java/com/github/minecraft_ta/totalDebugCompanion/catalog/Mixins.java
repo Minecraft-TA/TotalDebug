@@ -1,5 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.electronwill.nightconfig.core.CommentedConfig;
+import com.electronwill.nightconfig.core.UnmodifiableConfig;
+import com.electronwill.nightconfig.core.io.ParsingMode;
+import com.electronwill.nightconfig.toml.TomlFormat;
+import com.electronwill.nightconfig.toml.TomlParser;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -14,6 +19,7 @@ import org.objectweb.asm.Type;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.StringReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -39,10 +45,6 @@ public final class Mixins {
     private static final int MAXIMUM_CONFIG_BYTES = 1024 * 1024;
     private static final int MAXIMUM_CLASS_BYTES = 4 * 1024 * 1024;
     private static final int DEFAULT_PRIORITY = 1000;
-    /** A {@code [[mixins]]} table header, which a comment may follow. */
-    private static final Pattern MIXIN_TABLE = Pattern.compile("(?m)^\\s*\\[\\[\\s*mixins\\s*]]\\s*(#.*)?$");
-    /** A table's {@code config} key, as a basic or a literal string. */
-    private static final Pattern CONFIG = Pattern.compile("(?m)^\\s*config\\s*=\\s*(?:\"((?:[^\"\\\\]|\\\\.)+)\"|'([^']+)')");
     private static final String MIXIN = "Lorg/spongepowered/asm/mixin/Mixin;";
     private static final String DESC = "Lorg/spongepowered/asm/mixin/injection/Desc;";
     /** What a method annotation of Mixin or MixinExtras does to its target, by the annotation's descriptor. */
@@ -243,13 +245,13 @@ public final class Mixins {
         Set<String> configs = new LinkedHashSet<>();
         Optional<byte[]> toml = archive.read("META-INF/neoforge.mods.toml", MAXIMUM_CONFIG_BYTES);
         if (toml.isPresent()) {
-            String text = new String(toml.get(), StandardCharsets.UTF_8);
-            Matcher table = MIXIN_TABLE.matcher(text);
-            while (table.find()) {
-                // The table's keys run to the next table.
-                int end = text.indexOf("\n[", table.end());
-                Matcher config = CONFIG.matcher(text.substring(table.end(), end < 0 ? text.length() : end));
-                if (config.find()) configs.add(config.group(1) != null ? basicString(config.group(1)) : config.group(2));
+            // Read as TOML, as NeoForge reads it; a file that is not TOML fails as the game fails it.
+            CommentedConfig metadata = TomlFormat.newConfig(LinkedHashMap::new);
+            new TomlParser().parse(new StringReader(new String(toml.get(), StandardCharsets.UTF_8)), metadata, ParsingMode.REPLACE);
+            if (metadata.get("mixins") instanceof List<?> tables) {
+                for (Object table : tables) {
+                    if (table instanceof UnmodifiableConfig mixins && mixins.get("config") instanceof String config) configs.add(config);
+                }
             }
         }
         Optional<byte[]> manifest = archive.read("META-INF/MANIFEST.MF", MAXIMUM_CONFIG_BYTES);
@@ -262,38 +264,6 @@ public final class Mixins {
             }
         }
         return configs;
-    }
-
-    /** The text of a TOML basic string's contents, with its escapes such as {@code \\u002E} decoded. */
-    static String basicString(String escaped) {
-        StringBuilder text = new StringBuilder();
-        for (int index = 0; index < escaped.length(); index++) {
-            char character = escaped.charAt(index);
-            if (character != '\\' || index + 1 >= escaped.length()) {
-                text.append(character);
-                continue;
-            }
-            char code = escaped.charAt(++index);
-            switch (code) {
-                case 'b' -> text.append('\b');
-                case 't' -> text.append('\t');
-                case 'n' -> text.append('\n');
-                case 'f' -> text.append('\f');
-                case 'r' -> text.append('\r');
-                case 'u', 'U' -> {
-                    int digits = code == 'u' ? 4 : 8;
-                    // A short or malformed escape, which TOML refuses, stays as written.
-                    if (index + digits >= escaped.length() || !escaped.substring(index + 1, index + 1 + digits).matches("[0-9A-Fa-f]+")) {
-                        text.append('\\').append(code);
-                        continue;
-                    }
-                    text.appendCodePoint(Integer.parseInt(escaped.substring(index + 1, index + 1 + digits), 16));
-                    index += digits;
-                }
-                default -> text.append(code);
-            }
-        }
-        return text.toString();
     }
 
     private static String owner(String config, List<String> mods) {

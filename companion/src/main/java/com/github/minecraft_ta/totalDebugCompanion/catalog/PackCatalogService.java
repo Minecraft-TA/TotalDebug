@@ -117,10 +117,7 @@ public final class PackCatalogService {
                         + ", not the announced " + inventoryId);
             }
             RuntimeInventory runtime = Files.isRegularFile(this.paths.inventory()) ? RuntimeInventory.read(this.paths.inventory()) : null;
-            CatalogIndex index = index(catalog, runtime);
-            // Read here, off the Swing thread, so the Modpack tree knows at once whether it has a Mixins row.
-            index.declaresMixins();
-            loaded = new Ready(index);
+            loaded = new Ready(index(catalog, runtime));
         } catch (IOException | RuntimeException failure) {
             loaded = new Failed(failure.getMessage());
         }
@@ -131,11 +128,15 @@ public final class PackCatalogService {
         set(new Failed(detail.isBlank() ? "Minecraft could not capture the pack catalog" : detail));
     }
 
+    /** The index of a restored or announced catalog, built on the loader thread. */
     private static CatalogIndex index(PackCatalog catalog, RuntimeInventory runtime) {
         List<Path> vanilla = runtime != null && runtime.id().equals(catalog.inventoryId())
                 && catalog.mods().stream().anyMatch(mod -> mod.id().equals("minecraft"))
                 ? ModResources.vanillaArchives(runtime.sources()) : List.of();
-        return new CatalogIndex(catalog, vanilla);
+        CatalogIndex index = new CatalogIndex(catalog, vanilla);
+        // Read here, off the Swing thread, so the Modpack tree knows at once whether it has a Mixins row.
+        index.declaresMixins();
+        return index;
     }
 
     /** A different runtime inventory makes the shown catalog outdated until its own catalog arrives. */

@@ -32,7 +32,7 @@ class MixinsTest {
         Map<String, byte[]> entries = new LinkedHashMap<>();
         entries.put("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nMulti-Release: true\r\n\r\n".getBytes(StandardCharsets.UTF_8));
         entries.put("META-INF/neoforge.mods.toml", ("modLoader=\"javafml\"\n[[mods]]\nmodId=\"gears\"\n"
-                + "[[mixins]] # the common ones\nconfig='gears.mixins.json'\n[[mixins]]\nconfig = \"gears.client.mixins.json\"\n")
+                + "[[mixins]] # the common ones\nconfig='gears.mixins.json'\n[[mixins]]\n\"config\" = \"gears\\u002Eclient.mixins.json\"\n")
                 .getBytes(StandardCharsets.UTF_8));
         entries.put("gears.mixins.json", "{\"package\":\"com.gears.mixin\",\"refmap\":\"gears.refmap.json\",\"mixins\":[\"LevelMixin\",\"Missing\",\"Broken\",\"Huge\"]}"
                 .getBytes(StandardCharsets.UTF_8));
@@ -150,8 +150,6 @@ class MixinsTest {
         assertEquals(new Mixins.Selected(new MixinSelector.Matching("Level$", "^on", "V$"), ""),
                 Mixins.selector("owner=/Level$/ name=/^on/ desc=/V$/"));
         assertEquals(new Mixins.Selected(new MixinSelector.Dynamic("@Shadow(tick)"), ""), Mixins.selector("@Shadow(tick)"));
-        assertEquals("gears.mixins.json", Mixins.basicString("gears\\u002Emixins.json"), "a TOML escape");
-        assertEquals("a\"b", Mixins.basicString("a\\\"b"));
     }
 
     private static Mixins.Selected selected(String name, String descriptor, int limit, String owner) {
