@@ -595,7 +595,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 CompanionSession connected = session;
                 long established = connected.connection();
                 // Sends only on this connection, never to a game that connected after it.
-                current.location().connected(message -> connected.connection() == established && connected.send(message));
+                current.location().connected(message -> connected.send(established, message));
             }
             if (reconnect != null && reconnect.project == current) {
                 var completed = reconnect;

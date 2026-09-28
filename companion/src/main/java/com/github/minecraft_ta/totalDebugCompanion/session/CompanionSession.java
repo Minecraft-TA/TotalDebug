@@ -97,6 +97,8 @@ public final class CompanionSession implements AutoCloseable {
     private final Listener listener;
     private final AtomicReference<State> state = new AtomicReference<>(State.WAITING_FOR_HELLO);
     private final AtomicLong connections = new AtomicLong();
+    /** Held while a connection is numbered and taken as authenticated, and by sends bound to one connection. */
+    private final Object connectionChange = new Object();
     private ProjectSelectionServer projectSelections;
     private AttachmentHandler projectSelectionHandler;
     private CompanionSessionDescriptor descriptor;
@@ -186,6 +188,16 @@ public final class CompanionSession implements AutoCloseable {
     /** Includes a client whose authentication handshake is still in progress. */
     public boolean hasClient() {
         return this.server.isClientConnected();
+    }
+
+    /**
+     * Sends {@code message} only while {@code connection} is the authenticated one, checked and queued in one step, so it
+     * never reaches a game that connected after it.
+     */
+    public boolean send(long connection, AbstractMessage message) {
+        synchronized (this.connectionChange) {
+            return this.connections.get() == connection && send(message);
+        }
     }
 
     public boolean send(AbstractMessage message) {
@@ -284,8 +296,10 @@ public final class CompanionSession implements AutoCloseable {
             return;
         }
 
-        this.connections.incrementAndGet();
-        this.state.set(State.AUTHENTICATED);
+        synchronized (this.connectionChange) {
+            this.connections.incrementAndGet();
+            this.state.set(State.AUTHENTICATED);
+        }
         this.server.getMessageProcessor().enqueueMessage(response);
         this.server.getMessageProcessor().enqueueMessage(new ReadyMessage());
         this.listener.connected();

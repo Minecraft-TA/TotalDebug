@@ -17,6 +17,9 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
+import java.nio.channels.FileLock;
+import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.Comparator;
@@ -225,6 +228,61 @@ class ResourceEditsTest {
         assertEquals(Set.of(ReloadPayload.Kind.DATA), sent.getFirst().kinds());
         assertEquals(world.toAbsolutePath().normalize().toString(), sent.getFirst().dataWorld(),
                 "the game refuses to reload it once it plays another world");
+    }
+
+    @Test
+    void aDatapackOfAWorldTheUnconnectedGameHasOpenIsWrittenForItsNextLoad() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        LevelDatFixture.write(world, LevelDatFixture.world("World"));
+        Path pack = Files.createDirectories(world.resolve("datapacks/TotalDebug"));
+        Files.writeString(pack.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":48,\"description\":\"\"}}");
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, true), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, InstanceState.inMemory());
+
+        try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock ignored = channel.lock()) {
+            ResourceEdits.Saved saved = edits.save("data/testmod/recipe/gear.json", bytes("{}")).get(5, TimeUnit.SECONDS);
+
+            assertEquals("{}", Files.readString(pack.resolve("data/testmod/recipe/gear.json")), "the game only reads a datapack");
+            assertEquals(ConfigChanges.Effect.WORLD_OPENS, saved.effect());
+            assertEquals("The world World is open in a game that is not connected to Companion; it uses the change when the world is loaded again",
+                    saved.reloadFailure());
+        }
+    }
+
+    @Test
+    void leavingAWorldDropsOnlyItsDataFromTheNextReload() throws Exception {
+        Path first = this.directory.resolve("saves/First");
+        Path second = this.directory.resolve("saves/Second");
+        LevelDatFixture.write(first, LevelDatFixture.world("First"));
+        LevelDatFixture.write(second, LevelDatFixture.world("Second"));
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        edits.location().connected(message -> {
+            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
+            return true;
+        });
+        edits.location().playing(new PlayingPayload.Singleplayer(first.toString(), false));
+        edits.packStack(STACK);
+
+        CompletableFuture<ResourceEdits.Saved> running = edits.save(LANG, bytes("{}"));
+        awaitSent(sent, 1);
+        CompletableFuture<ResourceEdits.Saved> model = edits.save("assets/testmod/models/block/gear.json", bytes("{}"));
+        CompletableFuture<ResourceEdits.Saved> firstData = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
+        edits.location().playing(new PlayingPayload.Singleplayer(second.toString(), false));
+        edits.packStack(STACK);
+        CompletableFuture<ResourceEdits.Saved> secondData = edits.save("data/testmod/recipe/wheel.json", bytes("{}"));
+
+        assertTrue(firstData.get(5, TimeUnit.SECONDS).reloadFailure().contains("another world"), "the first world's data is not reloaded in the second");
+        edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
+        running.get(5, TimeUnit.SECONDS);
+        awaitSent(sent, 2);
+        ReloadPayload next = sent.get(1);
+        assertEquals(Set.of(ReloadPayload.Kind.RESOURCES, ReloadPayload.Kind.DATA), next.kinds(), "the model's reload stays");
+        assertEquals(second.toAbsolutePath().normalize().toString(), next.dataWorld());
+        edits.answered(new ReloadResultPayload(next.requestId(), 10, List.of(), ""));
+        assertEquals(ConfigChanges.Effect.NOW, model.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(ConfigChanges.Effect.NOW, secondData.get(5, TimeUnit.SECONDS).effect());
     }
 
     @Test

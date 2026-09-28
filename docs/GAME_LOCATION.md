@@ -68,6 +68,8 @@ A category asks the state how a change of what it owns can be made, and receives
 | Held, while the game plays something else or no game runs | Refused: the world is open in another program |
 | Not held | Files, whatever the game does |
 
+A world's datapack files are the exception: the game only reads them, when it loads the world or reloads its data, so they are written whatever holds the world. They are used live only while the connected game plays the world; while a game without a connection has it open, the save says it is used when the world is loaded again.
+
 A world of the instance is never live while the game plays on a remote server: that server's world is on its own machine, and the instance's worlds are closed files.
 
 **The current world** is the world the game has open (the one it plays in singleplayer, or the held one of a game that is not connected), otherwise the world played last. Pages that show "the current world", and data written into a world's datapack, follow it.
@@ -77,9 +79,10 @@ A world of the instance is never live while the game plays on a remote server: t
 - No category checks the game lock, a `session.lock` or the connection itself. It asks `GameLocation`. The file primitives keep their own last guard: `LevelDat` never writes a held world.
 - A live answer's connection sends only on the connection it was given for. Once that connection has ended its sends fail, so a message never goes to a game that connected since.
 - A category that waits for the game's answers listens to `GameLocation` to fail them when the game disconnects.
+- A page that shows something chosen by where the game is, such as the open world's copy of a server configuration, reads it again when `GameLocation` changes. A page where the user chose the world keeps that choice.
 - A live request for a world, such as a datapack selection or a data reload, names that world, and the game refuses it when it plays another by the time the request arrives: what the game plays is told once a second, so Companion can be a moment behind.
 - What the game reports about a world, such as its datapacks, belongs to what it plays. Companion drops it when the game plays something else, and the game reports it again.
-- Reloads asked for together go to the game on one connection; asked for on an earlier connection, they fail rather than reach a game that connected since.
+- Reloads asked for together go to the game on one connection; asked for on an earlier connection, they fail rather than reach a game that connected since. Data asked for a world the game has left is dropped from the reload alone.
 
 ## One side type
 

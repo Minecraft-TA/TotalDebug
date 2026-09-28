@@ -86,6 +86,8 @@ public final class ResourceEdits {
         final GameLocation.Connection connection;
         /** The world whose data the batch reloads, or null while it reloads no data. */
         Path dataWorld;
+        /** What the batch's data edits wait for: its result, or a failure once their world was left. */
+        CompletableFuture<ReloadResultPayload> dataResult = new CompletableFuture<>();
         final Set<ReloadPayload.Kind> kinds = EnumSet.noneOf(ReloadPayload.Kind.class);
         final Set<String> watched = new LinkedHashSet<>();
         final CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
@@ -741,8 +743,10 @@ public final class ResourceEdits {
         ResourcePaths.Apply apply = ResourcePaths.apply(path);
         boolean assets = path.startsWith("assets/");
         GameState game = this.location.read();
-        // Assets belong to the game; a world's datapack is read by that world only.
-        Access access = assets ? game.client("use the change") : game.world(pack.getParent().getParent(), "use the change");
+        // Assets belong to the game. A world's datapack is read by that world only, and no game writes it, so it is written
+        // whatever holds the world; only the connected game playing it uses it at once.
+        Path world = assets ? null : pack.getParent().getParent();
+        Access access = assets ? game.client("use the change") : game.plays(world) ? game.world(world, "use the change") : new Access.Files();
         ConfigChanges.Effect later = assets ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS;
         if (access instanceof Access.Refused refused) {
             return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), refused.reason()));
@@ -757,6 +761,12 @@ public final class ResourceEdits {
                             "The TotalDebug pack could not be enabled in options.txt: " + exception.getMessage()));
                 }
             }
+            if (!assets && game.isOpen(world)) {
+                // Written all the same: the game only reads a datapack, when it loads the world or its data again.
+                return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), "The world " + world.getFileName()
+                        + (game.connected() ? " is open, and the game has not said yet that it plays it" : " is open in a game that is not connected to Companion")
+                        + "; it uses the change when the world is loaded again"));
+            }
             return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), ""));
         }
         if (!assets && apply == ResourcePaths.Apply.WORLD_LOAD) {
@@ -764,7 +774,6 @@ public final class ResourceEdits {
         }
         // Files written beside it join the same reload, which they are part of.
         GameLocation.Connection connection = ((Access.Live) access).connection();
-        Path world = assets ? null : pack.getParent().getParent();
         for (String beside : alsoWatched) reload(connection, world, kind(beside), beside, managed(pack));
         return reload(connection, world, kind(path), path, managed(pack)).handle((result, failure) -> {
             if (failure != null) {
@@ -798,21 +807,27 @@ public final class ResourceEdits {
                                                                        ReloadPayload.Kind kind, String path, boolean managed) {
         if (this.next != null && this.next.connection != connection) {
             // Asked for on an earlier connection: that game is gone, and the one connected now never saw these writes.
-            this.next.result.completeExceptionally(new IOException("The game disconnected before it reloaded"));
-            this.next = null;
-        }
-        if (this.next != null && world != null && this.next.dataWorld != null && !this.next.dataWorld.equals(world)) {
-            // Data of a world the game played before: it plays another now, which never saw these writes.
-            this.next.result.completeExceptionally(new IOException("The game went to another world before it reloaded"));
+            IOException gone = new IOException("The game disconnected before it reloaded");
+            this.next.result.completeExceptionally(gone);
+            this.next.dataResult.completeExceptionally(gone);
             this.next = null;
         }
         if (this.next == null) this.next = new Batch(connection);
-        if (world != null) this.next.dataWorld = world.toAbsolutePath().normalize();
+        Batch batch = this.next;
+        if (world != null && batch.dataWorld != null && !batch.dataWorld.equals(world.toAbsolutePath().normalize())) {
+            // Data of a world the game played before: it plays another now, which never saw these writes. The batch's asset
+            // reloads stay.
+            batch.dataResult.completeExceptionally(new IOException("The game went to another world before it reloaded"));
+            batch.dataResult = new CompletableFuture<>();
+            batch.kinds.remove(ReloadPayload.Kind.DATA);
+            batch.managedData = false;
+        }
+        if (world != null) batch.dataWorld = world.toAbsolutePath().normalize();
         this.next.kinds.add(kind);
         this.next.watched.add(path);
         if (path.startsWith("assets/")) this.next.managedAssets |= managed;
         else this.next.managedData |= managed;
-        CompletableFuture<ReloadResultPayload> result = this.next.result;
+        CompletableFuture<ReloadResultPayload> result = world != null ? this.next.dataResult : this.next.result;
         // A write still queued joins this reload rather than taking another after it.
         if (this.running == null && this.writing == 0) sendNext();
         return result;
@@ -829,6 +844,11 @@ public final class ResourceEdits {
             batch.kinds.remove(ReloadPayload.Kind.TEXTURES);
         }
         GameLocation.Connection send = batch.connection;
+        CompletableFuture<ReloadResultPayload> data = batch.dataResult;
+        batch.result.whenComplete((answer, failure) -> {
+            if (failure != null) data.completeExceptionally(failure);
+            else data.complete(answer);
+        });
         int id = this.requests.incrementAndGet();
         this.waiting.put(id, batch.result);
         List<String> watched = new ArrayList<>(batch.watched);
