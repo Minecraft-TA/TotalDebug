@@ -87,6 +87,8 @@ final class GameRulesPanel extends JPanel {
     /** The world whose rules are shown; the sets of another world's rules no longer concern the rows. */
     private Object world;
     private int worldShown;
+    /** Why the world's rules cannot be shown, in place of them, or empty. */
+    private String unavailable = "";
 
     GameRulesPanel() {
         super(new BorderLayout());
@@ -160,6 +162,25 @@ final class GameRulesPanel extends JPanel {
         }));
     }
 
+    /** Shows why the rules of {@code world} cannot be shown, in place of them. */
+    void showUnavailable(Object world, String reason) {
+        showWorld(world);
+        this.unavailable = reason;
+        this.model.all = List.of();
+        applyFilter();
+    }
+
+    /** Starts afresh for another world, whatever was being set in the last one. */
+    private void showWorld(Object world) {
+        if (this.table.isEditing()) this.table.getCellEditor().cancelCellEditing();
+        if (Objects.equals(world, this.world)) return;
+        this.world = world;
+        this.worldShown++;
+        this.setting.clear();
+        this.named.clear();
+        this.body.showNotice("");
+    }
+
     /** Shows {@code value} as {@code name}'s value, keeping the selected rules selected while the filter still shows them. */
     private void replace(String name, String value) {
         List<Rule> all = new ArrayList<>();
@@ -178,14 +199,8 @@ final class GameRulesPanel extends JPanel {
      * set to. Another world's rules start afresh, whatever was being set in the last one.
      */
     void setRules(Object world, Map<String, String> rules) {
-        if (this.table.isEditing()) this.table.getCellEditor().cancelCellEditing();
-        if (!Objects.equals(world, this.world)) {
-            this.world = world;
-            this.worldShown++;
-            this.setting.clear();
-            this.named.clear();
-            this.body.showNotice("");
-        }
+        showWorld(world);
+        this.unavailable = "";
         Set<String> selected = new HashSet<>();
         for (Rule rule : selectedRules()) selected.add(rule.name());
         List<Rule> all = new ArrayList<>();
@@ -214,7 +229,8 @@ final class GameRulesPanel extends JPanel {
         this.model.shown = List.copyOf(shown);
         this.model.fireTableDataChanged();
         boolean empty = shown.isEmpty();
-        if (empty) this.body.showMessage(this.model.all.isEmpty() ? "The world has no game rules saved." : "No game rule matches the filter.");
+        if (empty) this.body.showMessage(!this.unavailable.isEmpty() ? this.unavailable
+                : this.model.all.isEmpty() ? "The world has no game rules saved." : "No game rule matches the filter.");
         else this.body.showContent();
     }
 

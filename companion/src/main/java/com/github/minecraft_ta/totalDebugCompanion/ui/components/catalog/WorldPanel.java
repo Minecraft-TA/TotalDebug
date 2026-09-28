@@ -168,8 +168,9 @@ public final class WorldPanel extends JPanel {
         if (world.isEmpty()) return new Loaded(null, Map.of(), List.of(), null, "No world has been played in this instance yet.");
         try {
             CurrentWorld.Saved saved = CurrentWorld.read(world.get());
-            Map<String, String> liveRules = saved.open() && rules != null && rules.of(saved.directory().getFileName().toString())
-                    ? rules.rules() : saved.gameRules();
+            // An open world's level.dat lags behind the game, so its rules are only the game's own, or none while unknown.
+            Map<String, String> liveRules = !saved.open() ? saved.gameRules()
+                    : rules != null && rules.of(saved.directory().getFileName().toString()) ? rules.rules() : null;
             return new Loaded(saved, liveRules, PackResources.worldDatapacks(stack, saved), icon(world.get().resolve("icon.png")), "");
         } catch (IOException | RuntimeException unreadable) {
             return new Loaded(null, Map.of(), List.of(), null, "The world " + world.get().getFileName() + " could not be read: "
@@ -208,9 +209,13 @@ public final class WorldPanel extends JPanel {
         this.header.setSubtitle(subtitle);
 
         showOverview(saved);
-        this.rules.setRules(saved.directory(), loaded.rules());
+        if (loaded.rules() != null) {
+            this.rules.setRules(saved.directory(), loaded.rules());
+        } else {
+            this.rules.showUnavailable(saved.directory(), "The game has the world open; its game rules show once the game is connected to Companion.");
+        }
         this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
-        setTab(WorldTab.GAME_RULES, loaded.rules().size());
+        setTab(WorldTab.GAME_RULES, loaded.rules() != null ? loaded.rules().size() : saved.gameRules().size());
         setTab(WorldTab.DATAPACKS, this.datapackList.size());
         ((CardLayout) this.cards.getLayout()).show(this.cards, PAGE_CARD);
         if (this.requested != null) show(this.requested);

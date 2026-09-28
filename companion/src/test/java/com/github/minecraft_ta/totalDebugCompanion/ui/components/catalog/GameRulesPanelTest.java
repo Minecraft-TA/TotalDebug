@@ -54,4 +54,15 @@ class GameRulesPanelTest {
             assertEquals("Not set: randomTickSpeed: The world is closed", panel[0].notice());
         });
     }
+
+    @Test
+    void anOpenWorldWithoutTheGamesRulesShowsWhyInsteadOfSavedOnes() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            GameRulesPanel panel = new GameRulesPanel();
+            panel.setRules("Test", new TreeMap<>(Map.of("keepInventory", "true")));
+            panel.showUnavailable("Test", "The game has the world open; its game rules show once the game is connected to Companion.");
+            assertEquals(List.of(), panel.shownValues(), "nothing to edit from a lagging level.dat");
+            assertEquals(0, panel.rowCount());
+        });
+    }
 }
