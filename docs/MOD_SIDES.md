@@ -1,6 +1,6 @@
 # The mod's client and server parts
 
-Design for item A2 of the roadmap: the mod split into a common, a client and a server part, with one relay that carries Companion's messages for the server through the client. It builds on [GAME_LOCATION.md](GAME_LOCATION.md), which decides *whether* a change goes to the server; this document decides *how* it gets there and who may make it.
+Design for item A2 of the roadmap: the mod's common, client and server parts, with one relay that carries Companion's messages for the server through the client. It builds on [GAME_LOCATION.md](GAME_LOCATION.md), which decides *whether* a change goes to the server; this document decides *how* it gets there and who may make it.
 
 ## Why
 
@@ -13,13 +13,16 @@ Each script operation also has its own payload type, so every new server feature
 
 ## Three parts
 
-| Part | Package | Holds | May use |
+| Part | Where | Holds | May use |
 |---|---|---|---|
-| Common | `totaldebug.common` | Script runtime and value capture, inspection readers, runtime sources, the relay's codec | Neither client nor dedicated-server classes |
-| Client | `totaldebug.client` | The Companion connection, F6 input, resource packs and assets, key bindings, options, the relay's client end | Client classes; never `getSingleplayerServer()` |
-| Server | `totaldebug.server` | Every server operation: scripts, class manifest, datapacks, data reloads, game rules, what the server reports about its world, the relay's server end | Server classes only |
+| Client | `totaldebug.client` | The Companion connection, F6 input, resource packs and assets, key bindings, options, the relay's client end, and the client's mod entry `TotalDebugClientMod` | Client classes; never `getSingleplayerServer()` |
+| Server | `totaldebug.server` | Every server operation: scripts, class manifest, datapacks, data reloads, game rules, what the server reports about its world, the relay's server end | Server classes |
+| Common | Everything else | The mod's entry `TotalDebug`, the script API (`totaldebug.script`, `totaldebug.inspection`), runtime sources, networking contracts, configuration | Neither client classes nor the client part |
 
-The rule is checked by a test that reads the compiled classes of `server` and `common` and fails on any reference to `net.minecraft.client`, and on any call to `getSingleplayerServer` from `client`. The mod keeps one entry point; the client part is still created only on the client distribution.
+- **The parts are a rule, not a move.** Scripts and inspection tools import `ScriptProgram` and the readers by their package, so the script API keeps its packages; moving them would break every saved script.
+- **The rule is checked** by `ModPartsTest`, which reads the mod's compiled classes and fails on any class outside `totaldebug.client` that refers to `net.minecraft.client` or to the client part.
+- **The client's setup at mod construction** lives in its own entry class, `@Mod(dist = CLIENT)`, which NeoForge constructs only on the client, instead of a distribution check in `TotalDebug`.
+- A second check, that no client class calls `getSingleplayerServer()`, is added in layer 3, once the last such calls have moved.
 
 ## The relay
 
@@ -79,7 +82,7 @@ A stack, each layer at most about 500 lines, each merged before the next opens:
 
 | Layer | Content | Protocol | Tests |
 |---|---|---|---|
-| 1. Parts | Move the classes into `common`, `client` and `server`; no behaviour change | None | The dependency test; the existing suites unchanged |
+| 1. Parts | The rule and its test; the client's mod entry; no behaviour change | None | `ModPartsTest`; the existing suites unchanged |
 | 2. Relay | `ToServer`/`ToCompanion` with chunks; scripts, manifest and source requests move onto it; their payloads go | None (Companion messages unchanged) | Chunking, player attribution, leave cleanup, a large script beyond 30,000 bytes |
 | 3. World operations | Datapack selection, data reload, datapack report and game rules move to the server part, for the integrated server | Next version: server-reported datapacks | Singleplayer behaviour unchanged; no client class calls `getSingleplayerServer()` |
 | 4. Remote servers | The permission policy and configuration; `GameState` answers for a remote server's world; the World page for a server | Next version if the report needs the server's identity | Owner, operator and non-operator cases; a server without TotalDebug |
