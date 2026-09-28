@@ -144,6 +144,48 @@ class ResourceTextEditorTest {
         }
     }
 
+    @Test
+    void aMinifiedLanguageFileIsReformattedAsOneEditThatUndoTakesBack() throws Exception {
+        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+                InstanceState.inMemory());
+        StringBuilder minified = new StringBuilder("{");
+        for (int entry = 0; entry < 100; entry++) minified.append("\"item.testmod.gear_").append(entry).append("\":\"Gear\",");
+        minified.append("\"end\":\"end\"}\n");
+        String inJar = minified.toString();
+        ResourceTextEditor[] editor = new ResourceTextEditor[1];
+        SwingUtilities.invokeAndWait(() -> {
+            editor[0] = new ResourceTextEditor(LANG, "testmod.jar", null,
+                    new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits);
+            editor[0].reformat();
+            assertEquals(inJar, editor[0].textPanel().text(), "until the working pack's copy is read, the text stays");
+        });
+        try {
+            awaitOnSwing(() -> editor[0].targetBox().getItemCount() > 0);
+            SwingUtilities.invokeAndWait(() -> {
+                assertTrue(editor[0].oneLineOffered(), "one long line, ending in a line break, offers Reformat Code");
+                editor[0].textPanel().editorPane.insert("//", 0);
+                assertTrue(editor[0].oneLineOffered(), "typing leaves the offer, so the text does not move");
+                editor[0].reformat();
+            });
+            awaitOnSwing(() -> editor[0].noticeText().startsWith("Not reformatted: "));
+            SwingUtilities.invokeAndWait(() -> {
+                editor[0].textPanel().editorPane.replaceRange("", 0, 2);
+                assertEquals("", editor[0].noticeText(), "the problem ends with the edit");
+                editor[0].reformat();
+            });
+            awaitOnSwing(() -> editor[0].textPanel().text().startsWith("{\n  \"item.testmod.gear_0\": \"Gear\",\n"));
+            SwingUtilities.invokeAndWait(() -> {
+                assertTrue(editor[0].textPanel().modified(), "an edit that Save writes");
+                assertFalse(editor[0].oneLineOffered());
+                editor[0].textPanel().editorPane.undoLastAction();
+                assertEquals(inJar, editor[0].textPanel().text(), "one Undo takes it back");
+            });
+        } finally {
+            SwingUtilities.invokeAndWait(editor[0]::dispose);
+        }
+    }
+
     private static void awaitOnSwing(BooleanSupplier condition) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         boolean[] met = new boolean[1];

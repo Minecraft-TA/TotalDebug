@@ -3,25 +3,17 @@ package com.github.minecraft_ta.totalDebugCompanion.pack;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
-import com.google.gson.Gson;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonParseException;
-import com.google.gson.TypeAdapter;
-import com.google.gson.stream.JsonReader;
+import com.google.gson.Strictness;
 
-import java.io.IOException;
-import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 /** Where a file sits in a pack, what the running game reloads to use it, and whether its text is usable. */
 public final class ResourcePaths {
-    /** Reads JSON the way the game's {@code GsonHelper} does, with the reader's own leniency. */
-    private static final TypeAdapter<JsonElement> ELEMENTS = new Gson().getAdapter(JsonElement.class);
     /** Data folders the game reads only when a world loads: its dynamic registries. */
     private static final Set<String> WORLD_LOAD_FOLDERS = Set.of("worldgen", "dimension", "dimension_type",
             "damage_type", "chat_type", "trim_pattern", "trim_material", "wolf_variant", "painting_variant",
@@ -103,17 +95,13 @@ public final class ResourcePaths {
      * Returns the problem, with its line when the parser names one, or empty.
      */
     public static Optional<String> check(String path, String text) {
-        String lower = path.toLowerCase(Locale.ROOT);
-        if (!lower.endsWith(".json") && !lower.endsWith(".mcmeta")) return Optional.empty();
+        if (!JsonFormat.formats(path)) return Optional.empty();
         boolean language = apply(path) == Apply.LANGUAGE;
         JsonElement parsed;
         try {
-            JsonReader reader = new JsonReader(new StringReader(text));
-            reader.setLenient(language);
-            parsed = ELEMENTS.read(reader);
-        } catch (IOException | JsonParseException invalid) {
-            Throwable cause = invalid instanceof JsonParseException && invalid.getCause() != null ? invalid.getCause() : invalid;
-            return Optional.of("Not valid JSON: " + cause.getMessage());
+            parsed = JsonFormat.parse(text, language ? Strictness.LENIENT : Strictness.LEGACY_STRICT);
+        } catch (IllegalArgumentException invalid) {
+            return Optional.of("Not valid JSON: " + invalid.getMessage());
         }
         if (parsed.isJsonNull()) return Optional.of("Not valid JSON: the file holds no value");
         if (language) {
