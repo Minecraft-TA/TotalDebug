@@ -169,7 +169,7 @@ public final class GameRuleEdits {
                 throw new IOException("The level.dat of " + target.world().getFileName() + " holds no world data");
             }
             NbtData.CompoundTag rules = gameRules(root.tag());
-            if (!(rules.entries().get(target.name()) instanceof NbtData.StringTag held) || !held.value().equals(previous)) {
+            if (rules == null || !(rules.entries().get(target.name()) instanceof NbtData.StringTag held) || !held.value().equals(previous)) {
                 throw new IOException(target.name() + " changed in the world since it was read");
             }
             NbtData.CompoundTag written = LevelDat.with(rules, target.name(), new NbtData.StringTag(value));
