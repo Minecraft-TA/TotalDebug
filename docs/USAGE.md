@@ -24,7 +24,7 @@ Minecraft captures the pack catalog once per runtime inventory and language afte
 
 Companion remembers one project per Minecraft instance and keeps one selected at a time. Scripts, watches, history and caches remain in that instance's existing `total-debug` directory. Standalone startup reopens the selected project, including cached source access while Minecraft is offline.
 
-F6 or an explicit source-open request from another game selects its project before connecting. An ordinary handshake cannot replace the selected project. Selection uses an authenticated loopback request separate from the occupied game socket; it does not depend on the optional MCP host. Companion protocol 16 requires a matching mod/Companion pair.
+F6 in another game selects that game's project before connecting. An ordinary handshake cannot replace the selected project. Selection uses an authenticated loopback request separate from the occupied game socket; it does not depend on the optional MCP host. The mod and Companion must speak the same protocol version.
 
 The Game popup provides an icon-only Reconnect action for the selected project. It republishes discovery information and resets the active connection while keeping indexed browsing available. Pending means the authenticated connection has not completed; after 30 seconds without a matching game, the popup reports that timeout and permits another attempt. It does not claim Minecraft crashed. A stale action from another project is rejected. If discovery publication fails before disconnecting, the existing connection remains usable and the failure appears in notifications.
 

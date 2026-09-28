@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totaldebug.network.ForwardedCompanionPayload;
 import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.ServerManifestPayload;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
@@ -15,7 +16,6 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMess
 import com.github.minecraft_ta.totaldebug.runtime.PreparedRuntimeSources;
 import com.github.minecraft_ta.totaldebug.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
-import com.github.minecraft_ta.totaldebug.tick.TickDomain;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 
 import net.minecraft.server.MinecraftServer;
@@ -214,7 +214,7 @@ public final class ServerScriptService {
 
         ScriptRunner created = new ScriptRunner(
                 TotalDebug.class.getClassLoader(),
-                (phase, task) -> this.tickTasks.submit(TickDomain.SERVER, phase, task),
+                (phase, task) -> this.tickTasks.submit(Side.SERVER, phase, task),
                 (scriptId, result) -> sendResult(server, player, scriptId, result),
                 new ServerScriptTargets(server)
         );

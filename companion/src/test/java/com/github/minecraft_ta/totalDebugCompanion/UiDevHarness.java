@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totalDebugCompanion;
 
 import javax.swing.JLabel;
 
+import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
@@ -47,7 +49,6 @@ import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 
-import org.eclipse.jdt.core.IJavaElement;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.IconRowHeader;
 import java.awt.Component;
@@ -379,11 +380,8 @@ public final class UiDevHarness {
     }
 
     private static void scheduleMethodNavigationVerification() {
-        Timer openTimer = new Timer(500, event -> application.openClass(
-                "sample.ThemeSampleImpl",
-                IJavaElement.METHOD,
-                "Lsample/ThemeSampleImpl;.apply(Lsample/ThemeSample;)V"
-        ));
+        Timer openTimer = new Timer(500, event -> application.open(new NavigationTarget.RuntimeDeclaration(
+                new RuntimeMember.Method("sample.ThemeSampleImpl", "apply", "(Lsample/ThemeSample;)V"))));
         openTimer.setRepeats(false);
         openTimer.start();
 

@@ -17,11 +17,6 @@ class LanguageResourcesTest {
     private static final Set<String> CORE_KEYS = Set.of(
             "key.categories.total_debug",
             "key.total_debug.open_code_gui",
-            "commands.total_debug.decompile.block.failed",
-            "commands.total_debug.decompile.item.failed",
-            "commands.total_debug.decompile.entity.failed",
-            "commands.total_debug.decompile.blockentity.failed",
-            "commands.total_debug.decompile.class.failed",
             "companion_app.starting",
             "companion_app.connecting",
             "companion_app.connection_success",

@@ -5,8 +5,8 @@ import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogCapture;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogPublisher;
 import com.github.minecraft_ta.totaldebug.client.companion.ChangePublisher;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
+import com.github.minecraft_ta.totaldebug.client.companion.CompanionRequests;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionProgressActionBar;
-import com.github.minecraft_ta.totaldebug.client.decompile.ClientCodeOpenService;
 import com.github.minecraft_ta.totaldebug.client.input.CodeViewInput;
 import com.github.minecraft_ta.totaldebug.client.inspection.ItemIcons;
 import com.github.minecraft_ta.totaldebug.client.inspection.ResourceSnapshots;
@@ -45,7 +45,7 @@ public final class TotalDebugClient {
     private static GameLock gameLock;
 
     private final CompanionAppClient companionApp;
-    private final ClientCodeOpenService codeOpen;
+    private final CompanionRequests requests;
     private final CodeViewOperation codeView;
     private final CodeViewInput codeViewInput;
     private final KeptStacks keptStacks = new KeptStacks();
@@ -78,7 +78,7 @@ public final class TotalDebugClient {
             }
         }));
         companionApp.setProgressListener(progress -> CompanionProgressActionBar.show(Minecraft.getInstance(), progress));
-        this.codeOpen = new ClientCodeOpenService(companionApp);
+        this.requests = new CompanionRequests(companionApp);
         this.resources = new ResourceSnapshots(paths.previews(), companionApp::sendResourceSnapshot);
         this.catalogs = new PackCatalogPublisher(
                 paths.catalog(),
@@ -118,7 +118,7 @@ public final class TotalDebugClient {
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(Selection subject) {
-                TotalDebugClient.this.codeOpen.inspect(new InspectSubjectPayload(
+                TotalDebugClient.this.requests.inspect(new InspectSubjectPayload(
                         gameSession(),
                         subject.subject().format(),
                         subject.identity(),
@@ -131,7 +131,7 @@ public final class TotalDebugClient {
 
             @Override
             public void focusCompanion() {
-                TotalDebugClient.this.codeOpen.focusCompanion();
+                TotalDebugClient.this.requests.focusCompanion();
             }
         });
         this.codeViewInput = new CodeViewInput(this.codeView::inspectOrFocus, this.keptStacks);
@@ -185,9 +185,6 @@ public final class TotalDebugClient {
         this.companionApp.announceInventory();
     }
 
-    public void openClass(Class<?> targetClass) {
-        this.codeOpen.openClass(targetClass);
-    }
 
     public CodeViewInput codeViewInput() {
         return this.codeViewInput;
