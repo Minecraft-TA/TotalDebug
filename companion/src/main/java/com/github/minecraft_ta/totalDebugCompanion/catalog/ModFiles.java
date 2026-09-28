@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
@@ -90,7 +91,8 @@ public final class ModFiles {
 
     /**
      * Opens the mod file for many reads: a JAR stays open, and a nested JAR is copied to a temporary file once, which is
-     * read entry by entry and deleted on close. Empty when the file does not exist. Blocking.
+     * read entry by entry and deleted on close. A multi-release JAR gives the entries this Java version loads, as the game
+     * does. Empty when the file does not exist. Blocking.
      */
     public static Optional<Archive> open(URI modFile) throws IOException {
         if ("file".equalsIgnoreCase(modFile.getScheme())) {
@@ -106,22 +108,7 @@ public final class ModFiles {
                 }
             });
             if (!Files.isRegularFile(file)) return Optional.empty();
-            ZipFile archive = new ZipFile(file.toFile());
-            return Optional.of(new Archive() {
-                @Override
-                public Optional<byte[]> read(String entry, int maximumBytes) throws IOException {
-                    ZipEntry found = archive.getEntry(entry);
-                    if (found == null || found.isDirectory()) return Optional.empty();
-                    try (InputStream input = archive.getInputStream(found)) {
-                        return Optional.of(limited(input, maximumBytes, entry));
-                    }
-                }
-
-                @Override
-                public void close() throws IOException {
-                    archive.close();
-                }
-            });
+            return Optional.of(jar(file, null));
         }
         if (!"jij".equalsIgnoreCase(modFile.getScheme())) return Optional.empty();
         Optional<byte[]> nested = nestedJar(modFile);
@@ -129,15 +116,19 @@ public final class ModFiles {
         byte[] jar = nested.get();
         // A copy on disk is read like any JAR, one entry at a time, however much its entries would expand to.
         Path copy = Files.createTempFile("totaldebug-nested", ".jar");
-        ZipFile archive;
         try {
             Files.write(copy, jar);
-            archive = new ZipFile(copy.toFile());
+            return Optional.of(jar(copy, copy));
         } catch (IOException | RuntimeException failed) {
             Files.deleteIfExists(copy);
             throw failed;
         }
-        return Optional.of(new Archive() {
+    }
+
+    /** The JAR {@code file}, read at this Java version's entries; {@code copy}, if not null, is deleted on close. */
+    private static Archive jar(Path file, Path copy) throws IOException {
+        JarFile archive = new JarFile(file.toFile(), false, ZipFile.OPEN_READ, Runtime.version());
+        return new Archive() {
             @Override
             public Optional<byte[]> read(String entry, int maximumBytes) throws IOException {
                 ZipEntry found = archive.getEntry(entry);
@@ -152,10 +143,10 @@ public final class ModFiles {
                 try {
                     archive.close();
                 } finally {
-                    Files.deleteIfExists(copy);
+                    if (copy != null) Files.deleteIfExists(copy);
                 }
             }
-        });
+        };
     }
 
     private static Optional<byte[]> read(Path file, String entry, int maximumBytes) throws IOException {

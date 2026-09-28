@@ -30,11 +30,16 @@ class MixinsTest {
     @Test
     void aModsMixinsAreReadFromItsConfigurationsAndClasses() throws Exception {
         Map<String, byte[]> entries = new LinkedHashMap<>();
+        entries.put("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nMulti-Release: true\r\n\r\n".getBytes(StandardCharsets.UTF_8));
         entries.put("META-INF/neoforge.mods.toml", ("modLoader=\"javafml\"\n[[mods]]\nmodId=\"gears\"\n"
                 + "[[mixins]] # the common ones\nconfig='gears.mixins.json'\n[[mixins]]\nconfig = \"gears.client.mixins.json\"\n")
                 .getBytes(StandardCharsets.UTF_8));
-        entries.put("gears.mixins.json", "{\"package\":\"com.gears.mixin\",\"mixins\":[\"LevelMixin\",\"Missing\",\"Broken\",\"Huge\"]}"
+        entries.put("gears.mixins.json", "{\"package\":\"com.gears.mixin\",\"refmap\":\"gears.refmap.json\",\"mixins\":[\"LevelMixin\",\"Missing\",\"Broken\",\"Huge\"]}"
                 .getBytes(StandardCharsets.UTF_8));
+        entries.put("gears.refmap.json", ("{\"mappings\":{\"com/gears/mixin/LevelMixin\":{\"tick\":"
+                + "\"Lnet/minecraft/world/level/Level;tick(Z)V\"}}}").getBytes(StandardCharsets.UTF_8));
+        entries.put("META-INF/versions/21/gears.client.mixins.json",
+                "{\"package\":\"com.gears.mixin\",\"mixinPriority\":1300,\"client\":[\"ScreenAccessor\"]}".getBytes(StandardCharsets.UTF_8));
         entries.put("gears.client.mixins.json", "{\"package\":\"com.gears.mixin\",\"mixinPriority\":1200,\"client\":[\"ScreenAccessor\"]}"
                 .getBytes(StandardCharsets.UTF_8));
         entries.put("com/gears/mixin/LevelMixin.class", MixinFixtures.mixinClass("com/gears/mixin/LevelMixin", LEVEL, 900,
@@ -65,11 +70,11 @@ class MixinsTest {
         assertEquals(900, level.priority());
         assertEquals(List.of(new Mixins.Change("Inject", new MixinSelector.Method("tick", "()V")),
                 new Mixins.Change("Redirect", new MixinSelector.Method("explode", "(DDD)V"), LEVEL),
-                new Mixins.Change("WrapOperation", new MixinSelector.Method("tick", ""))), level.changes(),
-                "each with the overload its descriptor picks, or the first of the name");
+                new Mixins.Change("WrapOperation", new MixinSelector.Method("tick", "(Z)V"), LEVEL)), level.changes(),
+                "each with the overload its descriptor picks, and tick as the reference map maps it");
         Mixins.Mixin accessor = mixins.get(1);
         assertEquals(Mixins.Side.CLIENT, accessor.side());
-        assertEquals(1200, accessor.priority(), "without its own priority, the configuration's");
+        assertEquals(1300, accessor.priority(), "without its own priority, the configuration's, as Java 21 reads a multi-release file");
         assertEquals(List.of(new Mixins.Change("Accessor", new MixinSelector.Field("width")),
                 new Mixins.Change("Invoker", new MixinSelector.Method("<init>", "(Ljava/lang/String;)V"))), accessor.changes(),
                 "named after the methods getWidth, a field, and newScreen, the constructor it calls");
@@ -99,7 +104,7 @@ class MixinsTest {
         writer.visitEnd();
 
         Mixins.Mixin read = Mixins.mixin("gears", "gears.mixins.json", "com.gears.mixin.DescMixin", Mixins.Side.BOTH, 1000,
-                writer.toByteArray()).orElseThrow();
+                writer.toByteArray(), Map.of()).orElseThrow();
         assertEquals(List.of(new Mixins.Change("Inject", new MixinSelector.Method("tickChunk", "(I)V"))), read.changes(),
                 "the overload its arguments pick; not a mixin that only adds members");
     }
@@ -132,6 +137,7 @@ class MixinsTest {
         assertEquals(selected("tick", "()V", 1, ""), Mixins.selector(" tick ()V "), "whitespace is dropped");
         assertEquals(selected("tick", "(I)V", 1, LEVEL), Mixins.selector("Lnet/minecraft/world/level/Level;tick(I)V"));
         assertEquals(selected("tick", "", 1, LEVEL), Mixins.selector("net.minecraft.world.level.Level.tick"));
+        assertEquals(selected("tick", "()V", 1, LEVEL), Mixins.selector("net/minecraft/world/level/Level.tick()V"), "an owner with slashes");
         assertEquals(selected("<init>", "(Ljava/lang/String;)V", 1, ""), Mixins.selector("<init>(Ljava/lang/String;)V"));
         assertEquals(selected("tick", "(I)V", 2, ""), Mixins.selector("tick{2}(I)V"), "a quantifier limits the matches");
         assertEquals(selected("tick", "", 3, ""), Mixins.selector("tick{1,3}"));

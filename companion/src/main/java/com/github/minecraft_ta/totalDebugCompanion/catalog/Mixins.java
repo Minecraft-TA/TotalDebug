@@ -182,6 +182,13 @@ public final class Mixins {
                 // A class without its own priority takes its configuration's.
                 int priority = root.get("mixinPriority") instanceof JsonElement element && element.isJsonPrimitive()
                         && element.getAsJsonPrimitive().isNumber() ? element.getAsInt() : DEFAULT_PRIORITY;
+                Map<String, Map<String, String>> references;
+                try {
+                    references = refmap(archive, root);
+                } catch (IOException | RuntimeException unreadable) {
+                    problems.add(name(file) + ": " + config + "'s refmap could not be read: " + message(unreadable));
+                    references = Map.of();
+                }
                 for (Side side : Side.values()) {
                     String list = switch (side) {
                         case BOTH -> "mixins";
@@ -196,7 +203,8 @@ public final class Mixins {
                             Optional<byte[]> bytes = archive.read(className.replace('.', '/') + ".class", MAXIMUM_CLASS_BYTES);
                             // A listed class the file does not hold is one the configuration names for another version.
                             if (bytes.isEmpty()) continue;
-                            mixin(owner, config, className, side, priority, bytes.get()).ifPresent(mixins::add);
+                            mixin(owner, config, className, side, priority, bytes.get(),
+                                    references.getOrDefault(className.replace('.', '/'), Map.of())).ifPresent(mixins::add);
                         } catch (IOException | RuntimeException malformed) {
                             problems.add(name(file) + ": " + className + " could not be read: " + message(malformed));
                         }
@@ -296,8 +304,36 @@ public final class Mixins {
         return mods.getFirst();
     }
 
-    /** The mixin a class declares, or empty for a class without {@code @Mixin}; {@code priority} is its configuration's. */
-    static Optional<Mixin> mixin(String modId, String config, String className, Side side, int priority, byte[] bytes) {
+    /**
+     * The reference map a configuration names in {@code refmap}, as Mixin reads it: by mixin class internal name, what
+     * each selector or target string written in the class stands for in the game. Empty without one; a named file the
+     * mod does not hold is left out, as Mixin leaves it.
+     */
+    private static Map<String, Map<String, String>> refmap(ModFiles.Archive archive, JsonObject config) throws IOException {
+        if (!(config.get("refmap") instanceof JsonElement name) || !name.isJsonPrimitive()) return Map.of();
+        Optional<byte[]> bytes = archive.read(name.getAsString(), MAXIMUM_CONFIG_BYTES);
+        if (bytes.isEmpty()) return Map.of();
+        if (!(JsonParser.parseString(new String(bytes.get(), StandardCharsets.UTF_8)) instanceof JsonObject root)
+                || !(root.get("mappings") instanceof JsonObject mappings)) return Map.of();
+        Map<String, Map<String, String>> references = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> mixin : mappings.entrySet()) {
+            if (!(mixin.getValue() instanceof JsonObject entries)) continue;
+            Map<String, String> mapped = new LinkedHashMap<>();
+            for (Map.Entry<String, JsonElement> entry : entries.entrySet()) {
+                if (entry.getValue().isJsonPrimitive()) mapped.put(entry.getKey(), entry.getValue().getAsString());
+            }
+            references.put(mixin.getKey(), Map.copyOf(mapped));
+        }
+        return references;
+    }
+
+    /**
+     * The mixin a class declares, or empty for a class without {@code @Mixin}; {@code priority} is its configuration's,
+     * and {@code references} its entries of the configuration's reference map, which each selector and target string
+     * passes through first, as in Mixin.
+     */
+    static Optional<Mixin> mixin(String modId, String config, String className, Side side, int priority, byte[] bytes,
+                                 Map<String, String> references) {
         List<String> targets = new ArrayList<>();
         List<Change> changes = new ArrayList<>();
         int[] effective = {priority};
@@ -319,7 +355,9 @@ public final class Mixins {
                             @Override
                             public void visit(String ignored, Object value) {
                                 if ("value".equals(name) && value instanceof Type type) targets.add(type.getClassName());
-                                if ("targets".equals(name) && value instanceof String target) targets.add(target.replace('/', '.'));
+                                if ("targets".equals(name) && value instanceof String target) {
+                                    targets.add(references.getOrDefault(target, target).replace('/', '.'));
+                                }
                             }
                         };
                     }
@@ -333,7 +371,7 @@ public final class Mixins {
                     public AnnotationVisitor visitAnnotation(String annotation, boolean visible) {
                         String kind = KINDS.get(annotation);
                         if (kind == null) return null;
-                        return new SelectorVisitor(kind, methodName, descriptor, (access & Opcodes.ACC_STATIC) != 0, changes);
+                        return new SelectorVisitor(kind, methodName, descriptor, (access & Opcodes.ACC_STATIC) != 0, references, changes);
                     }
                 };
             }
@@ -353,17 +391,20 @@ public final class Mixins {
         /** The annotated method's own descriptor, which an overwrite shares with the member it replaces. */
         private final String methodDescriptor;
         private final boolean staticHandler;
+        private final Map<String, String> references;
         private final List<Change> changes;
         private final List<Selected> named = new ArrayList<>();
         /** Other names an overwrite replaces its method by, where the target has one of those instead. */
         private final List<String> aliases = new ArrayList<>();
 
-        SelectorVisitor(String kind, String methodName, String methodDescriptor, boolean staticHandler, List<Change> changes) {
+        SelectorVisitor(String kind, String methodName, String methodDescriptor, boolean staticHandler, Map<String, String> references,
+                        List<Change> changes) {
             super(Opcodes.ASM9);
             this.kind = kind;
             this.methodName = methodName;
             this.methodDescriptor = methodDescriptor;
             this.staticHandler = staticHandler;
+            this.references = references;
             this.changes = changes;
         }
 
@@ -437,7 +478,7 @@ public final class Mixins {
         }
 
         private Selected selected(String selector) {
-            return selector(selector);
+            return selector(this.references.getOrDefault(selector, selector));
         }
 
         @Override
@@ -515,7 +556,7 @@ public final class Mixins {
         int dot = name.lastIndexOf('.');
         int semicolon = name.indexOf(';');
         if (dot >= 0) {
-            owner = name.substring(0, dot);
+            owner = name.substring(0, dot).replace('/', '.');
             name = name.substring(dot + 1);
         } else if (semicolon >= 0 && name.startsWith("L")) {
             owner = name.substring(1, semicolon).replace('/', '.');

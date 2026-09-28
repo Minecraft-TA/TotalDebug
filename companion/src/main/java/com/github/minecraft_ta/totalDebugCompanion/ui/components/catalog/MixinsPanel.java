@@ -367,8 +367,9 @@ public final class MixinsPanel extends JPanel {
         return tooltip.html();
     }
 
+    /** Opens the row's target class, which a class the game does not have has no source of. */
     private void openTarget(Row row) {
-        this.navigator.accept(new NavigationTarget.RuntimeClass(row.target()));
+        if (row.kind() != Kind.NO_CLASS) this.navigator.accept(new NavigationTarget.RuntimeClass(row.target()));
     }
 
     private JPopupMenu menu(int viewRow) {
@@ -384,7 +385,7 @@ public final class MixinsPanel extends JPanel {
             return menu;
         }
         Row row = selected.getFirst();
-        menu.add(ContextMenus.action("Open Source", Icons.JUMP_TO_SOURCE, "ENTER", () -> openTarget(row)));
+        if (row.kind() != Kind.NO_CLASS) menu.add(ContextMenus.action("Open Source", Icons.JUMP_TO_SOURCE, "ENTER", () -> openTarget(row)));
         Set<String> opened = new LinkedHashSet<>();
         for (Entry entry : row.entries()) {
             String mixin = entry.mixin().className();
