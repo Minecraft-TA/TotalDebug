@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
@@ -192,6 +194,26 @@ class ConfigPanelTest {
         awaitOnSwing(() -> "9".equals(table.row(1).value()) && area.getText().equals(saved));
         assertEquals(saved, Files.readString(file), "undo writes the whole text back");
         assertEquals(0, record.size());
+    }
+
+    @Test
+    void aServerConfigurationFollowsTheGameToAnotherWorld() throws Exception {
+        Path first = world("First", 2_000);
+        Path second = world("Second", 1_000);
+        GameLocation location = GameLocations.of(this.directory, true);
+        location.connected(message -> true);
+        location.playing(new PlayingPayload.Singleplayer(first.getParent().getParent().toString(), false));
+        ConfigPanel[] panel = new ConfigPanel[1];
+        SwingUtilities.invokeAndWait(() -> {
+            panel[0] = new ConfigPanel("testmod", new ConfigChanges(location, ChangeRecord.inMemory()), target -> { });
+            panel[0].setFiles(List.of(FILE));
+        });
+        JComboBox<?> source = component(panel[0], JComboBox.class);
+        awaitOnSwing(() -> source.getSelectedItem() != null && source.getSelectedItem().toString().equals("First"));
+
+        location.playing(new PlayingPayload.Singleplayer(second.getParent().getParent().toString(), false));
+
+        awaitOnSwing(() -> source.getSelectedItem() != null && source.getSelectedItem().toString().equals("Second"));
     }
 
     @Test

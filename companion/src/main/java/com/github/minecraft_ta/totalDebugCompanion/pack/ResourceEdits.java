@@ -144,6 +144,7 @@ public final class ResourceEdits {
             else if (change == GameLocation.Change.PLAYING) {
                 // The packs the game named belong to what it played; it names them again for what it plays now.
                 this.stack = null;
+                dropLeftWorldData();
                 this.stackListeners.forEach(Runnable::run);
             }
         });
@@ -814,14 +815,7 @@ public final class ResourceEdits {
         }
         if (this.next == null) this.next = new Batch(connection);
         Batch batch = this.next;
-        if (world != null && batch.dataWorld != null && !batch.dataWorld.equals(world.toAbsolutePath().normalize())) {
-            // Data of a world the game played before: it plays another now, which never saw these writes. The batch's asset
-            // reloads stay.
-            batch.dataResult.completeExceptionally(new IOException("The game went to another world before it reloaded"));
-            batch.dataResult = new CompletableFuture<>();
-            batch.kinds.remove(ReloadPayload.Kind.DATA);
-            batch.managedData = false;
-        }
+        if (world != null && batch.dataWorld != null && !batch.dataWorld.equals(world.toAbsolutePath().normalize())) dropData(batch);
         if (world != null) batch.dataWorld = world.toAbsolutePath().normalize();
         this.next.kinds.add(kind);
         this.next.watched.add(path);
@@ -831,6 +825,23 @@ public final class ResourceEdits {
         // A write still queued joins this reload rather than taking another after it.
         if (this.running == null && this.writing == 0) sendNext();
         return result;
+    }
+
+    /** Drops the waiting reload's data when the game no longer plays its world. */
+    private synchronized void dropLeftWorldData() {
+        if (this.next != null && this.next.dataWorld != null && !this.location.read().plays(this.next.dataWorld)) dropData(this.next);
+    }
+
+    /**
+     * Drops {@code batch}'s data: the game plays another world now, which never saw these writes. The batch's asset
+     * reloads stay, and its data saves fail with that reason.
+     */
+    private static void dropData(Batch batch) {
+        batch.dataResult.completeExceptionally(new IOException("The game went to another world before it reloaded"));
+        batch.dataResult = new CompletableFuture<>();
+        batch.dataWorld = null;
+        batch.kinds.remove(ReloadPayload.Kind.DATA);
+        batch.managedData = false;
     }
 
     private synchronized void sendNext() {

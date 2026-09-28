@@ -35,6 +35,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.JTextComponent;
+import javax.swing.SwingUtilities;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
@@ -108,7 +109,15 @@ final class ConfigPanel extends JPanel {
                 read.values() == null ? "" : read.values().text(), read.problem()),
                 failure -> showFailure("Could not read the file: " + failure.getMessage())).whenShown(this);
         this.sources = new PageLoader<>(this::prepareSources, read -> showSources(read.file(), read.found(), true),
-                failure -> showFailure("Could not list the worlds' copies: " + failure.getMessage()));
+                failure -> showFailure("Could not list the worlds' copies: " + failure.getMessage()))
+                // A server configuration is shown from the world the game has open first; it follows the game to another
+                // world, unless its text has unsaved changes, which stay with the file they were made in.
+                .follow(listener -> this.location.addListener(change -> {
+                    if (change == GameLocation.Change.PLAYING) SwingUtilities.invokeLater(() -> {
+                        PackCatalog.ConfigFile file = selectedFile();
+                        if (file != null && file.type() == PackCatalog.ConfigType.SERVER && !this.textEditor.modified()) listener.run();
+                    });
+                }));
         configureFiles();
         this.content.add(toolbar(), BorderLayout.NORTH);
         JPanel settings = new JPanel(new BorderLayout());

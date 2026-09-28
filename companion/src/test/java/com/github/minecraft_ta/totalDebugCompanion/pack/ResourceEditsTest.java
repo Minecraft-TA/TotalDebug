@@ -286,6 +286,35 @@ class ResourceEditsTest {
     }
 
     @Test
+    void leavingAWorldDropsItsWaitingDataAtOnce() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        LevelDatFixture.write(world, LevelDatFixture.world("World"));
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        edits.location().connected(message -> {
+            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
+            return true;
+        });
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.packStack(STACK);
+
+        CompletableFuture<ResourceEdits.Saved> running = edits.save(LANG, bytes("{}"));
+        awaitSent(sent, 1);
+        CompletableFuture<ResourceEdits.Saved> model = edits.save("assets/testmod/models/block/gear.json", bytes("{}"));
+        CompletableFuture<ResourceEdits.Saved> data = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
+        edits.location().playing(new PlayingPayload.Menu());
+
+        assertTrue(data.get(5, TimeUnit.SECONDS).reloadFailure().contains("another world"));
+        edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
+        running.get(5, TimeUnit.SECONDS);
+        awaitSent(sent, 2);
+        assertEquals(Set.of(ReloadPayload.Kind.RESOURCES), sent.get(1).kinds(), "the left world's data is not asked for");
+        assertEquals("", sent.get(1).dataWorld());
+        edits.answered(new ReloadResultPayload(sent.get(1).requestId(), 10, List.of(), ""));
+        assertEquals(ConfigChanges.Effect.NOW, model.get(5, TimeUnit.SECONDS).effect());
+    }
+
+    @Test
     void reloadsAskedForDuringAReloadRunTogetherAfterIt() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
