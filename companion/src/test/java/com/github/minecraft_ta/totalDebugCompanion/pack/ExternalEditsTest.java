@@ -37,17 +37,19 @@ class ExternalEditsTest {
         Path pack = edits.save(LANG, bytes("{\"a\":\"companion\"}")).get(5, TimeUnit.SECONDS).pack();
         Path file = pack.resolve(LANG);
 
-        assertNull(edits.adopt(LANG, pack, bytes("{\"a\":\"companion\"}")).get(5, TimeUnit.SECONDS),
+        assertNull(edits.adopt(LANG, pack, bytes("{\"a\":\"companion\"}"), Files.readAllBytes(file)).get(5, TimeUnit.SECONDS),
                 "Companion's own save is nothing new");
         Files.writeString(file, "{\"a\":\"program\"}");
-        assertNotNull(edits.adopt(LANG, pack, bytes("{\"a\":\"companion\"}")).get(5, TimeUnit.SECONDS));
+        assertNull(edits.adopt(LANG, pack, bytes("{\"a\":\"companion\"}"), bytes("{\"a\":\"half\"}")).get(5, TimeUnit.SECONDS),
+                "a file that changed again since it was found whole waits for the next save");
+        assertNotNull(edits.adopt(LANG, pack, bytes("{\"a\":\"companion\"}"), Files.readAllBytes(file)).get(5, TimeUnit.SECONDS));
         ChangeRecord.Change change = record.changes().getFirst();
         assertEquals("", change.original(), "the pack had no copy before Companion's save");
         assertEquals(ResourceOriginals.hash(bytes("{\"a\":\"program\"}")), change.current());
 
         edits.revert(change).get(5, TimeUnit.SECONDS);
         assertFalse(Files.exists(file));
-        assertNull(edits.adopt(LANG, pack, bytes("{\"a\":\"companion\"}")).get(5, TimeUnit.SECONDS),
+        assertNull(edits.adopt(LANG, pack, bytes("{\"a\":\"companion\"}"), null).get(5, TimeUnit.SECONDS),
                 "the revert is Companion's, not the program's");
     }
 
@@ -62,9 +64,27 @@ class ExternalEditsTest {
         Files.writeString(file, "{\"a\":\"mine\"}");
 
         Files.writeString(file, "{\"a\":\"program\"}");
-        assertNotNull(edits.adopt(LANG, pack, bytes("{\"a\":\"mine\"}")).get(5, TimeUnit.SECONDS));
+        assertNotNull(edits.adopt(LANG, pack, bytes("{\"a\":\"mine\"}"), Files.readAllBytes(file)).get(5, TimeUnit.SECONDS));
         edits.revert(record.changes().getFirst()).get(5, TimeUnit.SECONDS);
         assertEquals("{\"a\":\"mine\"}", Files.readString(file), "Revert puts back what the file held before the program");
+    }
+
+    @Test
+    void aProgramsSaveAfterTheFileWasPutBackOutsideCompanionStartsFromThatOriginal() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        Path pack = edits.save(LANG, bytes("{\"a\":\"companion\"}")).get(5, TimeUnit.SECONDS).pack();
+        Path file = pack.resolve(LANG);
+        // Put back by hand: the pack had no copy before Companion's save.
+        Files.delete(file);
+        edits.holds(record.changes().getFirst());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (record.size() > 0 && System.nanoTime() < deadline) Thread.sleep(10);
+        assertEquals(0, record.size());
+
+        Files.writeString(file, "{\"a\":\"program\"}");
+        assertNotNull(edits.adopt(LANG, pack, null, Files.readAllBytes(file)).get(5, TimeUnit.SECONDS));
+        assertEquals("", record.changes().getFirst().original(), "what the file held before the program: nothing");
     }
 
     @Test

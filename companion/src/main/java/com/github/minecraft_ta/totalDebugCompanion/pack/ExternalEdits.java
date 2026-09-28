@@ -156,15 +156,17 @@ public final class ExternalEdits implements AutoCloseable {
 
     private void take(Followed file) {
         Path location = file.pack.resolve(file.path);
+        byte[] seen;
         try {
             // Gone for now, such as between a program's delete and rename; its next write comes as another event.
             if (!Files.isRegularFile(location)) return;
-            if (!readable(file.path, Files.readAllBytes(location))) return;
+            seen = Files.readAllBytes(location);
+            if (!readable(file.path, seen)) return;
         } catch (IOException unreadable) {
             // Still being written; the program's next write comes as another event.
             return;
         }
-        this.edits.adopt(file.path, file.pack, file.before).whenComplete((saved, failure) -> {
+        this.edits.adopt(file.path, file.pack, file.before, seen).whenComplete((saved, failure) -> {
             if (saved == null && failure == null) return;
             Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
             file.listeners.forEach(listener -> listener.accept(saved, cause));

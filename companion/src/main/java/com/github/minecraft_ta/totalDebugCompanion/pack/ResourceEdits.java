@@ -468,7 +468,7 @@ public final class ResourceEdits {
      * its message names the file.
      */
     public static final class ChangedSince extends IOException {
-        ChangedSince(String message) {
+        public ChangedSince(String message) {
             super(message);
         }
     }
@@ -565,10 +565,11 @@ public final class ResourceEdits {
     /**
      * Takes what another program saved to {@code path} in {@code pack} as a change Companion made: recorded, so Changes
      * can revert it, and used by the game as a save is. {@code before} is what the file held when the program opened it,
-     * the original where neither Companion nor the program changed it since. Completes with null when the file holds
-     * what Companion or the last taken save left, such as after Companion's own save.
+     * the original where neither Companion nor the program changed it since, and {@code seen} what the file held when
+     * the program's save was found whole. Completes with null when the file holds what Companion or the last taken save
+     * left, such as after Companion's own save, or no longer what was seen, such as while the program writes again.
      */
-    public CompletableFuture<Saved> adopt(String path, Path pack, byte[] before) {
+    public CompletableFuture<Saved> adopt(String path, Path pack, byte[] before, byte[] seen) {
         ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
         synchronized (this) {
             this.writing++;
@@ -578,8 +579,11 @@ public final class ResourceEdits {
             try {
                 Path file = pack.resolve(path);
                 String now = ResourceOriginals.hash(Files.isRegularFile(file) ? Files.readAllBytes(file) : null);
+                // Changed again since it was found whole: the program's next write is taken instead.
+                if (!now.equals(ResourceOriginals.hash(seen))) return false;
                 ChangeRecord.Change change = this.record.change(target);
-                String known = this.lastWritten.get(target);
+                // Without a change, what Companion wrote last is the original it put back.
+                String known = change == null ? this.lastWritten.get(target) : null;
                 String expected = change != null ? change.current() : known != null ? known : ResourceOriginals.hash(before);
                 if (expected.equals(now)) return false;
                 if (change == null) this.originals.keep(known != null ? this.originals.read(known) : before);
@@ -683,6 +687,8 @@ public final class ResourceEdits {
         try {
             String hash = ResourceOriginals.hash(Files.isRegularFile(file) ? Files.readAllBytes(file) : null);
             this.record.observed(target, hash, String::equals);
+            // Put back outside Companion, so what Companion wrote last is not what the file holds.
+            if (this.record.change(target) == null) this.lastWritten.remove(target);
         } catch (IOException unreadable) {
             // An unreadable file keeps its change.
         }

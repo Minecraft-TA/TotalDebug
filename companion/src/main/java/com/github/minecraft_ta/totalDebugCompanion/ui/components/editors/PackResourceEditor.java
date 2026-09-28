@@ -24,6 +24,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -441,8 +442,39 @@ abstract class PackResourceEditor<V> extends JPanel {
      */
     protected final void saveThen(Consumer<Path> after) {
         if (this.busy || this.following) return;
-        if (this.managed && same(shown(), this.packContent)) after.accept(this.opened != null ? this.opened : this.pack);
-        else save(after);
+        if (!this.managed || !same(shown(), this.packContent)) {
+            save(after);
+            return;
+        }
+        // The pack's copy may have changed since this tab read it, such as by another program: opening that one would
+        // not be what the tab shows, so it is replaced only after asking, as a save would.
+        Path pack = this.opened != null ? this.opened : this.pack;
+        String read = this.packHash;
+        this.busy = true;
+        changed();
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                Path file = pack.resolve(this.path);
+                return ResourceOriginals.hash(Files.isRegularFile(file) ? Files.readAllBytes(file) : null);
+            } catch (IOException exception) {
+                throw new CompletionException(exception);
+            }
+        }).whenComplete((held, failure) -> SwingUtilities.invokeLater(() -> {
+            this.busy = false;
+            changed();
+            if (this.disposed) return;
+            if (failure != null) {
+                showNotice("Not opened: " + message(failure), ThemeColors::error);
+            } else if (held.equals(read)) {
+                after.accept(pack);
+            } else if (this.askToReplace.test(new ResourceEdits.ChangedSince(this.path.substring(this.path.lastIndexOf('/') + 1)
+                    + " changed in " + this.packName + " since this tab read it"))) {
+                this.baseline = null;
+                save(after);
+            } else {
+                readAfterSave();
+            }
+        }));
     }
 
     private void save(Consumer<Path> after) {

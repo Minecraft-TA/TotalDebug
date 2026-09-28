@@ -514,8 +514,12 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
                     this.externalPack = pack;
                     this.stopExternal = edits().external().addListener(path(), pack, (saved, problem) -> SwingUtilities.invokeLater(() -> {
                         if (disposed()) return;
-                        if (problem != null) showNotice("Not taken from the image editor: " + message(problem), ThemeColors::error);
-                        else showSaved(saved);
+                        if (problem != null) {
+                            showNotice("Not taken from the image editor: " + message(problem), ThemeColors::error);
+                        } else if (!saved.reloadFailure().isEmpty() || !saved.problems().isEmpty() || !saved.unused().isEmpty()) {
+                            // Only what went wrong: reading the new copy, such as one too large to edit here, says the rest.
+                            showSaved(saved);
+                        }
                     }));
                 })));
     }
