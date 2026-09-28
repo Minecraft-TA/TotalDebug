@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.NoticeLine;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.PlateIcon;
@@ -38,6 +39,8 @@ public final class PackPanel extends JPanel {
     private final Path file;
     private final SubjectHeader header = new SubjectHeader();
     private final ResourceBrowser browser;
+    /** Why Show in Explorer could not show the pack. */
+    private final NoticeLine notice = new NoticeLine();
     private final PageLoader<Loaded> loader;
 
     public PackPanel(Path file, Consumer<NavigationTarget> navigator) {
@@ -47,9 +50,12 @@ public final class PackPanel extends JPanel {
         this.header.setTitle(PackFolders.title(file));
         this.header.setIcon(new PlateIcon(Icons.RESOURCES_ROOT, SubjectHeader.ICON_SIZE));
         JButton show = new JButton("Show in Explorer", Icons.FOLDER);
-        show.addActionListener(event -> Explorer.show(file));
+        show.addActionListener(event -> this.notice.show(Explorer.show(file).orElse("")));
         this.header.addControl(show);
-        add(this.header, BorderLayout.NORTH);
+        JPanel top = new JPanel(new BorderLayout());
+        top.add(this.header, BorderLayout.NORTH);
+        top.add(this.notice, BorderLayout.SOUTH);
+        add(top, BorderLayout.NORTH);
         add(this.browser, BorderLayout.CENTER);
         this.loader = new PageLoader<>(() -> () -> read(file), this::show, failure -> {
             // What was read before is not the pack any more.

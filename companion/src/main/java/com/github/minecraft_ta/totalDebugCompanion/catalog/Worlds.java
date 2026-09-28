@@ -30,7 +30,10 @@ public final class Worlds {
         return null;
     }
 
-    /** The world played last, by the time its {@code level.dat} was written, or null without worlds. */
+    /**
+     * The world played last, by the time its {@code level.dat} was written, or null without worlds. A world whose save
+     * stopped between the game's two renames has only {@code level.dat_old}, which the game loads then, and counts too.
+     */
     public static Path lastPlayed(Path workspace) {
         if (workspace == null) return null;
         Path latest = null;
@@ -38,6 +41,7 @@ public final class Worlds {
         try (DirectoryStream<Path> saves = Files.newDirectoryStream(workspace.resolve("saves"), Files::isDirectory)) {
             for (Path world : saves) {
                 Path level = world.resolve("level.dat");
+                if (!Files.isRegularFile(level)) level = world.resolve("level.dat_old");
                 if (!Files.isRegularFile(level)) continue;
                 FileTime time = Files.getLastModifiedTime(level);
                 if (latestTime == null || time.compareTo(latestTime) > 0) {

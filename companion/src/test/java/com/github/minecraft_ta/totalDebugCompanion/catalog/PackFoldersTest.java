@@ -24,9 +24,13 @@ class PackFoldersTest {
         Files.createDirectories(folder.resolve("backup"));
         try (ZipOutputStream output = new ZipOutputStream(Files.newOutputStream(folder.resolve("Old.zip")))) {
             output.putNextEntry(new ZipEntry("pack.mcmeta"));
-            output.write("{}".getBytes(StandardCharsets.UTF_8));
+            output.write("{\"pack\":{\"pack_format\":15,\"description\":\"Old\"}}".getBytes(StandardCharsets.UTF_8));
             output.closeEntry();
         }
+        Files.createDirectories(folder.resolve("Broken"));
+        Files.writeString(folder.resolve("Broken/pack.mcmeta"), "{\"pack\":{\"description\":\"No format\"}}");
+        Files.createDirectories(folder.resolve("Nameless"));
+        Files.writeString(folder.resolve("Nameless/pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":null}}");
         try (ZipOutputStream output = new ZipOutputStream(Files.newOutputStream(folder.resolve("Nested.zip")))) {
             output.putNextEntry(new ZipEntry("Nested/pack.mcmeta"));
             output.closeEntry();
@@ -34,7 +38,7 @@ class PackFoldersTest {
         Files.writeString(folder.resolve("readme.txt"), "");
 
         assertEquals(List.of("file/Faithful", "file/Old.zip"), List.copyOf(PackFolders.list(folder).keySet()),
-                "a folder or zip without pack.mcmeta at its root and other files are no packs, as for the game");
+                "a folder or zip without readable pack metadata at its root and other files are no packs, as for the game");
         assertEquals("Old.zip", PackFolders.title(folder.resolve("Old.zip")), "the game titles a zip pack with its file name");
         assertTrue(PackFolders.list(this.directory.resolve("missing")).isEmpty());
     }

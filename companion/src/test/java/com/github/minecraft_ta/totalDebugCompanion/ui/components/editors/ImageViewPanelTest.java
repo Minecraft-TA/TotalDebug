@@ -9,6 +9,7 @@ import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -26,9 +27,12 @@ class ImageViewPanelTest {
                 JButton in = (JButton) toolbar.getComponent(1);
                 JButton fit = (JButton) toolbar.getComponent(2);
                 JButton actual = (JButton) toolbar.getComponent(3);
-                assertEquals(5, toolbar.getComponentCount());
-                for (var component : toolbar.getComponents()) {
-                    JButton button = (JButton) component;
+                List<JButton> buttons = Arrays.stream(toolbar.getComponents()).filter(JButton.class::isInstance)
+                        .map(JButton.class::cast).toList();
+                assertEquals(7, buttons.size(), "with the play and whole-sheet buttons, hidden for a still image");
+                assertEquals(5, Arrays.stream(toolbar.getComponents()).filter(Component::isVisible).count(),
+                        "a still image shows no animation controls");
+                for (JButton button : buttons) {
                     assertTrue(button.isFocusable());
                     assertFalse(button.isRequestFocusEnabled());
                     assertNotNull(button.getIcon());
@@ -145,6 +149,7 @@ class ImageViewPanelTest {
                 frames.setValue(1);
                 JLabel label = findComponent(toolbar, JLabel.class);
                 assertEquals("Frame 2 / 2", label.getText());
+                // The controls sit in the toolbar itself, so a narrow tab wraps them one by one.
                 JButton whole = (JButton) toolbar.getComponent(toolbar.getComponentCount() - 1);
                 whole.doClick(0);
                 assertTrue(statuses.getLast().startsWith("16 x 48    PNG"), statuses.getLast());
@@ -235,6 +240,10 @@ class ImageViewPanelTest {
     private static <T extends Component> T findComponent(Container root, Class<T> type) {
         for (Component component : root.getComponents()) {
             if (type.isInstance(component)) return type.cast(component);
+            if (component instanceof Container child) {
+                T match = findComponent(child, type);
+                if (match != null) return match;
+            }
         }
         return null;
     }

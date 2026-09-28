@@ -1,7 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -33,15 +36,29 @@ public final class PackFolders {
 
     /**
      * Whether the game takes {@code entry} as a pack: a folder or a file ending in {@code .zip}, as its
-     * {@code PackDetector} finds them, with a {@code pack.mcmeta} at its root, which it reads before listing the pack.
+     * {@code PackDetector} finds them, with a {@code pack.mcmeta} at its root whose {@code pack} section has a
+     * {@code pack_format} number and a {@code description}; the game leaves out a pack whose metadata it cannot read.
      */
     public static boolean isPack(Path entry) {
-        if (Files.isDirectory(entry)) return Files.isRegularFile(entry.resolve("pack.mcmeta"));
-        if (!Files.isRegularFile(entry) || !entry.getFileName().toString().endsWith(".zip")) return false;
-        try (ZipFile zip = new ZipFile(entry.toFile())) {
-            return zip.getEntry("pack.mcmeta") != null;
-        } catch (IOException unreadable) {
+        if (!Files.isDirectory(entry) && !(Files.isRegularFile(entry) && entry.getFileName().toString().endsWith(".zip"))) {
             return false;
+        }
+        // The description is a text component: text, a list or an object; null or a number is none.
+        return section(entry).filter(section -> section.get("pack_format") instanceof JsonPrimitive format && format.isNumber()
+                && (section.get("description") instanceof JsonPrimitive text && text.isString()
+                || section.get("description") instanceof JsonArray || section.get("description") instanceof JsonObject)).isPresent();
+    }
+
+    /** The {@code pack} section of a pack's {@code pack.mcmeta}, or empty without one it can read. */
+    private static Optional<JsonObject> section(Path pack) {
+        try {
+            byte[] bytes = read(pack, "pack.mcmeta");
+            if (bytes == null) return Optional.empty();
+            JsonElement root = JsonParser.parseReader(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8));
+            return root.isJsonObject() && root.getAsJsonObject().get("pack") instanceof JsonObject section
+                    ? Optional.of(section) : Optional.empty();
+        } catch (IOException | RuntimeException unreadable) {
+            return Optional.empty();
         }
     }
 
@@ -64,18 +81,8 @@ public final class PackFolders {
 
     /** What the pack's {@code pack.mcmeta} says, or empty when it has none or it cannot be read. */
     public static Optional<Meta> meta(Path pack) {
-        try {
-            byte[] bytes = read(pack, "pack.mcmeta");
-            if (bytes == null) return Optional.empty();
-            JsonElement root = JsonParser.parseReader(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8));
-            if (!root.isJsonObject() || !root.getAsJsonObject().has("pack")) return Optional.empty();
-            var section = root.getAsJsonObject().getAsJsonObject("pack");
-            int format = section.has("pack_format") && section.get("pack_format").isJsonPrimitive()
-                    && section.get("pack_format").getAsJsonPrimitive().isNumber() ? section.get("pack_format").getAsInt() : 0;
-            return Optional.of(new Meta(section.has("description") ? plain(section.get("description")) : "", format));
-        } catch (IOException | RuntimeException unreadable) {
-            return Optional.empty();
-        }
+        return section(pack).map(section -> new Meta(section.has("description") ? plain(section.get("description")) : "",
+                section.get("pack_format") instanceof JsonPrimitive format && format.isNumber() ? format.getAsInt() : 0));
     }
 
     /** The bytes of {@code name} at the root of a folder or zip pack, at most a mebibyte, or null when it has none. */

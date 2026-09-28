@@ -69,6 +69,17 @@ class CurrentWorldTest {
     }
 
     @Test
+    void aWorldWithOnlyItsOldLevelDatIsTheCurrentWorld() throws Exception {
+        Path world = this.directory.resolve("saves/Stopped");
+        LevelDatFixture.write(world, LevelDatFixture.world("Stopped"));
+        // The game stopped between renaming level.dat to level.dat_old and writing the new one.
+        Files.move(world.resolve("level.dat"), world.resolve("level.dat_old"));
+
+        assertEquals(world, CurrentWorld.directory(this.directory).orElseThrow());
+        assertEquals("Stopped", CurrentWorld.read(world).name());
+    }
+
+    @Test
     void datapacksFollowThePackScreenWithNewFolderPacksLast() throws Exception {
         Path world = this.directory.resolve("world");
         LevelDatFixture.write(world, LevelDatFixture.world("Test"));

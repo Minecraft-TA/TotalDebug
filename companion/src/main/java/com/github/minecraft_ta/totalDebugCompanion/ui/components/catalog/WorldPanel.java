@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.NoticeLine;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
@@ -75,6 +76,8 @@ public final class WorldPanel extends JPanel {
     private final PageLoader<Loaded> loader;
     private final Runnable removeCatalogListener;
     private final SubjectHeader header = new SubjectHeader();
+    /** Why Show in Explorer could not show the world. */
+    private final NoticeLine notice = new NoticeLine();
     private final JTabbedPane tabs = new JTabbedPane();
     private final Map<WorldTab, Component> tabContent = new EnumMap<>(WorldTab.class);
     private final JPanel overview = new JPanel(new BorderLayout());
@@ -107,7 +110,10 @@ public final class WorldPanel extends JPanel {
         }
         TypeToFilter.forwardTyping(this.tabs, this::selectedFilter);
         JPanel page = new JPanel(new BorderLayout());
-        page.add(this.header, BorderLayout.NORTH);
+        JPanel top = new JPanel(new BorderLayout());
+        top.add(this.header, BorderLayout.NORTH);
+        top.add(this.notice, BorderLayout.SOUTH);
+        page.add(top, BorderLayout.NORTH);
         page.add(this.tabs, BorderLayout.CENTER);
         // The message comes first, so the page stays empty until the world is read.
         this.message.setVerticalAlignment(JLabel.TOP);
@@ -183,7 +189,7 @@ public final class WorldPanel extends JPanel {
         content.add(facts);
         LinkLabel folder = new LinkLabel(saved.directory().getFileName().toString(), Icons.FOLDER,
                 Tooltip.of("Show in Explorer").detail(Tooltip.shortPath(saved.directory())).html(),
-                () -> Explorer.show(saved.directory()));
+                () -> this.notice.show(Explorer.show(saved.directory()).orElse("")));
         content.add(new PageSection("Files", PageSection.linkRows(List.of(new PageSection.LinkRow("Folder", List.of(folder))))));
         this.overview.removeAll();
         this.overview.add(content, BorderLayout.NORTH);

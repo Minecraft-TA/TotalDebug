@@ -58,7 +58,7 @@ class TextureEditorTest {
             SwingUtilities.invokeAndWait(() -> {
                 selectTool(editor[0], "Eraser");
                 click(editor[0], new Point(1, 2), 0);
-                assertEquals(0, editor[0].shown().getRGB(1, 2));
+                assertEquals(0, editor[0].shown().pixels().getRGB(1, 2));
                 assertTrue(editor[0].modified());
                 editor[0].save();
             });
@@ -72,10 +72,10 @@ class TextureEditorTest {
             SwingUtilities.invokeAndWait(() -> {
                 click(editor[0], new Point(0, 1), 0);
                 click(editor[0], new Point(3, 1), InputEvent.SHIFT_DOWN_MASK);
-                assertEquals(0, editor[0].shown().getRGB(2, 1), "Shift+click erases the line from the last pixel");
+                assertEquals(0, editor[0].shown().pixels().getRGB(2, 1), "Shift+click erases the line from the last pixel");
                 editor[0].discard();
-                assertEquals(GRAY, editor[0].shown().getRGB(2, 1), "Discard goes back to the saved copy");
-                assertEquals(0, editor[0].shown().getRGB(1, 2));
+                assertEquals(GRAY, editor[0].shown().pixels().getRGB(2, 1), "Discard goes back to the saved copy");
+                assertEquals(0, editor[0].shown().pixels().getRGB(1, 2));
                 assertFalse(editor[0].modified());
             });
         } finally {
@@ -101,13 +101,13 @@ class TextureEditorTest {
                 assertEquals(GRAY, editor[0].color(), "the pencil starts with the texture's most used color");
                 selectTool(editor[0], "Pencil");
                 click(editor[0], new Point(0, 1), 0);
-                assertEquals(GRAY, editor[0].shown().getRGB(0, 1));
+                assertEquals(GRAY, editor[0].shown().pixels().getRGB(0, 1));
                 click(editor[0], new Point(3, 3), InputEvent.ALT_DOWN_MASK);
-                assertEquals(0xFFFF0000, editor[0].shown().getRGB(3, 3), "Alt+click picks instead of drawing");
+                assertEquals(0xFFFF0000, editor[0].shown().pixels().getRGB(3, 3), "Alt+click picks instead of drawing");
                 click(editor[0], new Point(0, 0), 0);
-                assertEquals(0xFFFF0000, editor[0].shown().getRGB(0, 0), "the pencil draws with the picked color");
+                assertEquals(0xFFFF0000, editor[0].shown().pixels().getRGB(0, 0), "the pencil draws with the picked color");
                 selectTool(editor[0], "Undo");
-                assertEquals(GRAY, editor[0].shown().getRGB(0, 0), "Undo takes the stroke back");
+                assertEquals(GRAY, editor[0].shown().pixels().getRGB(0, 0), "Undo takes the stroke back");
 
                 // A stroke keeps the tool it started with, whatever is chosen while it is drawn.
                 selectTool(editor[0], "Eraser");
@@ -116,7 +116,7 @@ class TextureEditorTest {
                 selectTool(editor[0], "Pencil");
                 painter.drag(new Point(2, 1), editor[0].view().shownRegion(), press(editor[0], 0));
                 painter.release();
-                assertEquals(List.of(0, 0), List.of(editor[0].shown().getRGB(1, 1), editor[0].shown().getRGB(2, 1)));
+                assertEquals(List.of(0, 0), List.of(editor[0].shown().pixels().getRGB(1, 1), editor[0].shown().pixels().getRGB(2, 1)));
             });
         } finally {
             SwingUtilities.invokeAndWait(editor[0]::dispose);
@@ -141,6 +141,28 @@ class TextureEditorTest {
                 selectTool(editor[0], "Pencil");
                 assertFalse(editor[0].view().painter().paints(), "a copy that cannot be read is not drawn over");
             });
+        } finally {
+            SwingUtilities.invokeAndWait(editor[0]::dispose);
+        }
+    }
+
+    @Test
+    void thePacksCopyPlaysItsOwnAnimation() throws Exception {
+        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+                InstanceState.inMemory());
+        Path copy = edits.pack(TEXTURE).resolve(TEXTURE);
+        Files.createDirectories(copy.getParent());
+        ImageIO.write(new BufferedImage(4, 8, BufferedImage.TYPE_INT_ARGB), "png", copy.toFile());
+        Files.writeString(copy.resolveSibling("gear.png.mcmeta"), "{\"animation\":{\"frametime\":2}}");
+
+        TextureEditor[] editor = new TextureEditor[1];
+        SwingUtilities.invokeAndWait(() -> editor[0] = new TextureEditor(TEXTURE, "testmod.jar", null,
+                new LoadedResource.Image(new BufferedImage(4, 8, BufferedImage.TYPE_INT_ARGB), 100), edits, ignored -> { }));
+        try {
+            awaitOnSwing(() -> editor[0].targetBox().getItemCount() > 0);
+            SwingUtilities.invokeAndWait(() -> assertEquals(4, editor[0].view().shownRegion().height,
+                    "the copy in the pack is animated, two frames of 4 x 4, although the opened file is not"));
         } finally {
             SwingUtilities.invokeAndWait(editor[0]::dispose);
         }

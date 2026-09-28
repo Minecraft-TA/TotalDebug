@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -30,6 +31,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -44,10 +46,11 @@ import java.util.function.Supplier;
  */
 abstract class PackResourceEditor<V> extends JPanel {
     /**
-     * The pack the content is saved in, its entry in the change record when the copy was read, its copy there or null, why
-     * the game does not use that copy or null, and the packs it could be saved into instead, empty for an opened pack.
+     * The pack the content is saved in, its entry in the change record when the copy was read, its copy there or null and
+     * the hash of that copy's bytes, empty for none, why the game does not use that copy or null, and the packs it could be
+     * saved into instead, empty for an opened pack.
      */
-    private record Found<V>(Path pack, ChangeRecord.Change recorded, V managed, String unused, List<Path> targets) {
+    private record Found<V>(Path pack, ChangeRecord.Change recorded, V managed, String hash, String unused, List<Path> targets) {
     }
 
     private final String path;
@@ -102,6 +105,17 @@ abstract class PackResourceEditor<V> extends JPanel {
      * next read replaces it; a save's result stays.
      */
     private String readNotice;
+    /**
+     * The hash of the pack's copy this tab last loaded or saved, empty when the pack held none, or null before the first
+     * read: a save replaces only that copy, and asks before replacing another one written since, such as by another tab.
+     */
+    private String baseline;
+    /** The pack the baseline belongs to; moving to another pack starts from that pack's copy. */
+    private Path baselinePack;
+    /** The hash of {@code packContent}, the copy Discard goes back to, which becomes the baseline then. */
+    private String packHash;
+    /** Asks whether to save over a copy written since this tab read the pack's; tests answer it themselves. */
+    Predicate<ResourceEdits.ChangedSince> askToReplace = this::replaceChangedCopy;
     private boolean disposed;
 
     /**
@@ -117,6 +131,10 @@ abstract class PackResourceEditor<V> extends JPanel {
         this.edits = Objects.requireNonNull(edits, "edits");
         this.openedContent = content;
         this.packContent = content;
+    }
+
+    protected final ResourceEdits edits() {
+        return this.edits;
     }
 
     /** The resource's pack path, such as {@code assets/ns/lang/en_us.json}. */
@@ -141,6 +159,11 @@ abstract class PackResourceEditor<V> extends JPanel {
 
     /** The content of a file's bytes. Blocking. */
     protected abstract V decode(byte[] bytes) throws IOException;
+
+    /** The content of {@code pack}'s copy, whose bytes are {@code bytes}; what lies beside it may count too. Blocking. */
+    protected V decode(byte[] bytes, Path pack) throws IOException {
+        return decode(bytes);
+    }
 
     /** The bytes the content is written as. */
     protected abstract byte[] encode(V content) throws IOException;
@@ -309,7 +332,8 @@ abstract class PackResourceEditor<V> extends JPanel {
                 // The record is looked at before the file, so a change between the two is caught afterwards.
                 ChangeRecord.Change recorded = this.edits.record().change(new ChangeRecord.Resource(this.path, pack));
                 Optional<byte[]> copy = this.edits.managed(pack, this.path);
-                return new Found<>(pack, recorded, copy.isPresent() ? decode(copy.get()) : null,
+                return new Found<>(pack, recorded, copy.isPresent() ? decode(copy.get(), pack) : null,
+                        ResourceOriginals.hash(copy.orElse(null)),
                         this.edits.unusedBecause(this.path, pack).orElse(null),
                         this.opened != null ? List.of() : this.edits.packs(this.path));
             } catch (Exception exception) {
@@ -336,6 +360,17 @@ abstract class PackResourceEditor<V> extends JPanel {
             // A deleted file keeps its content on screen, as unsaved content a Save would write again.
             if (!modified() && (this.managed || this.opened == null)) load(this.packContent);
             else markSaved(this.packContent);
+            // Changes that match the copy read now, such as another tab's save of the same text, are unsaved no more.
+            boolean unsaved = modified();
+            // Unsaved changes keep the copy they were made to as the one a save replaces, so replacing another asks. A tab
+            // moved to another pack, such as a newly chosen working pack, carries its changes over to that pack's copy.
+            boolean samePack = found.pack().equals(this.baselinePack);
+            boolean changedSince = unsaved && samePack && this.baseline != null && !this.baseline.equals(found.hash());
+            if (!unsaved || this.baseline == null || !samePack) {
+                this.baseline = found.hash();
+                this.baselinePack = found.pack();
+            }
+            this.packHash = found.hash();
             showState("");
             // Why the game did not use the copy ends when it does now, such as after the player enabled the pack.
             boolean replaceable = this.notice.getText().isEmpty() || this.notice.getText().equals(this.readNotice);
@@ -343,6 +378,10 @@ abstract class PackResourceEditor<V> extends JPanel {
             this.readNotice = found.unused();
             // A save's reload failure or problems stay: they tell why, such as a pack the game turned off after a failure.
             if (found.unused() != null && replaceable) showNotice(found.unused(), ThemeColors::warning);
+            if (changedSince && replaceable) {
+                this.readNotice = "The " + noun() + " changed in the pack since this tab read it; saving asks before replacing it";
+                showNotice(this.readNotice, ThemeColors::warning);
+            }
             changed();
             // A save or revert that came after the record was looked at is read again.
             if (!Objects.equals(recorded(), this.seen)) readCopies(true);
@@ -405,25 +444,41 @@ abstract class PackResourceEditor<V> extends JPanel {
         this.saving = edited;
         Path into = this.opened != null ? this.opened : this.pack;
         Map<String, byte[]> alongside = alongside();
-        // Encoding a large texture takes a while, so it runs with the rest of the save.
+        String expected = this.baseline;
+        String[] written = new String[1];
+        // Encoding a large texture takes a while, so it runs with the rest of the save, and so does its hash.
         CompletableFuture.supplyAsync(() -> {
             try {
-                return encode(edited);
+                byte[] bytes = encode(edited);
+                written[0] = ResourceOriginals.hash(bytes);
+                return bytes;
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }).thenCompose(bytes -> this.edits.save(this.path, into, bytes, alongside))
+        }).thenCompose(bytes -> this.edits.save(this.path, into, bytes, alongside, expected))
                 .whenComplete((saved, failure) -> SwingUtilities.invokeLater(() -> {
                     this.busy = false;
                     this.saving = null;
                     if (this.disposed) return;
                     if (failure != null) {
                         showState("");
-                        showNotice("Not saved: " + message(failure), ThemeColors::error);
                         changed();
+                        // Asked before following a change that came during the save, which would hold the overwrite back.
+                        if (cause(failure) instanceof ResourceEdits.ChangedSince changedSince && this.askToReplace.test(changedSince)) {
+                            this.baseline = null;
+                            save();
+                            return;
+                        }
+                        showNotice("Not saved: " + message(failure), ThemeColors::error);
                         followLater();
+                        // A copy written since, which the save refused to replace, is read, so Discard goes back to it;
+                        // the changes on screen stay, still unsaved.
+                        readAfterSave();
                         return;
                     }
+                    this.baseline = written[0];
+                    this.baselinePack = saved.pack();
+                    this.packHash = written[0];
                     boolean keepEdits = !same(shown(), edited);
                     showPack(saved.pack());
                     this.packContent = edited;
@@ -439,7 +494,15 @@ abstract class PackResourceEditor<V> extends JPanel {
                     }
                     changed();
                     followLater();
+                    // Another tab's save that came while this one ran was not read then.
+                    ChangeRecord.Change now = recorded();
+                    if (now != null && !now.current().equals(written[0])) readAfterSave();
                 }));
+    }
+
+    /** Reads the copies again after a save, unless following a working pack or world change does already. */
+    private void readAfterSave() {
+        if (!this.following && !this.busy) readCopies(false);
     }
 
     /** Follows a working pack or world change that came during the save just completed. */
@@ -467,6 +530,7 @@ abstract class PackResourceEditor<V> extends JPanel {
     /** Drops the unsaved changes, back to the pack's content. */
     void discard() {
         load(this.packContent);
+        this.baseline = this.packHash;
         showNotice("", ThemeColors::secondaryText);
         changed();
     }
@@ -491,6 +555,20 @@ abstract class PackResourceEditor<V> extends JPanel {
         this.notice.setText(message);
         this.notice.setToolTipText(null);
         this.notice.setVisible(!message.isEmpty());
+    }
+
+    /** Whether to save over a copy written since this tab read the pack's, after asking. */
+    private boolean replaceChangedCopy(ResourceEdits.ChangedSince changedSince) {
+        Object[] options = {"Overwrite", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(this, changedSince.getMessage() + ". Overwrite it with this tab's " + noun() + "?",
+                "Changed since", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[1]);
+        return choice == 0;
+    }
+
+    private static Throwable cause(Throwable failure) {
+        Throwable cause = failure;
+        while (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+        return cause;
     }
 
     private static String message(Throwable failure) {

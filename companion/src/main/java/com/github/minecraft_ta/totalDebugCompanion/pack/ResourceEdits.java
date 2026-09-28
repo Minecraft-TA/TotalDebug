@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.Worlds;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -270,7 +272,15 @@ public final class ResourceEdits {
     /** The copy of a resource in {@code pack}, a managed pack, or empty when it does not hold it. Blocking. */
     public Optional<byte[]> managed(Path pack, String path) throws IOException {
         Path file = pack.resolve(path);
-        return Files.isRegularFile(file) ? Optional.of(Files.readAllBytes(file)) : Optional.empty();
+        if (!Files.isRegularFile(file)) return Optional.empty();
+        // As a tab opens a file: a copy larger than Companion reads is refused before it is read.
+        long limit = path.endsWith(".png") ? ResourceLoader.MAXIMUM_PNG_BYTES : ResourceLoader.MAXIMUM_TEXT_BYTES;
+        long size = Files.size(file);
+        if (size > limit) {
+            throw new IOException("The copy in the " + PackFolders.label(pack) + " is " + String.format(Locale.ROOT, "%.1f", size / (1024d * 1024))
+                    + " MiB, more than the " + limit / (1024 * 1024) + " MiB Companion opens");
+        }
+        return Optional.of(Files.readAllBytes(file));
     }
 
     /**
@@ -284,21 +294,52 @@ public final class ResourceEdits {
         // The game names the open world's datapacks only; another world's and a closed game's are read from their files.
         if (current == null || !assets && !Worlds.isOpen(pack.getParent().getParent())) return disabledOnDisk(path, pack);
         List<PackStackPayload.Pack> packs = assets ? current.resourcePacks() : current.dataPacks();
-        String id = "file/" + pack.getFileName();
-        int position = -1;
-        for (int index = 0; index < packs.size(); index++) {
-            if (packs.get(index).id().equals(id)) position = index;
-        }
+        int position = position(packs, pack);
         if (position < 0) {
             // The managed pack is enabled by the reload after a save, and so is a datapack the world does not know yet, as
             // /reload does. One its level.dat lists, but the open world does not use, was disabled since.
             if (managed(pack)) return Optional.empty();
             return assets || !newToTheWorld(pack) ? Optional.of(notEnabled(pack)) : Optional.empty();
         }
+        return supplierAbove(packs, position, path)
+                .map(above -> above + " is above the " + PackFolders.label(pack) + " and supplies this file too, so the game shows its copy");
+    }
+
+    /** Where a folder pack lies in the game's stack, by the id the game gives it, or -1 where it is not enabled. */
+    private static int position(List<PackStackPayload.Pack> packs, Path pack) {
+        String id = "file/" + pack.getFileName();
+        int position = -1;
+        for (int index = 0; index < packs.size(); index++) {
+            if (packs.get(index).id().equals(id)) position = index;
+        }
+        return position;
+    }
+
+    /** The title of the highest pack above {@code position} of {@code packs} that supplies {@code path} too, or empty. */
+    private static Optional<String> supplierAbove(List<PackStackPayload.Pack> packs, int position, String path) {
         for (int index = packs.size() - 1; index > position; index--) {
             PackStackPayload.Pack above = packs.get(index);
-            if (!above.source().isEmpty() && contains(Path.of(above.source()), path)) {
-                return Optional.of(above.title() + " is above the " + PackFolders.label(pack) + " and supplies this file too, so the game shows its copy");
+            if (!above.source().isEmpty() && contains(Path.of(above.source()), path)) return Optional.of(above.title());
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Why a file written beside a resource, such as a texture's animation, is not the one the game uses: a pack above
+     * {@code pack} that supplies it too. Empty when none does, or the game has not named its packs. Blocking.
+     */
+    private Optional<String> besideUnused(List<String> beside, Path pack) {
+        PackStackPayload current = this.stack;
+        if (current == null) return Optional.empty();
+        for (String path : beside) {
+            List<PackStackPayload.Pack> packs = path.startsWith("assets/") ? current.resourcePacks() : current.dataPacks();
+            int position = position(packs, pack);
+            if (position < 0) continue;
+            String name = path.substring(path.lastIndexOf('/') + 1);
+            Optional<String> above = supplierAbove(packs, position, path);
+            if (above.isPresent()) {
+                return Optional.of(above.get() + " is above the " + PackFolders.label(pack) + " and supplies " + name
+                        + " too, so the game uses its copy");
             }
         }
         return Optional.empty();
@@ -339,6 +380,44 @@ public final class ResourceEdits {
         return "The " + PackFolders.label(pack) + " is not enabled, so the game does not use this file";
     }
 
+    /**
+     * The {@code .mcmeta} the game reads for {@code path} of {@code pack}: the one of the highest enabled pack from
+     * {@code pack} up that supplies it, as the game takes a resource's metadata from its own pack or one above; with the
+     * pack not in the game's stack, its own. Empty without one, and refused when larger than {@code limit}. Blocking.
+     */
+    public Optional<byte[]> metadata(String path, Path pack, int limit) throws IOException {
+        String name = path + ".mcmeta";
+        PackStackPayload current = this.stack;
+        if (current != null) {
+            List<PackStackPayload.Pack> packs = path.startsWith("assets/") ? current.resourcePacks() : current.dataPacks();
+            int position = position(packs, pack);
+            for (int index = packs.size() - 1; position >= 0 && index > position; index--) {
+                String source = packs.get(index).source();
+                if (!source.isEmpty() && contains(Path.of(source), name)) return Optional.of(read(Path.of(source), name, limit));
+            }
+        }
+        return contains(pack, name) ? Optional.of(read(pack, name, limit)) : Optional.empty();
+    }
+
+    /** The bytes of {@code path} in a folder or zip pack, at most {@code limit}. */
+    private static byte[] read(Path source, String path, int limit) throws IOException {
+        if (Files.isDirectory(source)) {
+            Path file = source.resolve(path);
+            if (Files.size(file) > limit) throw new IOException(path + " is larger than " + limit / 1024 + " KiB");
+            return Files.readAllBytes(file);
+        }
+        try (ZipFile zip = new ZipFile(source.toFile())) {
+            var entry = zip.getEntry(path);
+            if (entry == null) throw new IOException(path + " is gone");
+            if (entry.getSize() > limit) throw new IOException(path + " is larger than " + limit / 1024 + " KiB");
+            try (var input = zip.getInputStream(entry)) {
+                byte[] bytes = input.readNBytes(limit + 1);
+                if (bytes.length > limit) throw new IOException(path + " is larger than " + limit / 1024 + " KiB");
+                return bytes;
+            }
+        }
+    }
+
     private static boolean contains(Path source, String path) {
         if (Files.isDirectory(source)) return Files.isRegularFile(source.resolve(path));
         if (!Files.isRegularFile(source)) return false;
@@ -367,6 +446,25 @@ public final class ResourceEdits {
      * pack where it has no copy yet, such as the animation of a texture; each is a change of its own.
      */
     public CompletableFuture<Saved> save(String path, Path into, byte[] content, Map<String, byte[]> alongside) {
+        return save(path, into, content, alongside, null);
+    }
+
+    /**
+     * A copy in the pack other than the one a save expected to replace, such as one another tab or program wrote since;
+     * its message names the file.
+     */
+    public static final class ChangedSince extends IOException {
+        ChangedSince(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * Saves as {@link #save(String, Path, byte[], Map)} does, but only over the copy whose hash is {@code expected}, empty
+     * for none; another copy fails the save with {@link ChangedSince}. A null {@code expected} replaces whatever the pack
+     * holds.
+     */
+    public CompletableFuture<Saved> save(String path, Path into, byte[] content, Map<String, byte[]> alongside, String expected) {
         Objects.requireNonNull(content, "content");
         Objects.requireNonNull(alongside, "alongside");
         // The files written beside it, which the reload watches too: they may change what the game makes of the resource.
@@ -377,12 +475,18 @@ public final class ResourceEdits {
                 if (managed(pack)) preparePack(pack, path.startsWith("assets/"));
                 // A pack of the player's may have been removed since the tab chose it; the game would not load it.
                 else if (!PackFolders.isPack(pack)) {
-                    throw new IOException("The " + PackFolders.label(pack) + " is gone or has no pack.mcmeta, so the game does not load it");
+                    throw new IOException("The " + PackFolders.label(pack) + " is gone or has no readable pack.mcmeta, so the game does not load it");
                 }
                 Path file = pack.resolve(path);
+                // Checked before anything is written, so a refused save leaves the pack as it was.
+                byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+                if (expected != null && !expected.equals(ResourceOriginals.hash(previous))) {
+                    throw new ChangedSince(path.substring(path.lastIndexOf('/') + 1) + " changed in the "
+                            + PackFolders.label(pack) + " since this tab read it");
+                }
                 // Only a copy the save makes gets them: a pack's own copy without them, such as a static texture, stays so.
                 // Written first: should one fail, the resource itself is left as it was, and the save fails whole.
-                for (Map.Entry<String, byte[]> companion : Files.exists(file) ? Map.<String, byte[]>of().entrySet() : alongside.entrySet()) {
+                for (Map.Entry<String, byte[]> companion : previous != null ? Map.<String, byte[]>of().entrySet() : alongside.entrySet()) {
                     Path companionFile = pack.resolve(companion.getKey());
                     // The pack's own copy, even a different one, stays.
                     if (Files.exists(companionFile)) continue;
@@ -392,7 +496,6 @@ public final class ResourceEdits {
                     this.record.changed(beside, ResourceOriginals.hash(null), ResourceOriginals.hash(companion.getValue()));
                     added.add(companion.getKey());
                 }
-                byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
                 ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
                 if (this.record.change(target) == null) this.originals.keep(previous);
                 AtomicFiles.replace(file, staged -> Files.write(staged, content));
@@ -404,7 +507,7 @@ public final class ResourceEdits {
         })
                 // A pack of the player's that is not enabled or lies below another keeps its copy unused, reloaded or not.
                 .thenApply(saved -> new Saved(saved.effect(), saved.pack(), saved.problems(), saved.reloadFailure(),
-                        unusedBecause(path, saved.pack()).orElse(""))));
+                        unusedBecause(path, saved.pack()).or(() -> besideUnused(added, saved.pack())).orElse(""))));
     }
 
     /**
@@ -434,7 +537,13 @@ public final class ResourceEdits {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }));
+        })).thenApply(saved -> {
+            // The file is put back either way, so the change leaves the record; a pack the game skips does not use it, the
+            // TotalDebug pack included.
+            Path pack = saved.pack();
+            return PackFolders.isPack(pack) ? saved : new Saved(saved.effect(), pack, saved.problems(),
+                    saved.reloadFailure(), "The " + PackFolders.label(pack) + " is gone or has no readable pack.mcmeta, so the game does not load it");
+        });
     }
 
     /**

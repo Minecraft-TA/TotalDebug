@@ -195,7 +195,7 @@ final class ConfigPanel extends JPanel {
         if (path == null) return null;
         JPopupMenu menu = new JPopupMenu();
         menu.add(ContextMenus.copyAction("Copy Path", path.toString()));
-        menu.add(ContextMenus.action("Show in Explorer", null, null, () -> Explorer.show(path)));
+        menu.add(ContextMenus.action("Show in Explorer", null, null, () -> setStatus(Explorer.show(path).orElse(""))));
         return menu;
     }
 

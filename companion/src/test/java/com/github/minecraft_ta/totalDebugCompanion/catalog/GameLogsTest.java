@@ -9,6 +9,7 @@ import java.nio.file.attribute.FileTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GameLogsTest {
     @TempDir Path directory;
@@ -103,6 +104,13 @@ class GameLogsTest {
                 Details:
                 \tMod file: /C:/mods/total_debug.jar
                 \tFailure message: Mod total_debug requires neoforge 21.1.248 or above
+                \tMod version: 3.0.0
+                -- Mod loading issue for: gears --
+                Details:
+                \tFailure message: Mod gears could not be loaded:
+                \t\tMissing class com.example.gears.Gear
+                \t\tIt was expected in gears.jar
+                \tMod version: 1.0.0
                 """;
         Path file = Files.createDirectories(this.directory.resolve("crash-reports")).resolve("crash-2026-08-22_21.11.53-client.txt");
         Files.writeString(file, report);
@@ -120,7 +128,22 @@ class GameLogsTest {
         assertEquals("TotalDebugClient.java:64", frames.getFirst().source());
         assertEquals("minecraft", read.failures().getLast().frames().getFirst().modId());
         assertEquals(List.of(new GameLogs.ModIssue("total_debug", "Mod total_debug requires neoforge 21.1.248 or above",
-                report.indexOf("-- Mod loading issue"))), read.modIssues());
+                        report.indexOf("-- Mod loading issue")),
+                new GameLogs.ModIssue("gears", "Mod gears could not be loaded:\nMissing class com.example.gears.Gear\n"
+                        + "It was expected in gears.jar", report.indexOf("-- Mod loading issue for: gears"))), read.modIssues(),
+                "a failure message goes on over the lines indented deeper than its first");
+    }
+
+    @Test
+    void anEntryLongerThanItKeepsSaysHowMuchIsLeftOut() throws Exception {
+        StringBuilder log = new StringBuilder("[27Sept2026 10:00:00.000] [Render thread/ERROR] [net.minecraft.Test/]: Broke\n");
+        for (int line = 0; line < 250; line++) log.append("\tat frame").append(line).append('\n');
+        Path file = Files.createDirectories(this.directory.resolve("logs")).resolve("latest.log");
+        Files.writeString(file, log.toString());
+
+        String text = GameLogs.readLog(file).entries().getFirst().text();
+        assertTrue(text.endsWith("\n51 more lines in the log"), text.substring(text.length() - 60));
+        assertEquals(201, text.split("\n").length, "the first line, 199 that follow it, and what was left out");
     }
 
     @Test

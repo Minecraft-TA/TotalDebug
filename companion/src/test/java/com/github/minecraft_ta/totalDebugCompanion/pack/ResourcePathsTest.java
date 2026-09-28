@@ -27,7 +27,7 @@ class ResourcePathsTest {
         Files.createDirectories(file.getParent());
         Files.writeString(file, "{}");
         assertEquals(Optional.empty(), ResourcePaths.of(new LocalFileSource(file)), "a folder without pack.mcmeta is no pack");
-        Files.writeString(pack.resolve("pack.mcmeta"), "{}");
+        Files.writeString(pack.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         assertEquals(Optional.of("assets/testmod/lang/en_us.json"), ResourcePaths.of(new LocalFileSource(file)));
     }
 
