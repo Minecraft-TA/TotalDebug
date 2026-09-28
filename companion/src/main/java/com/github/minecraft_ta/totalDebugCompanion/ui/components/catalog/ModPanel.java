@@ -119,7 +119,7 @@ public final class ModPanel extends JPanel {
             this.resources.setMessage("Resources could not be read: " + failure.getMessage());
             setTab(ModTab.RESOURCES, 1);
         });
-        this.configs = new ConfigPanel(modId, workspace, changes, navigator);
+        this.configs = new ConfigPanel(modId, changes, navigator);
         this.keyBindings = new KeyBindingsPanel(catalog, keyControl, modId, navigator);
         this.content = new ContentBrowser(this.listIcons, this::iconOf, navigator, null);
 

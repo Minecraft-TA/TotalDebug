@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
@@ -38,12 +39,17 @@ public final class CatalogSearch {
     private List<ModResources.Resource> resources;
     private List<Path> directories;
     /** Where the game keeps its keys, or null without a game directory. */
+    private final GameLocation location;
     private final Path options;
 
-    /** {@code options} is the game's {@code options.txt}, read for the keys the bindings have now; null for none. */
-    public CatalogSearch(CatalogIndex index, Path options) {
+    /**
+     * {@code location} is where the project's game is, whose {@code options.txt} is read for the keys the bindings have
+     * now and whose packs are listed; null without a project.
+     */
+    public CatalogSearch(CatalogIndex index, GameLocation location) {
         this.index = Objects.requireNonNull(index, "index");
-        this.options = options;
+        this.location = location;
+        this.options = location == null ? null : location.workspace().resolve("options.txt");
         this.entries = index.entries();
         this.names = new String[this.entries.size()];
         this.ids = new String[this.entries.size()];
@@ -129,10 +135,9 @@ public final class CatalogSearch {
      */
     private List<PackResult> packs() {
         List<PackResult> packs = new ArrayList<>();
-        Path workspace = this.options == null ? null : this.options.getParent();
-        if (workspace == null) return packs;
-        addPacks(workspace.resolve("resourcepacks"), "Resource pack", packs);
-        CurrentWorld.directory(workspace).ifPresent(world -> addPacks(world.resolve("datapacks"), "Datapack", packs));
+        if (this.location == null) return packs;
+        addPacks(this.location.workspace().resolve("resourcepacks"), "Resource pack", packs);
+        CurrentWorld.directory(this.location.read()).ifPresent(world -> addPacks(world.resolve("datapacks"), "Datapack", packs));
         return packs;
     }
 

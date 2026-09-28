@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
@@ -16,7 +17,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.Catalog
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ModLogoIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogMessages;
 
-import java.nio.file.Path;
 import java.util.Locale;
 import java.util.function.Supplier;
 
@@ -148,15 +148,15 @@ public class SearchEverywherePopup extends JFrame {
     private final RuntimeIndexService indexLoader;
     private final Supplier<RuntimeBinding> runtime;
     private final Supplier<PackCatalogService> catalog;
-    /** The current project's options.txt, which holds the keys; null without a project. */
-    private final Supplier<Path> options;
+    /** Where the current project's game is, whose options.txt holds the keys; null without a project. */
+    private final Supplier<GameLocation> location;
     private final CatalogIcons catalogIcons;
     private final Consumer<NavigationTarget> navigator;
     private CatalogSearch catalogSearch;
     private final Map<String, Icon> modLogos = new HashMap<>();
     private String resultNote = "";
     SearchEverywherePopup(Window owner, RuntimeIndexService indexLoader, Supplier<RuntimeBinding> runtime,
-                          Supplier<PackCatalogService> catalog, Supplier<Path> options, ItemIconService itemIcons,
+                          Supplier<PackCatalogService> catalog, Supplier<GameLocation> location, ItemIconService itemIcons,
                           Consumer<NavigationTarget> navigator) {
         this.owner = owner;
         if (owner != null && !owner.getFocusableWindowState()) {
@@ -166,7 +166,7 @@ public class SearchEverywherePopup extends JFrame {
         this.indexLoader = indexLoader;
         this.runtime = runtime;
         this.catalog = Objects.requireNonNull(catalog, "catalog");
-        this.options = Objects.requireNonNull(options, "options");
+        this.location = Objects.requireNonNull(location, "location");
         this.catalogIcons = new CatalogIcons(itemIcons, PREVIEW_SIZE);
         this.navigator = navigator;
         this.moduleFilterPopup = new ModuleFilterPopup(
@@ -475,7 +475,7 @@ public class SearchEverywherePopup extends JFrame {
         if (index == null) {
             this.catalogSearch = null;
         } else if (this.catalogSearch == null || this.catalogSearch.index() != index) {
-            this.catalogSearch = new CatalogSearch(index, this.options.get());
+            this.catalogSearch = new CatalogSearch(index, this.location.get());
             this.modLogos.clear();
         }
         return this.catalogSearch;

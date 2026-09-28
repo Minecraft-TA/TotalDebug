@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.Access;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.protocol.message.KeyBindingResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetKeyBindingMessage;
@@ -20,15 +22,13 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BooleanSupplier;
-import java.util.function.Predicate;
 
 /**
  * Puts key bindings on keys. While the game is connected it changes the binding itself, like its controls screen, and
  * saves {@code options.txt}; otherwise Companion writes the binding's line in {@code options.txt}, which the game
  * reads when it starts. Writing that file while the game runs would be undone the next time the game saves its
- * options, so a game running without a connection is asked to connect first. Every change is entered in the change
- * record, also one the game applies after Companion stopped waiting for its answer.
+ * options, so a game running without a connection is asked to connect first; {@link GameLocation} decides which. Every
+ * change is entered in the change record, also one the game applies after Companion stopped waiting for its answer.
  */
 public final class KeyBindingControl {
     private static final long ANSWER_SECONDS = 5;
@@ -43,22 +43,23 @@ public final class KeyBindingControl {
 
     private final Path options;
     private final ChangeRecord record;
-    private final BooleanSupplier gameRunning;
+    private final GameLocation location;
     private final Executor writes;
     private final AtomicInteger requests = new AtomicInteger();
     private final Map<Integer, CompletableFuture<KeyBindingResultPayload>> waiting = new ConcurrentHashMap<>();
-    /** Sends a message to the connected game, or is null while no game is connected. */
-    private volatile Predicate<SetKeyBindingMessage> game;
 
     /**
-     * {@code options} is the game's {@code options.txt}; {@code gameRunning} tells whether a game runs there, and
-     * {@code writes} runs the project's writes, which it finishes before its change record closes.
+     * Changes the keys of the game {@code location} tells of, in its {@code options.txt}; {@code writes} runs the
+     * project's writes, which it finishes before its change record closes.
      */
-    public KeyBindingControl(Path options, ChangeRecord record, BooleanSupplier gameRunning, Executor writes) {
-        this.options = Objects.requireNonNull(options, "options");
+    public KeyBindingControl(GameLocation location, ChangeRecord record, Executor writes) {
+        this.location = Objects.requireNonNull(location, "location");
+        this.options = location.workspace().resolve("options.txt");
         this.record = Objects.requireNonNull(record, "record");
-        this.gameRunning = Objects.requireNonNull(gameRunning, "gameRunning");
         this.writes = Objects.requireNonNull(writes, "writes");
+        location.addListener(change -> {
+            if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
+        });
     }
 
     /** The game's {@code options.txt}, where the keys are saved. */
@@ -66,12 +67,7 @@ public final class KeyBindingControl {
         return this.options;
     }
 
-    public void gameConnected(Predicate<SetKeyBindingMessage> send) {
-        this.game = Objects.requireNonNull(send, "send");
-    }
-
-    public void gameDisconnected() {
-        this.game = null;
+    private void gameDisconnected() {
         for (CompletableFuture<KeyBindingResultPayload> request : this.waiting.values()) {
             request.completeExceptionally(new IOException("The game disconnected before it answered"));
         }
@@ -84,16 +80,32 @@ public final class KeyBindingControl {
         if (request != null) request.complete(result);
     }
 
-    /** Puts the binding {@code name} on {@code assignment}; {@code shown} is the key it had when the edit was made. */
+    /**
+     * Puts the binding {@code name} on {@code assignment}; {@code shown} is the key it had when the edit was made. Where
+     * the key is changed is decided in the project's write queue, after the writes queued before it.
+     */
     public CompletableFuture<Result> set(String name, KeyBindings.Assignment shown, KeyBindings.Assignment assignment) {
-        Predicate<SetKeyBindingMessage> send = this.game;
-        if (send == null) {
-            try {
-                return CompletableFuture.supplyAsync(() -> writeOffline(name, shown, assignment), this.writes);
-            } catch (RejectedExecutionException closed) {
-                return CompletableFuture.failedFuture(new IOException("The project is closing; the key was not changed"));
-            }
+        CompletableFuture<Decided> decided;
+        try {
+            decided = CompletableFuture.supplyAsync(() -> switch (this.location.read().client("change keys")) {
+                case Access.Live live -> new Decided(null, live.connection());
+                case Access.Files ignored -> new Decided(writeOffline(name, shown, assignment), null);
+                case Access.Refused refused -> throw new CompletionException(new IOException(refused.reason()));
+            }, this.writes);
+        } catch (RejectedExecutionException closed) {
+            return CompletableFuture.failedFuture(new IOException("The project is closing; the key was not changed"));
         }
+        return decided.thenCompose(done -> done.live() == null ? CompletableFuture.completedFuture(done.written())
+                : live(done.live(), name, shown, assignment));
+    }
+
+    /** What the write queue decided: the key written into options.txt, or the connection to change it live. */
+    private record Decided(Result written, GameLocation.Connection live) {
+    }
+
+    /** Asks the connected game to change the key, and records the change whenever it answers. */
+    private CompletableFuture<Result> live(GameLocation.Connection connection, String name, KeyBindings.Assignment shown,
+                                           KeyBindings.Assignment assignment) {
         int id = this.requests.incrementAndGet();
         CompletableFuture<KeyBindingResultPayload> answer = new CompletableFuture<>();
         this.waiting.put(id, answer);
@@ -103,7 +115,7 @@ public final class KeyBindingControl {
             return recorded(name, shown, new Result(new KeyBindings.Assignment(payload.previousKey(), payload.previousModifier()),
                     new KeyBindings.Assignment(payload.key(), payload.modifier()), true));
         });
-        if (!send.test(new SetKeyBindingMessage(id, name, assignment.key(), assignment.modifier()))) {
+        if (!connection.send(new SetKeyBindingMessage(id, name, assignment.key(), assignment.modifier()))) {
             this.waiting.remove(id);
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));
         }
@@ -113,12 +125,8 @@ public final class KeyBindingControl {
         return waited;
     }
 
-    /** Writes the binding into {@code options.txt}, which only a closed game reads again. */
+    /** Writes the binding into {@code options.txt}, which only a closed game reads again. In the write queue. */
     private Result writeOffline(String name, KeyBindings.Assignment shown, KeyBindings.Assignment assignment) {
-        if (this.gameRunning.getAsBoolean()) {
-            throw new CompletionException(new IOException(
-                    "The game is running but not connected to Companion; connect it to change keys"));
-        }
         try {
             return recorded(name, shown, new Result(writeOptions(name, assignment), assignment, false));
         } catch (IOException exception) {

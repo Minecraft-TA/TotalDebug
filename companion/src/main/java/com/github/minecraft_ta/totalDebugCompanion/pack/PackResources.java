@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.pack;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
@@ -90,10 +91,10 @@ public final class PackResources {
      * current world's {@code level.dat} names them; a pack the game builds in memory, such as one a mod generates, adds
      * nothing Companion can read. Blocking.
      */
-    public static List<Source> data(PackStackPayload stack, CatalogIndex index, Path workspace) throws IOException {
+    public static List<Source> data(PackStackPayload stack, CatalogIndex index, GameState game) throws IOException {
         if (stack != null) return stack.dataPacks().stream().map(pack -> source(pack, index)).toList();
         // The game enables a new pack of the world's folder above the others when it loads the world.
-        List<ListedPack> listed = worldDatapacks(workspace);
+        List<ListedPack> listed = worldDatapacks(game);
         List<ListedPack> enabled = new ArrayList<>(listed.stream().filter(pack -> pack.state() == ListedPack.State.ENABLED).toList().reversed());
         enabled.addAll(listed.stream().filter(pack -> pack.state() == ListedPack.State.NEW).toList());
         List<Source> sources = new ArrayList<>();
@@ -118,11 +119,11 @@ public final class PackResources {
      * The current world's datapacks, or none without a world. A {@code level.dat} that cannot be read fails, rather than
      * leaving the world's packs out of what the game uses. Blocking.
      */
-    private static List<ListedPack> worldDatapacks(Path workspace) throws IOException {
-        Optional<Path> world = CurrentWorld.directory(workspace);
+    private static List<ListedPack> worldDatapacks(GameState game) throws IOException {
+        Optional<Path> world = CurrentWorld.directory(game);
         if (world.isEmpty()) return List.of();
         try {
-            return CurrentWorld.read(world.get()).datapacks();
+            return CurrentWorld.read(game, world.get()).datapacks();
         } catch (RuntimeException malformed) {
             throw new IOException("The level.dat of " + world.get().getFileName() + " is malformed: " + malformed.getMessage(), malformed);
         }

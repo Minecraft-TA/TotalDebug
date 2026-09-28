@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
@@ -19,7 +20,6 @@ import java.awt.BorderLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -46,7 +46,7 @@ public final class PackConfigurationPanel extends JPanel {
     }
 
     private final PackCatalogService catalog;
-    private final Path workspace;
+    private final GameLocation location;
     private final Consumer<NavigationTarget> navigator;
     private final ConfigWriter writer;
     private final PageLoader<Loaded> loader;
@@ -62,11 +62,11 @@ public final class PackConfigurationPanel extends JPanel {
     private String unavailable = "";
     private String status = "";
 
-    public PackConfigurationPanel(PackCatalogService catalog, Path workspace, ConfigChanges changes,
+    public PackConfigurationPanel(PackCatalogService catalog, ConfigChanges changes,
                                  Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
-        this.workspace = workspace;
+        this.location = changes.location();
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.writer = new ConfigWriter(changes, this::setStatus, this::load);
 
@@ -130,7 +130,7 @@ public final class PackConfigurationPanel extends JPanel {
             boolean modShown = false;
             for (PackCatalog.ConfigFile file : mod.configs()) {
                 if (file.settings().isEmpty()) continue;
-                List<ConfigSources.Source> sources = ConfigSources.of(this.workspace, file);
+                List<ConfigSources.Source> sources = ConfigSources.of(this.location, file);
                 if (sources.isEmpty()) continue;
                 ConfigSources.Source source = sources.getFirst();
                 ConfigValues values;

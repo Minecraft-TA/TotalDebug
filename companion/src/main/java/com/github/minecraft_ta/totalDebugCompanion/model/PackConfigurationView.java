@@ -13,7 +13,7 @@ public final class PackConfigurationView implements IEditorPanel {
     private final PackConfigurationPanel panel;
 
     public PackConfigurationView(EditorContext context) {
-        this.panel = new PackConfigurationPanel(context.project().catalog(), context.project().profile().workspaceDirectory(),
+        this.panel = new PackConfigurationPanel(context.project().catalog(),
                 context.project().configChanges(), context.navigation()::navigate);
     }
 

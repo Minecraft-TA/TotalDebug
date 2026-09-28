@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
@@ -61,7 +62,7 @@ final class ConfigPanel extends JPanel {
     private static final String MESSAGE_CARD = "message";
 
     private final String modId;
-    private final Path workspace;
+    private final GameLocation location;
     private final ConfigWriter writer;
     private final Consumer<NavigationTarget> navigator;
     /** What the file could not show, such as a read error; it takes the place of {@link #status}. */
@@ -96,10 +97,10 @@ final class ConfigPanel extends JPanel {
     private Object shownSource;
 
     /** {@code modId} is the mod whose files are shown. */
-    ConfigPanel(String modId, Path workspace, ConfigChanges changes, Consumer<NavigationTarget> navigator) {
+    ConfigPanel(String modId, ConfigChanges changes, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
-        this.workspace = workspace;
+        this.location = changes.location();
         this.writer = new ConfigWriter(changes, this::setStatus, this::load);
         this.textEditor = new ConfigTextEditor(this.writer, this::setStatus, this::load);
         this.navigator = Objects.requireNonNull(navigator, "navigator");
@@ -309,7 +310,7 @@ final class ConfigPanel extends JPanel {
         this.sources.cancel();
         this.modifiedOnly.setVisible(file != null && !file.settings().isEmpty());
         if (file == null || file.type() != PackCatalog.ConfigType.SERVER) {
-            showSources(file, file == null ? List.of() : ConfigSources.of(this.workspace, file), true);
+            showSources(file, file == null ? List.of() : ConfigSources.of(this.location, file), true);
             return;
         }
         // A server configuration's copies are found by listing the worlds, which reads the disk. Until they are known,
@@ -323,7 +324,7 @@ final class ConfigPanel extends JPanel {
     private Callable<SourcesRead> prepareSources() {
         PackCatalog.ConfigFile file = selectedFile();
         if (file == null) return null;
-        return () -> new SourcesRead(file, ConfigSources.of(this.workspace, file));
+        return () -> new SourcesRead(file, ConfigSources.of(this.location, file));
     }
 
     /** Shows {@code file}'s copies; {@code known} tells whether they are all listed, so its values can be read. */

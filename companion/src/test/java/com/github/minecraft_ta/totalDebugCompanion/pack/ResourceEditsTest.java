@@ -2,9 +2,11 @@ package com.github.minecraft_ta.totalDebugCompanion.pack;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
@@ -13,12 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.util.Comparator;
 import java.util.List;
@@ -154,8 +153,8 @@ class ResourceEditsTest {
     void aRunningGameNotConnectedKeepsItsOptionsAndIsAskedToConnect() throws Exception {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "resourcePacks:[\"vanilla\"]\n");
-        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> true,
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, true), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(STACK);
 
@@ -213,7 +212,7 @@ class ResourceEditsTest {
         ResourceEdits edits = edits(record);
         edits.packStack(STACK);
         List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
-        edits.gameConnected(message -> {
+        edits.location().connected(message -> {
             if (message instanceof ReloadMessage reload) sent.add(reload.payload());
             return true;
         });
@@ -248,11 +247,11 @@ class ResourceEditsTest {
         ChangeRecord record = ChangeRecord.inMemory();
         ExecutorService queue = Executors.newSingleThreadExecutor();
         try {
-            ResourceEdits edits = new ResourceEdits(this.directory, record,
-                    new ResourceOriginals(this.directory.resolve("total-debug/originals")), queue, () -> false, InstanceState.inMemory());
+            ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record,
+                    new ResourceOriginals(this.directory.resolve("total-debug/originals")), queue, InstanceState.inMemory());
             edits.packStack(STACK);
             List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
-            edits.gameConnected(message -> {
+            edits.location().connected(message -> {
                 if (message instanceof ReloadMessage reload) {
                     sent.add(reload.payload());
                     edits.answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(), ""));
@@ -400,7 +399,7 @@ class ResourceEditsTest {
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         edits.packStack(STACK);
         List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
-        edits.gameConnected(message -> {
+        edits.location().connected(message -> {
             if (message instanceof ReloadMessage reload) {
                 sent.add(reload.payload());
                 edits.answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(new ReloadResultPayload.Problem(
@@ -503,19 +502,17 @@ class ResourceEditsTest {
         Path added = LevelDatFixture.datapack(world, "Added");
         Path off = LevelDatFixture.datapack(world, "Off");
         Path live = LevelDatFixture.datapack(world, "Live");
-        Files.writeString(world.resolve("session.lock"), "x");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.location().connected(message -> true);
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
         edits.packStack(STACK);
         String recipe = "data/tweaks/recipe/gear.json";
 
-        try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.WRITE);
-             FileLock ignored = channel.lock()) {
-            assertTrue(edits.unusedBecause(recipe, added).isEmpty(), "a reload enables it, as /reload does");
-            assertEquals("The Off datapack of World is not enabled, so the game does not use this file",
-                    edits.unusedBecause(recipe, off).orElseThrow(), "but not one the world disabled");
-            assertEquals("The Live datapack of World is not enabled, so the game does not use this file",
-                    edits.unusedBecause(recipe, live).orElseThrow(), "nor one disabled in the open world since level.dat was saved");
-        }
+        assertTrue(edits.unusedBecause(recipe, added).isEmpty(), "a reload enables it, as /reload does");
+        assertEquals("The Off datapack of World is not enabled, so the game does not use this file",
+                edits.unusedBecause(recipe, off).orElseThrow(), "but not one the world disabled");
+        assertEquals("The Live datapack of World is not enabled, so the game does not use this file",
+                edits.unusedBecause(recipe, live).orElseThrow(), "nor one disabled in the open world since level.dat was saved");
     }
 
     @Test
@@ -605,7 +602,7 @@ class ResourceEditsTest {
         assertEquals("", state.workingPack("data"), "each side has its own working pack");
 
         List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
-        edits.gameConnected(message -> {
+        edits.location().connected(message -> {
             if (message instanceof ReloadMessage reload) sent.add(reload.payload());
             return true;
         });
@@ -633,8 +630,8 @@ class ResourceEditsTest {
     }
 
     private ResourceEdits edits(ChangeRecord record, InstanceState state) {
-        return new ResourceEdits(this.directory, record, new ResourceOriginals(this.directory.resolve("total-debug/originals")),
-                Runnable::run, () -> false, state);
+        return new ResourceEdits(GameLocations.of(this.directory, false), record, new ResourceOriginals(this.directory.resolve("total-debug/originals")),
+                Runnable::run, state);
     }
 
     private Path world(String name) throws IOException {

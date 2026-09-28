@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
-import com.github.minecraft_ta.totaldebug.storage.GameLock;
-import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
@@ -65,20 +65,36 @@ public final class ConfigChanges {
     private record Key(Path file, String setting) {
     }
 
+    private final GameLocation location;
     private final Path workspace;
     private final ChangeRecord record;
     private final Map<Key, Pending> pending = new ConcurrentHashMap<>();
     /** One write at a time for the project, so writes to the same file never interleave. */
     private final ExecutorService writes = Executors.newSingleThreadExecutor(task ->
             Thread.ofPlatform().daemon().name("Configuration writes").unstarted(task));
-    private volatile boolean connected;
     /** The game process the pending edits wait in, or 0 while it is unknown. */
     private long gameProcess;
 
-    /** {@code workspace} is the game directory, and {@code record} keeps every edit. */
-    public ConfigChanges(Path workspace, ChangeRecord record) {
-        this.workspace = workspace;
+    /** {@code location} tells where the game of the instance is, and {@code record} keeps every edit. */
+    public ConfigChanges(GameLocation location, ChangeRecord record) {
+        this.location = Objects.requireNonNull(location, "location");
+        this.workspace = location.workspace();
         this.record = Objects.requireNonNull(record, "record");
+        location.addListener(change -> {
+            switch (change) {
+                case CONNECTED, PROCESS -> {
+                    // The process may have been announced before the connection was taken as established.
+                    if (location.process() != 0) gameProcess(location.process());
+                }
+                case DISCONNECTED -> gameDisconnected();
+                default -> { }
+            }
+        });
+    }
+
+    /** Where the game of the instance is. */
+    public GameLocation location() {
+        return this.location;
     }
 
     public ChangeRecord record() {
@@ -119,15 +135,11 @@ public final class ConfigChanges {
         if (interrupted) Thread.currentThread().interrupt();
     }
 
-    public void gameConnected() {
-        this.connected = true;
-    }
-
     /**
      * The connected game's process. Another process than the one the pending edits wait in started after it, and read
      * every file when it started.
      */
-    public synchronized void gameProcess(long processId) {
+    private synchronized void gameProcess(long processId) {
         // The first game seen may be the one the edits wait in; only a known, different process has restarted.
         if (this.gameProcess != 0 && processId != this.gameProcess) this.pending.clear();
         this.gameProcess = processId;
@@ -137,23 +149,12 @@ public final class ConfigChanges {
      * The game lost its connection. Pending edits stay while it still runs, since a reconnect does not apply them; a
      * game that closed reads every file again when it starts.
      */
-    public void gameDisconnected() {
-        this.connected = false;
-        if (!gameLockHeld()) this.pending.clear();
-    }
-
-    /** Whether a game runs in the instance, connected or not. Blocking; it looks at the game's lock. */
-    private boolean gameRunning() {
-        return this.connected || gameLockHeld();
-    }
-
-    private boolean gameLockHeld() {
-        return this.workspace != null && GameLock.held(InstancePaths.forGame(this.workspace).gameLock());
+    private void gameDisconnected() {
+        if (!this.location.read().running()) this.pending.clear();
     }
 
     /** Where a configuration file is: a world's server configuration, the defaults for new worlds, or the config folder. */
     public Location location(Path file) {
-        if (this.workspace == null) return Location.CONFIG;
         Path normalized = file.toAbsolutePath().normalize();
         if (normalized.startsWith(this.workspace.resolve("defaultconfigs").toAbsolutePath().normalize())) return Location.DEFAULTS;
         return world(normalized) == null ? Location.CONFIG : Location.WORLD;
@@ -170,7 +171,8 @@ public final class ConfigChanges {
         Pending earlier = this.pending.get(key);
         Location location = location(target.file());
         Path world = location == Location.WORLD ? world(key.file()) : null;
-        Effect effect = effect(type, restart, location, world);
+        GameState state = this.location.read();
+        Effect effect = effect(state, type, restart, location, world);
         if (!effect.pending()) {
             this.pending.remove(key);
         } else if (earlier != null && earlier.applied().equals(written)) {
@@ -178,20 +180,20 @@ public final class ConfigChanges {
             this.pending.remove(key);
             return Effect.NOW;
         } else {
-            Path openWorld = effect == Effect.REJOIN ? (world != null ? world : Worlds.open(this.workspace)) : null;
+            Path openWorld = effect == Effect.REJOIN ? (world != null ? world : state.openWorld()) : null;
             this.pending.put(key, new Pending(effect, openWorld, earlier == null ? previous : earlier.applied()));
         }
         return effect;
     }
 
-    private Effect effect(PackCatalog.ConfigType type, PackCatalog.Restart restart, Location location, Path world) {
+    private Effect effect(GameState state, PackCatalog.ConfigType type, PackCatalog.Restart restart, Location location, Path world) {
         if (location == Location.DEFAULTS) return Effect.NEW_WORLDS;
-        if (!gameRunning()) return location == Location.WORLD ? Effect.WORLD_OPENS : Effect.GAME_STARTS;
+        if (!state.running()) return location == Location.WORLD ? Effect.WORLD_OPENS : Effect.GAME_STARTS;
         if (type == PackCatalog.ConfigType.STARTUP || restart == PackCatalog.Restart.GAME || !watchesFiles()) {
             return Effect.RESTART;
         }
-        if (location == Location.WORLD && !Worlds.isOpen(world)) return Effect.WORLD_OPENS;
-        if (restart == PackCatalog.Restart.WORLD) return Worlds.open(this.workspace) == null ? Effect.NOW : Effect.REJOIN;
+        if (location == Location.WORLD && !state.isOpen(world)) return Effect.WORLD_OPENS;
+        if (restart == PackCatalog.Restart.WORLD) return state.openWorld() == null ? Effect.NOW : Effect.REJOIN;
         return Effect.NOW;
     }
 
@@ -211,20 +213,20 @@ public final class ConfigChanges {
      * looks at the game's and the worlds' locks.
      */
     public void refresh() {
-        if (!gameRunning()) {
+        GameState state = this.location.read();
+        if (!state.running()) {
             this.pending.clear();
             return;
         }
         List<Key> applied = new ArrayList<>();
         this.pending.forEach((key, entry) -> {
-            if (entry.effect() == Effect.REJOIN && (entry.world() == null || !Worlds.isOpen(entry.world()))) applied.add(key);
+            if (entry.effect() == Effect.REJOIN && (entry.world() == null || !state.isOpen(entry.world()))) applied.add(key);
         });
         applied.forEach(this.pending::remove);
     }
 
     /** The world directory holding {@code file} as {@code saves/<world>/serverconfig/<file>}, or null. */
     private Path world(Path file) {
-        if (this.workspace == null) return null;
         Path saves = this.workspace.resolve("saves").toAbsolutePath().normalize();
         for (Path world = file.getParent(); world != null; world = world.getParent()) {
             if (saves.equals(world.getParent())) return file.startsWith(world.resolve("serverconfig")) ? world : null;
@@ -234,7 +236,6 @@ public final class ConfigChanges {
 
     /** Whether NeoForge reloads changed configuration files; {@code config/fml.toml} can turn that off. */
     private boolean watchesFiles() {
-        if (this.workspace == null) return true;
         Path fml = this.workspace.resolve("config").resolve("fml.toml");
         if (!Files.isRegularFile(fml)) return true;
         try {

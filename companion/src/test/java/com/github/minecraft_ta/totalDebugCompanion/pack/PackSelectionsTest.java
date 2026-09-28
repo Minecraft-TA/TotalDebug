@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
@@ -36,7 +37,7 @@ class PackSelectionsTest {
         Files.writeString(options, "version:3955\nresourcePacks:[\"vanilla\",\"mod_resources\",\"file/Old\"]\n"
                 + "incompatibleResourcePacks:[\"file/Old\"]\nlang:en_us\n");
         ChangeRecord record = ChangeRecord.inMemory();
-        PackSelections selections = selections(record, edits(record), false);
+        PackSelections selections = selections(record, edits(record, false));
 
         PackSelections.Applied applied = selections.set(SetPacksPayload.Side.RESOURCES, null,
                 List.of("vanilla", "file/New", "mod_resources")).get(5, TimeUnit.SECONDS);
@@ -58,7 +59,7 @@ class PackSelectionsTest {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
         ChangeRecord record = ChangeRecord.inMemory();
-        PackSelections selections = selections(record, edits(record), false);
+        PackSelections selections = selections(record, edits(record, false));
         selections.set(SetPacksPayload.Side.RESOURCES, null, List.of("vanilla", "mod_resources", "file/A")).get(5, TimeUnit.SECONDS);
         Files.writeString(options, "resourcePacks:[\"vanilla\",\"mod_resources\",\"file/B\"]\n");
 
@@ -72,7 +73,7 @@ class PackSelectionsTest {
     @Test
     void aRunningGameWithoutAConnectionKeepsItsResourcePacks() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        PackSelections selections = selections(record, edits(record), true);
+        PackSelections selections = selections(record, edits(record, true));
         ExecutionException refused = assertThrows(ExecutionException.class, () -> selections.set(SetPacksPayload.Side.RESOURCES,
                 null, List.of("vanilla")).get(5, TimeUnit.SECONDS));
         assertTrue(refused.getCause().getMessage().startsWith("The game is running but not connected"), refused.getCause().getMessage());
@@ -86,12 +87,12 @@ class PackSelectionsTest {
         LevelDatFixture.datapack(world, "Tweaks");
         LevelDatFixture.datapack(world, "Fresh");
         ChangeRecord record = ChangeRecord.inMemory();
-        PackSelections selections = selections(record, edits(record), false);
+        PackSelections selections = selections(record, edits(record, false));
 
         PackSelections.Applied applied = selections.set(SetPacksPayload.Side.DATA, world,
                 List.of("vanilla", "file/Fresh", "mod_data")).get(5, TimeUnit.SECONDS);
         assertEquals(ConfigChanges.Effect.WORLD_OPENS, applied.effect());
-        CurrentWorld.Saved saved = CurrentWorld.read(world);
+        CurrentWorld.Saved saved = CurrentWorld.read(GameLocations.of(this.directory, false).read(), world);
         assertEquals(List.of("+mod_data", "+file/Fresh", "+vanilla", "-file/Tweaks", "-bundle",
                         "-mod/testmod:data/testmod/datapacks/extra"),
                 saved.datapacks().stream().map(pack -> (pack.state() == ListedPack.State.ENABLED ? "+" : "-") + pack.id()).toList(),
@@ -101,24 +102,24 @@ class PackSelectionsTest {
         assertTrue(Files.isRegularFile(world.resolve("level.dat_old")), "the last level.dat is kept, as the game keeps it");
 
         selections.revert(record.changes().getFirst()).get(5, TimeUnit.SECONDS);
-        assertEquals(List.of("file/Tweaks", "mod_data", "vanilla"), CurrentWorld.read(world).datapacks().stream()
+        assertEquals(List.of("file/Tweaks", "mod_data", "vanilla"), CurrentWorld.read(GameLocations.of(this.directory, false).read(), world).datapacks().stream()
                 .filter(pack -> pack.state() == ListedPack.State.ENABLED).map(ListedPack::id).toList());
     }
 
     @Test
     void theConnectedGameSelectsThePacksAndTheChangeIsRecordedOnceItDid() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        ResourceEdits edits = edits(record);
+        ResourceEdits edits = edits(record, true);
         edits.packStack(new PackStackPayload(34, 48, List.of(
                 new PackStackPayload.Pack("vanilla", "Minecraft", "", PackStackPayload.REQUIRED),
                 new PackStackPayload.Pack("mod_resources", "Mod Resources", "", PackStackPayload.REQUIRED),
                 new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN)), List.of()));
         List<SetPacksPayload> sent = new CopyOnWriteArrayList<>();
-        edits.gameConnected(message -> {
+        edits.location().connected(message -> {
             if (message instanceof SetPacksMessage packs) sent.add(packs.payload());
             return true;
         });
-        PackSelections selections = selections(record, edits, true);
+        PackSelections selections = selections(record, edits);
 
         CompletableFuture<PackSelections.Applied> applied = selections.set(SetPacksPayload.Side.RESOURCES, null,
                 List.of("vanilla", "mod_resources", "programmer_art"));
@@ -134,12 +135,12 @@ class PackSelectionsTest {
         assertFalse(Files.exists(this.directory.resolve("options.txt")), "the game saves options.txt itself");
     }
 
-    private ResourceEdits edits(ChangeRecord record) {
-        return new ResourceEdits(this.directory, record, new ResourceOriginals(this.directory.resolve("total-debug/originals")),
-                Runnable::run, () -> false, InstanceState.inMemory());
+    private ResourceEdits edits(ChangeRecord record, boolean gameRunning) {
+        return new ResourceEdits(GameLocations.of(this.directory, gameRunning), record,
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, InstanceState.inMemory());
     }
 
-    private PackSelections selections(ChangeRecord record, ResourceEdits edits, boolean gameRunning) {
-        return new PackSelections(this.directory, record, edits, () -> gameRunning, Runnable::run);
+    private PackSelections selections(ChangeRecord record, ResourceEdits edits) {
+        return new PackSelections(record, edits, Runnable::run);
     }
 }

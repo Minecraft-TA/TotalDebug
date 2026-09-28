@@ -4,7 +4,9 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.Worlds;
+import com.github.minecraft_ta.totalDebugCompanion.game.Access;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -16,7 +18,6 @@ import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
-import com.github.tth05.scnet.message.AbstractMessage;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -42,10 +43,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.zip.ZipFile;
 
@@ -95,15 +94,14 @@ public final class ResourceEdits {
         boolean managedData;
     }
 
+    private final GameLocation location;
     private final Path workspace;
     private final ChangeRecord record;
     private final ResourceOriginals originals;
     private final Executor writes;
-    private final BooleanSupplier gameRunning;
     private final InstanceState state;
     private final AtomicInteger requests = new AtomicInteger();
     private final Map<Integer, CompletableFuture<ReloadResultPayload>> waiting = new ConcurrentHashMap<>();
-    private volatile Predicate<AbstractMessage> game;
     private volatile PackStackPayload stack;
     /** Run whenever the game names its packs again, such as after another world opened. */
     private final List<Runnable> stackListeners = new CopyOnWriteArrayList<>();
@@ -121,17 +119,25 @@ public final class ResourceEdits {
     private final ExternalEdits external = new ExternalEdits(this);
 
     /**
-     * {@code workspace} is the game directory, {@code writes} the project's write queue, {@code gameRunning} tells
-     * whether a game runs in the instance, connected or not, and {@code state} keeps the working pack of each side.
+     * Edits the resources of the game {@code location} tells of; {@code writes} is the project's write queue, and
+     * {@code state} keeps the working pack of each side.
      */
-    public ResourceEdits(Path workspace, ChangeRecord record, ResourceOriginals originals, Executor writes,
-                         BooleanSupplier gameRunning, InstanceState state) {
-        this.workspace = Objects.requireNonNull(workspace, "workspace").toAbsolutePath().normalize();
+    public ResourceEdits(GameLocation location, ChangeRecord record, ResourceOriginals originals, Executor writes,
+                         InstanceState state) {
+        this.location = Objects.requireNonNull(location, "location");
+        this.workspace = location.workspace();
         this.record = Objects.requireNonNull(record, "record");
         this.originals = Objects.requireNonNull(originals, "originals");
         this.writes = Objects.requireNonNull(writes, "writes");
-        this.gameRunning = Objects.requireNonNull(gameRunning, "gameRunning");
         this.state = Objects.requireNonNull(state, "state");
+        location.addListener(change -> {
+            if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
+        });
+    }
+
+    /** Where the game of the instance is. */
+    public GameLocation location() {
+        return this.location;
     }
 
     public ChangeRecord record() {
@@ -148,13 +154,8 @@ public final class ResourceEdits {
         this.external.close();
     }
 
-    public void gameConnected(Predicate<AbstractMessage> send) {
-        this.game = Objects.requireNonNull(send, "send");
-    }
-
-    /** The game closed: reloads it did not answer have failed. */
-    public void gameDisconnected() {
-        this.game = null;
+    /** The game disconnected: reloads it did not answer have failed. */
+    private void gameDisconnected() {
         this.stack = null;
         this.stackListeners.forEach(Runnable::run);
         for (CompletableFuture<ReloadResultPayload> request : this.waiting.values()) {
@@ -255,8 +256,7 @@ public final class ResourceEdits {
     /** The folder holding the packs of {@code path}'s side: {@code resourcepacks}, or the current world's datapacks. */
     private Path packFolder(String path) throws IOException {
         if (path.startsWith("assets/")) return this.workspace.resolve("resourcepacks");
-        Path world = Worlds.open(this.workspace);
-        if (world == null) world = Worlds.lastPlayed(this.workspace);
+        Path world = this.location.read().currentWorld();
         if (world == null) throw new IOException("Data is written into a world's datapacks, and this game has no world yet");
         return world.resolve("datapacks");
     }
@@ -312,7 +312,7 @@ public final class ResourceEdits {
         boolean assets = path.startsWith("assets/");
         PackStackPayload current = this.stack;
         // The game names the open world's datapacks only; another world's and a closed game's are read from their files.
-        if (current == null || !assets && !Worlds.isOpen(pack.getParent().getParent())) return disabledOnDisk(path, pack);
+        if (current == null || !assets && !this.location.read().plays(pack.getParent().getParent())) return disabledOnDisk(path, pack);
         List<PackStackPayload.Pack> packs = assets ? current.resourcePacks() : current.dataPacks();
         int position = position(packs, pack);
         if (position < 0) {
@@ -377,7 +377,7 @@ public final class ResourceEdits {
                 return PackResources.enabledInOptions(this.workspace.resolve("options.txt")).contains(id)
                         ? Optional.empty() : Optional.of(notEnabled(pack));
             }
-            boolean disabled = CurrentWorld.read(pack.getParent().getParent()).datapacks().stream()
+            boolean disabled = CurrentWorld.read(this.location.read(), pack.getParent().getParent()).datapacks().stream()
                     .anyMatch(listed -> listed.id().equals(id) && listed.state() == ListedPack.State.DISABLED);
             return disabled ? Optional.of(notEnabled(pack)) : Optional.empty();
         } catch (IOException | RuntimeException unreadable) {
@@ -386,10 +386,10 @@ public final class ResourceEdits {
     }
 
     /** Whether the datapack is in its world's folder but in neither of the lists its {@code level.dat} keeps. */
-    private static boolean newToTheWorld(Path pack) {
+    private boolean newToTheWorld(Path pack) {
         String id = "file/" + pack.getFileName();
         try {
-            return CurrentWorld.read(pack.getParent().getParent()).datapacks().stream()
+            return CurrentWorld.read(this.location.read(), pack.getParent().getParent()).datapacks().stream()
                     .anyMatch(listed -> listed.id().equals(id) && listed.state() == ListedPack.State.NEW);
         } catch (IOException | RuntimeException unreadable) {
             return false;
@@ -727,33 +727,27 @@ public final class ResourceEdits {
     private CompletableFuture<Saved> apply(String path, List<String> alsoWatched, Path pack) {
         ResourcePaths.Apply apply = ResourcePaths.apply(path);
         boolean assets = path.startsWith("assets/");
-        if (this.game == null) {
-            if (this.gameRunning.getAsBoolean()) {
-                // A running game writes options.txt itself, and only a connected one can reload.
-                return CompletableFuture.completedFuture(new Saved(assets ? ConfigChanges.Effect.GAME_STARTS
-                        : ConfigChanges.Effect.WORLD_OPENS, pack, List.of(),
-                        "The game is running but not connected to Companion; connect it to use the change"));
-            }
+        GameState game = this.location.read();
+        // Assets belong to the game; a world's datapack is read by that world only.
+        Access access = assets ? game.client("use the change") : game.world(pack.getParent().getParent(), "use the change");
+        ConfigChanges.Effect later = assets ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS;
+        if (access instanceof Access.Refused refused) {
+            return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), refused.reason()));
+        }
+        if (access instanceof Access.Files) {
             if (assets && managed(pack)) {
                 try {
                     enableOffline();
                 } catch (IOException | RuntimeException exception) {
                     // The file is saved either way; a malformed options.txt only keeps the pack from being enabled.
-                    return CompletableFuture.completedFuture(new Saved(ConfigChanges.Effect.GAME_STARTS, pack, List.of(),
+                    return CompletableFuture.completedFuture(new Saved(later, pack, List.of(),
                             "The TotalDebug pack could not be enabled in options.txt: " + exception.getMessage()));
                 }
             }
-            return CompletableFuture.completedFuture(new Saved(assets ? ConfigChanges.Effect.GAME_STARTS
-                    : ConfigChanges.Effect.WORLD_OPENS, pack, List.of(), ""));
+            return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), ""));
         }
-        if (!assets) {
-            // A world's datapack is read by that world only.
-            if (!Worlds.isOpen(pack.getParent().getParent())) {
-                return CompletableFuture.completedFuture(new Saved(ConfigChanges.Effect.WORLD_OPENS, pack, List.of(), ""));
-            }
-            if (apply == ResourcePaths.Apply.WORLD_LOAD) {
-                return CompletableFuture.completedFuture(new Saved(ConfigChanges.Effect.REJOIN, pack, List.of(), ""));
-            }
+        if (!assets && apply == ResourcePaths.Apply.WORLD_LOAD) {
+            return CompletableFuture.completedFuture(new Saved(ConfigChanges.Effect.REJOIN, pack, List.of(), ""));
         }
         // Files written beside it join the same reload, which they are part of.
         for (String beside : alsoWatched) reload(kind(beside), beside, managed(pack));
@@ -772,11 +766,11 @@ public final class ResourceEdits {
      * world's datapacks, and reload what that needs; completes with its answer, or fails without a game.
      */
     public CompletableFuture<ReloadResultPayload> select(SetPacksPayload.Side side, List<String> enabled) {
-        Predicate<AbstractMessage> send = this.game;
+        GameLocation.Connection send = this.location.connection();
         int id = this.requests.incrementAndGet();
         CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
         this.waiting.put(id, result);
-        if (send == null || !send.test(new SetPacksMessage(new SetPacksPayload(id, side, enabled)))) {
+        if (send == null || !send.send(new SetPacksMessage(new SetPacksPayload(id, side, enabled)))) {
             this.waiting.remove(id);
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));
         }
@@ -806,12 +800,12 @@ public final class ResourceEdits {
             batch.kinds.remove(ReloadPayload.Kind.LANGUAGE);
             batch.kinds.remove(ReloadPayload.Kind.TEXTURES);
         }
-        Predicate<AbstractMessage> send = this.game;
+        GameLocation.Connection send = this.location.connection();
         int id = this.requests.incrementAndGet();
         this.waiting.put(id, batch.result);
         List<String> watched = new ArrayList<>(batch.watched);
         if (watched.size() > ReloadPayload.MAX_WATCHED) watched = watched.subList(0, ReloadPayload.MAX_WATCHED);
-        if (send == null || !send.test(new ReloadMessage(new ReloadPayload(id, batch.kinds, batch.managedAssets ? PACK_ID : "",
+        if (send == null || !send.send(new ReloadMessage(new ReloadPayload(id, batch.kinds, batch.managedAssets ? PACK_ID : "",
                 batch.managedData ? PACK_ID : "", watched)))) {
             this.waiting.remove(id);
             batch.result.completeExceptionally(new IOException("The game is not connected"));

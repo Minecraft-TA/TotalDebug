@@ -14,7 +14,7 @@ public final class WorldView implements IEditorPanel {
     private final WorldPanel panel;
 
     public WorldView(EditorContext context) {
-        this.panel = new WorldPanel(context.project().profile().workspaceDirectory(), context.project().catalog(),
+        this.panel = new WorldPanel(context.project().catalog(),
                 context.itemIcons(), context.project().world(), context.project().resources(), context.project().packSelections(),
                 context.navigation()::navigate);
     }

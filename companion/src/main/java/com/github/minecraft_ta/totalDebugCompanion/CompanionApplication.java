@@ -39,6 +39,7 @@ import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
@@ -190,11 +191,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                         if (executionRuns != null) executionRuns.disconnected(connection,
                                 closed || reconnect != null || current == null || current.phase() == ProjectScope.Phase.RETIRED);
                         scriptCompiler.runtimeDisconnected();
-                        if (current != null) {
-                            current.configChanges().gameDisconnected();
-                            current.keyBindings().gameDisconnected();
-                            current.resources().gameDisconnected();
-                        }
+                        if (current != null) current.location().disconnected();
                         if (reconnect != null)
                             updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
                         else if (launch != null)
@@ -218,6 +215,12 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 public void packStack(PackStackMessage message) {
                     ProjectScope scope = current;
                     if (scope != null) scope.resources().packStack(message.payload());
+                }
+
+                @Override
+                public void playing(PlayingMessage message) {
+                    ProjectScope scope = current;
+                    if (scope != null) scope.location().playing(message.payload());
                 }
 
                 @Override
@@ -361,7 +364,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 message.processId()
         ));
         ProjectScope scope = currentScope();
-        if (scope != null) scope.configChanges().gameProcess(message.processId());
+        if (scope != null) scope.location().process(message.processId());
     }
 
     private void restoreProfile() throws IOException {
@@ -589,10 +592,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             if (closed || switching || !session.isConnected() || reconnect != null && !reconnect.resetComplete) return;
             updateGameStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft is connected and authenticated."));
             if (current != null) {
-                current.configChanges().gameConnected();
                 CompanionSession connected = session;
-                current.keyBindings().gameConnected(connected::send);
-                current.resources().gameConnected(connected::send);
+                current.location().connected(connected::send);
             }
             if (reconnect != null && reconnect.project == current) {
                 var completed = reconnect;

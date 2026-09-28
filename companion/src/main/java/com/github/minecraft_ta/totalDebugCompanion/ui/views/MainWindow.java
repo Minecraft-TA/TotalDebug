@@ -515,7 +515,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
             return scope == null ? null : scope.catalog();
         }, () -> {
             ProjectScope scope = project.get();
-            return scope == null ? null : scope.keyBindings().options();
+            return scope == null ? null : scope.location();
         }, itemIcons, target -> navigation().navigate(target));
     }
 

@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
@@ -76,7 +77,6 @@ public final class WorldPanel extends JPanel {
     private record Loaded(CurrentWorld.Saved saved, List<ListedPack> datapacks, BufferedImage icon, String problem) {
     }
 
-    private final Path workspace;
     private final PackCatalogService catalog;
     private final ItemIconService icons;
     private final WorldReadings readings;
@@ -99,13 +99,12 @@ public final class WorldPanel extends JPanel {
     private boolean disposed;
 
     /**
-     * {@code workspace} is the game directory, whose {@code saves} hold the worlds; each read is recorded in
-     * {@code readings}, which the Project tree follows.
+     * Shows the current world of the game {@code edits} tells of; each read is recorded in {@code readings}, which the
+     * Project tree follows.
      */
-    public WorldPanel(Path workspace, PackCatalogService catalog, ItemIconService icons, WorldReadings readings,
+    public WorldPanel(PackCatalogService catalog, ItemIconService icons, WorldReadings readings,
                       ResourceEdits edits, PackSelections selections, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
-        this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.readings = Objects.requireNonNull(readings, "readings");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         this.icons = Objects.requireNonNull(icons, "icons");
@@ -144,16 +143,16 @@ public final class WorldPanel extends JPanel {
         // A change of the game's datapacks, or one Companion wrote, is read again at once.
         this.loader = new PageLoader<>(() -> {
             PackStackPayload stack = edits.packStack();
-            return () -> read(this.workspace, stack);
+            return () -> read(edits.location().read(), stack);
         }, this::show, failure -> show(new Loaded(null, List.of(), null, "The world could not be read: " + failure.getMessage())))
                 .whenShown(this).follow(edits::addStackListener).follow(edits.record()::addListener);
     }
 
-    private static Loaded read(Path workspace, PackStackPayload stack) {
-        Optional<Path> world = CurrentWorld.directory(workspace);
+    private static Loaded read(GameState game, PackStackPayload stack) {
+        Optional<Path> world = CurrentWorld.directory(game);
         if (world.isEmpty()) return new Loaded(null, List.of(), null, "No world has been played in this instance yet.");
         try {
-            CurrentWorld.Saved saved = CurrentWorld.read(world.get());
+            CurrentWorld.Saved saved = CurrentWorld.read(game, world.get());
             return new Loaded(saved, PackResources.worldDatapacks(stack, saved), icon(world.get().resolve("icon.png")), "");
         } catch (IOException | RuntimeException unreadable) {
             return new Loaded(null, List.of(), null, "The world " + world.get().getFileName() + " could not be read: " + unreadable.getMessage());

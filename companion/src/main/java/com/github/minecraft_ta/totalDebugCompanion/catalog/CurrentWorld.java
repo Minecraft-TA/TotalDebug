@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -72,16 +73,15 @@ public final class CurrentWorld {
     }
 
     /** The current world's folder: the one the game has open, or the one played last. Empty without a world. */
-    public static Optional<Path> directory(Path workspace) {
-        Path open = Worlds.open(workspace);
-        return Optional.ofNullable(open != null ? open : Worlds.lastPlayed(workspace));
+    public static Optional<Path> directory(GameState game) {
+        return Optional.ofNullable(game.currentWorld());
     }
 
     /**
      * Reads a world's {@code level.dat}. The game saves it by renaming the last one to {@code level.dat_old} first, and
-     * loads that one when {@code level.dat} is missing; so does this.
+     * loads that one when {@code level.dat} is missing; so does this. Whether the world is open is as {@code game} says.
      */
-    public static Saved read(Path world) throws IOException {
+    public static Saved read(GameState game, Path world) throws IOException {
         Path level = LevelDat.file(world);
         FileTime saved = Files.getLastModifiedTime(level);
         NbtData.CompoundTag data = compound(LevelDat.read(level).tag(), "Data");
@@ -98,7 +98,7 @@ public final class CurrentWorld {
         }
         String name = string(data, "LevelName");
         long lastPlayed = number(data, "LastPlayed", 0);
-        return new Saved(world, Worlds.isOpen(world), saved, name.isEmpty() ? world.getFileName().toString() : name,
+        return new Saved(world, game.isOpen(world), saved, name.isEmpty() ? world.getFileName().toString() : name,
                 generation == null || !(generation.entries().get("seed") instanceof NbtData.LongTag seed) ? null : seed.value(),
                 gameMode((int) number(data, "GameType", 0)), difficulty((int) number(data, "Difficulty", 2)),
                 number(data, "DifficultyLocked", 0) != 0, number(data, "hardcore", 0) != 0, number(data, "allowCommands", 0) != 0,

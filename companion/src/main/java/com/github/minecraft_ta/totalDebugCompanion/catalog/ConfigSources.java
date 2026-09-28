@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
@@ -79,7 +81,8 @@ public final class ConfigSources {
      * then the most recently changed, and then the defaults for new worlds. A server configuration's loaded file belongs to the world open when
      * the catalog was captured, so every world is listed. Blocking for a server configuration; it lists the worlds.
      */
-    public static List<Source> of(Path workspace, PackCatalog.ConfigFile file) {
+    public static List<Source> of(GameLocation location, PackCatalog.ConfigFile file) {
+        Path workspace = location.workspace();
         if (file.type() != PackCatalog.ConfigType.SERVER || workspace == null) {
             Path loaded = loaded(workspace, file);
             return loaded == null ? List.of() : List.of(new Source(file.fileName(), loaded));
@@ -87,6 +90,7 @@ public final class ConfigSources {
         List<Source> worlds = new ArrayList<>();
         Map<Source, FileTime> modified = new HashMap<>();
         Set<Source> open = new HashSet<>();
+        GameState game = location.read();
         try (DirectoryStream<Path> saves = Files.newDirectoryStream(workspace.resolve("saves"), Files::isDirectory)) {
             for (Path world : saves) {
                 Path path = world.resolve("serverconfig").resolve(file.fileName());
@@ -94,7 +98,7 @@ public final class ConfigSources {
                 Source source = new Source(world.getFileName().toString(), path);
                 worlds.add(source);
                 modified.put(source, Files.getLastModifiedTime(path));
-                if (Worlds.isOpen(world)) open.add(source);
+                if (game.isOpen(world)) open.add(source);
             }
         } catch (IOException noSaves) {
             // A pack that never created a world has no server configuration yet.

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
@@ -127,7 +128,7 @@ class CatalogSearchTest {
 
     private CatalogSearch catalog() throws Exception {
         return new CatalogSearch(new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory))),
-                this.directory.resolve("options.txt"));
+                GameLocations.of(this.directory, false));
     }
 
     private static String kind(Result result) {

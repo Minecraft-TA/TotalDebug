@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.EditableTextPanel;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
@@ -92,7 +93,7 @@ class ConfigPanelTest {
                 file, FILE.sections(), FILE.settings().subList(0, 2));
         ConfigPanel[] panel = new ConfigPanel[1];
         SwingUtilities.invokeAndWait(() -> {
-            panel[0] = new ConfigPanel("testmod", this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()), target -> { });
+            panel[0] = new ConfigPanel("testmod", new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), target -> { });
             panel[0].setFiles(List.of(common));
         });
         ConfigSettingsTable table = component(panel[0], ConfigSettingsTable.class);
@@ -132,7 +133,7 @@ class ConfigPanelTest {
         Path file = Files.createDirectories(this.directory.resolve("config")).resolve("testmod-common.toml");
         Files.writeString(file, "[widgets]\n\tspeed = 12\n");
         List<String> shown = new ArrayList<>();
-        ConfigWriter writer = new ConfigWriter(new ConfigChanges(this.directory, ChangeRecord.inMemory()), shown::add, () -> { });
+        ConfigWriter writer = new ConfigWriter(new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), shown::add, () -> { });
         PackCatalog.ConfigSetting speed = FILE.settings().getFirst();
 
         assertEquals("", writer.revert(new ConfigWriter.Target("testmod", "testmod-common.toml", file,
@@ -161,7 +162,7 @@ class ConfigPanelTest {
         ChangeRecord record = ChangeRecord.inMemory();
         ConfigPanel[] panel = new ConfigPanel[1];
         SwingUtilities.invokeAndWait(() -> {
-            panel[0] = new ConfigPanel("testmod", this.directory, new ConfigChanges(this.directory, record), target -> { });
+            panel[0] = new ConfigPanel("testmod", new ConfigChanges(GameLocations.of(this.directory, false), record), target -> { });
             panel[0].setFiles(List.of(common));
         });
         ConfigSettingsTable table = component(panel[0], ConfigSettingsTable.class);
@@ -206,7 +207,7 @@ class ConfigPanelTest {
                 List.of(), List.of());
         ConfigPanel[] panel = new ConfigPanel[1];
         SwingUtilities.invokeAndWait(() -> {
-            panel[0] = new ConfigPanel("testmod", this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()),
+            panel[0] = new ConfigPanel("testmod", new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
                     target -> { });
             panel[0].setFiles(List.of(a));
         });
@@ -237,7 +238,7 @@ class ConfigPanelTest {
         Path file = Files.createDirectories(this.directory.resolve("config")).resolve("testmod-common.toml");
         Files.writeString(file, "speed = 5\n");
         boolean[] conflicted = new boolean[1];
-        ConfigWriter writer = new ConfigWriter(new ConfigChanges(this.directory, ChangeRecord.inMemory()), status -> { }, () -> { });
+        ConfigWriter writer = new ConfigWriter(new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), status -> { }, () -> { });
         ConfigWriter.FileTarget target = new ConfigWriter.FileTarget("testmod", "testmod-common.toml", file,
                 PackCatalog.ConfigType.COMMON);
 
@@ -320,7 +321,7 @@ class ConfigPanelTest {
         Files.writeString(defaults, "");
 
         assertEquals(List.of(new ConfigSources.Source("New World", newer), new ConfigSources.Source("Old World", older),
-                new ConfigSources.Source("New worlds", defaults)), ConfigSources.of(this.directory, FILE));
+                new ConfigSources.Source("New worlds", defaults)), ConfigSources.of(GameLocations.of(this.directory, false), FILE));
     }
 
     @Test
@@ -331,7 +332,7 @@ class ConfigPanelTest {
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE);
              FileLock ignored = channel.lock()) {
             assertEquals(List.of(new ConfigSources.Source("Open World", open), new ConfigSources.Source("New World", newer)),
-                    ConfigSources.of(this.directory, FILE), "an edit is meant for the world the game has open");
+                    ConfigSources.of(GameLocations.of(this.directory, true), FILE), "an edit is meant for the world the game has open");
         }
     }
 

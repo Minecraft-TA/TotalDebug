@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
@@ -35,12 +37,12 @@ final class WorldTreeItems {
     }
 
     static final class Root extends DirectoryTreeItem implements NavigableTreeItem {
-        private final Path workspace;
+        private final GameLocation location;
         private final WorldReadings readings;
 
-        Root(Path workspace, WorldReadings readings) {
+        Root(GameLocation location, WorldReadings readings) {
             super(ROOT);
-            this.workspace = workspace;
+            this.location = location;
             this.readings = readings;
             setPresentation(PrimarySecondaryText.primary("World"));
             setIcon(Icons.WORLD);
@@ -63,10 +65,11 @@ final class WorldTreeItems {
 
         @Override
         public List<TreeItem> loadChildren() {
-            Optional<Path> world = CurrentWorld.directory(this.workspace);
+            GameState game = this.location.read();
+            Optional<Path> world = CurrentWorld.directory(game);
             CurrentWorld.Saved saved = null;
             try {
-                if (world.isPresent()) saved = CurrentWorld.read(world.get());
+                if (world.isPresent()) saved = CurrentWorld.read(game, world.get());
             } catch (IOException | RuntimeException unreadable) {
                 // The page says why the world could not be read.
             }

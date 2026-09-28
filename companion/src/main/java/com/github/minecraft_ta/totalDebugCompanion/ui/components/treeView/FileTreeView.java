@@ -241,7 +241,7 @@ public class FileTreeView extends JScrollPane {
             rootItems.add(mods);
         }
         if (Files.isDirectory(scope.profile().workspaceDirectory().resolve("saves"))) {
-            rootItems.add(new WorldTreeItems.Root(scope.profile().workspaceDirectory(), scope.world()));
+            rootItems.add(new WorldTreeItems.Root(scope.location(), scope.world()));
         }
         if (binding != null && !catalog.modules().isEmpty()) {
             rootItems.add(new DecompiledSourcesTreeItem(this.tree, binding.decompiler()));
