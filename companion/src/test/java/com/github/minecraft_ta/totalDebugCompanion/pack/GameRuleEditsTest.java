@@ -66,6 +66,9 @@ class GameRuleEditsTest {
         assertEquals(0, record.size());
         assertFalse(Files.exists(world.resolve("level.dat_old")), "level.dat was not written");
         assertNull(GameRuleEdits.problem("3", "-7"));
+        assertEquals("3", GameRuleEdits.canonical("5", "03"), "as the game writes it");
+        assertEquals("0", GameRuleEdits.canonical("5", "-0"));
+        assertEquals("true", GameRuleEdits.canonical("false", "true"));
     }
 
     @Test
@@ -89,7 +92,8 @@ class GameRuleEditsTest {
             CompletableFuture<GameRuleEdits.Applied> applied = rules.set(world, "randomTickSpeed", "10");
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
             while (sent.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10);
-            assertEquals(new SetGameRulePayload(sent.getFirst().requestId(), "randomTickSpeed", "10"), sent.getFirst());
+            assertEquals(new SetGameRulePayload(sent.getFirst().requestId(), "Test", "randomTickSpeed", "3", "10"), sent.getFirst(),
+                    "for this world, while the rule is still what was read");
             edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 1, List.of(), ""));
             assertEquals(ConfigChanges.Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
             assertEquals("3", record.changes().getFirst().original(), "the value the running game had");

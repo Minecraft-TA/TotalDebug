@@ -73,28 +73,31 @@ public final class GameRuleEdits {
         } catch (IOException refused) {
             return CompletableFuture.failedFuture(refused);
         }
-        CompletableFuture<String> before = write(() -> {
+        CompletableFuture<String[]> before = write(() -> {
             try {
                 String previous = current(target);
                 if (previous == null) throw new IOException("The world " + target.world().getFileName() + " has no game rule " + target.name());
                 String problem = problem(previous, value);
                 if (problem != null) throw new IOException(problem);
-                if (reverting != null && !previous.equals(reverting.current()) && !previous.equals(value)) {
+                String written = canonical(previous, value);
+                if (reverting != null && !previous.equals(reverting.current()) && !previous.equals(written)) {
                     throw new IOException(target.name() + " was changed outside Companion since, and reverting would replace that");
                 }
                 if (!live) {
-                    writeLevel(target, value);
-                    this.record.changed(target, previous, value);
+                    writeLevel(target, written);
+                    this.record.changed(target, previous, written);
                 }
-                return previous;
+                return new String[]{previous, written};
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
         });
         if (!live) return before.thenApply(ignored -> new Applied(ConfigChanges.Effect.WORLD_OPENS));
-        return before.thenCompose(previous -> this.edits.setGameRule(target.name(), value).thenApply(result -> {
+        // The game sets it only while the world and the rule's value are still those read here.
+        return before.thenCompose(values -> this.edits.setGameRule(target.world().getFileName().toString(), target.name(),
+                values[0], values[1]).thenApply(result -> {
             if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
-            this.record.changed(target, previous, value);
+            this.record.changed(target, values[0], values[1]);
             return new Applied(ConfigChanges.Effect.NOW);
         }));
     }
@@ -133,6 +136,11 @@ public final class GameRuleEdits {
         }
         if (value.isBlank() || value.contains("\n")) return "Enter a value";
         return null;
+    }
+
+    /** {@code value} as the game writes it: a whole number without leading zeros or a sign on zero. */
+    static String canonical(String previous, String value) {
+        return NUMBER.matcher(previous).matches() ? Integer.toString(Integer.parseInt(value)) : value;
     }
 
     private static void writeLevel(ChangeRecord.GameRule target, String value) throws IOException {

@@ -164,7 +164,7 @@ public final class ResourceEdits {
         this.gameRules = null;
         this.stackListeners.forEach(Runnable::run);
         for (CompletableFuture<ReloadResultPayload> request : this.waiting.values()) {
-            request.completeExceptionally(new IOException("The game disconnected before it finished reloading"));
+            request.completeExceptionally(new IOException("The game disconnected before it answered"));
         }
         this.waiting.clear();
     }
@@ -187,15 +187,15 @@ public final class ResourceEdits {
     }
 
     /**
-     * Asks the connected game to set the game rule {@code name} of the world it has open to {@code value}, as
-     * {@code /gamerule} does; completes with its answer, or fails without a game.
+     * Asks the connected game to set the game rule {@code name} of the world in the folder {@code world} to {@code value},
+     * as {@code /gamerule} does, provided it still is {@code expected}; completes with its answer, or fails without a game.
      */
-    public CompletableFuture<ReloadResultPayload> setGameRule(String name, String value) {
+    public CompletableFuture<ReloadResultPayload> setGameRule(String world, String name, String expected, String value) {
         Predicate<AbstractMessage> send = this.game;
         int id = this.requests.incrementAndGet();
         CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
         this.waiting.put(id, result);
-        if (send == null || !send.test(new SetGameRuleMessage(new SetGameRulePayload(id, name, value)))) {
+        if (send == null || !send.test(new SetGameRuleMessage(new SetGameRulePayload(id, world, name, expected, value)))) {
             this.waiting.remove(id);
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));
         }

@@ -9,6 +9,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.AbstractAction;
+import javax.swing.AbstractCellEditor;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -16,15 +18,18 @@ import javax.swing.JTable;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.JTextField;
 import javax.swing.ToolTipManager;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableCellEditor;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.EventObject;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -87,6 +92,21 @@ final class GameRulesPanel extends JPanel {
         this.table.getColumnModel().getColumn(1).setPreferredWidth(400);
         this.body = new BrowserBody("Filter by rule or value", BrowserBody.scroll(this.table), this.table, this::applyFilter);
         add(this.body, BorderLayout.CENTER);
+        this.table.setDefaultEditor(Object.class, new ValueEditor());
+        // Enter and F2 edit the value of the selected rule, wherever the row has focus.
+        for (String key : new String[]{"ENTER", "F2"}) {
+            this.table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(key), "editRule");
+        }
+        this.table.getActionMap().put("editRule", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                int row = GameRulesPanel.this.table.getSelectedRow();
+                if (row >= 0 && GameRulesPanel.this.table.editCellAt(row, 1)) {
+                    Component editor = GameRulesPanel.this.table.getEditorComponent();
+                    if (editor != null) editor.requestFocusInWindow();
+                }
+            }
+        });
         this.table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("SPACE"), "toggleRule");
         this.table.getActionMap().put("toggleRule", new AbstractAction() {
             @Override
@@ -128,15 +148,16 @@ final class GameRulesPanel extends JPanel {
         }));
     }
 
-    /** Shows {@code value} as {@code name}'s value, keeping the selection. */
+    /** Shows {@code value} as {@code name}'s value, keeping the selected rules selected while the filter still shows them. */
     private void replace(String name, String value) {
         List<Rule> all = new ArrayList<>();
         for (Rule rule : this.model.all) all.add(rule.name().equals(name) ? Rule.of(name, value) : rule);
         this.model.all = List.copyOf(all);
-        int[] selected = this.table.getSelectedRows();
+        Set<String> selected = new HashSet<>();
+        for (Rule rule : selectedRules()) selected.add(rule.name());
         applyFilter();
-        for (int row : selected) {
-            if (row < this.model.shown.size()) this.table.addRowSelectionInterval(row, row);
+        for (int row = 0; row < this.model.shown.size(); row++) {
+            if (selected.contains(this.model.shown.get(row).name())) this.table.addRowSelectionInterval(row, row);
         }
     }
 
@@ -210,9 +231,92 @@ final class GameRulesPanel extends JPanel {
         return "/gamerule " + rule.name() + " " + rule.value();
     }
 
+    /**
+     * Edits a value in place: a text field, or true and false to choose from for such a rule. A value the rule does not
+     * take stays in the field, marked, with the reason under the bar.
+     */
+    private final class ValueEditor extends AbstractCellEditor implements TableCellEditor {
+        private final JTextField field = new JTextField();
+        private final JComboBox<String> choices = new JComboBox<>(new String[]{"true", "false"});
+        private JComponent active = this.field;
+        private Rule rule;
+        private boolean configuring;
+
+        ValueEditor() {
+            this.field.setBorder(UiMetrics.cellPadding());
+            this.field.addActionListener(event -> stopCellEditing());
+            this.choices.putClientProperty("JComboBox.isTableCellEditor", Boolean.TRUE);
+            this.choices.addActionListener(event -> {
+                if (!this.configuring) stopCellEditing();
+            });
+        }
+
+        @Override
+        public boolean isCellEditable(EventObject event) {
+            return !(event instanceof MouseEvent mouse) || mouse.getClickCount() >= 2;
+        }
+
+        @Override
+        public Component getTableCellEditorComponent(JTable table, Object value, boolean selected, int row, int column) {
+            this.rule = GameRulesPanel.this.model.shown.get(row);
+            this.field.putClientProperty("JComponent.outline", null);
+            if (this.rule.kind() == ConfigSettingsTable.ValueKind.BOOLEAN) {
+                this.configuring = true;
+                try {
+                    this.choices.setFont(table.getFont());
+                    this.choices.setForeground(ConfigSettingsTable.color(this.rule.kind()));
+                    this.choices.setSelectedItem(this.rule.value());
+                } finally {
+                    this.configuring = false;
+                }
+                this.active = this.choices;
+                SwingUtilities.invokeLater(() -> {
+                    if (this.choices.isShowing()) this.choices.showPopup();
+                });
+            } else {
+                this.field.setFont(table.getFont());
+                this.field.setForeground(ConfigSettingsTable.color(this.rule.kind()));
+                this.field.setText(this.rule.value());
+                this.field.selectAll();
+                this.active = this.field;
+            }
+            return this.active;
+        }
+
+        @Override
+        public Object getCellEditorValue() {
+            return this.active == this.choices ? String.valueOf(this.choices.getSelectedItem()) : this.field.getText().strip();
+        }
+
+        @Override
+        public boolean stopCellEditing() {
+            Rule editing = this.rule;
+            String value = (String) getCellEditorValue();
+            String problem = value.equals(editing.value()) ? null : GameRuleEdits.problem(editing.value(), value);
+            if (problem != null) {
+                this.field.putClientProperty("JComponent.outline", "error");
+                GameRulesPanel.this.body.showNotice("Not set: " + editing.name() + ": " + problem);
+                return false;
+            }
+            fireEditingStopped();
+            set(editing, value);
+            return true;
+        }
+
+        @Override
+        public void cancelCellEditing() {
+            GameRulesPanel.this.body.showNotice("");
+            super.cancelCellEditing();
+        }
+    }
+
     /** Starts editing or sets the value of the rule at {@code row} as typed, for tests. */
     void edit(int row, String value) {
         this.model.setValueAt(value, row, 1);
+    }
+
+    JTable table() {
+        return this.table;
     }
 
     List<String> shownValues() {

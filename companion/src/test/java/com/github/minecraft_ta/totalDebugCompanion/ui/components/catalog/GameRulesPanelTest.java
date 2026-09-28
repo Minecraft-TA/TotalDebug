@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import org.junit.jupiter.api.Test;
 
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GameRulesPanelTest {
@@ -25,6 +27,13 @@ class GameRulesPanelTest {
                 return answer;
             });
             panel[0].setRules(new TreeMap<>(Map.of("keepInventory", "true", "randomTickSpeed", "3")));
+
+            assertTrue(panel[0].table().editCellAt(1, 1));
+            ((JTextField) panel[0].table().getEditorComponent()).setText("fast");
+            assertFalse(panel[0].table().getCellEditor().stopCellEditing(), "a refused value stays in the editor");
+            assertTrue(panel[0].table().isEditing());
+            assertEquals("Not set: randomTickSpeed: Enter a whole number", panel[0].notice());
+            panel[0].table().getCellEditor().cancelCellEditing();
 
             panel[0].edit(1, "fast");
             assertEquals("Not set: randomTickSpeed: Enter a whole number", panel[0].notice());

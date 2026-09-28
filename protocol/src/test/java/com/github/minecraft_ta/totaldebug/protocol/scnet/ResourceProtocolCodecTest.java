@@ -62,7 +62,7 @@ class ResourceProtocolCodecTest {
         readRules.read(new ByteBufferInputStream(written(new GameRulesMessage(rules))));
         assertEquals(rules, readRules.payload());
 
-        SetGameRulePayload request = new SetGameRulePayload(5, "keepInventory", "false");
+        SetGameRulePayload request = new SetGameRulePayload(5, "New World", "keepInventory", "true", "false");
         SetGameRuleMessage readRequest = new SetGameRuleMessage();
         readRequest.read(new ByteBufferInputStream(written(new SetGameRuleMessage(request))));
         assertEquals(request, readRequest.payload());

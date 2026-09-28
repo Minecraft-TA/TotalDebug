@@ -9,7 +9,9 @@ import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.storage.LevelResource;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -69,7 +71,8 @@ public final class GameRuleControl {
 
     /**
      * Sets the rule {@code request} names in the open world by running {@code /gamerule}, which checks the value as the
-     * command does, then answers with what the command reported when it failed. Client thread only.
+     * command does, then answers with what the command reported when it failed. A request for another world, or for a
+     * rule that no longer has the value it expects, is refused. Client thread only.
      */
     public static void set(SetGameRulePayload request, Consumer<ReloadResultPayload> answer) {
         long started = System.nanoTime();
@@ -84,6 +87,22 @@ public final class GameRuleControl {
             return;
         }
         server.execute(() -> {
+            // The world and the value the request was made for, checked where the command runs, so nothing changes between.
+            Path folder = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().getFileName();
+            if (folder == null || !folder.toString().equals(request.world())) {
+                answer.accept(new ReloadResultPayload(request.requestId(), 0, List.of(), "The game has " + folder + " open, not " + request.world()));
+                return;
+            }
+            String now = rules(server).get(request.name());
+            if (now == null) {
+                answer.accept(new ReloadResultPayload(request.requestId(), 0, List.of(), "The world has no game rule " + request.name()));
+                return;
+            }
+            if (!now.equals(request.expected())) {
+                answer.accept(new ReloadResultPayload(request.requestId(), 0, List.of(),
+                        request.name() + " is " + now + " now; it was changed since"));
+                return;
+            }
             List<String> failures = new ArrayList<>();
             boolean[] succeeded = new boolean[1];
             CommandSource capture = new CommandSource() {
