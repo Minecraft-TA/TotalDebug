@@ -207,6 +207,27 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aDataReloadNamesTheWorldItsDataWasWrittenFor() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        LevelDatFixture.write(world, LevelDatFixture.world("World"));
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        edits.location().connected(message -> {
+            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
+            return true;
+        });
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.packStack(STACK);
+
+        edits.save("data/testmod/recipe/gear.json", bytes("{}"));
+        awaitSent(sent, 1);
+
+        assertEquals(Set.of(ReloadPayload.Kind.DATA), sent.getFirst().kinds());
+        assertEquals(world.toAbsolutePath().normalize().toString(), sent.getFirst().dataWorld(),
+                "the game refuses to reload it once it plays another world");
+    }
+
+    @Test
     void reloadsAskedForDuringAReloadRunTogetherAfterIt() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);

@@ -43,7 +43,7 @@ public final class ResourceReloads {
         ReloadProblems problems = ReloadProblems.open(request.watched());
         // Data and resources reload independently, so one failing does not keep the other from the game.
         List<CompletableFuture<Void>> reloads = new ArrayList<>();
-        if (request.kinds().contains(ReloadPayload.Kind.DATA)) reloads.add(attempt(() -> reloadData(request.managedDataPack())));
+        if (request.kinds().contains(ReloadPayload.Kind.DATA)) reloads.add(attempt(() -> reloadData(request.dataWorld(), request.managedDataPack())));
         Set<ReloadPayload.Kind> kinds = request.kinds();
         if (kinds.contains(ReloadPayload.Kind.RESOURCES) || kinds.contains(ReloadPayload.Kind.LANGUAGE)
                 || kinds.contains(ReloadPayload.Kind.TEXTURES)) {
@@ -94,12 +94,7 @@ public final class ResourceReloads {
         if (server == null) {
             return CompletableFuture.failedFuture(new IllegalStateException("No singleplayer world is open"));
         }
-        // Chosen for the world Companion saw the game play; the game may have gone to another since.
-        Path played = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
-        if (!played.equals(Path.of(world).toAbsolutePath().normalize())) {
-            return CompletableFuture.failedFuture(new IllegalStateException("The game no longer plays the world "
-                    + Path.of(world).getFileName() + "; nothing was changed"));
-        }
+        if (!plays(server, world)) return CompletableFuture.failedFuture(notPlayed(world));
         return CompletableFuture.supplyAsync(() -> {
             PackRepository packs = server.getPackRepository();
             packs.reload();
@@ -114,6 +109,18 @@ public final class ResourceReloads {
             if (!refused.isEmpty()) throw new IllegalArgumentException(String.join("; ", refused));
             return server.reloadResources(enabled);
         }, server).thenCompose(reload -> reload);
+    }
+
+    /**
+     * Whether {@code server} runs the world {@code world} names. A request is made for the world Companion saw the game
+     * play, and the game may have gone to another since.
+     */
+    private static boolean plays(IntegratedServer server, String world) {
+        return server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().equals(Path.of(world).toAbsolutePath().normalize());
+    }
+
+    private static IllegalStateException notPlayed(String world) {
+        return new IllegalStateException("The game no longer plays the world " + Path.of(world).getFileName() + "; nothing was changed");
     }
 
     /** Saves the selected resource packs into {@code options.txt}, as {@code Options.updateResourcePacks} does. */
@@ -223,12 +230,13 @@ public final class ResourceReloads {
     }
 
     /** Reloads the singleplayer server's data with every pack the world does not disable, as {@code /reload} does. */
-    private static CompletableFuture<Void> reloadData(String managedPack) {
+    private static CompletableFuture<Void> reloadData(String world, String managedPack) {
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
         if (server == null) {
             return CompletableFuture.failedFuture(new IllegalStateException(
                     "Data is reloaded only in a singleplayer world, and none is open"));
         }
+        if (!plays(server, world)) return CompletableFuture.failedFuture(notPlayed(world));
         return CompletableFuture.supplyAsync(() -> {
             PackRepository packs = server.getPackRepository();
             packs.reload();

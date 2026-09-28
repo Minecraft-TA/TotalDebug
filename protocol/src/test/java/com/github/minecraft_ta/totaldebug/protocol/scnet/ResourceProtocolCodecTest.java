@@ -33,7 +33,7 @@ class ResourceProtocolCodecTest {
     @Test
     void aReloadAndItsAnswerSurviveTheWire() {
         ReloadPayload request = new ReloadPayload(3, EnumSet.of(ReloadPayload.Kind.LANGUAGE, ReloadPayload.Kind.DATA, ReloadPayload.Kind.TEXTURES),
-                "file/TotalDebug", "", List.of("assets/testmod/lang/en_us.json"));
+                "file/TotalDebug", "", "C:/game/saves/World", List.of("assets/testmod/lang/en_us.json"));
         ReloadMessage readRequest = new ReloadMessage();
         readRequest.read(new ByteBufferInputStream(written(new ReloadMessage(request))));
         assertEquals(request, readRequest.payload());
@@ -57,6 +57,13 @@ class ResourceProtocolCodecTest {
     void aDatapackSelectionNamesItsWorldAndAResourcePackSelectionNone() {
         assertThrows(IllegalArgumentException.class, () -> new SetPacksPayload(1, SetPacksPayload.Side.DATA, "", List.of()));
         assertThrows(IllegalArgumentException.class, () -> new SetPacksPayload(1, SetPacksPayload.Side.RESOURCES, "C:/game/saves/World", List.of()));
+    }
+
+    @Test
+    void aDataReloadNamesItsWorldAndAReloadWithoutDataNone() {
+        assertThrows(IllegalArgumentException.class, () -> new ReloadPayload(1, EnumSet.of(ReloadPayload.Kind.DATA), "", "", "", List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ReloadPayload(1, EnumSet.of(ReloadPayload.Kind.LANGUAGE), "", "",
+                "C:/game/saves/World", List.of()));
     }
 
     private static ByteBuffer written(AbstractMessage message) {
