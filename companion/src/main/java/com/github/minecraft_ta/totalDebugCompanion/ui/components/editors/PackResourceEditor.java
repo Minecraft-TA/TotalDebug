@@ -469,8 +469,11 @@ abstract class PackResourceEditor<V> extends JPanel {
                             save();
                             return;
                         }
-                        followLater();
                         showNotice("Not saved: " + message(failure), ThemeColors::error);
+                        followLater();
+                        // A copy written since, which the save refused to replace, is read, so Discard goes back to it;
+                        // the changes on screen stay, still unsaved.
+                        readAfterSave();
                         return;
                     }
                     this.baseline = written[0];
@@ -491,7 +494,15 @@ abstract class PackResourceEditor<V> extends JPanel {
                     }
                     changed();
                     followLater();
+                    // Another tab's save that came while this one ran was not read then.
+                    ChangeRecord.Change now = recorded();
+                    if (now != null && !now.current().equals(written[0])) readAfterSave();
                 }));
+    }
+
+    /** Reads the copies again after a save, unless following a working pack or world change does already. */
+    private void readAfterSave() {
+        if (!this.following && !this.busy) readCopies(false);
     }
 
     /** Follows a working pack or world change that came during the save just completed. */
