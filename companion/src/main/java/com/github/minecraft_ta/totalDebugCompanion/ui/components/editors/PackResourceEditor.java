@@ -24,6 +24,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -430,7 +432,53 @@ abstract class PackResourceEditor<V> extends JPanel {
 
     /** Checks the content, writes it into the pack, then shows what the game uses and what its reload reported. */
     final void save() {
-        if (this.busy || this.following || same(shown(), this.packContent)) return;
+        save(null);
+    }
+
+    /**
+     * Makes the pack hold the shown content, saving it as {@link #save()} does where it does not yet, such as a mod's
+     * texture no pack has a copy of, then runs {@code after} with that pack. Nothing runs while the copy is being read
+     * or saved, or when the save fails.
+     */
+    protected final void saveThen(Consumer<Path> after) {
+        if (this.busy || this.following) return;
+        if (!this.managed || !same(shown(), this.packContent)) {
+            save(after);
+            return;
+        }
+        // The pack's copy may have changed since this tab read it, such as by another program: opening that one would
+        // not be what the tab shows, so it is replaced only after asking, as a save would.
+        Path pack = this.opened != null ? this.opened : this.pack;
+        String read = this.packHash;
+        this.busy = true;
+        changed();
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                Path file = pack.resolve(this.path);
+                return ResourceOriginals.hash(Files.isRegularFile(file) ? Files.readAllBytes(file) : null);
+            } catch (IOException exception) {
+                throw new CompletionException(exception);
+            }
+        }).whenComplete((held, failure) -> SwingUtilities.invokeLater(() -> {
+            this.busy = false;
+            changed();
+            if (this.disposed) return;
+            if (failure != null) {
+                showNotice("Not opened: " + message(failure), ThemeColors::error);
+            } else if (held.equals(read)) {
+                after.accept(pack);
+            } else if (this.askToReplace.test(new ResourceEdits.ChangedSince(this.path.substring(this.path.lastIndexOf('/') + 1)
+                    + " changed in " + this.packName + " since this tab read it"))) {
+                this.baseline = null;
+                save(after);
+            } else {
+                readAfterSave();
+            }
+        }));
+    }
+
+    private void save(Consumer<Path> after) {
+        if (this.busy || this.following || after == null && same(shown(), this.packContent)) return;
         V edited = copy(shown());
         Optional<String> problem = check(edited);
         if (problem.isPresent()) {
@@ -466,7 +514,7 @@ abstract class PackResourceEditor<V> extends JPanel {
                         // Asked before following a change that came during the save, which would hold the overwrite back.
                         if (cause(failure) instanceof ResourceEdits.ChangedSince changedSince && this.askToReplace.test(changedSince)) {
                             this.baseline = null;
-                            save();
+                            save(after);
                             return;
                         }
                         showNotice("Not saved: " + message(failure), ThemeColors::error);
@@ -485,19 +533,25 @@ abstract class PackResourceEditor<V> extends JPanel {
                     this.managed = true;
                     if (keepEdits) markSaved(edited);
                     else load(edited);
-                    // A copy the game does not use does not apply, however the reload went.
-                    showState(saved.reloadFailure().isEmpty() && saved.unused().isEmpty() ? saved.effect().description() : "");
-                    showResult(saved.problems(), saved.reloadFailure());
-                    if (saved.reloadFailure().isEmpty() && saved.problems().isEmpty() && !saved.unused().isEmpty()) {
-                        showNotice(saved.unused(), ThemeColors::warning);
-                        this.readNotice = saved.unused();
-                    }
+                    showSaved(saved);
                     changed();
                     followLater();
                     // Another tab's save that came while this one ran was not read then.
                     ChangeRecord.Change now = recorded();
                     if (now != null && !now.current().equals(written[0])) readAfterSave();
+                    if (after != null) after.accept(saved.pack());
                 }));
+    }
+
+    /** Shows what the game made of a save: whether it uses it now, and what its reload reported. */
+    protected final void showSaved(ResourceEdits.Saved saved) {
+        // A copy the game does not use does not apply, however the reload went.
+        showState(saved.reloadFailure().isEmpty() && saved.unused().isEmpty() ? saved.effect().description() : "");
+        showResult(saved.problems(), saved.reloadFailure());
+        if (saved.reloadFailure().isEmpty() && saved.problems().isEmpty() && !saved.unused().isEmpty()) {
+            showNotice(saved.unused(), ThemeColors::warning);
+            this.readNotice = saved.unused();
+        }
     }
 
     /** Reads the copies again after a save, unless following a working pack or world change does already. */
@@ -571,9 +625,14 @@ abstract class PackResourceEditor<V> extends JPanel {
         return cause;
     }
 
-    private static String message(Throwable failure) {
+    protected static String message(Throwable failure) {
         Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
         return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+    }
+
+    /** The pack the tab shows and saves into now, or null before it is known. */
+    protected final Path currentPack() {
+        return this.opened != null ? this.opened : this.pack;
     }
 
     protected final boolean disposed() {

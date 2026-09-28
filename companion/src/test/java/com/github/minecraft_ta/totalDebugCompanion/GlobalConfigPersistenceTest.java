@@ -27,6 +27,7 @@ class GlobalConfigPersistenceTest {
         config.setAutomaticDebuggerPreviews(false);
         config.setInlineDiagnostics(false);
         config.setSidebarWidth("resource-categories", 260);
+        config.setImageEditor("C:/Program Files/paint.net/paintdotnet.exe");
         config.saveNow();
 
         GlobalConfig restored = new GlobalConfig();
@@ -40,6 +41,9 @@ class GlobalConfigPersistenceTest {
         assertFalse(restored.inlineDiagnostics());
         assertEquals(260, restored.sidebarWidth("resource-categories"), "a dragged sidebar keeps its width across restarts");
         assertNull(restored.sidebarWidth("log-files"), "a sidebar never dragged starts at its default");
+        assertEquals("C:/Program Files/paint.net/paintdotnet.exe", restored.imageEditor());
+        restored.setImageEditor(" ");
+        assertNull(restored.imageEditor(), "blank goes back to the system app");
         var json = JsonFiles.read(new AppPaths(this.home).settings());
         assertFalse(json.has("debuggerWatches"));
         assertFalse(json.has("debuggerBreakpoints"));
@@ -67,6 +71,7 @@ class GlobalConfigPersistenceTest {
         assertEquals("islands-dark", config.themeId());
         assertEquals(14, config.editorFontSize());
         assertTrue(config.inlineDiagnostics());
+        assertNull(config.imageEditor(), "the system app for images until one is chosen");
         assertFalse(Files.exists(new AppPaths(this.home).settings()));
         config.setEditorFontSize(9999);
         config.setUiFontSize(-4);

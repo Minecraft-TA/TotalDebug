@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.formdev.flatlaf.util.SystemFileChooser;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.SectionHeading;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
@@ -21,6 +23,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
 import java.awt.Component;
@@ -29,6 +32,8 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Window;
+import java.io.File;
+import java.nio.file.Path;
 import java.util.function.Consumer;
 
 /**
@@ -83,11 +88,13 @@ public class SettingsWindow extends JDialog {
                 config.debuggerInlineValues(),
                 config::setDebuggerInlineValues
         ));
-        addWideRow(form, row, createToggle(
+        addWideRow(form, row++, createToggle(
                 "Show automatic value previews",
                 config.automaticDebuggerPreviews(),
                 config::setAutomaticDebuggerPreviews
         ));
+        addSection(form, row++, "Resources");
+        addRow(form, row, "Image editor", createImageEditorChooser(), 420);
 
         content.add(form, BorderLayout.CENTER);
         content.add(createButtonBar(), BorderLayout.SOUTH);
@@ -117,6 +124,51 @@ public class SettingsWindow extends JDialog {
             }
         });
         return chooser;
+    }
+
+    /** The program textures open in: a chosen one, or the system's app for images while none is. */
+    private JComponent createImageEditorChooser() {
+        GlobalConfig config = GlobalConfig.getInstance();
+        JTextField program = new JTextField();
+        program.setEditable(false);
+        program.putClientProperty("JTextField.placeholderText", "System app for images");
+        program.getAccessibleContext().setAccessibleName("Image editor");
+        JButton choose = new JButton("Choose…");
+        JButton reset = new JButton("Reset to Default");
+        Runnable show = () -> {
+            String chosen = config.imageEditor();
+            program.setText(chosen == null ? "" : chosen);
+            program.setCaretPosition(0);
+            program.setToolTipText(chosen == null ? null : Tooltip.of(Path.of(chosen).getFileName().toString())
+                    .detail(Tooltip.shortPath(Path.of(chosen))).html());
+            reset.setEnabled(chosen != null);
+        };
+        choose.addActionListener(event -> {
+            SystemFileChooser chooser = new SystemFileChooser();
+            chooser.setDialogTitle("Choose Image Editor");
+            chooser.setFileSelectionMode(SystemFileChooser.FILES_ONLY);
+            String chosen = config.imageEditor();
+            if (chosen != null && Path.of(chosen).getParent() != null) chooser.setCurrentDirectory(Path.of(chosen).getParent().toFile());
+            if (chooser.showOpenDialog(this) == SystemFileChooser.APPROVE_OPTION) {
+                File selected = chooser.getSelectedFile();
+                config.setImageEditor(selected.getPath());
+                show.run();
+            }
+        });
+        reset.addActionListener(event -> {
+            config.setImageEditor(null);
+            show.run();
+        });
+        show.run();
+        JPanel row = new JPanel(new BorderLayout(6, 0));
+        row.add(program, BorderLayout.CENTER);
+        JPanel buttons = new JPanel();
+        buttons.setLayout(new BoxLayout(buttons, BoxLayout.LINE_AXIS));
+        buttons.add(choose);
+        buttons.add(Box.createHorizontalStrut(6));
+        buttons.add(reset);
+        row.add(buttons, BorderLayout.EAST);
+        return row;
     }
 
     private JComponent createFontSizeSpinner(float current, Consumer<Float> setter, Runnable afterChange) {
@@ -170,6 +222,10 @@ public class SettingsWindow extends JDialog {
     }
 
     private static void addRow(JPanel form, int row, String label, Component field) {
+        addRow(form, row, label, field, 180);
+    }
+
+    private static void addRow(JPanel form, int row, String label, Component field, int width) {
         GridBagConstraints labelConstraints = new GridBagConstraints();
         labelConstraints.gridx = 0;
         labelConstraints.gridy = row;
@@ -183,7 +239,7 @@ public class SettingsWindow extends JDialog {
         fieldConstraints.weightx = 1;
         fieldConstraints.fill = GridBagConstraints.HORIZONTAL;
         fieldConstraints.insets = new Insets(UiMetrics.formRowGap() / 2, 0, UiMetrics.formRowGap() / 2, 0);
-        field.setPreferredSize(new Dimension(180, field.getPreferredSize().height));
+        field.setPreferredSize(new Dimension(width, field.getPreferredSize().height));
         form.add(field, fieldConstraints);
     }
 
