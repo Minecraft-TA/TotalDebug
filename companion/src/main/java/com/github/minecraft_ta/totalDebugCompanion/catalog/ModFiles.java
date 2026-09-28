@@ -9,7 +9,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -48,6 +51,87 @@ public final class ModFiles {
             jar = nested.get();
         }
         return entry(jar, entry, maximumBytes);
+    }
+
+    /** A mod file opened for many reads, closed when done. */
+    public interface Archive extends AutoCloseable {
+        /** The bytes of {@code entry}, or empty when the file has none. Blocking. */
+        Optional<byte[]> read(String entry, int maximumBytes) throws IOException;
+
+        @Override
+        void close() throws IOException;
+    }
+
+    /**
+     * Opens the mod file for many reads: a JAR stays open, and a nested JAR is read into memory once. Empty when the
+     * file does not exist. Blocking.
+     */
+    public static Optional<Archive> open(URI modFile) throws IOException {
+        if ("file".equalsIgnoreCase(modFile.getScheme())) {
+            Path file = Path.of(modFile);
+            if (Files.isDirectory(file)) return Optional.of(new Archive() {
+                @Override
+                public Optional<byte[]> read(String entry, int maximumBytes) throws IOException {
+                    return ModFiles.read(file, entry, maximumBytes);
+                }
+
+                @Override
+                public void close() {
+                }
+            });
+            if (!Files.isRegularFile(file)) return Optional.empty();
+            ZipFile archive = new ZipFile(file.toFile());
+            return Optional.of(new Archive() {
+                @Override
+                public Optional<byte[]> read(String entry, int maximumBytes) throws IOException {
+                    ZipEntry found = archive.getEntry(entry);
+                    if (found == null || found.isDirectory()) return Optional.empty();
+                    try (InputStream input = archive.getInputStream(found)) {
+                        return Optional.of(input.readNBytes(maximumBytes));
+                    }
+                }
+
+                @Override
+                public void close() throws IOException {
+                    archive.close();
+                }
+            });
+        }
+        if (!"jij".equalsIgnoreCase(modFile.getScheme())) return Optional.empty();
+        List<String> parts = nesting(modFile.toString());
+        Path outer = outerPath(parts.getFirst());
+        if (!Files.isRegularFile(outer)) return Optional.empty();
+        byte[] jar;
+        try (ZipFile archive = new ZipFile(outer.toFile())) {
+            ZipEntry inner = archive.getEntry(parts.get(1));
+            if (inner == null) return Optional.empty();
+            try (InputStream input = archive.getInputStream(inner)) {
+                jar = input.readNBytes(MAXIMUM_NESTED_JAR_BYTES);
+            }
+        }
+        for (String inner : parts.subList(2, parts.size())) {
+            Optional<byte[]> nested = entry(jar, inner, MAXIMUM_NESTED_JAR_BYTES);
+            if (nested.isEmpty()) return Optional.empty();
+            jar = nested.get();
+        }
+        // Every entry at once: a nested JAR can only be read from its start.
+        Map<String, byte[]> entries = new HashMap<>();
+        try (ZipInputStream input = new ZipInputStream(new ByteArrayInputStream(jar))) {
+            for (ZipEntry entry = input.getNextEntry(); entry != null; entry = input.getNextEntry()) {
+                if (!entry.isDirectory()) entries.put(entry.getName(), input.readNBytes(MAXIMUM_NESTED_JAR_BYTES));
+            }
+        }
+        return Optional.of(new Archive() {
+            @Override
+            public Optional<byte[]> read(String entry, int maximumBytes) {
+                byte[] bytes = entries.get(entry);
+                return bytes == null ? Optional.empty() : Optional.of(bytes.length <= maximumBytes ? bytes : Arrays.copyOf(bytes, maximumBytes));
+            }
+
+            @Override
+            public void close() {
+            }
+        });
     }
 
     private static Optional<byte[]> read(Path file, String entry, int maximumBytes) throws IOException {

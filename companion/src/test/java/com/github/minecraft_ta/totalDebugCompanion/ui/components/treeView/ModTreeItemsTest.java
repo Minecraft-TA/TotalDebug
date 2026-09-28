@@ -38,7 +38,8 @@ class ModTreeItemsTest {
 
         List<TreeItem> pack = ModTreeItems.packChildren(snapshot);
         assertEquals(List.of(ModTreeItems.MODS, ModTreeItems.CONTENT, ModTreeItems.CONFIGURATION, ModTreeItems.RESOURCES,
-                ModTreeItems.KEY_BINDINGS), pack.stream().map(TreeItem::getName).toList());
+                ModTreeItems.KEY_BINDINGS, ModTreeItems.MIXINS), pack.stream().map(TreeItem::getName).toList());
+        assertEquals(new NavigationTarget.Mixins(), ((NavigableTreeItem) pack.get(5)).navigationTarget());
         assertEquals(new NavigationTarget.PackResources(""), ((NavigableTreeItem) pack.get(3)).navigationTarget());
         assertEquals("3", pack.get(4).getPresentation().secondary());
         assertEquals("2", pack.getFirst().getPresentation().secondary());

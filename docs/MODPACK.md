@@ -24,7 +24,7 @@ A pack-wide view belongs under Modpack, not under one of its mods. Views about o
 | Key bindings | Every binding with its key, default, context and mod; collisions split into those on the same key press, modifier overlaps and equal keys in contexts that never meet; searchable by text, by key such as `ctrl+g`, or by pressing the key; keys are set in the running game, or in `options.txt` while it is closed, one binding or a selection at a time | Captured key mappings, contexts and key names, `options.txt` | Built in |
 | Game options | The rest of `options.txt` | `options.txt` | Built in |
 | Logs | `latest.log` and crash reports, linked to the classes and mods they name | `logs/`, `crash-reports/` | Built in |
-| Mixins | Mixins by target class, where several mods change the same member | Captured mixin configurations | Built in |
+| Mixins | Mixins by target class, where several mods change the same member | Mod files: mixin configurations and classes | Built in |
 | Changes | Every change Companion made, with the value it replaced and a revert | Companion's change record | Built in |
 | Shader packs | The active shader pack and its options | `shaderpacks/` | Extension for Iris or Oculus |
 | Pack scripts | KubeJS and CraftTweaker scripts, reloaded through their mod | `kubejs/`, `scripts/` | Extension per scripting mod |
@@ -66,6 +66,15 @@ The game's `logs/latest.log` and `logs/debug.log`, then its crash reports, the n
 - **A crash report** is listed by what happened and when, as the report says. It shows the mods that failed to load and why, from a crash report of failed mod loading, then each exception and its causes with their stack frames. A frame names the mod whose module holds it, as `TRANSFORMER/total_debug@2.0.0/...` says, or the mod whose mixin added a handler such as `handler$zfe000$sodium$onTick`, and opens its class; other rows open the report at that line.
 - **Reading:** a file is read again only when it changed, and the page keeps the selected file and row.
 - **Not yet:** archived logs (`.log.gz`), naming the mod behind a log line's logger, and pack health checks built on these.
+
+## Mixins
+
+- **Source:** the mods' files, read without the game: the mixin configurations each file names in `neoforge.mods.toml` (`[[mixins]] config`) or its manifest's `MixinConfigs`, the classes each configuration lists under its `package` (`mixins` on both sides, `client`, `server`), and what each class changes, read from its bytecode: its `@Mixin` targets and priority, and the annotations of its methods. A configuration's plugin can still leave a mixin out when the game applies them; the page lists what the files declare.
+- **Changes:** Mixin's `Inject`, `Redirect`, `ModifyArg`, `ModifyArgs`, `ModifyVariable`, `ModifyConstant`, `Overwrite`, `Accessor` and `Invoker`, and MixinExtras' `ModifyExpressionValue`, `ModifyReturnValue`, `ModifyReceiver`, `WrapWithCondition`, `WrapOperation` and `WrapMethod`, each on the member its target selector names, without owner or descriptor. A mixin with none of them adds members or interfaces, and changes the class itself.
+- **Rows:** one per changed member of a target class: the class, the member, the mods that change it and how; by class name, then member. The tooltip lists each mixin with its mod, kind, side and a priority other than the default. Shared narrows the list to members several mods change, where their changes can meet; when one of them overwrites the member, its changes show in the warning color.
+- **Opening:** a row opens its target class; the menu opens each mixin class and each mod's page.
+- **Reading:** each mod file is opened once; the page reads the files again when the catalog changes.
+- **Not yet:** the mixins the running game applied, and a Mixins tab on the mod page.
 
 ## Content kinds
 

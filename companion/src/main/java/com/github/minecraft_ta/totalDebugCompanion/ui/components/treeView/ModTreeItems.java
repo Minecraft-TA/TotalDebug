@@ -42,6 +42,7 @@ final class ModTreeItems {
     static final String CHANGES = "changes";
     static final String LOGS = "logs";
     static final String KEY_BINDINGS = "key-bindings";
+    static final String MIXINS = "mixins";
     static final String CONTENT = "content";
     static final String OTHER_NAMESPACES = "other-namespaces";
     private static final Set<String> PLATFORM = Set.of("minecraft", "neoforge");
@@ -89,8 +90,8 @@ final class ModTreeItems {
     }
 
     /**
-     * The rows under Modpack: Mods, Content, Configuration, Resources and Key bindings once the catalog describes them,
-     * and Changes while Companion has changes in effect.
+     * The rows under Modpack: Mods, Content, Configuration, Resources, Key bindings and Mixins once the catalog
+     * describes them, and Changes while Companion has changes in effect.
      */
     static List<TreeItem> packChildren(Snapshot snapshot) {
         List<TreeItem> children = new ArrayList<>();
@@ -104,6 +105,7 @@ final class ModTreeItems {
         if (snapshot.index() != null && !snapshot.index().catalog().keyBindings().isEmpty()) {
             children.add(new KeyBindings(snapshot.index().catalog().keyBindings().size()));
         }
+        if (snapshot.index() != null) children.add(new Mixins());
         if (snapshot.logs()) children.add(new Logs());
         if (snapshot.changes() > 0) children.add(new Changes(snapshot.changes()));
         return children;
@@ -404,13 +406,33 @@ final class ModTreeItems {
         }
     }
 
+    /** Opens the mixins the mods declare. */
+    static final class Mixins extends TreeItem implements NavigableTreeItem {
+        Mixins() {
+            super(MIXINS);
+            setPresentation(PrimarySecondaryText.primary("Mixins"));
+            setIcon(Icons.MIXIN);
+            setSortPriority(5);
+        }
+
+        @Override
+        public String getTooltip() {
+            return "The mixins of every mod, by the members they change";
+        }
+
+        @Override
+        public NavigationTarget navigationTarget() {
+            return new NavigationTarget.Mixins();
+        }
+    }
+
     /** Opens the game's logs and crash reports. */
     static final class Logs extends TreeItem implements NavigableTreeItem {
         Logs() {
             super(LOGS);
             setPresentation(PrimarySecondaryText.primary("Logs"));
             setIcon(Icons.TEXT_FILE);
-            setSortPriority(5);
+            setSortPriority(6);
         }
 
         @Override
@@ -430,7 +452,7 @@ final class ModTreeItems {
             super(CHANGES);
             setPresentation(new PrimarySecondaryText("Changes", NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
             setIcon(Icons.CHANGES);
-            setSortPriority(6);
+            setSortPriority(7);
         }
 
         @Override

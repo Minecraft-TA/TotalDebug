@@ -165,6 +165,7 @@ public class Icons {
     public static final FlatSVGIcon UNDO = new FlatSVGIcon("icons/undo.svg");
     public static final FlatSVGIcon REDO = new FlatSVGIcon("icons/redo.svg");
     public static final FlatSVGIcon REFORMAT_CODE = new FlatSVGIcon("icons/reformatCode.svg");
+    public static final FlatSVGIcon MIXIN = new FlatSVGIcon("icons/mixin.svg");
     public static final FlatSVGIcon EXTERNAL_EDITOR = new FlatSVGIcon("icons/externalLink.svg");
     public static final FlatSVGIcon FIELD = new FlatSVGIcon("icons/field.svg");
 

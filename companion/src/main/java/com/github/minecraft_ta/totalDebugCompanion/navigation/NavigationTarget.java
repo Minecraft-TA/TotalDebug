@@ -29,6 +29,7 @@ public sealed interface NavigationTarget permits
         NavigationTarget.PackConfiguration,
         NavigationTarget.PackResources,
         NavigationTarget.Logs,
+        NavigationTarget.Mixins,
         NavigationTarget.Changes,
         NavigationTarget.KeyBindings,
         NavigationTarget.World,
@@ -114,6 +115,10 @@ public sealed interface NavigationTarget permits
         public Logs() {
             this(null);
         }
+    }
+
+    /** The mixins the mods declare, by the members of the classes they change. */
+    record Mixins() implements NavigationTarget {
     }
 
     /** A registered block, item or entity type, described by the captured pack catalog. */

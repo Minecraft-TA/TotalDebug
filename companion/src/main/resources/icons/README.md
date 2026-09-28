@@ -101,8 +101,9 @@ Taken unchanged from `expui` as well, with their `_dark` pairs:
 
 Custom, in the same stroke weights and palette: `content` (four squares in the colors of the content kinds, for all
 registered content), `block` (an isometric cube for block types), `entity` (a face for entity
-types), `script` (Companion's script file), `companion` (the application icon) and `externalLink` (an arrow leaving a box,
-for Open in External Editor, drawn after IntelliJ's external link), each with its `_dark` pair.
+types), `script` (Companion's script file), `companion` (the application icon), `externalLink` (an arrow leaving a box,
+for Open in External Editor, drawn after IntelliJ's external link) and `mixin` (a class with an added member over
+another, for Mixins), each with its `_dark` pair.
 `prism.svg` is Prism Launcher's logo, with its SVG metadata kept, and `prism-instance.svg` its grass instance icon;
 see [PRISM_NOTICE.txt](PRISM_NOTICE.txt).
 

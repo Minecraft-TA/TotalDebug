@@ -59,6 +59,7 @@ enum UiRenderScenario {
     PACK_CONFIGURATION("pack-configuration", "Every setting of the pack under its mod and file, one of them modified"),
     PACK_RESOURCES("pack-resources", "Every resource of the pack with the pack its copy comes from"),
     LOGS("logs", "The game's logs with a warning and an error"),
+    MIXINS("mixins", "The mods' mixins by the members they change, one of them replaced whole"),
     LOGS_CRASH("logs-crash", "A crash report with its stack frames by mod"),
     KEY_BINDINGS("key-bindings", "The pack's key bindings with a changed key that collides"),
     CONTENT("content", "The pack's registered content with every kind listed together"),

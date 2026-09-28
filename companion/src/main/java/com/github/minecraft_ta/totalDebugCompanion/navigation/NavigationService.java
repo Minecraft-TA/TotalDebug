@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
 import com.github.minecraft_ta.totalDebugCompanion.model.KeyBindingsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
+import com.github.minecraft_ta.totalDebugCompanion.model.MixinsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PackView;
 import com.github.minecraft_ta.totalDebugCompanion.model.WorldView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
@@ -135,6 +136,7 @@ public final class NavigationService {
             case NavigationTarget.PackConfiguration ignored -> true;
             case NavigationTarget.PackResources ignored -> true;
             case NavigationTarget.Logs ignored -> true;
+            case NavigationTarget.Mixins ignored -> true;
             case NavigationTarget.Changes ignored -> true;
             case NavigationTarget.KeyBindings ignored -> true;
             case NavigationTarget.World ignored -> true;
@@ -155,6 +157,7 @@ public final class NavigationService {
                     case NavigationTarget.PackConfiguration ignored -> requireRevealed(fileTree.revealPackConfiguration());
                     case NavigationTarget.PackResources ignored -> requireRevealed(fileTree.revealPackResources());
                     case NavigationTarget.Logs ignored -> requireRevealed(fileTree.revealLogs());
+                    case NavigationTarget.Mixins ignored -> requireRevealed(fileTree.revealMixins());
                     case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges());
                     case NavigationTarget.KeyBindings ignored -> requireRevealed(fileTree.revealKeyBindings());
                     case NavigationTarget.World world -> requireRevealed(fileTree.revealWorld(world.tab()));
@@ -328,6 +331,11 @@ public final class NavigationService {
                         view -> true,
                         () -> new LogsView(editors.get())
                 ).thenAccept(view -> view.show(logs.file())), activation);
+                case NavigationTarget.Mixins ignored -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        MixinsView.class,
+                        view -> true,
+                        () -> new MixinsView(editors.get())
+                ).thenAccept(view -> { }), activation);
                 case NavigationTarget.Changes ignored -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         ChangesView.class,
                         view -> true,
@@ -829,6 +837,7 @@ public final class NavigationService {
             case NavigationTarget.PackConfiguration ignored -> "modpack configuration";
             case NavigationTarget.PackResources ignored -> "modpack resources";
             case NavigationTarget.Logs ignored -> "logs";
+            case NavigationTarget.Mixins ignored -> "mixins";
             case NavigationTarget.Changes ignored -> "changes";
             case NavigationTarget.KeyBindings ignored -> "key bindings";
             case NavigationTarget.World ignored -> "world";

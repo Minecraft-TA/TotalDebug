@@ -1,0 +1,327 @@
+package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
+
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.Mixins;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
+
+import javax.swing.AbstractAction;
+import javax.swing.JCheckBox;
+import javax.swing.JComponent;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JTable;
+import javax.swing.KeyStroke;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
+import javax.swing.ToolTipManager;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.text.JTextComponent;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
+
+/**
+ * The mixins the mods declare, one row per member of a target class they change, with the mods that change it and how.
+ * Shared narrows the list to members several mods change, where their changes can meet; an Overwrite among them stands
+ * out. A row opens its target class; its menu opens each mixin class and mod.
+ */
+public final class MixinsPanel extends JPanel {
+    /** A changed member of a target class, empty for the class itself, and the mixins that change it. */
+    record Row(String target, String member, List<Entry> entries) {
+        Set<String> mods() {
+            Set<String> mods = new LinkedHashSet<>();
+            for (Entry entry : this.entries) mods.add(entry.mixin().modId());
+            return mods;
+        }
+
+        boolean shared() {
+            return mods().size() > 1;
+        }
+
+        /** Several mods change the member and one of them replaces it whole, which the others' changes may not survive. */
+        boolean overwritten() {
+            return shared() && this.entries.stream().anyMatch(entry -> entry.kind().equals("Overwrite"));
+        }
+
+        String kinds() {
+            Set<String> kinds = new LinkedHashSet<>();
+            for (Entry entry : this.entries) kinds.add(entry.kind());
+            return String.join(", ", kinds);
+        }
+    }
+
+    /** One mixin's change to a row's member. */
+    record Entry(Mixins.Mixin mixin, String kind) {
+    }
+
+    private record Loaded(CatalogIndex index, List<Row> rows) {
+    }
+
+    private final PackCatalogService catalog;
+    private final Consumer<NavigationTarget> navigator;
+    private final RowsModel model = new RowsModel();
+    private final JTable table = new JTable(this.model) {
+        @Override
+        public String getToolTipText(MouseEvent event) {
+            int row = rowAtPoint(event.getPoint());
+            return row < 0 ? null : tooltip(MixinsPanel.this.model.shown.get(row));
+        }
+    };
+    private final BrowserBody body;
+    private final JCheckBox sharedOnly = new JCheckBox("Shared");
+    private final PageLoader<Loaded> loader;
+    private CatalogIndex index;
+    private List<Row> all = List.of();
+    private String unavailable = "";
+
+    public MixinsPanel(PackCatalogService catalog, Consumer<NavigationTarget> navigator) {
+        super(new BorderLayout());
+        this.catalog = Objects.requireNonNull(catalog, "catalog");
+        this.navigator = Objects.requireNonNull(navigator, "navigator");
+        this.table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        Tables.configure(this.table);
+        this.table.setDefaultRenderer(Object.class, new RowRenderer());
+        ToolTipManager.sharedInstance().registerComponent(this.table);
+        ContextMenus.installTable(this.table, this::menu);
+        this.table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                int row = MixinsPanel.this.table.rowAtPoint(event.getPoint());
+                if (row >= 0 && event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) openTarget(MixinsPanel.this.model.shown.get(row));
+            }
+        });
+        this.table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openTarget");
+        this.table.getActionMap().put("openTarget", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                int row = MixinsPanel.this.table.getSelectedRow();
+                if (row >= 0) openTarget(MixinsPanel.this.model.shown.get(row));
+            }
+        });
+        int[] weights = {30, 25, 25, 20};
+        for (int column = 0; column < weights.length; column++) {
+            this.table.getColumnModel().getColumn(column).setPreferredWidth(weights[column] * 10);
+        }
+        this.body = new BrowserBody("Filter by class, member or mod", BrowserBody.scroll(this.table), this.table, this::applyFilter);
+        this.sharedOnly.setToolTipText(Tooltip.of("Shared").text("Only members that several mods change").html());
+        this.sharedOnly.addActionListener(event -> applyFilter());
+        this.body.addOption(this.sharedOnly);
+        add(this.body, BorderLayout.CENTER);
+        this.loader = new PageLoader<>(this::prepareLoad, this::show, failure -> {
+            this.all = List.of();
+            this.unavailable = "The mixins could not be read: " + failure.getMessage();
+            applyFilter();
+        }).whenShown(this).follow(catalog::addListener);
+    }
+
+    /** Reads the mods' mixins again. */
+    public void load() {
+        this.loader.load();
+    }
+
+    /** Reads the mixins of the mods the catalog knows; without a catalog there is nothing to read. */
+    private Callable<Loaded> prepareLoad() {
+        CatalogIndex captured = this.catalog.index().orElse(null);
+        if (captured == null) {
+            String reason = CatalogMessages.unavailable(this.catalog.state());
+            show(new Loaded(null, List.of()));
+            this.unavailable = reason.isEmpty() ? "The pack catalog is not captured yet." : reason;
+            applyFilter();
+            return null;
+        }
+        if (this.all.isEmpty()) this.body.showMessage("Reading the mixins of every mod");
+        return () -> new Loaded(captured, rows(Mixins.read(captured)));
+    }
+
+    /** One row per changed member of each target, targets by their name as shown, then package, and members by name. */
+    static List<Row> rows(List<Mixins.Mixin> mixins) {
+        Map<String, Map<String, List<Entry>>> byTarget = new LinkedHashMap<>();
+        for (Mixins.Mixin mixin : mixins) {
+            for (String target : mixin.targets()) {
+                for (Mixins.Change change : mixin.changes()) {
+                    byTarget.computeIfAbsent(target, ignored -> new LinkedHashMap<>())
+                            .computeIfAbsent(change.member(), ignored -> new ArrayList<>()).add(new Entry(mixin, change.kind()));
+                }
+            }
+        }
+        List<Row> rows = new ArrayList<>();
+        byTarget.forEach((target, members) -> members.forEach((member, entries) -> rows.add(new Row(target, member, List.copyOf(entries)))));
+        rows.sort(Comparator.comparing((Row row) -> simple(row.target())).thenComparing(Row::target).thenComparing(Row::member));
+        return rows;
+    }
+
+    private void show(Loaded loaded) {
+        this.index = loaded.index();
+        this.all = loaded.rows();
+        this.unavailable = "";
+        applyFilter();
+    }
+
+    private void applyFilter() {
+        String query = this.body.query().toLowerCase(Locale.ROOT);
+        boolean shared = this.sharedOnly.isSelected();
+        List<Row> shown = new ArrayList<>();
+        for (Row row : this.all) {
+            if (shared && !row.shared()) continue;
+            if (query.isEmpty() || row.target().toLowerCase(Locale.ROOT).contains(query) || row.member().toLowerCase(Locale.ROOT).contains(query)
+                    || mods(row).toLowerCase(Locale.ROOT).contains(query) || row.mods().stream().anyMatch(mod -> mod.contains(query))) {
+                shown.add(row);
+            }
+        }
+        this.model.shown = List.copyOf(shown);
+        this.model.fireTableDataChanged();
+        if (!shown.isEmpty()) this.body.showContent();
+        else if (!this.unavailable.isEmpty()) this.body.showMessage(this.unavailable);
+        else if (this.all.isEmpty()) this.body.showMessage("No mod declares mixins.");
+        else this.body.showMessage(shared && query.isEmpty() ? "No member is changed by several mods." : "No mixin matches the filter.");
+    }
+
+    /** The names of the mods that change the row's member, as the catalog names them. */
+    private String mods(Row row) {
+        List<String> names = new ArrayList<>();
+        for (String mod : row.mods()) names.add(modName(mod));
+        return String.join(", ", names);
+    }
+
+    private String modName(String modId) {
+        return this.index == null ? modId : this.index.mod(modId).map(PackCatalog.Mod::name).orElse(modId);
+    }
+
+    private static String simple(String binaryName) {
+        return binaryName.substring(binaryName.lastIndexOf('.') + 1);
+    }
+
+    private String tooltip(Row row) {
+        Tooltip tooltip = Tooltip.of(simple(row.target()) + (row.member().isEmpty() ? "" : "." + row.member())).detail(row.target());
+        for (Entry entry : row.entries()) {
+            Mixins.Mixin mixin = entry.mixin();
+            tooltip.fact(modName(mixin.modId()), entry.kind() + " in " + simple(mixin.className()) + ", " + mixin.side().label()
+                    + (mixin.priority() == 1000 ? "" : ", priority " + mixin.priority()));
+        }
+        if (row.member().isEmpty()) tooltip.text("Adds members or interfaces to the class");
+        if (row.overwritten()) tooltip.text("One mod replaces the member whole; the others' changes may not reach it");
+        return tooltip.html();
+    }
+
+    private void openTarget(Row row) {
+        this.navigator.accept(new NavigationTarget.RuntimeClass(row.target()));
+    }
+
+    private JPopupMenu menu(int viewRow) {
+        if (viewRow < 0) return null;
+        List<Row> selected = new ArrayList<>();
+        for (int row : this.table.getSelectedRows()) selected.add(this.model.shown.get(row));
+        if (selected.isEmpty()) return null;
+        JPopupMenu menu = new JPopupMenu();
+        if (selected.size() > 1) {
+            List<String> names = new ArrayList<>();
+            for (Row row : selected) names.add(row.target() + (row.member().isEmpty() ? "" : "#" + row.member()));
+            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy " + names.size() + " References", String.join("\n", names))));
+            return menu;
+        }
+        Row row = selected.getFirst();
+        menu.add(ContextMenus.action("Open " + simple(row.target()), null, "ENTER", () -> openTarget(row)));
+        Set<String> opened = new LinkedHashSet<>();
+        for (Entry entry : row.entries()) {
+            String mixin = entry.mixin().className();
+            if (opened.add(mixin)) {
+                menu.add(ContextMenus.action("Open " + simple(mixin), null, null,
+                        () -> this.navigator.accept(new NavigationTarget.RuntimeClass(mixin))));
+            }
+        }
+        menu.addSeparator();
+        for (String mod : row.mods()) {
+            menu.add(ContextMenus.action("Open " + modName(mod), null, null, () -> this.navigator.accept(new NavigationTarget.ModPage(mod))));
+        }
+        menu.addSeparator();
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Reference", row.target() + (row.member().isEmpty() ? "" : "#" + row.member()))));
+        return menu;
+    }
+
+    int rowCount() {
+        return this.model.getRowCount();
+    }
+
+    JTextComponent filterField() {
+        return this.body.filter();
+    }
+
+    public void dispose() {
+        this.loader.dispose();
+    }
+
+    private final class RowsModel extends AbstractTableModel {
+        private List<Row> shown = List.of();
+
+        @Override
+        public int getRowCount() {
+            return this.shown.size();
+        }
+
+        @Override
+        public int getColumnCount() {
+            return 4;
+        }
+
+        @Override
+        public String getColumnName(int column) {
+            return switch (column) {
+                case 0 -> "Target";
+                case 1 -> "Member";
+                case 2 -> "Mods";
+                default -> "Changes";
+            };
+        }
+
+        @Override
+        public Object getValueAt(int rowIndex, int column) {
+            Row row = this.shown.get(rowIndex);
+            return switch (column) {
+                case 0 -> simple(row.target());
+                case 1 -> row.member().isEmpty() ? "The class" : row.member();
+                case 2 -> mods(row);
+                default -> row.kinds();
+            };
+        }
+    }
+
+    /** Targets in regular text, the rest in secondary text; a member one mod replaces under others' changes as a warning. */
+    private final class RowRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean selected, boolean focused,
+                                                       int rowIndex, int column) {
+            super.getTableCellRendererComponent(table, value, selected, false, rowIndex, column);
+            setBorder(UiMetrics.cellPadding());
+            Row row = MixinsPanel.this.model.shown.get(rowIndex);
+            if (!selected) {
+                setForeground(column == 3 && row.overwritten() ? ThemeColors.warning()
+                        : column == 0 || column == 1 && !row.member().isEmpty() ? ThemeColors.text() : ThemeColors.secondaryText());
+            }
+            return this;
+        }
+    }
+}

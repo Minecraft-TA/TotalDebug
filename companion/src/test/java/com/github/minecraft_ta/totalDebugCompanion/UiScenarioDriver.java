@@ -557,6 +557,7 @@ final class UiScenarioDriver {
             case PACK_CONFIGURATION -> context.once("pack-configuration", () -> navigate(new NavigationTarget.PackConfiguration()));
             case PACK_RESOURCES -> context.once("pack-resources", () -> navigate(new NavigationTarget.PackResources("")));
             case LOGS -> context.once("logs", () -> navigate(new NavigationTarget.Logs()));
+            case MIXINS -> context.once("mixins", () -> navigate(new NavigationTarget.Mixins()));
             case LOGS_CRASH -> context.once("logs-crash", () -> navigate(new NavigationTarget.Logs(mainWindow.editorContext().project()
                     .profile().workspaceDirectory().resolve("crash-reports/crash-2026-09-27_10.00.00-client.txt"))));
             case KEY_BINDINGS -> context.once("key-bindings", () -> navigate(new NavigationTarget.KeyBindings("")));
@@ -724,6 +725,7 @@ final class UiScenarioDriver {
                         && panel.rowCount() > 0;
             }
             case KEY_BINDINGS -> showsTable("Key bindings", "Action");
+            case MIXINS -> showsTable("Mixins", "Target");
             case WORLD -> mainWindow.getEditorTabs().getSelectedEditor() instanceof WorldView view
                     && "Test World".equals(view.getTitle());
             case WORLD_RULES -> showsTable("Test World", "Rule");
