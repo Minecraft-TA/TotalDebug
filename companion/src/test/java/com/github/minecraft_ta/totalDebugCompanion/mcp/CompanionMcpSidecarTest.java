@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 
@@ -118,7 +119,7 @@ class CompanionMcpSidecarTest {
                 }
 
                 @Override
-                public void execute(int id, String source, CodeModeJobService.ExecutionSide side,
+                public void execute(int id, String source, Side side,
                                     CodeModeJobService.ExecutionEnvironment environment) {
                     submitted.complete(id);
                 }
@@ -242,7 +243,7 @@ class CompanionMcpSidecarTest {
         public void execute(
                 int scriptId,
                 String source,
-                CodeModeJobService.ExecutionSide side,
+                Side side,
                 CodeModeJobService.ExecutionEnvironment environment
         ) {
         }

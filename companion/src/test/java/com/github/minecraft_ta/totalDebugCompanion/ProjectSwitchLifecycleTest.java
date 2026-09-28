@@ -20,6 +20,7 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -70,7 +71,7 @@ class ProjectSwitchLifecycleTest {
             app.openProject(a).get(10, TimeUnit.SECONDS);
             app.instanceState().setDebuggerWatches(List.of("watch A"));
             var admitted = app.requireProject().admit(() -> jobs.submit("return 42;", List.of(),
-                    CodeModeJobService.ExecutionSide.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD));
+                    Side.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD));
             assertEquals(CodeModeJobService.JobState.COMPILING, admitted.state());
             app.openProject(b).get(10, TimeUnit.SECONDS);
             assertEquals(CodeModeJobService.JobState.DISCONNECTED, jobs.get(admitted.jobId()).orElseThrow().state());

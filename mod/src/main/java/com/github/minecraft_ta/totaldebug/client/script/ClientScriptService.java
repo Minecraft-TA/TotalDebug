@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
@@ -25,12 +26,7 @@ import java.util.function.Supplier;
 
 /** Routes authenticated Companion script requests to the client or negotiated game server. */
 public final class ClientScriptService implements AutoCloseable {
-    private enum ExecutionSide {
-        CLIENT,
-        SERVER
-    }
-
-    private record Run(int companionId, int executionId, ExecutionSide side) { }
+    private record Run(int companionId, int executionId, Side side) { }
 
     private final ExecutionResultSink resultSink;
     private final TickTaskScheduler tickTasks;
@@ -97,7 +93,7 @@ public final class ClientScriptService implements AutoCloseable {
             }
         }
 
-        if (message.serverSide()) {
+        if (message.side() == Side.SERVER) {
             runOnServer(message, environment);
         } else {
             runOnClient(message, environment, subject);
@@ -115,7 +111,7 @@ public final class ClientScriptService implements AutoCloseable {
             return;
         }
 
-        Run run = registerRun(message.scriptId(), ExecutionSide.SERVER);
+        Run run = registerRun(message.scriptId(), Side.SERVER);
         if (run == null) {
             return;
         }
@@ -125,14 +121,14 @@ public final class ClientScriptService implements AutoCloseable {
                     message.serverSessionId(), message.subject(), message.subjectExpectedId());
         } catch (IllegalArgumentException exception) {
             acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
-                    exception.getMessage()), ExecutionSide.SERVER);
+                    exception.getMessage()), Side.SERVER);
             return;
         }
         try {
             this.serverTransport.run(payload);
         } catch (RuntimeException exception) {
             acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
-                    "Unable to send the server script: " + exception.getMessage()), ExecutionSide.SERVER);
+                    "Unable to send the server script: " + exception.getMessage()), Side.SERVER);
         }
     }
 
@@ -149,7 +145,7 @@ public final class ClientScriptService implements AutoCloseable {
             );
             return;
         }
-        Run run = registerRun(message.scriptId(), ExecutionSide.CLIENT);
+        Run run = registerRun(message.scriptId(), Side.CLIENT);
         if (run == null) {
             return;
         }
@@ -162,7 +158,7 @@ public final class ClientScriptService implements AutoCloseable {
         if (run == null) {
             return;
         }
-        if (run.side() == ExecutionSide.CLIENT) {
+        if (run.side() == Side.CLIENT) {
             if (this.runner != null) {
                 this.runner.stopScript(run.executionId());
             }
@@ -171,14 +167,14 @@ public final class ClientScriptService implements AutoCloseable {
         ServerScriptTransport.Availability availability = this.serverTransport.availability();
         if (!availability.available()) {
             acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.CANCELLATION_PENDING, availability.unavailableReason()),
-                    ExecutionSide.SERVER);
+                    Side.SERVER);
             return;
         }
         try {
             this.serverTransport.stop(new StopServerScriptPayload(run.executionId()));
         } catch (RuntimeException exception) {
             acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.CANCELLATION_PENDING,
-                    "Unable to stop the server script: " + exception.getMessage()), ExecutionSide.SERVER);
+                    "Unable to stop the server script: " + exception.getMessage()), Side.SERVER);
         }
     }
 
@@ -188,9 +184,9 @@ public final class ClientScriptService implements AutoCloseable {
             this.runner.stopAll();
         }
         for (Run run : new ArrayList<>(this.executions.values())) {
-            if (run.side() == ExecutionSide.SERVER) {
+            if (run.side() == Side.SERVER) {
                 acceptResult(run.executionId(), ExecutionResult.failed("", null,
-                        "Disconnected from the server while the script was running"), ExecutionSide.SERVER);
+                        "Disconnected from the server while the script was running"), Side.SERVER);
             }
         }
     }
@@ -204,7 +200,7 @@ public final class ClientScriptService implements AutoCloseable {
             return;
         }
         Run run = this.executions.get(chunk.scriptId());
-        if (run == null || run.side() != ExecutionSide.SERVER) {
+        if (run == null || run.side() != Side.SERVER) {
             TotalDebug.LOGGER.warn(
                     "Discarding an execution-result chunk for inactive or client-side script {}",
                     chunk.scriptId()
@@ -213,7 +209,7 @@ public final class ClientScriptService implements AutoCloseable {
         }
         try {
             this.forwardedResults.accept(chunk).ifPresent(result ->
-                    acceptResult(result.scriptId(), result.result(), ExecutionSide.SERVER));
+                    acceptResult(result.scriptId(), result.result(), Side.SERVER));
         } catch (IllegalArgumentException exception) {
             TotalDebug.LOGGER.warn("Discarding invalid forwarded execution result", exception);
         }
@@ -226,13 +222,13 @@ public final class ClientScriptService implements AutoCloseable {
         this.runner = new ScriptRunner(
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(TickDomain.CLIENT, phase, task),
-                (scriptId, result) -> acceptResult(scriptId, result, ExecutionSide.CLIENT),
+                (scriptId, result) -> acceptResult(scriptId, result, Side.CLIENT),
                 new ClientScriptTargets(this.stacks)
         );
         return this.runner;
     }
 
-    private synchronized Run registerRun(int scriptId, ExecutionSide side) {
+    private synchronized Run registerRun(int scriptId, Side side) {
         if (this.activeRuns.containsKey(scriptId)) {
             sendUntrackedResult(scriptId, ExecutionStatus.COMPILATION_FAILED,
                     "A script with this id is already running");
@@ -254,7 +250,7 @@ public final class ClientScriptService implements AutoCloseable {
     private synchronized void acceptResult(
             int scriptId,
             ExecutionResult result,
-            ExecutionSide expectedSide
+            Side expectedSide
     ) {
         Run run = this.executions.get(scriptId);
         if (run == null || run.side() != expectedSide) {
@@ -291,7 +287,7 @@ public final class ClientScriptService implements AutoCloseable {
         // Detach observers before cancellation can synchronously deliver a result.
         this.activeRuns.clear();
         for (Run run : detachedRuns) {
-            if (run.side() != ExecutionSide.SERVER) {
+            if (run.side() != Side.SERVER) {
                 continue;
             }
             try {

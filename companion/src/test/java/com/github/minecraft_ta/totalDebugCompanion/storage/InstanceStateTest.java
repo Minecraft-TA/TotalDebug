@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExpressionHistory;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import com.google.gson.JsonObject;
@@ -26,7 +27,7 @@ class InstanceStateTest {
         var breakpoint = new InstanceState.PersistedBreakpoint("decompiled:///example/Target.java",
                 "example.Target", 12, 8, null, null, null, "x > 1", "2", false,
                 new DebugEngine.BreakpointAction(null, "probe.java", true));
-        var entry = new ExpressionHistory.Entry("Blocks.AIR", SnippetExecutionService.Side.CLIENT,
+        var entry = new ExpressionHistory.Entry("Blocks.AIR", Side.CLIENT,
                 List.of("net.minecraft.world.level.block.Blocks"),
                 JavaSnippetSource.Mode.BODY);
         try (var state = InstanceState.open(first)) {

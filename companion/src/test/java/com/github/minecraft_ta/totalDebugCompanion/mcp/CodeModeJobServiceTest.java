@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 import java.util.function.IntConsumer;
 import java.util.Map;
 import java.util.Set;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
@@ -35,7 +36,7 @@ class CodeModeJobServiceTest {
             CodeModeJobService.JobSnapshot submitted = service.submit(
                     "        logln(List.of(\"proof\")); return java.util.Map.of(\"values\", List.of(1, 2));",
                     List.of("java.util.List"),
-                    CodeModeJobService.ExecutionSide.CLIENT,
+                    Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
             );
 
@@ -87,7 +88,7 @@ class CodeModeJobServiceTest {
             CodeModeJobService.JobSnapshot submitted = service.submit(
                     "log(\"before\"); throw new RuntimeException();",
                     List.of(),
-                    CodeModeJobService.ExecutionSide.CLIENT,
+                    Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
             );
 
@@ -116,7 +117,7 @@ class CodeModeJobServiceTest {
             CodeModeJobService.JobSnapshot submitted = service.submit(
                     "return 42;",
                     List.of(),
-                    CodeModeJobService.ExecutionSide.CLIENT,
+                    Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
             );
             AtomicReference<CodeModeJobService.JobSnapshot> waited = new AtomicReference<>();
@@ -142,7 +143,7 @@ class CodeModeJobServiceTest {
             CodeModeJobService.JobSnapshot submitted = service.submit(
                     "        Thread.sleep(10_000L); return null;",
                     List.of(),
-                    CodeModeJobService.ExecutionSide.CLIENT,
+                    Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
             );
 
@@ -173,7 +174,7 @@ class CodeModeJobServiceTest {
                     () -> service.submit(
                             "return 1;",
                             List.of(),
-                            CodeModeJobService.ExecutionSide.CLIENT,
+                            Side.CLIENT,
                             CodeModeJobService.ExecutionEnvironment.THREAD
                     )
             );
@@ -196,7 +197,7 @@ class CodeModeJobServiceTest {
             CodeModeJobService.JobSnapshot submitted = service.submit(
                     "return 1;",
                     List.of(),
-                    CodeModeJobService.ExecutionSide.CLIENT,
+                    Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
             );
 
@@ -212,7 +213,7 @@ class CodeModeJobServiceTest {
     void pendingCancellationKeepsWaitingForActualCompletion() {
         FakeTransport transport = new FakeTransport();
         try (CodeModeJobService service = service(transport, true)) {
-            var submitted = service.submit("return 42;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+            var submitted = service.submit("return 42;", List.of(), Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD);
             service.acceptResult(submitted.scriptId(), new ExecutionResult(ExecutionStatus.CANCELLATION_PENDING,
                     ExecutionText.empty(), null, ExecutionText.complete("Stop timed out; script is still running")));
@@ -231,7 +232,7 @@ class CodeModeJobServiceTest {
     void switchDisconnectsCompilingJobsBeforeSynchronousCancellationFailure() {
         FakeTransport transport = new FakeTransport();
         try (CodeModeJobService service = service(transport, true)) {
-            var submitted = service.submit("return 42;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+            var submitted = service.submit("return 42;", List.of(), Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD);
             transport.onCancel = scriptId -> service.acceptResult(scriptId,
                     new ExecutionResult(ExecutionStatus.COMPILATION_FAILED, ExecutionText.empty(), null,
@@ -247,7 +248,7 @@ class CodeModeJobServiceTest {
         FakeTransport transport = new FakeTransport();
         try (CodeModeJobService service = service(transport, true)) {
             assertThrows(IllegalArgumentException.class, () -> service.submit(" ", List.of(),
-                    CodeModeJobService.ExecutionSide.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD));
+                    Side.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD));
             assertEquals(List.of(1), transport.discardedScriptIds);
             assertTrue(transport.executions.isEmpty());
             assertTrue(service.list(10).isEmpty());
@@ -258,7 +259,7 @@ class CodeModeJobServiceTest {
     void cancellationTransportFailureDoesNotLoseTheLiveJob() {
         FakeTransport transport = new FakeTransport();
         try (CodeModeJobService service = service(transport, true)) {
-            var submitted = service.submit("return 42;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+            var submitted = service.submit("return 42;", List.of(), Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD);
             transport.cancelFailure = new IllegalStateException("fixture transport failure");
             assertTrue(service.cancel(submitted.jobId()));
@@ -287,7 +288,7 @@ class CodeModeJobServiceTest {
             CodeModeJobService.JobSnapshot submitted = service.submit(
                     "return null;",
                     List.of(),
-                    CodeModeJobService.ExecutionSide.CLIENT,
+                    Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
             );
             String retained = "x".repeat(300_000);
@@ -312,14 +313,14 @@ class CodeModeJobServiceTest {
         FakeTransport transport = new FakeTransport();
         String expired;
         try (CodeModeJobService service = service(transport, true)) {
-            var active = service.submit("return 0;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+            var active = service.submit("return 0;", List.of(), Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD);
-            var first = service.submit("return 1;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+            var first = service.submit("return 1;", List.of(), Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD);
             expired = first.jobId();
             service.acceptResult(first.scriptId(), completed("", null));
             for (int i = 0; i < CodeModeJobService.MAX_RETAINED_JOBS; i++) {
-                var job = service.submit("return 2;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                var job = service.submit("return 2;", List.of(), Side.CLIENT,
                         CodeModeJobService.ExecutionEnvironment.THREAD);
                 service.acceptResult(job.scriptId(), completed("", null));
             }
@@ -437,7 +438,7 @@ class CodeModeJobServiceTest {
         public void execute(
                 int scriptId,
                 String source,
-                CodeModeJobService.ExecutionSide side,
+                Side side,
                 CodeModeJobService.ExecutionEnvironment environment
         ) {
             this.executions.add(new Execution(scriptId, source, side, environment));
@@ -459,7 +460,7 @@ class CodeModeJobServiceTest {
     private record Execution(
             int scriptId,
             String source,
-            CodeModeJobService.ExecutionSide side,
+            Side side,
             CodeModeJobService.ExecutionEnvironment environment
     ) {
     }

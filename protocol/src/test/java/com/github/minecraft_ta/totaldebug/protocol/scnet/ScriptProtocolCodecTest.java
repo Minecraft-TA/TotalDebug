@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.GoldenMessages;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 
@@ -35,7 +36,7 @@ class ScriptProtocolCodecTest {
         assertArrayEquals(new byte[]{1, 2, 3}, message.bytecode().classes().get("X"));
         assertEquals("inventory", message.inventoryId());
         assertEquals("s", message.serverSessionId());
-        assertTrue(message.serverSide());
+        assertEquals(Side.SERVER, message.side());
         assertEquals("POST_TICK", message.executionEnvironment());
         assertEquals("", message.subject());
         assertEquals("", message.subjectSessionId());
@@ -48,7 +49,7 @@ class ScriptProtocolCodecTest {
                 7,
                 new ScriptBytecode("X", Map.of("X", new byte[]{1})),
                 "inventory",
-                false,
+                Side.CLIENT,
                 ScriptExecutionEnvironment.POST_TICK.name(),
                 "",
                 "block minecraft:overworld 1 64 -2",
@@ -72,7 +73,7 @@ class ScriptProtocolCodecTest {
                 7,
                 new ScriptBytecode("X", Map.of("X", new byte[]{1})),
                 "inventory",
-                false,
+                Side.CLIENT,
                 ScriptExecutionEnvironment.POST_TICK.name(),
                 "",
                 "entity 00000000-0000-0000-0000-000000000001",
@@ -83,7 +84,7 @@ class ScriptProtocolCodecTest {
                 7,
                 new ScriptBytecode("X", Map.of("X", new byte[]{1})),
                 "inventory",
-                false,
+                Side.CLIENT,
                 ScriptExecutionEnvironment.POST_TICK.name(),
                 "",
                 "",
@@ -153,7 +154,7 @@ class ScriptProtocolCodecTest {
                 7,
                 new ScriptBytecode("X", Map.of("X", new byte[]{1, 2, 3})),
                 "inventory",
-                true,
+                Side.SERVER,
                 ScriptExecutionEnvironment.POST_TICK.name(), "s"
         );
         ByteBufferOutputStream output = new ByteBufferOutputStream();

@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -41,7 +42,7 @@ class McpLifecycleTest {
             var second = CompanionProfile.forGame(Files.createDirectories(root.resolve("second")));
             app.openProject(first).get(10, TimeUnit.SECONDS);
             app.startMcpServer(jobs, 0);
-            var old = jobs.submit("return 1;", List.of(), CodeModeJobService.ExecutionSide.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD);
+            var old = jobs.submit("return 1;", List.of(), Side.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD);
             var stopping = app.setMcpEnabled(false);
             if (!overlap) {
                 stopping.get(10, TimeUnit.SECONDS);
@@ -54,7 +55,7 @@ class McpLifecycleTest {
             assertTrue(cancelled.contains(old.scriptId()), "Retirement must send cancellation even with HTTP disabled");
             assertEquals(CodeModeJobService.JobState.DISCONNECTED, jobs.get(old.jobId()).orElseThrow().state());
             app.startMcpServer(jobs, 0);
-            var next = jobs.submit("return 2;", List.of(), CodeModeJobService.ExecutionSide.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD);
+            var next = jobs.submit("return 2;", List.of(), Side.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD);
             assertTrue(next.scriptId() > old.scriptId(), "Script ids are not reused after the MCP server restarts");
             assertEquals(CodeModeJobService.JobState.COMPILING, next.state());
         }

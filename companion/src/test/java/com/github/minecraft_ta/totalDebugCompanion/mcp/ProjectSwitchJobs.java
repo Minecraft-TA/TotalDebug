@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
@@ -24,7 +25,7 @@ public final class ProjectSwitchJobs {
                 compiling.put(++lastId, observer);
                 return lastId;
             }
-            @Override public void execute(int id, String source, CodeModeJobService.ExecutionSide side,
+            @Override public void execute(int id, String source, Side side,
                                           CodeModeJobService.ExecutionEnvironment environment) {
             }
             @Override public void discard(int id) {

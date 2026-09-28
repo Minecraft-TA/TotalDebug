@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -73,7 +74,7 @@ class ExecutionRunsTest {
             var recorder = new Recorder();
             int id = fixture.runs.open(recorder);
             // The compiler has no runtime, so it reports the failure while the run is submitted.
-            assertTrue(fixture.runs.submit(id, fixture.project, "public class Probe {}", false, ScriptExecutionEnvironment.THREAD));
+            assertTrue(fixture.runs.submit(id, fixture.project, "public class Probe {}", Side.CLIENT, ScriptExecutionEnvironment.THREAD));
             fixture.deliver(id, ExecutionStatus.RUN_COMPLETED);
             assertEquals(List.of("failed " + id + " COMPILATION_FAILED"), recorder.events);
         }
@@ -83,7 +84,7 @@ class ExecutionRunsTest {
         try (var fixture = new Fixture(false)) {
             var recorder = new Recorder();
             int id = fixture.runs.open(recorder);
-            assertFalse(fixture.runs.submit(id, fixture.project, "public class Probe {}", false, ScriptExecutionEnvironment.THREAD));
+            assertFalse(fixture.runs.submit(id, fixture.project, "public class Probe {}", Side.CLIENT, ScriptExecutionEnvironment.THREAD));
             fixture.deliver(id, ExecutionStatus.RUN_COMPLETED);
             fixture.runs.disconnectAll(false);
             assertTrue(recorder.events.isEmpty());
@@ -99,7 +100,7 @@ class ExecutionRunsTest {
             if (state.equals("switching")) fixture.project.beginSwitch();
             if (state.equals("retired")) fixture.project.retire();
             assertFalse(fixture.runs.submit(id, state.equals("missing") ? null : fixture.project,
-                    "public class Probe {}", false, ScriptExecutionEnvironment.THREAD));
+                    "public class Probe {}", Side.CLIENT, ScriptExecutionEnvironment.THREAD));
             fixture.deliver(id, ExecutionStatus.RUN_COMPLETED);
             fixture.runs.disconnectAll(false);
             assertTrue(recorder.events.isEmpty());
@@ -126,7 +127,7 @@ class ExecutionRunsTest {
             ScriptSubject subject = targeted ? new ScriptSubject(
                     SubjectRef.parseOccurrence("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session", "minecraft:pig") : null;
             String source = "import fixture.ScriptProgram; public class Probe extends ScriptProgram { public Object run() { return null; } }";
-            var submission = new FutureTask<>(() -> runs.submit(id, project, source, false, ScriptExecutionEnvironment.THREAD, subject));
+            var submission = new FutureTask<>(() -> runs.submit(id, project, source, Side.CLIENT, ScriptExecutionEnvironment.THREAD, subject));
             Thread submitter = Thread.ofPlatform().unstarted(submission);
             synchronized (lifecycle) {
                 submitter.start();
@@ -142,7 +143,7 @@ class ExecutionRunsTest {
             assertEquals(List.of("disconnected " + id + " false"), recorder.events);
 
             int replacementId = runs.open(new Recorder());
-            assertTrue(runs.submit(replacementId, project, source, false, ScriptExecutionEnvironment.THREAD, subject));
+            assertTrue(runs.submit(replacementId, project, source, Side.CLIENT, ScriptExecutionEnvironment.THREAD, subject));
             // The single compiler worker processes the old submission first if it was wrongly accepted.
             RunScriptMessage message = sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(message, "A fresh run must still execute on the replacement connection");

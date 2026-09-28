@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValuePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
@@ -79,12 +80,12 @@ public final class CodeModeJobService implements AutoCloseable {
                     }
 
                     @Override
-                    public void execute(int scriptId, String source, ExecutionSide side, ExecutionEnvironment environment) {
+                    public void execute(int scriptId, String source, Side side, ExecutionEnvironment environment) {
                         boolean sent = runs.submit(
                                 scriptId,
                                 project.get(),
                                 source,
-                                side == ExecutionSide.SERVER,
+                                side,
                                 environment.toWireValue()
                         );
                         if (!sent) {
@@ -153,7 +154,7 @@ public final class CodeModeJobService implements AutoCloseable {
     public JobSnapshot submit(
             String code,
             List<String> imports,
-            ExecutionSide side,
+            Side side,
             ExecutionEnvironment environment
     ) {
         Objects.requireNonNull(side, "side");
@@ -359,11 +360,6 @@ public final class CodeModeJobService implements AutoCloseable {
         List.copyOf(this.jobsByScriptId.keySet()).forEach(this::disconnect);
     }
 
-    public enum ExecutionSide {
-        CLIENT,
-        SERVER
-    }
-
     public enum ExecutionEnvironment {
         THREAD,
         PRE_TICK,
@@ -392,7 +388,7 @@ public final class CodeModeJobService implements AutoCloseable {
             String jobId,
             int scriptId,
             JobState state,
-            ExecutionSide side,
+            Side side,
             ExecutionEnvironment environment,
             Instant submittedAt,
             Instant updatedAt,
@@ -438,7 +434,7 @@ public final class CodeModeJobService implements AutoCloseable {
         /** Allocates the script id and registers the observer for its results before the source is built. */
         int open(ExecutionRuns.Observer observer);
 
-        void execute(int scriptId, String source, ExecutionSide side, ExecutionEnvironment environment);
+        void execute(int scriptId, String source, Side side, ExecutionEnvironment environment);
 
         /** Releases an opened id whose job could not be created. */
         void discard(int scriptId);
@@ -449,7 +445,7 @@ public final class CodeModeJobService implements AutoCloseable {
     private static final class Job {
         private final String jobId;
         private final int scriptId;
-        private final ExecutionSide side;
+        private final Side side;
         private final ExecutionEnvironment environment;
         private final String source;
         private final Instant submittedAt;
@@ -470,7 +466,7 @@ public final class CodeModeJobService implements AutoCloseable {
         private Job(
                 String jobId,
                 int scriptId,
-                ExecutionSide side,
+                Side side,
                 ExecutionEnvironment environment,
                 String source,
                 Instant submittedAt,

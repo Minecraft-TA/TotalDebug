@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.evaluation.InMemoryCompilationExceptio
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.evaluation.ScriptClassLoader;
 import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
@@ -107,7 +108,7 @@ class ScriptCompilationServiceTest {
                  return this.sent.add(message);
              }, this.requests::add)) {
             compiler.bind(snapshot);
-            compiler.submit(7, SOURCE, false, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(7, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
             RunScriptMessage message = this.sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(message, () -> this.failures.toString());
             assertEquals("inventory", message.inventoryId());
@@ -132,7 +133,7 @@ class ScriptCompilationServiceTest {
     void readinessSaysWhyARunCannotStartAndSignalsTheNextChange() throws Exception {
         try (ReadySnapshot snapshot = fixture();
              var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
-            ScriptCompilationService.Readiness unbound = compiler.readiness(false);
+            ScriptCompilationService.Readiness unbound = compiler.readiness(Side.CLIENT);
             assertFalse(unbound.ready());
             assertEquals("The runtime class index is not ready for compilation", unbound.detail());
             assertFalse(unbound.changed().isDone());
@@ -140,15 +141,15 @@ class ScriptCompilationServiceTest {
             compiler.bind(snapshot);
 
             assertTrue(unbound.changed().isDone(), "binding the index is a change");
-            assertTrue(compiler.readiness(false).ready(), "client runs need only the index");
-            ScriptCompilationService.Readiness server = compiler.readiness(true);
+            assertTrue(compiler.readiness(Side.CLIENT).ready(), "client runs need only the index");
+            ScriptCompilationService.Readiness server = compiler.readiness(Side.SERVER);
             assertFalse(server.ready());
             assertEquals("Waiting for the client index and server handshake comparison", server.detail());
 
             compiler.runtimeDisconnected();
 
             assertTrue(server.changed().isDone());
-            assertEquals("Minecraft disconnected", compiler.readiness(true).detail());
+            assertEquals("Minecraft disconnected", compiler.readiness(Side.SERVER).detail());
         }
     }
 
@@ -157,7 +158,7 @@ class ScriptCompilationServiceTest {
         try (ReadySnapshot snapshot = fixture();
              var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
             compiler.bind(snapshot);
-            compiler.submit(8, SOURCE, false, ScriptExecutionEnvironment.POST_TICK,
+            compiler.submit(8, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.POST_TICK,
                     new ScriptSubject(SubjectRef.parseOccurrence("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session",
                             "minecraft:pig"),
                     outcome -> this.failures.add(outcome.result()));
@@ -175,9 +176,9 @@ class ScriptCompilationServiceTest {
         try (ReadySnapshot snapshot = fixture();
              var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
             compiler.bind(snapshot);
-            compiler.submit(9, SOURCE, false, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(9, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
             RunScriptMessage first = this.sent.poll(10, TimeUnit.SECONDS);
-            compiler.submit(10, SOURCE, false, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(10, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
             RunScriptMessage second = this.sent.poll(10, TimeUnit.SECONDS);
 
             assertNotNull(first, () -> this.failures.toString());
@@ -185,7 +186,7 @@ class ScriptCompilationServiceTest {
             assertSame(first.bytecode(), second.bytecode());
 
             compiler.bind(snapshot);
-            compiler.submit(11, SOURCE, false, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(11, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
             RunScriptMessage rebound = this.sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(rebound, () -> this.failures.toString());
             assertNotSame(first.bytecode(), rebound.bytecode());
@@ -197,7 +198,7 @@ class ScriptCompilationServiceTest {
         try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
             compiler.bind(snapshot);
             var outcomes = new LinkedBlockingQueue<ScriptCompilationService.Failure>();
-            compiler.submit(1, SOURCE.replace("Api.pick", "Api.missing"), false,
+            compiler.submit(1, SOURCE.replace("Api.pick", "Api.missing"), Side.CLIENT,
                     ScriptExecutionEnvironment.THREAD, outcomes::add);
             var outcome = outcomes.poll(10, TimeUnit.SECONDS);
             assertNotNull(outcome);
@@ -210,10 +211,10 @@ class ScriptCompilationServiceTest {
             assertTrue(this.sent.isEmpty());
             installServer(compiler, snapshot, "server-session");
             compiler.submit(1, "import fixture.ScriptProgram; public class Good extends ScriptProgram { public Object run() { return 42; } }",
-                    true, ScriptExecutionEnvironment.THREAD, recovered -> this.failures.add(recovered.result()));
+                    Side.SERVER, ScriptExecutionEnvironment.THREAD, recovered -> this.failures.add(recovered.result()));
             RunScriptMessage message = this.sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(message);
-            assertTrue(message.serverSide());
+            assertEquals(Side.SERVER, message.side());
             assertEquals(List.of("Good"), List.copyOf(message.bytecode().classes().keySet()));
         }
     }
@@ -223,7 +224,7 @@ class ScriptCompilationServiceTest {
         try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
             compiler.bind(snapshot);
             Files.writeString(this.directory.resolve("inventory.json"), "{\"id\":\"changed\"}");
-            compiler.submit(1, SOURCE, false, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(1, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             ExecutionResult failure = this.failures.poll(10, TimeUnit.SECONDS);
             assertNotNull(failure);
             assertTrue(failure.error().text().contains("Runtime cache has changed"));
@@ -301,7 +302,7 @@ class ScriptCompilationServiceTest {
             });
             assertTrue(locked.await(5, TimeUnit.SECONDS));
             try {
-                compiler.submit(1, SOURCE, false, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+                compiler.submit(1, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
                 assertTrue(compiler.cancel(1));
                 CompletableFuture.runAsync(() -> compiler.bind(null)).get(2, TimeUnit.SECONDS);
                 snapshot.close();
@@ -342,12 +343,12 @@ class ScriptCompilationServiceTest {
             compiler.bind(snapshot);
             installServer(compiler, new ServerManifest.Catalog(List.of(snapshot.sources().get(0).path(),
                     snapshot.sources().get(2).path())), "server-session");
-            compiler.submit(1, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             var failure = this.failures.poll(10, TimeUnit.SECONDS);
             assertNotNull(failure);
             assertTrue(failure.error().text().contains("fixture.QuadView"), failure.error().text());
             assertTrue(this.sent.isEmpty());
-            compiler.submit(2, SOURCE, false, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(2, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertNotNull(this.sent.poll(10, TimeUnit.SECONDS), () -> this.failures.toString());
         }
     }
@@ -367,7 +368,7 @@ class ScriptCompilationServiceTest {
             var paths = List.of(serverApi, snapshot.sources().get(1).path(), snapshot.sources().get(2).path());
             compiler.bind(snapshot);
             installServer(compiler, new ServerManifest.Catalog(paths), "server-session");
-            compiler.submit(1, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             RunScriptMessage compiled = this.sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(compiled, () -> this.failures.toString());
             assertEquals("server-session", compiled.serverSessionId());
@@ -388,7 +389,7 @@ class ScriptCompilationServiceTest {
             compiler.bind(snapshot);
             installServer(compiler, new ServerManifest.Catalog(List.of(changed, snapshot.sources().get(1).path(),
                     snapshot.sources().get(2).path())), "server-session");
-            compiler.submit(1, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             var failure = this.failures.poll(10, TimeUnit.SECONDS);
             assertNotNull(failure);
             assertTrue(failure.error().text().contains("class fixture.Api is absent or its declarations differ"), failure.error().text());
@@ -404,14 +405,14 @@ class ScriptCompilationServiceTest {
             var release = new CountDownLatch(1);
             var held = holdCacheLock(release);
             try {
-                compiler.submit(1, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+                compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
                 compiler.acceptServerManifest(ServerManifestMessage.unavailable("Disconnected"));
             } finally { release.countDown(); }
             held.get(10, TimeUnit.SECONDS);
             assertNotNull(this.failures.poll(10, TimeUnit.SECONDS));
             assertTrue(this.sent.isEmpty());
             installServer(compiler, snapshot, "new-session");
-            compiler.submit(2, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(2, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertEquals("new-session", this.sent.poll(10, TimeUnit.SECONDS).serverSessionId());
         }
     }
@@ -420,7 +421,7 @@ class ScriptCompilationServiceTest {
     void serverCompilationRequiresACompletedHandshake() throws Exception {
         try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
             compiler.bind(snapshot);
-            compiler.submit(1, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertTrue(this.failures.poll(10, TimeUnit.SECONDS).error().text().contains("handshake"));
             assertTrue(this.sent.isEmpty());
         }
@@ -439,7 +440,7 @@ class ScriptCompilationServiceTest {
             compiler.acceptServerManifest(new ServerManifestMessage("session", "", middle, bytes.length,
                     Arrays.copyOfRange(bytes, middle, bytes.length)));
             finishHandshake(compiler, catalog);
-            compiler.submit(1, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertNotNull(this.sent.poll(10, TimeUnit.SECONDS), () -> this.failures.toString());
             assertTrue(this.requests.isEmpty());
         }
@@ -454,9 +455,9 @@ class ScriptCompilationServiceTest {
             for (var message : ServerManifestMessage.split("session", catalog.baseline())) compiler.acceptServerManifest(message);
             compiler.compile("public class Barrier {}", "Barrier").get(10, TimeUnit.SECONDS);
             var old = this.requests.remove();
-            compiler.submit(1, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertTrue(this.failures.poll(10, TimeUnit.SECONDS).error().text().contains("Comparing server source"));
-            compiler.submit(2, SOURCE, false, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(2, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertNotNull(this.sent.poll(10, TimeUnit.SECONDS));
 
             // The same server session is replayed when Companion reconnects; request identity must still change.
@@ -469,11 +470,11 @@ class ScriptCompilationServiceTest {
                 compiler.acceptServerManifest(message);
             }
             compiler.compile("public class Barrier {}", "Barrier").get(10, TimeUnit.SECONDS);
-            compiler.submit(3, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(3, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertTrue(this.failures.poll(10, TimeUnit.SECONDS).error().text().contains("Comparing server source"));
             this.requests.add(current);
             finishHandshake(compiler, catalog);
-            compiler.submit(4, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(4, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertTrue(this.failures.poll(10, TimeUnit.SECONDS).error().text().contains("class fixture.Api"));
             assertTrue(this.sent.isEmpty());
         }
@@ -488,12 +489,12 @@ class ScriptCompilationServiceTest {
             var held = holdCacheLock(release);
             try {
                 compiler.bind(snapshot);
-                compiler.submit(1, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+                compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
                 assertTrue(this.failures.poll(5, TimeUnit.SECONDS).error().text().contains("handshake"));
             } finally { release.countDown(); }
             held.get(10, TimeUnit.SECONDS);
             compiler.compile("public class Barrier {}", "Barrier").get(10, TimeUnit.SECONDS);
-            compiler.submit(2, SOURCE, true, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            compiler.submit(2, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertNotNull(this.sent.poll(10, TimeUnit.SECONDS), () -> this.failures.toString());
         }
     }

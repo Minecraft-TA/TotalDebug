@@ -27,6 +27,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.SignatureHelpPopup;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 import com.github.minecraft_ta.totaldebug.evaluation.CompilationDiagnostic;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
@@ -146,8 +147,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         headerBar.setBackground(ThemeColors.headerBackground());
         headerBar.setBorder(new CompoundBorder(DynamicMatteBorder.rule(0, 0, 1, 0), BorderFactory.createEmptyBorder(5, 0, 5, 0)));
 
-        runButton.addActionListener(e -> runScript(false));
-        runServerButton.addActionListener(e -> runScript(true));
+        runButton.addActionListener(e -> runScript(Side.CLIENT));
+        runServerButton.addActionListener(e -> runScript(Side.SERVER));
         stopButton.addActionListener(e -> { if (activeRun != null) activeRun.stop(); });
 
         headerBar.add(runButton);
@@ -200,7 +201,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         });
     }
 
-    private void runScript(boolean server) {
+    private void runScript(Side side) {
         analysis.finishEditing();
         if (!context.scripts().isConnected()) {
             reportNotification(Severity.ERROR, "Not connected to game client!");
@@ -224,7 +225,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         clearRunOutput();
         unsubscribeRun.run();
         try {
-            activeRun = context.editorRuns().start(context.project(), notificationSource(), generated.source(), server,
+            activeRun = context.editorRuns().start(context.project(), notificationSource(), generated.source(), side,
                     (ScriptExecutionEnvironment) executionEnvironmentComboBox.getSelectedItem());
             EditorScriptRunService.Run run = activeRun;
             unsubscribeRun = run.subscribe(state -> acceptRunState(run, state, generated));

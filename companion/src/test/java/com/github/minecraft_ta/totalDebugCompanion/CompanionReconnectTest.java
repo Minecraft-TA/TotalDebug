@@ -14,6 +14,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.CompanionUi;
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.ProjectSelectionRequest;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
@@ -233,7 +234,7 @@ class CompanionReconnectTest {
             app.startMcpServer(jobs, 0);
             try (var game = socket(config)) {
                 assertTrue(handshake(game, selected, TOKEN));
-                var job = jobs.submit("return 42;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                var job = jobs.submit("return 42;", List.of(), Side.CLIENT,
                         CodeModeJobService.ExecutionEnvironment.THREAD);
                 var lossReported = new CountDownLatch(1);
                 var pendingWhileConnected = new AtomicBoolean();
@@ -278,7 +279,7 @@ class CompanionReconnectTest {
                 catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
             });
             app.startMcpServer(jobs, 0);
-            jobs.submit("return 1;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+            jobs.submit("return 1;", List.of(), Side.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD);
             var reconnect = app.reconnectGame(app.requireProject());
             try {

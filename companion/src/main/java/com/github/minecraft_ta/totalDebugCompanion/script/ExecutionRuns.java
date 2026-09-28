@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.script;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope.InactiveProjectException;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
@@ -58,12 +59,12 @@ public final class ExecutionRuns implements AutoCloseable {
     }
 
     /** Returns false, and forgets the run, when the current connection did not accept it. */
-    public boolean submit(int id, ProjectScope project, String source, boolean serverSide,
+    public boolean submit(int id, ProjectScope project, String source, Side side,
                           ScriptExecutionEnvironment environment) {
-        return submit(id, project, source, serverSide, environment, null);
+        return submit(id, project, source, side, environment, null);
     }
 
-    public boolean submit(int id, ProjectScope project, String source, boolean serverSide,
+    public boolean submit(int id, ProjectScope project, String source, Side side,
                           ScriptExecutionEnvironment environment, ScriptSubject subject) {
         if (project == null) {
             discard(id);
@@ -76,7 +77,7 @@ public final class ExecutionRuns implements AutoCloseable {
                 if (run == null) return false;
                 boolean sent = false;
                 try {
-                    sent = this.scripts.run(project, id, source, serverSide, environment, subject, failure -> failed(id, failure));
+                    sent = this.scripts.run(project, id, source, side, environment, subject, failure -> failed(id, failure));
                     return sent;
                 } finally {
                     if (!sent) this.runs.remove(id, run);
@@ -92,8 +93,8 @@ public final class ExecutionRuns implements AutoCloseable {
         return this.scripts.stop(id);
     }
 
-    public ScriptCompilationService.Readiness readiness(boolean serverSide) {
-        return this.scripts.readiness(serverSide);
+    public ScriptCompilationService.Readiness readiness(Side side) {
+        return this.scripts.readiness(side);
     }
 
     /** Ends runs submitted on the given connection or an earlier one. */
