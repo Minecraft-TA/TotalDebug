@@ -35,6 +35,10 @@ public interface IEditorPanel {
     /** The runtime that supplied this view; local editors have no runtime owner. */
     default RuntimeBinding runtimeBinding() { return null; }
 
+    /** The project's runtime was installed, replaced or removed. */
+    default void runtimeChanged() {
+    }
+
     default NavigationTarget getNavigationTarget() {
         return null;
     }

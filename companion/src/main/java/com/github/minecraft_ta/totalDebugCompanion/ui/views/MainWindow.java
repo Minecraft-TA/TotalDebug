@@ -26,6 +26,7 @@ import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
+import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -275,7 +276,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.fileTreeView.reloadProfile();
         if (this.searchEverywherePopup != null) this.searchEverywherePopup.catalogChanged();
     }
-    @Override public void runtimeChanged() { statusBar.refreshContext(); editorTabs.astCache().refreshEnvironment(); navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }
+    @Override public void runtimeChanged() { statusBar.refreshContext(); editorTabs.astCache().refreshEnvironment(); navigationService.runtimeChanged(); editorTabs.editors().forEach(IEditorPanel::runtimeChanged); refreshRuntimeSources(); refreshActions(); }
     @Override public void navigate(NavigationTarget target, NavigationService.Activation activation) { navigation().navigate(target, activation); }
     @Override public void focus() { UIUtils.focusWindow(this); }
     @Override public void showError(String title, String message) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE); }

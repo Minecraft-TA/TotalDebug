@@ -1,8 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.ClassBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.MixinMember;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.MixinSelector;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.MixinTarget;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.Mixins;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -34,6 +37,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -44,21 +48,50 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * The mixins the mods declare, one row per member of a target class they change, with the mods that change it and how.
- * Shared narrows the list to members several mods change, where their changes can meet; an Overwrite among them stands
- * out. A row opens its target class; its menu opens each mixin class and mod.
+ * Each change's selector is resolved against the members the target declares, read from the class index, as Mixin
+ * resolves it. Shared narrows the list to members several mods change, where their changes can meet; an Overwrite among
+ * them stands out. A row opens its target class; its menu opens each mixin class and mod.
  */
 public final class MixinsPanel extends JPanel {
-    /** A member of a target class that mixins change, and the changes that reach it. */
-    record Row(String target, MixinMember member, List<Entry> entries) {
+    /** What a row stands for: a member the target declares, or a selector that selects none, and why. */
+    enum Kind {
+        CLASS(""),
+        FIELD(""),
+        METHOD(""),
+        NOT_SELECTED("Selects nothing the class declares"),
+        DYNAMIC("A dynamic selector, which only the game resolves"),
+        NO_CLASS("The class is not in the game");
+
+        private final String reason;
+
+        Kind(String reason) {
+            this.reason = reason;
+        }
+
+        boolean selected() {
+            return this.reason.isEmpty();
+        }
+    }
+
+    /** Where the target classes of mixins come from: a class by binary name, or empty when the game has none of it. */
+    @FunctionalInterface
+    interface Targets {
+        Optional<MixinTarget> find(String binaryName) throws IOException;
+    }
+
+    /** A member of a target class that mixins change, or a selector that selects none, and the changes of the row. */
+    record Row(String target, String member, Kind kind, List<Entry> entries) {
         /** What identifies the row across reloads. */
         String key() {
-            return this.target + "#" + this.member.getClass().getSimpleName() + ":" + this.member.shown();
+            return this.target + "#" + this.kind + ":" + this.member;
         }
 
         Set<String> mods() {
@@ -67,8 +100,12 @@ public final class MixinsPanel extends JPanel {
             return mods;
         }
 
-        /** Whether changes of different mods meet here: on one side at least, as a client-only and a server-only never do. */
+        /**
+         * Whether changes of different mods meet here: on a member both select, on one side at least, as a client-only
+         * and a server-only never do.
+         */
         boolean shared() {
+            if (!this.kind.selected()) return false;
             for (Entry first : this.entries) {
                 for (Entry second : this.entries) {
                     if (meet(first, second)) return true;
@@ -79,6 +116,7 @@ public final class MixinsPanel extends JPanel {
 
         /** One mod replaces the member whole where another mod's change meets it, which that change may not survive. */
         boolean overwritten() {
+            if (!this.kind.selected()) return false;
             for (Entry overwrite : this.entries) {
                 if (!overwrite.kind().equals("Overwrite")) continue;
                 for (Entry other : this.entries) {
@@ -95,9 +133,9 @@ public final class MixinsPanel extends JPanel {
                     && (one == Mixins.Side.BOTH || two == Mixins.Side.BOTH || one == two);
         }
 
-        /** The row as a reference: the target, and the member with its overload where it gives one. */
+        /** The row as a reference: the target, and the member with its overload, or the selector as written. */
         String reference() {
-            return this.target + (this.member instanceof MixinMember.Whole ? "" : "#" + this.member.shown());
+            return this.target + (this.kind == Kind.CLASS ? "" : "#" + this.member);
         }
 
         String kinds() {
@@ -107,8 +145,8 @@ public final class MixinsPanel extends JPanel {
         }
     }
 
-    /** One mixin's change, to the member it names. */
-    record Entry(Mixins.Mixin mixin, String kind, MixinMember member) {
+    /** One mixin's change of the row. */
+    record Entry(Mixins.Mixin mixin, String kind) {
     }
 
     /** The rows read, and why files or classes could not be read. */
@@ -116,6 +154,8 @@ public final class MixinsPanel extends JPanel {
     }
 
     private final PackCatalogService catalog;
+    /** The current runtime's classes, or null while the class index is not ready. */
+    private final Supplier<ClassBytecodeSource> classes;
     private final Consumer<NavigationTarget> navigator;
     private final RowsModel model = new RowsModel();
     private final JTable table = new JTable(this.model) {
@@ -132,9 +172,10 @@ public final class MixinsPanel extends JPanel {
     private List<Row> all = List.of();
     private String unavailable = "";
 
-    public MixinsPanel(PackCatalogService catalog, Consumer<NavigationTarget> navigator) {
+    public MixinsPanel(PackCatalogService catalog, Supplier<ClassBytecodeSource> classes, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
+        this.classes = Objects.requireNonNull(classes, "classes");
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         Tables.configure(this.table);
@@ -172,66 +213,87 @@ public final class MixinsPanel extends JPanel {
         }).whenShown(this).follow(catalog::addListener);
     }
 
-    /** Reads the mods' mixins again. */
+    /** Reads the mods' mixins again, and resolves them against the current runtime's classes. */
     public void load() {
         this.loader.load();
     }
 
-    /** Reads the mixins of the mods the catalog knows; without a catalog there is nothing to read. */
+    /**
+     * Reads the mixins of the mods the catalog knows and resolves them against the runtime's classes; without a catalog
+     * there is nothing to read, and without the class index nothing to resolve against.
+     */
     private Callable<Loaded> prepareLoad() {
         CatalogIndex captured = this.catalog.index().orElse(null);
-        if (captured == null) {
-            String reason = CatalogMessages.unavailable(this.catalog.state());
+        ClassBytecodeSource source = this.classes.get();
+        if (captured == null || source == null) {
+            String reason = captured == null ? CatalogMessages.unavailable(this.catalog.state()) : "";
             show(new Loaded(null, List.of(), List.of()));
-            this.unavailable = reason.isEmpty() ? "The pack catalog is not captured yet." : reason;
+            this.unavailable = captured != null ? "The class index is not ready yet."
+                    : reason.isEmpty() ? "The pack catalog is not captured yet." : reason;
             applyFilter();
             return null;
         }
         if (this.all.isEmpty()) this.body.showMessage("Reading the mixins of every mod");
         return () -> {
             Mixins.Read read = Mixins.read(captured);
-            return new Loaded(captured, rows(read.mixins()), read.problems());
+            List<String> problems = new ArrayList<>(read.problems());
+            List<Row> rows = rows(read.mixins(), binaryName -> {
+                byte[] bytes = source.findClassBytes(binaryName);
+                return bytes == null ? Optional.empty() : Optional.of(MixinTarget.read(bytes));
+            }, problems);
+            return new Loaded(captured, rows, problems);
         };
     }
 
     /**
-     * One row per member of each target that changes reach, by target, then member. The rows are the members the changes
-     * name, except one that joins the rows of the more exact members it reaches ({@link MixinMember#precision}), such as a
-     * method named without its descriptor, which is a row of its own only where it reaches none. Each row holds every
-     * change that reaches its member.
+     * One row per member of each target that changes select, by target, then member: each change's selector is resolved
+     * against the members the target declares, so a row holds every change that selects its member. A change that selects
+     * nothing, or whose target the game does not have, is a row of the selector as written, which meets no other change.
+     * A target that cannot be read is named in {@code problems}, and its changes left out.
      */
-    static List<Row> rows(List<Mixins.Mixin> mixins) {
-        Map<String, List<Entry>> byTarget = new LinkedHashMap<>();
+    static List<Row> rows(List<Mixins.Mixin> mixins, Targets targets, List<String> problems) {
+        Map<String, Optional<MixinTarget>> read = new LinkedHashMap<>();
+        Set<String> unreadable = new HashSet<>();
+        Map<Row, List<Entry>> byRow = new LinkedHashMap<>();
         for (Mixins.Mixin mixin : mixins) {
             for (String target : mixin.targets()) {
+                if (unreadable.contains(target)) continue;
+                Optional<MixinTarget> declared = read.get(target);
+                if (declared == null) {
+                    try {
+                        declared = targets.find(target);
+                    } catch (IOException | RuntimeException failure) {
+                        unreadable.add(target);
+                        problems.add(target + ": " + (failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage()));
+                        continue;
+                    }
+                    read.put(target, declared);
+                }
                 for (Mixins.Change change : mixin.changes()) {
                     // A selector naming its owner changes only that one of the mixin's targets.
                     if (!change.appliesTo(target)) continue;
-                    byTarget.computeIfAbsent(target, ignored -> new ArrayList<>()).add(new Entry(mixin, change.kind(), change.member()));
+                    Entry entry = new Entry(mixin, change.kind());
+                    List<MixinMember> selected = declared.map(found -> change.selector().select(found, change.staticHandler())).orElse(List.of());
+                    Kind missing = declared.isEmpty() ? Kind.NO_CLASS : change.selector() instanceof MixinSelector.Dynamic ? Kind.DYNAMIC : Kind.NOT_SELECTED;
+                    if (selected.isEmpty()) byRow.computeIfAbsent(new Row(target, change.selector().shown(), missing, List.of()), ignored -> new ArrayList<>()).add(entry);
+                    for (MixinMember member : selected) {
+                        byRow.computeIfAbsent(new Row(target, member.shown(), kind(member), List.of()), ignored -> new ArrayList<>()).add(entry);
+                    }
                 }
             }
         }
         List<Row> rows = new ArrayList<>();
-        byTarget.forEach((target, entries) -> {
-            Set<MixinMember> named = new LinkedHashSet<>();
-            for (Entry entry : entries) named.add(entry.member());
-            for (MixinMember member : named) {
-                if (named.stream().anyMatch(other -> other.precision() > member.precision() && member.reaches(other))) continue;
-                rows.add(new Row(target, member, entries.stream().filter(entry -> entry.member().reaches(member)).toList()));
-            }
-        });
+        byRow.forEach((row, entries) -> rows.add(new Row(row.target(), row.member(), row.kind(), entries.stream().distinct().toList())));
         rows.sort(Comparator.comparing((Row row) -> simple(row.target())).thenComparing(Row::target)
-                .thenComparing(row -> row.member() instanceof MixinMember.Matching).thenComparing(row -> row.member().name()).thenComparing(row -> order(row.member())).thenComparing(row -> row.member().shown()));
+                .thenComparing(Row::kind).thenComparing(Row::member));
         return rows;
     }
 
-    /** The class itself first, then a field, then the methods of a name. */
-    private static int order(MixinMember member) {
+    private static Kind kind(MixinMember member) {
         return switch (member) {
-            case MixinMember.Whole ignored -> 0;
-            case MixinMember.Field ignored -> 1;
-            case MixinMember.Method ignored -> 2;
-            case MixinMember.Matching ignored -> 3;
+            case MixinMember.Whole ignored -> Kind.CLASS;
+            case MixinMember.Field ignored -> Kind.FIELD;
+            case MixinMember.Method ignored -> Kind.METHOD;
         };
     }
 
@@ -259,7 +321,7 @@ public final class MixinsPanel extends JPanel {
         List<Row> shown = new ArrayList<>();
         for (Row row : this.all) {
             if (shared && !row.shared()) continue;
-            if (query.isEmpty() || row.target().toLowerCase(Locale.ROOT).contains(query) || row.member().shown().toLowerCase(Locale.ROOT).contains(query)
+            if (query.isEmpty() || row.target().toLowerCase(Locale.ROOT).contains(query) || row.member().toLowerCase(Locale.ROOT).contains(query)
                     || mods(row).toLowerCase(Locale.ROOT).contains(query) || row.mods().stream().anyMatch(mod -> mod.contains(query))
                     || row.kinds().toLowerCase(Locale.ROOT).contains(query)) {
                 shown.add(row);
@@ -292,14 +354,15 @@ public final class MixinsPanel extends JPanel {
     }
 
     private String tooltip(Row row) {
-        Tooltip tooltip = Tooltip.of(simple(row.target()) + (row.member() instanceof MixinMember.Whole ? "" : "." + row.member().shown()))
+        Tooltip tooltip = Tooltip.of(simple(row.target()) + (row.kind() == Kind.CLASS ? "" : "." + row.member()))
                 .detail(row.target());
         for (Entry entry : row.entries()) {
             Mixins.Mixin mixin = entry.mixin();
             tooltip.fact(modName(mixin.modId()), entry.kind() + " in " + simple(mixin.className()) + ", " + mixin.side().label()
                     + (mixin.priority() == 1000 ? "" : ", priority " + NumberFormat.getIntegerInstance(Locale.ROOT).format(mixin.priority())));
         }
-        if (row.member() instanceof MixinMember.Whole) tooltip.text("Adds members or interfaces to the class");
+        if (row.kind() == Kind.CLASS) tooltip.text("Adds members or interfaces to the class");
+        if (!row.kind().selected()) tooltip.text(row.kind().reason);
         if (row.overwritten()) tooltip.text("One mod replaces the member whole; the others' changes may not reach it");
         return tooltip.html();
     }
@@ -379,14 +442,17 @@ public final class MixinsPanel extends JPanel {
             Row row = this.shown.get(rowIndex);
             return switch (column) {
                 case 0 -> simple(row.target());
-                case 1 -> row.member().shown();
+                case 1 -> row.member();
                 case 2 -> mods(row);
                 default -> row.kinds();
             };
         }
     }
 
-    /** Targets in regular text, the rest in secondary text; a member one mod replaces under others' changes as a warning. */
+    /**
+     * Targets and members in regular text, the rest, the class itself and selectors that select nothing in secondary
+     * text; a member one mod replaces under others' changes as a warning.
+     */
     private final class RowRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean selected, boolean focused,
@@ -396,7 +462,7 @@ public final class MixinsPanel extends JPanel {
             Row row = MixinsPanel.this.model.shown.get(rowIndex);
             if (!selected) {
                 setForeground(column == 3 && row.overwritten() ? ThemeColors.warning()
-                        : column == 0 || column == 1 && !(row.member() instanceof MixinMember.Whole) ? ThemeColors.text() : ThemeColors.secondaryText());
+                        : column == 0 || column == 1 && row.kind() != Kind.CLASS && row.kind().selected() ? ThemeColors.text() : ThemeColors.secondaryText());
             }
             return this;
         }

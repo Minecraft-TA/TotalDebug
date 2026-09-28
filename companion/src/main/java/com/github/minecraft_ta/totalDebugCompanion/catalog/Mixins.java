@@ -82,18 +82,22 @@ public final class Mixins {
     }
 
     /**
-     * One change a mixin makes: how, such as {@code Inject}, to which member, and the target class its selector names by
-     * binary name, or empty for every target of the mixin.
+     * One change a mixin makes: how, such as {@code Inject}, what it selects, the target class its selector names by
+     * binary name, or empty for every target of the mixin, and whether its handler method is static.
      */
-    public record Change(String kind, MixinMember member, String owner) {
+    public record Change(String kind, MixinSelector selector, String owner, boolean staticHandler) {
         public Change {
             Objects.requireNonNull(kind, "kind");
-            Objects.requireNonNull(member, "member");
+            Objects.requireNonNull(selector, "selector");
             Objects.requireNonNull(owner, "owner");
         }
 
-        public Change(String kind, MixinMember member) {
-            this(kind, member, "");
+        public Change(String kind, MixinSelector selector, String owner) {
+            this(kind, selector, owner, false);
+        }
+
+        public Change(String kind, MixinSelector selector) {
+            this(kind, selector, "");
         }
 
         /** Whether the change applies to {@code target}, one of the mixin's targets. */
@@ -151,7 +155,14 @@ public final class Mixins {
         List<String> problems = new ArrayList<>();
         try (ModFiles.Archive archive = opened.get()) {
             for (String config : configs(archive)) {
-                Optional<byte[]> json = archive.read(config, MAXIMUM_CONFIG_BYTES);
+                Optional<byte[]> json;
+                try {
+                    json = archive.read(config, MAXIMUM_CONFIG_BYTES);
+                } catch (IOException unreadable) {
+                    // One entry that cannot be read leaves the file's others readable.
+                    problems.add(name(file) + ": " + message(unreadable));
+                    continue;
+                }
                 if (json.isEmpty()) {
                     problems.add(name(file) + ": " + config + " is missing");
                     continue;
@@ -181,12 +192,12 @@ public final class Mixins {
                     for (JsonElement name : names) {
                         if (!name.isJsonPrimitive()) continue;
                         String className = pkg.isEmpty() ? name.getAsString() : pkg + "." + name.getAsString();
-                        Optional<byte[]> bytes = archive.read(className.replace('.', '/') + ".class", MAXIMUM_CLASS_BYTES);
-                        // A listed class the file does not hold is one the configuration names for another version.
-                        if (bytes.isEmpty()) continue;
                         try {
+                            Optional<byte[]> bytes = archive.read(className.replace('.', '/') + ".class", MAXIMUM_CLASS_BYTES);
+                            // A listed class the file does not hold is one the configuration names for another version.
+                            if (bytes.isEmpty()) continue;
                             mixin(owner, config, className, side, priority, bytes.get()).ifPresent(mixins::add);
-                        } catch (RuntimeException malformed) {
+                        } catch (IOException | RuntimeException malformed) {
                             problems.add(name(file) + ": " + className + " could not be read: " + message(malformed));
                         }
                     }
@@ -322,13 +333,13 @@ public final class Mixins {
                     public AnnotationVisitor visitAnnotation(String annotation, boolean visible) {
                         String kind = KINDS.get(annotation);
                         if (kind == null) return null;
-                        return new SelectorVisitor(kind, methodName, descriptor, changes);
+                        return new SelectorVisitor(kind, methodName, descriptor, (access & Opcodes.ACC_STATIC) != 0, changes);
                     }
                 };
             }
         }, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
         if (!annotated[0] || targets.isEmpty()) return Optional.empty();
-        if (changes.isEmpty()) changes.add(new Change("Adds", new MixinMember.Whole()));
+        if (changes.isEmpty()) changes.add(new Change("Adds", new MixinSelector.Whole()));
         return Optional.of(new Mixin(modId, config, className, targets, side, effective[0], changes.stream().distinct().toList()));
     }
 
@@ -341,16 +352,18 @@ public final class Mixins {
         private final String methodName;
         /** The annotated method's own descriptor, which an overwrite shares with the member it replaces. */
         private final String methodDescriptor;
+        private final boolean staticHandler;
         private final List<Change> changes;
         private final List<Selected> named = new ArrayList<>();
         /** Other names an overwrite replaces its method by, where the target has one of those instead. */
         private final List<String> aliases = new ArrayList<>();
 
-        SelectorVisitor(String kind, String methodName, String methodDescriptor, List<Change> changes) {
+        SelectorVisitor(String kind, String methodName, String methodDescriptor, boolean staticHandler, List<Change> changes) {
             super(Opcodes.ASM9);
             this.kind = kind;
             this.methodName = methodName;
             this.methodDescriptor = methodDescriptor;
+            this.staticHandler = staticHandler;
             this.changes = changes;
         }
 
@@ -418,7 +431,7 @@ public final class Mixins {
                 public void visitEnd() {
                     if (member[0].isEmpty()) return;
                     String descriptor = Type.getMethodDescriptor(returned[0], arguments.toArray(Type[]::new));
-                    SelectorVisitor.this.named.add(new Selected(new MixinMember.Method(member[0], descriptor), owner[0]));
+                    SelectorVisitor.this.named.add(new Selected(new MixinSelector.Method(member[0], descriptor), owner[0]));
                 }
             };
         }
@@ -430,26 +443,31 @@ public final class Mixins {
         @Override
         public void visitEnd() {
             switch (this.kind) {
-                // An overwrite replaces the method of its own name and signature, or of one of its aliases.
+                // An overwrite replaces the method of its own name and signature, or else of its first alias the target has.
                 case "Overwrite" -> {
-                    this.changes.add(new Change(this.kind, new MixinMember.Method(this.methodName, this.methodDescriptor)));
-                    for (String alias : this.aliases) {
-                        this.changes.add(new Change(this.kind, new MixinMember.Method(alias, this.methodDescriptor)));
-                    }
+                    List<MixinSelector> choices = new ArrayList<>();
+                    choices.add(new MixinSelector.Method(this.methodName, this.methodDescriptor));
+                    for (String alias : this.aliases) choices.add(new MixinSelector.Method(alias, this.methodDescriptor));
+                    this.changes.add(new Change(this.kind, choices.size() == 1 ? choices.getFirst() : new MixinSelector.First(choices)));
                 }
                 // An accessor reaches a field; an invoker the method of its own signature, or a constructor.
-                case "Accessor" -> {
-                    String name = this.named.isEmpty() ? accessed(this.kind, this.methodName) : this.named.getFirst().member().name();
-                    this.changes.add(new Change(this.kind, new MixinMember.Field(name), namedOwner()));
-                }
+                case "Accessor" -> this.changes.add(new Change(this.kind, new MixinSelector.Field(accessedName()), namedOwner()));
                 case "Invoker" -> {
-                    String name = this.named.isEmpty() ? accessed(this.kind, this.methodName) : this.named.getFirst().member().name();
-                    this.changes.add(new Change(this.kind, new MixinMember.Method(name, invoked(name, this.methodDescriptor)), namedOwner()));
+                    String name = accessedName();
+                    this.changes.add(new Change(this.kind, new MixinSelector.Method(name, invoked(name, this.methodDescriptor)), namedOwner()));
                 }
                 default -> {
-                    for (Selected target : this.named) this.changes.add(new Change(this.kind, target.member(), target.owner()));
+                    for (Selected target : this.named) {
+                        this.changes.add(new Change(this.kind, target.selector(), target.owner(), this.staticHandler));
+                    }
                 }
             }
+        }
+
+        /** The member an accessor or invoker names in its annotation, or else by its own name. */
+        private String accessedName() {
+            return !this.named.isEmpty() && this.named.getFirst().selector() instanceof MixinSelector.Method method && !method.name().isEmpty()
+                    ? method.name() : accessed(this.kind, this.methodName);
         }
 
         /** The owner the annotation's own name gives, or empty. */
@@ -458,9 +476,12 @@ public final class Mixins {
         }
     }
 
-    /** What a selector names: a method, or methods matching a pattern, and the owner it names, or empty for any target. */
-    record Selected(MixinMember member, String owner) {
+    /** What a selector names, and the owner it names, or empty for any target. */
+    record Selected(MixinSelector selector, String owner) {
     }
+
+    /** A quantifier such as {@code {2}}, {@code {1,}}, {@code {,3}} or {@code {1,3}}. */
+    private static final Pattern QUANTIFIER = Pattern.compile("\\{\\s*(\\d*)\\s*(,?)\\s*(\\d*)\\s*}");
 
     /** Mixin's regular-expression selector: {@code /pattern/}, or parts such as {@code name=/pattern/}. */
     private static final Pattern MATCHER = Pattern.compile("((owner|name|desc)\\s*=\\s*)?/(.*?)(?<!\\\\)/");
@@ -468,24 +489,24 @@ public final class Mixins {
     /**
      * What a target selector names, read as Mixin's {@code MemberInfo.parse} reads it: whitespace dropped, an owner
      * before the last dot or as {@code Lowner;}, the descriptor from {@code (} or after {@code :}, and a quantifier at the
-     * end of the name ({@code *}, {@code +} or {@code {1,3}}), which counts matches and is not part of the name. An empty
-     * name, as {@code *} leaves, names every method. A selector ending in a slash names the methods whose names its name
-     * pattern matches.
+     * end of the name ({@code *}, {@code +} or {@code {1,3}}), which limits how many methods it selects and is not part
+     * of the name; without one it selects the first match. An empty name, as {@code *} leaves, names every method. A
+     * selector ending in a slash is a set of patterns, and one starting with {@code @} is dynamic.
      */
     static Selected selector(String selector) {
         String trimmed = selector.strip();
         // As Mixin's TargetSelector: only a regular-expression selector ends with a slash, and a dynamic one starts with @,
         // whose member only the game resolves, so it is named as written.
         if (trimmed.endsWith("/")) {
-            String name = ".*";
+            String[] parts = {"", "", ""};
             Matcher patterns = MATCHER.matcher(trimmed);
             while (patterns.find()) {
                 String part = patterns.group(2);
-                if (part == null || part.equals("name")) name = patterns.group(3);
+                parts["owner".equals(part) ? 0 : "desc".equals(part) ? 2 : 1] = patterns.group(3);
             }
-            return new Selected(new MixinMember.Matching(name), "");
+            return new Selected(new MixinSelector.Matching(parts[0], parts[1], parts[2]), "");
         }
-        if (trimmed.startsWith("@")) return new Selected(new MixinMember.Method(trimmed, ""), "");
+        if (trimmed.startsWith("@")) return new Selected(new MixinSelector.Dynamic(trimmed), "");
         String text = trimmed.replaceAll("\\s", "");
         int arrow = text.indexOf("->");
         if (arrow >= 0) text = text.substring(0, arrow);
@@ -513,12 +534,28 @@ public final class Mixins {
             owner = name.replace('/', '.');
             name = "";
         }
+        int limit = 1;
         if (name.endsWith("*") || name.endsWith("+")) {
             name = name.substring(0, name.length() - 1);
-        } else if (name.endsWith("}") && name.indexOf('{') >= 0) {
+            limit = Integer.MAX_VALUE;
+        } else if (name.indexOf('{') >= 0) {
+            // A malformed quantifier selects nothing, as Mixin refuses the selector.
+            Matcher quantifier = QUANTIFIER.matcher(name.substring(name.indexOf('{')));
+            limit = quantifier.matches() ? maximum(quantifier) : 0;
             name = name.substring(0, name.indexOf('{'));
         }
-        return new Selected(new MixinMember.Method(name, descriptor), owner);
+        return new Selected(new MixinSelector.Method(name, descriptor, limit), owner);
+    }
+
+    /** The most matches a quantifier allows: its upper bound, or its one count, or any number without an upper bound. */
+    private static int maximum(Matcher quantifier) {
+        String upper = quantifier.group(2).isEmpty() ? quantifier.group(1) : quantifier.group(3);
+        if (upper.isEmpty()) return quantifier.group(2).isEmpty() ? 0 : Integer.MAX_VALUE;
+        try {
+            return Integer.parseInt(upper);
+        } catch (NumberFormatException tooLarge) {
+            return Integer.MAX_VALUE;
+        }
     }
 
     /**
