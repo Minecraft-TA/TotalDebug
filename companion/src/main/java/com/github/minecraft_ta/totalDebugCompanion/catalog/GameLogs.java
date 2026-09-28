@@ -188,11 +188,19 @@ public final class GameLogs {
         List<ModIssue> issues = new ArrayList<>();
         String issueMod = null;
         int issueOffset = 0;
+        StringBuilder failureMessage = null;
+        int failureIndent = 0;
         boolean trace = false;
         try (Lines lines = new Lines(report)) {
             String line;
             while ((line = lines.next()) != null) {
                 String stripped = line.strip();
+                // A mod's failure message goes on over the lines indented deeper than its first.
+                if (failureMessage != null && (stripped.isEmpty() || indent(line) <= failureIndent)) {
+                    issues.add(new ModIssue(issueMod, failureMessage.toString(), issueOffset));
+                    issueMod = null;
+                    failureMessage = null;
+                }
                 if (time.isEmpty() && line.startsWith("Time: ")) time = line.substring("Time: ".length()).strip();
                 if (description.isEmpty() && line.startsWith("Description: ")) {
                     description = line.substring("Description: ".length()).strip();
@@ -202,8 +210,10 @@ public final class GameLogs {
                     issueMod = line.substring(MOD_ISSUE.length()).replace("--", "").strip();
                     issueOffset = lines.start();
                 } else if (issueMod != null && stripped.startsWith("Failure message: ")) {
-                    issues.add(new ModIssue(issueMod, stripped.substring("Failure message: ".length()), issueOffset));
-                    issueMod = null;
+                    failureMessage = new StringBuilder(stripped.substring("Failure message: ".length()));
+                    failureIndent = indent(line);
+                } else if (failureMessage != null) {
+                    failureMessage.append('\n').append(stripped);
                 } else if (trace) {
                     Matcher frame = FRAME.matcher(line);
                     if (frame.matches()) {
@@ -226,8 +236,21 @@ public final class GameLogs {
                 }
             }
         }
+        if (failureMessage != null) issues.add(new ModIssue(issueMod, failureMessage.toString(), issueOffset));
         if (message != null) failures.add(failure(message, messageOffset, frames));
         return new CrashReport(time, description, failures, issues);
+    }
+
+    /** How far a line is indented, a tab counting as four spaces. */
+    private static int indent(String line) {
+        int width = 0;
+        for (int index = 0; index < line.length(); index++) {
+            char character = line.charAt(index);
+            if (character == '\t') width += 4;
+            else if (character == ' ') width++;
+            else break;
+        }
+        return width;
     }
 
     private static Failure failure(StringBuilder text, int offset, List<Frame> frames) {
@@ -334,7 +357,10 @@ public final class GameLogs {
         }
 
         LogEntry entry() {
-            return new LogEntry(this.level, this.time, this.thread, this.logger, this.message, this.text.toString(), this.offset);
+            // An entry longer than it keeps says so, and the log holds the rest at its line.
+            String text = this.lines <= MAX_ENTRY_LINES ? this.text.toString()
+                    : this.text + "\n" + (this.lines - MAX_ENTRY_LINES) + " more lines in the log";
+            return new LogEntry(this.level, this.time, this.thread, this.logger, this.message, text, this.offset);
         }
     }
 }
