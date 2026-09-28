@@ -68,6 +68,25 @@ class GameRuleEditsTest {
     }
 
     @Test
+    void anOpenWorldWithoutTheGamesRulesKeepsItsChangesAndRefusesWrites() throws Exception {
+        Path world = world();
+        ChangeRecord record = ChangeRecord.inMemory();
+        GameRuleEdits rules = new GameRuleEdits(record, edits(record), Runnable::run);
+        rules.set(world, "keepInventory", "false").get(5, TimeUnit.SECONDS);
+        // Saved back to the original, as a game that has the world open may have saved it before taking the change.
+        ChangeRecord other = ChangeRecord.inMemory();
+        new GameRuleEdits(other, edits(other), Runnable::run).set(world, "keepInventory", "true").get(5, TimeUnit.SECONDS);
+
+        try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock ignored = channel.lock()) {
+            assertTrue(rules.holds(record.changes().getFirst()), "level.dat lags behind the open world; its value is not taken");
+            assertEquals(1, record.size());
+            assertRefused("is open in a game", () -> new GameRuleEdits(other, edits(other), Runnable::run)
+                    .set(world, "randomTickSpeed", "5"));
+        }
+    }
+
+    @Test
     void aValueTheGameWouldRefuseIsNotWritten() throws Exception {
         Path world = world();
         ChangeRecord record = ChangeRecord.inMemory();

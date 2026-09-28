@@ -26,7 +26,7 @@ class GameRulesPanelTest {
                 set.add(name + "=" + value);
                 return answer;
             });
-            panel[0].setRules(new TreeMap<>(Map.of("keepInventory", "true", "randomTickSpeed", "3")));
+            panel[0].setRules("Test", new TreeMap<>(Map.of("keepInventory", "true", "randomTickSpeed", "3")));
 
             assertTrue(panel[0].table().editCellAt(1, 1));
             ((JTextField) panel[0].table().getEditorComponent()).setText("fast");
@@ -44,7 +44,7 @@ class GameRulesPanelTest {
             assertEquals("", panel[0].notice());
         });
         // The game names its rules while the set is pending: a command set the rule meanwhile.
-        SwingUtilities.invokeAndWait(() -> panel[0].setRules(new TreeMap<>(Map.of("keepInventory", "true", "randomTickSpeed", "7"))));
+        SwingUtilities.invokeAndWait(() -> panel[0].setRules("Test", new TreeMap<>(Map.of("keepInventory", "true", "randomTickSpeed", "7"))));
         answer.completeExceptionally(new IllegalStateException("The world is closed"));
         SwingUtilities.invokeAndWait(() -> { });
         SwingUtilities.invokeAndWait(() -> {

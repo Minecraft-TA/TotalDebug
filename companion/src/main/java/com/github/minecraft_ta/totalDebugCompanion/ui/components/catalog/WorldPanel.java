@@ -208,7 +208,7 @@ public final class WorldPanel extends JPanel {
         this.header.setSubtitle(subtitle);
 
         showOverview(saved);
-        this.rules.setRules(loaded.rules());
+        this.rules.setRules(saved.directory(), loaded.rules());
         this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
         setTab(WorldTab.GAME_RULES, loaded.rules().size());
         setTab(WorldTab.DATAPACKS, this.datapackList.size());

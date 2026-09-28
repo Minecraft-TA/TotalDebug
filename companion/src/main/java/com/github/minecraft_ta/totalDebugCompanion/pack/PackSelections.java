@@ -191,7 +191,11 @@ public final class PackSelections {
      * disabled, so the game does not enable it again as a new one.
      */
     private static void writeLevel(Path world, List<String> enabled) throws IOException {
-        LevelDat.Root root = LevelDat.read(LevelDat.file(world));
+        LevelDat.update(world, root -> written(world, root, enabled));
+    }
+
+    /** {@code root} with {@code enabled} as its world's datapacks. */
+    private static LevelDat.Root written(Path world, LevelDat.Root root, List<String> enabled) throws IOException {
         if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
             throw new IOException("The level.dat of " + world.getFileName() + " holds no world data");
         }
@@ -202,7 +206,7 @@ public final class PackSelections {
         enabled.forEach(disabled::remove);
         NbtData.CompoundTag written = LevelDat.with(LevelDat.with(packs == null ? new NbtData.CompoundTag(Map.of()) : packs,
                 "Enabled", list(enabled)), "Disabled", list(List.copyOf(disabled)));
-        LevelDat.write(world, new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written))));
+        return new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written)));
     }
 
     private static NbtData.CompoundTag dataPacks(NbtData.CompoundTag root) {

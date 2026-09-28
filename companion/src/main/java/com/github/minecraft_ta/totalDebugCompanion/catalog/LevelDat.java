@@ -9,9 +9,13 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
@@ -59,12 +63,35 @@ public final class LevelDat {
         throw new IOException(file + " does not hold a compound");
     }
 
+    /** Makes a new {@code level.dat} from the one read; see {@link #update}. */
+    public interface Change {
+        Root apply(Root read) throws IOException;
+    }
+
     /**
-     * Writes {@code root} as {@code world}'s {@code level.dat}, as the game saves it. The world must not be open in a
-     * game, which would write it over.
+     * Reads {@code world}'s {@code level.dat}, makes it anew with {@code change} and writes it as the game saves it,
+     * holding the world's {@code session.lock} throughout, as the game does while it has the world open: a game cannot
+     * open the world in between, and a world a game has open is refused.
      */
-    public static void write(Path world, Root root) throws IOException {
-        if (Worlds.isOpen(world)) throw new IOException("The world " + world.getFileName() + " is open in a game, which writes its level.dat");
+    public static void update(Path world, Change change) throws IOException {
+        try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+            FileLock lock;
+            try {
+                lock = channel.tryLock();
+            } catch (OverlappingFileLockException held) {
+                lock = null;
+            }
+            if (lock == null) throw new IOException("The world " + world.getFileName() + " is open in a game, which writes its level.dat");
+            try {
+                write(world, change.apply(read(file(world))));
+            } finally {
+                lock.release();
+            }
+        }
+    }
+
+    /** Writes {@code root} as {@code world}'s {@code level.dat}, as the game saves it; the caller holds the world's lock. */
+    private static void write(Path world, Root root) throws IOException {
         byte[] unnamed = NbtData.write(root.tag());
         ByteArrayOutputStream named = new ByteArrayOutputStream(unnamed.length + 2 + root.name().length());
         try (DataOutputStream output = new DataOutputStream(named)) {

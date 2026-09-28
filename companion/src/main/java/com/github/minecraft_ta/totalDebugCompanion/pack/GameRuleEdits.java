@@ -91,7 +91,7 @@ public final class GameRuleEdits {
                     throw new IOException(target.name() + " was changed outside Companion since, and reverting would replace that");
                 }
                 if (!live) {
-                    writeLevel(target, written);
+                    writeLevel(target, previous, written);
                     this.record.changed(target, previous, written);
                 }
                 return new Read(previous, written, live);
@@ -130,9 +130,11 @@ public final class GameRuleEdits {
     /** The rule's value: as the connected game names it while it has the world open, or as level.dat saved it; null for none. */
     String current(ChangeRecord.GameRule target) throws IOException {
         GameRulesPayload rules = this.edits.gameRules();
-        // The connected game's rules count only for the world it names, not another one open in another game.
-        if (Worlds.isOpen(target.world()) && rules != null && rules.of(target.world().getFileName().toString())) {
-            return rules.rules().get(target.name());
+        // The connected game's rules count only for the world it names, not another one open in another game. While a game
+        // has the world open, its level.dat lags behind it, so without the game's rules the value is unknown.
+        if (Worlds.isOpen(target.world())) {
+            if (rules != null && rules.of(target.world().getFileName().toString())) return rules.rules().get(target.name());
+            throw new IOException("The world " + target.world().getFileName() + " is open in a game that is not connected to Companion");
         }
         NbtData.CompoundTag gameRules = gameRules(LevelDat.read(LevelDat.file(target.world())).tag());
         return gameRules != null && gameRules.entries().get(target.name()) instanceof NbtData.StringTag text ? text.value() : null;
@@ -159,14 +161,19 @@ public final class GameRuleEdits {
         return NUMBER.matcher(previous).matches() ? Integer.toString(Integer.parseInt(value)) : value;
     }
 
-    private static void writeLevel(ChangeRecord.GameRule target, String value) throws IOException {
-        LevelDat.Root root = LevelDat.read(LevelDat.file(target.world()));
-        if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
-            throw new IOException("The level.dat of " + target.world().getFileName() + " holds no world data");
-        }
-        NbtData.CompoundTag rules = gameRules(root.tag());
-        NbtData.CompoundTag written = LevelDat.with(rules, target.name(), new NbtData.StringTag(value));
-        LevelDat.write(target.world(), new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "GameRules", written))));
+    /** Writes {@code value} into the world's level.dat while it still holds {@code previous}, holding the world's lock. */
+    private static void writeLevel(ChangeRecord.GameRule target, String previous, String value) throws IOException {
+        LevelDat.update(target.world(), root -> {
+            if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
+                throw new IOException("The level.dat of " + target.world().getFileName() + " holds no world data");
+            }
+            NbtData.CompoundTag rules = gameRules(root.tag());
+            if (!(rules.entries().get(target.name()) instanceof NbtData.StringTag held) || !held.value().equals(previous)) {
+                throw new IOException(target.name() + " changed in the world since it was read");
+            }
+            NbtData.CompoundTag written = LevelDat.with(rules, target.name(), new NbtData.StringTag(value));
+            return new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "GameRules", written)));
+        });
     }
 
     private static NbtData.CompoundTag gameRules(NbtData.CompoundTag root) {

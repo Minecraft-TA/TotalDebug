@@ -35,6 +35,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -83,6 +84,9 @@ final class GameRulesPanel extends JPanel {
     private final Set<String> setting = new HashSet<>();
     /** The value the game named last for a rule being set, which a refused set shows instead of the one before. */
     private final Map<String, String> named = new HashMap<>();
+    /** The world whose rules are shown; the sets of another world's rules no longer concern the rows. */
+    private Object world;
+    private int worldShown;
 
     GameRulesPanel() {
         super(new BorderLayout());
@@ -141,7 +145,10 @@ final class GameRulesPanel extends JPanel {
         this.body.showNotice("");
         this.setting.add(rule.name());
         replace(rule.name(), value);
+        int shown = this.worldShown;
         this.setter.set(rule.name(), value).whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
+            // The rows show another world now, whose rules the set did not touch.
+            if (shown != this.worldShown) return;
             this.setting.remove(rule.name());
             String latest = this.named.remove(rule.name());
             if (failure != null) {
@@ -166,9 +173,19 @@ final class GameRulesPanel extends JPanel {
         }
     }
 
-    /** Shows the rules, keeping the selected ones selected; a rule being set keeps the value it is being set to. */
-    void setRules(Map<String, String> rules) {
+    /**
+     * Shows the rules of {@code world}, keeping the selected ones selected; a rule being set keeps the value it is being
+     * set to. Another world's rules start afresh, whatever was being set in the last one.
+     */
+    void setRules(Object world, Map<String, String> rules) {
         if (this.table.isEditing()) this.table.getCellEditor().cancelCellEditing();
+        if (!Objects.equals(world, this.world)) {
+            this.world = world;
+            this.worldShown++;
+            this.setting.clear();
+            this.named.clear();
+            this.body.showNotice("");
+        }
         Set<String> selected = new HashSet<>();
         for (Rule rule : selectedRules()) selected.add(rule.name());
         List<Rule> all = new ArrayList<>();
