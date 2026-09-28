@@ -309,21 +309,21 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private volatile ObjIntConsumer<RelayedMessage> toServerHandler = (message, companion) -> sendRelayFailed(
-            message.correlation(), "The game's relay to the server is not ready");
+            companion, message.correlation(), "The game's relay to the server is not ready");
 
     /** Receives the messages Companion addressed to the server with its connection's number; runs on the connection thread. */
     public void setToServerHandler(ObjIntConsumer<RelayedMessage> handler) {
         this.toServerHandler = Objects.requireNonNull(handler, "handler");
     }
 
-    /** Hands Companion a message the server sent, unread. */
-    public void sendFromServer(RelayedMessage message) {
-        send(new FromServerMessage(message));
+    /** Hands Companion connection {@code companion} a message the server sent it, unread. */
+    public void sendFromServer(int companion, RelayedMessage message) {
+        send(companion, new FromServerMessage(message));
     }
 
-    /** Tells Companion a message for the server could not be carried, and why. */
-    public void sendRelayFailed(int correlation, String reason) {
-        send(new RelayFailedMessage(correlation, reason));
+    /** Tells Companion connection {@code companion} a message it sent for the server could not be carried, and why. */
+    public void sendRelayFailed(int companion, int correlation, String reason) {
+        send(companion, new RelayFailedMessage(correlation, reason));
     }
 
     /** The number of the authenticated Companion connection, or 0 when none is. */
@@ -495,7 +495,22 @@ public final class CompanionAppClient implements AutoCloseable {
 
     private void send(AbstractMessage message) {
         var current = connection;
-        if (current == null || !current.authenticated() || !current.client.isConnected() || closing) return;
+        if (current == null) return;
+        send(current, message);
+    }
+
+    /**
+     * Sends {@code message} only to Companion connection {@code companion}: a restarted Companion counts its request ids
+     * from the beginning again, so an answer meant for an earlier connection must not reach it.
+     */
+    private void send(int companion, AbstractMessage message) {
+        var current = connection;
+        if (current == null || current.number != companion) return;
+        send(current, message);
+    }
+
+    private void send(Connection current, AbstractMessage message) {
+        if (!current.authenticated() || !current.client.isConnected() || closing) return;
         try { current.client.getMessageProcessor().enqueueMessage(message); }
         catch (RejectedExecutionException rejected) { TotalDebug.LOGGER.debug("Companion disconnected before message delivery", rejected); }
     }

@@ -32,7 +32,42 @@ import java.util.stream.Collectors;
 public final class ScriptReferences {
     private static final String LINKER = Type.getInternalName(ScriptAccessLinker.class);
 
-    private record Member(String owner, String name, String descriptor, boolean method) {
+    /** How a script uses a member: the JVM links an instruction only to a member of that kind. */
+    private enum Use {
+        INSTANCE_FIELD, STATIC_FIELD, INSTANCE_METHOD, STATIC_METHOD, CONSTRUCTOR, NEW_INSTANCE;
+
+        boolean method() {
+            return this != INSTANCE_FIELD && this != STATIC_FIELD;
+        }
+
+        boolean isStatic() {
+            return this == STATIC_FIELD || this == STATIC_METHOD;
+        }
+
+        /** The use of a {@link ScriptAccessLinker} operation. */
+        static Use of(int operation) {
+            return switch (operation) {
+                case ScriptAccessLinker.GET_FIELD, ScriptAccessLinker.PUT_FIELD -> INSTANCE_FIELD;
+                case ScriptAccessLinker.GET_STATIC, ScriptAccessLinker.PUT_STATIC -> STATIC_FIELD;
+                case ScriptAccessLinker.INVOKE_STATIC -> STATIC_METHOD;
+                case ScriptAccessLinker.NEW_INSTANCE -> NEW_INSTANCE;
+                default -> INSTANCE_METHOD;
+            };
+        }
+
+        /** The use of a field or method instruction, or of a method handle's tag. */
+        static Use ofInstruction(int opcode, String name) {
+            return switch (opcode) {
+                case Opcodes.GETFIELD, Opcodes.PUTFIELD, Opcodes.H_GETFIELD, Opcodes.H_PUTFIELD -> INSTANCE_FIELD;
+                case Opcodes.GETSTATIC, Opcodes.PUTSTATIC, Opcodes.H_GETSTATIC, Opcodes.H_PUTSTATIC -> STATIC_FIELD;
+                case Opcodes.INVOKESTATIC, Opcodes.H_INVOKESTATIC -> STATIC_METHOD;
+                case Opcodes.H_NEWINVOKESPECIAL -> NEW_INSTANCE;
+                default -> name.equals("<init>") ? CONSTRUCTOR : INSTANCE_METHOD;
+            };
+        }
+    }
+
+    private record Member(String owner, String name, String descriptor, Use use) {
     }
 
     private final Map<String, byte[]> script;
@@ -60,77 +95,119 @@ public final class ScriptReferences {
     }
 
     /**
-     * What {@code parent}, the loader the script would run under, cannot resolve: classes, then fields and methods of
-     * the classes it has, each as Java would name it.
+     * What {@code parent}, the loader the script would run under, cannot resolve: classes, then the script's own classes
+     * the JVM refuses to define over them, then fields and methods that are missing or of another kind, each as Java
+     * would name it.
      */
     public List<String> unresolved(ClassLoader parent) {
         ClassLoader loader = new ScriptClassLoader(Objects.requireNonNull(parent, "parent"), this.script);
         List<String> unresolved = new ArrayList<>();
         Set<String> missing = new LinkedHashSet<>();
         for (String name : this.classes) {
-            if (load(name, loader) == null) {
+            if (load(name, loader) instanceof Failed) {
                 missing.add(name);
                 unresolved.add(name);
             }
         }
-        for (Member member : this.members) {
-            if (missing.contains(member.owner())) continue;
-            Class<?> owner = load(member.owner(), loader);
-            if (owner == null) continue;
-            boolean found;
-            try {
-                found = member.method() ? hasMethod(owner, member.name(), member.descriptor())
-                        : hasField(owner, member.name(), member.descriptor());
-            } catch (LinkageError inspection) {
-                found = false;
+        if (missing.isEmpty()) {
+            // Defining a class checks its superclass and interfaces: not final, the right kind, accessible.
+            for (String name : this.script.keySet().stream().sorted().toList()) {
+                if (load(name, loader) instanceof Failed failed) unresolved.add(name + " (" + failed.reason() + ")");
             }
-            if (!found) unresolved.add(display(member));
+        }
+        for (Member member : this.members) {
+            if (missing.contains(member.owner()) || !(load(member.owner(), loader) instanceof Loaded(Class<?> owner))) continue;
+            String problem;
+            try {
+                problem = member.use().method() ? methodProblem(owner, member) : fieldProblem(owner, member);
+            } catch (LinkageError inspection) {
+                problem = "cannot be inspected: " + inspection;
+            }
+            if (problem != null) unresolved.add(problem.isEmpty() ? display(member) : display(member) + " (" + problem + ")");
         }
         return List.copyOf(unresolved);
     }
 
-    private static Class<?> load(String name, ClassLoader loader) {
+    private sealed interface Loading permits Loaded, Failed {
+    }
+
+    private record Loaded(Class<?> type) implements Loading {
+    }
+
+    private record Failed(String reason) implements Loading {
+    }
+
+    private static Loading load(String name, ClassLoader loader) {
         try {
-            return Class.forName(name, false, loader);
-        } catch (ClassNotFoundException | LinkageError missing) {
-            return null;
+            return new Loaded(Class.forName(name, false, loader));
+        } catch (ClassNotFoundException missing) {
+            return new Failed("not found");
+        } catch (LinkageError refused) {
+            return new Failed(refused.getClass().getSimpleName() + ": " + refused.getMessage());
         }
     }
 
-    private static boolean hasField(Class<?> type, String name, String descriptor) {
+    /** Empty when the field is missing, a reason when it has another kind, null when it links. */
+    private static String fieldProblem(Class<?> owner, Member member) {
+        Field field = field(owner, member.name(), member.descriptor());
+        if (field == null) return "";
+        boolean isStatic = Modifier.isStatic(field.getModifiers());
+        if (isStatic == member.use().isStatic()) return null;
+        return isStatic ? "static on the server" : "not static on the server";
+    }
+
+    /** Empty when the method is missing, a reason when it has another kind, null when it links. */
+    private static String methodProblem(Class<?> owner, Member member) {
+        if (member.name().equals("<init>")) {
+            for (Constructor<?> constructor : owner.getDeclaredConstructors()) {
+                if (!Type.getConstructorDescriptor(constructor).equals(member.descriptor())) continue;
+                if (member.use() == Use.NEW_INSTANCE && (owner.isInterface() || Modifier.isAbstract(owner.getModifiers()))) {
+                    return "abstract on the server";
+                }
+                return null;
+            }
+            return "";
+        }
+        Method method = method(owner, member.name(), member.descriptor());
+        if (method == null) return "";
+        if (signaturePolymorphic(method)) return null;
+        boolean isStatic = Modifier.isStatic(method.getModifiers());
+        if (isStatic == member.use().isStatic()) return null;
+        return isStatic ? "static on the server" : "not static on the server";
+    }
+
+    private static Field field(Class<?> type, String name, String descriptor) {
         for (Field field : type.getDeclaredFields()) {
-            if (field.getName().equals(name) && Type.getDescriptor(field.getType()).equals(descriptor)) return true;
+            if (field.getName().equals(name) && Type.getDescriptor(field.getType()).equals(descriptor)) return field;
         }
         for (Class<?> implemented : type.getInterfaces()) {
-            if (hasField(implemented, name, descriptor)) return true;
+            Field inherited = field(implemented, name, descriptor);
+            if (inherited != null) return inherited;
         }
-        return type.getSuperclass() != null && hasField(type.getSuperclass(), name, descriptor);
+        return type.getSuperclass() == null ? null : field(type.getSuperclass(), name, descriptor);
     }
 
-    private static boolean hasMethod(Class<?> owner, String name, String descriptor) {
-        if (name.equals("<init>")) {
-            for (Constructor<?> constructor : owner.getDeclaredConstructors()) {
-                if (Type.getConstructorDescriptor(constructor).equals(descriptor)) return true;
-            }
-            return false;
-        }
+    private static Method method(Class<?> owner, String name, String descriptor) {
         for (Class<?> type = owner; type != null; type = type.getSuperclass()) {
             for (Method method : type.getDeclaredMethods()) {
                 if (!method.getName().equals(name)) continue;
-                if (Type.getMethodDescriptor(method).equals(descriptor) || signaturePolymorphic(method)) return true;
+                if (Type.getMethodDescriptor(method).equals(descriptor) || signaturePolymorphic(method)) return method;
             }
         }
-        return hasInterfaceMethod(owner, name, descriptor) || owner.isInterface() && hasMethod(Object.class, name, descriptor);
+        Method inherited = interfaceMethod(owner, name, descriptor);
+        if (inherited != null) return inherited;
+        return owner.isInterface() ? method(Object.class, name, descriptor) : null;
     }
 
-    private static boolean hasInterfaceMethod(Class<?> type, String name, String descriptor) {
+    private static Method interfaceMethod(Class<?> type, String name, String descriptor) {
         for (Class<?> implemented : type.getInterfaces()) {
             for (Method method : implemented.getDeclaredMethods()) {
-                if (method.getName().equals(name) && Type.getMethodDescriptor(method).equals(descriptor)) return true;
+                if (method.getName().equals(name) && Type.getMethodDescriptor(method).equals(descriptor)) return method;
             }
-            if (hasInterfaceMethod(implemented, name, descriptor)) return true;
+            Method inherited = interfaceMethod(implemented, name, descriptor);
+            if (inherited != null) return inherited;
         }
-        return type.getSuperclass() != null && hasInterfaceMethod(type.getSuperclass(), name, descriptor);
+        return type.getSuperclass() == null ? null : interfaceMethod(type.getSuperclass(), name, descriptor);
     }
 
     /** {@code MethodHandle.invoke} and the like take any descriptor at their call site. */
@@ -141,7 +218,7 @@ public final class ScriptReferences {
     }
 
     private static String display(Member member) {
-        if (!member.method()) return member.owner() + "." + member.name();
+        if (!member.use().method()) return member.owner() + "." + member.name();
         String parameters = Arrays.stream(Type.getArgumentTypes(member.descriptor()))
                 .map(type -> type.getClassName().substring(type.getClassName().lastIndexOf('.') + 1))
                 .collect(Collectors.joining(", "));
@@ -167,11 +244,11 @@ public final class ScriptReferences {
         if (name != null) type(name.startsWith("[") ? Type.getType(name) : Type.getObjectType(name));
     }
 
-    private void member(String owner, String name, String descriptor, boolean method) {
+    private void member(String owner, String name, String descriptor, Use use) {
         internalName(owner);
         type(Type.getType(descriptor));
         // Arrays answer only length and Object's methods.
-        if (!owner.startsWith("[")) this.members.add(new Member(owner.replace('/', '.'), name, descriptor, method));
+        if (!owner.startsWith("[")) this.members.add(new Member(owner.replace('/', '.'), name, descriptor, use));
     }
 
     /** A call site {@link ScriptBytecodeTransformer} made for a member: its declaring class, name, descriptor and use. */
@@ -182,19 +259,15 @@ public final class ScriptReferences {
             return;
         }
         String owner = declaration.replace('.', '/');
-        switch (operation) {
-            case ScriptAccessLinker.INITIALIZE_CLASS -> internalName(owner);
-            case ScriptAccessLinker.GET_FIELD, ScriptAccessLinker.PUT_FIELD, ScriptAccessLinker.GET_STATIC,
-                 ScriptAccessLinker.PUT_STATIC -> member(owner, name, descriptor, false);
-            default -> member(owner, name, descriptor, true);
-        }
+        if (operation == ScriptAccessLinker.INITIALIZE_CLASS) internalName(owner);
+        else member(owner, name, descriptor, Use.of(operation));
     }
 
     private void constant(Object value) {
         switch (value) {
             case Type type -> type(type);
             case Handle handle -> member(handle.getOwner(), handle.getName(), handle.getDesc(),
-                    handle.getTag() > Opcodes.H_PUTSTATIC);
+                    Use.ofInstruction(handle.getTag(), handle.getName()));
             case ConstantDynamic dynamic -> {
                 type(Type.getType(dynamic.getDescriptor()));
                 constant(dynamic.getBootstrapMethod());
@@ -236,12 +309,12 @@ public final class ScriptReferences {
 
                 @Override
                 public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
-                    member(owner, name, descriptor, false);
+                    member(owner, name, descriptor, Use.ofInstruction(opcode, name));
                 }
 
                 @Override
                 public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
-                    member(owner, name, descriptor, true);
+                    member(owner, name, descriptor, Use.ofInstruction(opcode, name));
                 }
 
                 @Override

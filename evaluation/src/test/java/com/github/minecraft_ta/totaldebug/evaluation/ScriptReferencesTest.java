@@ -76,6 +76,42 @@ class ScriptReferencesTest {
     }
 
     @Test
+    void aMemberUsedAsAnotherKindIsNamedWithTheKindTheServerHas() {
+        Handle linker = new Handle(Opcodes.H_INVOKESTATIC, Type.getInternalName(ScriptAccessLinker.class), "bootstrap",
+                "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;"
+                        + "Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/invoke/CallSite;", false);
+        Map<String, byte[]> script = Map.of("probe.Kinds", type("probe/Kinds", method -> {
+            method.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Integer", "value", "I");
+            method.visitInsn(Opcodes.POP);
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/String", "length", "()I", false);
+            method.visitInsn(Opcodes.POP);
+            method.visitInvokeDynamicInsn("valueOf", "(Ljava/lang/Integer;I)Ljava/lang/Integer;", linker,
+                    "java.lang.Integer", "valueOf", "(I)Ljava/lang/Integer;", ScriptAccessLinker.INVOKE_VIRTUAL);
+            method.visitInvokeDynamicInsn("newInstance", "()Ljava/lang/Number;", linker,
+                    "java.lang.Number", "<init>", "()V", ScriptAccessLinker.NEW_INSTANCE);
+        }));
+
+        assertEquals(List.of("java.lang.Integer.value (not static on the server)",
+                        "java.lang.String.length() (not static on the server)",
+                        "java.lang.Integer.valueOf(int) (static on the server)",
+                        "new java.lang.Number() (abstract on the server)"),
+                ScriptReferences.read(script).unresolved(ScriptReferencesTest.class.getClassLoader()));
+    }
+
+    @Test
+    void aScriptClassTheServerWillNotDefineIsNamedWithTheReason() {
+        ClassWriter writer = new ClassWriter(0);
+        writer.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "probe/Sub", null, "java/lang/String", null);
+        writer.visitEnd();
+
+        List<String> unresolved = ScriptReferences.read(Map.of("probe.Sub", writer.toByteArray()))
+                .unresolved(ScriptReferencesTest.class.getClassLoader());
+
+        assertEquals(1, unresolved.size());
+        assertTrue(unresolved.getFirst().startsWith("probe.Sub (IncompatibleClassChangeError: "), unresolved.getFirst());
+    }
+
+    @Test
     void theScriptsOwnClassesAreNotReferencesOutsideIt() {
         ScriptReferences references = ScriptReferences.read(SCRIPT);
 

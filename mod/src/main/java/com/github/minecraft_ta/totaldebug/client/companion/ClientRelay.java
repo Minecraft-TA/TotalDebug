@@ -22,6 +22,8 @@ public final class ClientRelay {
     private final CompanionAppClient companionApp;
     private final Supplier<String> gameSession;
     private final RelayAssembler fromServer = RelayAssembler.toClient();
+    /** The Companion connection whose replies {@link #fromServer} is putting together. Client thread. */
+    private int assembling;
 
     /** {@code gameSession} is the joined world's session, or null before the player inspected anything in it. */
     public ClientRelay(CompanionAppClient companionApp, Supplier<String> gameSession) {
@@ -32,16 +34,16 @@ public final class ClientRelay {
     /** Carries a message Companion connection {@code companion} addressed to the server. Client thread. */
     public void toServer(int companion, RelayedMessage message) {
         if (!message.gameSession().isEmpty() && !message.gameSession().equals(this.gameSession.get())) {
-            this.companionApp.sendRelayFailed(message.correlation(), "The world containing this target was left; inspect it again");
+            this.companionApp.sendRelayFailed(companion, message.correlation(), "The world containing this target was left; inspect it again");
             return;
         }
         ClientPacketListener connection = Minecraft.getInstance().getConnection();
         if (connection == null) {
-            this.companionApp.sendRelayFailed(message.correlation(), "Join a world to reach its server");
+            this.companionApp.sendRelayFailed(companion, message.correlation(), "Join a world to reach its server");
             return;
         }
         if (!connection.hasChannel(ToServerPayload.TYPE)) {
-            this.companionApp.sendRelayFailed(message.correlation(), "The server does not have TotalDebug");
+            this.companionApp.sendRelayFailed(companion, message.correlation(), "The server does not have TotalDebug");
             return;
         }
         send(companion, message);
@@ -52,6 +54,7 @@ public final class ClientRelay {
      * Client thread.
      */
     public void companionLeft(int companion) {
+        this.fromServer.clear();
         ClientPacketListener connection = Minecraft.getInstance().getConnection();
         if (connection == null || !connection.hasChannel(ToServerPayload.TYPE)) return;
         send(companion, RelayedMessages.toServer(new CompanionLeftMessage(), 0, ""));
@@ -69,8 +72,13 @@ public final class ClientRelay {
      */
     public void fromServer(RelayChunk chunk) {
         if (chunk.companion() != this.companionApp.companionConnection()) return;
-        this.fromServer.accept(chunk).ifPresent(message ->
-                this.companionApp.sendFromServer(new RelayedMessage(0, "", message.messageId(), message.body())));
+        if (chunk.companion() != this.assembling) {
+            // What was put together for an earlier connection would otherwise hold the budget.
+            this.fromServer.clear();
+            this.assembling = chunk.companion();
+        }
+        this.fromServer.accept(chunk).ifPresent(message -> this.companionApp.sendFromServer(chunk.companion(),
+                new RelayedMessage(0, "", message.messageId(), message.body())));
     }
 
     /** The player left the server: what it was sending is dropped. */
