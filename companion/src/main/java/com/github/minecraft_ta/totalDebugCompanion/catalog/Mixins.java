@@ -204,7 +204,7 @@ public final class Mixins {
 
     /**
      * Whether any mod file of {@code index} names a mixin configuration, reading only each file's
-     * {@code neoforge.mods.toml} and manifest; a file that cannot be read names none. Blocking.
+     * {@code neoforge.mods.toml} and manifest; a file that cannot be read may, so it counts. Blocking.
      */
     public static boolean declared(CatalogIndex index) {
         Set<URI> files = new LinkedHashSet<>();
@@ -217,7 +217,8 @@ public final class Mixins {
                     if (!configs(archive).isEmpty()) return true;
                 }
             } catch (IOException | RuntimeException unreadable) {
-                // A file that cannot be read names nothing the page could list either.
+                // Whether it declares mixins is unknown: the page names why it could not be read.
+                return true;
             }
         }
         return false;
@@ -393,8 +394,11 @@ public final class Mixins {
         public void visitEnd() {
             switch (this.kind) {
                 case "Overwrite" -> this.changes.add(new Change(this.kind, this.methodName, this.methodDescriptor, ""));
-                case "Accessor", "Invoker" -> this.changes.add(this.named.isEmpty() ? new Change(this.kind, accessed(this.kind, this.methodName))
-                        : new Change(this.kind, this.named.getFirst().member(), this.named.getFirst().descriptor(), this.named.getFirst().owner()));
+                case "Accessor", "Invoker" -> {
+                    String member = this.named.isEmpty() ? accessed(this.kind, this.methodName) : this.named.getFirst().member();
+                    String owner = this.named.isEmpty() ? "" : this.named.getFirst().owner();
+                    this.changes.add(new Change(this.kind, member, reached(this.kind, member, this.methodDescriptor), owner));
+                }
                 default -> {
                     for (Change target : this.named) {
                         this.changes.add(new Change(this.kind, target.member(), target.descriptor(), target.owner()));
@@ -418,6 +422,20 @@ public final class Mixins {
         int colon = member.indexOf(':');
         if (colon >= 0) member = member.substring(0, colon);
         return member.strip();
+    }
+
+    /**
+     * What an accessor or invoker with the descriptor {@code method} reaches: an accessor a field, by its type, which
+     * its getter returns or its setter takes; an invoker the method of its own signature, or for a constructor, the one
+     * taking its arguments.
+     */
+    static String reached(String kind, String member, String method) {
+        Type type = Type.getMethodType(method);
+        if (kind.equals("Accessor")) {
+            Type field = type.getArgumentTypes().length == 0 ? type.getReturnType() : type.getArgumentTypes()[0];
+            return field.getDescriptor();
+        }
+        return member.equals("<init>") ? Type.getMethodDescriptor(Type.VOID_TYPE, type.getArgumentTypes()) : method;
     }
 
     /** The descriptor a selector such as {@code tick(I)V} gives, which picks one overload, or empty for all of them. */

@@ -45,8 +45,9 @@ class MixinsTest {
         entries.put("com/gears/mixin/Broken.class", new byte[]{1, 2, 3});
         entries.put("com/gears/mixin/ScreenAccessor.class", MixinFixtures.mixinClass("com/gears/mixin/ScreenAccessor",
                 "net.minecraft.client.gui.screens.Screen", 1000,
-                List.of(new MixinFixtures.Method("getWidth", "Lorg/spongepowered/asm/mixin/gen/Accessor;", null, null),
-                        new MixinFixtures.Method("newScreen", "Lorg/spongepowered/asm/mixin/gen/Invoker;", null, null))));
+                List.of(new MixinFixtures.Method("getWidth", "Lorg/spongepowered/asm/mixin/gen/Accessor;", null, null, "()I"),
+                        new MixinFixtures.Method("newScreen", "Lorg/spongepowered/asm/mixin/gen/Invoker;", null, null,
+                                "(Ljava/lang/String;)Lnet/minecraft/client/gui/screens/Screen;"))));
         Path jar = jar("gears.jar", entries);
 
         Mixins.Read read = Mixins.read(jar.toUri(), List.of("gears"));
@@ -65,8 +66,8 @@ class MixinsTest {
         Mixins.Mixin accessor = mixins.get(1);
         assertEquals(Mixins.Side.CLIENT, accessor.side());
         assertEquals(1200, accessor.priority(), "without its own priority, the configuration's");
-        assertEquals(List.of(new Mixins.Change("Accessor", "width"), new Mixins.Change("Invoker", "<init>")), accessor.changes(),
-                "named after the methods getWidth and newScreen, which makes one");
+        assertEquals(List.of(new Mixins.Change("Accessor", "width", "I", ""), new Mixins.Change("Invoker", "<init>", "(Ljava/lang/String;)V", "")),
+                accessor.changes(), "named after the methods getWidth, a field by its type, and newScreen, the constructor it calls");
     }
 
     @Test

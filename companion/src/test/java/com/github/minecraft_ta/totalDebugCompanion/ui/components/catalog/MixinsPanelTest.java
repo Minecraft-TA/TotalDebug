@@ -47,6 +47,20 @@ class MixinsPanelTest {
     }
 
     @Test
+    void aFieldAndAMethodOfOneNameStayApart() {
+        List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(
+                new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.A", List.of(LEVEL), Mixins.Side.BOTH, 1000,
+                        List.of(new Mixins.Change("Accessor", "value", "I", ""))),
+                new Mixins.Mixin("speed", "speed.mixins.json", "com.speed.mixin.B", List.of(LEVEL), Mixins.Side.BOTH, 1000,
+                        List.of(new Mixins.Change("Overwrite", "value", "()I", ""))),
+                new Mixins.Mixin("glow", "glow.mixins.json", "com.glow.mixin.C", List.of(LEVEL), Mixins.Side.BOTH, 1000,
+                        List.of(new Mixins.Change("Inject", "value")))));
+        assertEquals(List.of("value", "value()I"), rows.stream().map(MixinsPanel.Row::shownMember).toList());
+        assertFalse(rows.getFirst().shared(), "the field's accessor meets no method change");
+        assertTrue(rows.get(1).overwritten(), "the injection naming the method alone meets the overwrite");
+    }
+
+    @Test
     void changesOnSidesThatNeverMeetAreNotShared() {
         List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(
                 new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.A", List.of(LEVEL), Mixins.Side.CLIENT, 1000,

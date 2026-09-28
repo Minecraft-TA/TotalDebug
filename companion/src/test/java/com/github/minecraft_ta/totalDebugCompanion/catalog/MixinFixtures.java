@@ -14,7 +14,10 @@ public final class MixinFixtures {
      * A method of a mixin: its name, the annotation on it by descriptor, and the attribute naming its target with that
      * target, or a null attribute for an annotation without one, such as an accessor named after its method.
      */
-    public record Method(String name, String annotation, String attribute, String target) {
+    public record Method(String name, String annotation, String attribute, String target, String descriptor) {
+        public Method(String name, String annotation, String attribute, String target) {
+            this(name, annotation, attribute, target, "()V");
+        }
     }
 
     private MixinFixtures() {
@@ -31,7 +34,7 @@ public final class MixinFixtures {
         if (priority != 1000) mixin.visit("priority", priority);
         mixin.visitEnd();
         for (Method method : methods) {
-            MethodVisitor visitor = writer.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_ABSTRACT, method.name(), "()V", null, null);
+            MethodVisitor visitor = writer.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_ABSTRACT, method.name(), method.descriptor(), null, null);
             AnnotationVisitor annotation = visitor.visitAnnotation(method.annotation(), false);
             if (method.attribute() != null) {
                 AnnotationVisitor array = annotation.visitArray(method.attribute());

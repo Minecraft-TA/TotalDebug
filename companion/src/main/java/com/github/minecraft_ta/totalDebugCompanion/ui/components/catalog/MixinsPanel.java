@@ -58,9 +58,14 @@ public final class MixinsPanel extends JPanel {
      * pick, or empty when they name the member alone, and the mixins that change it.
      */
     record Row(String target, String member, String descriptor, List<Entry> entries) {
-        /** The member as the table shows it: with its descriptor where it is one overload. */
+        /** Whether the member is a field, which accessors reach, rather than a method. */
+        boolean field() {
+            return !this.descriptor.isEmpty() && !this.descriptor.startsWith("(");
+        }
+
+        /** The member as the table shows it: a method with its descriptor where it is one overload. */
         String shownMember() {
-            return this.member.isEmpty() ? "The class" : this.member + this.descriptor;
+            return this.member.isEmpty() ? "The class" : field() ? this.member : this.member + this.descriptor;
         }
 
         /** What identifies the row across reloads. */
@@ -104,7 +109,7 @@ public final class MixinsPanel extends JPanel {
 
         /** The row as a reference: the target, and the member with its overload where it is one. */
         String reference() {
-            return this.target + (this.member.isEmpty() ? "" : "#" + this.member + this.descriptor);
+            return this.target + (this.member.isEmpty() ? "" : "#" + this.member + (field() ? "" : this.descriptor));
         }
 
         String kinds() {
@@ -221,13 +226,19 @@ public final class MixinsPanel extends JPanel {
         }
         List<Row> rows = new ArrayList<>();
         byTarget.forEach((target, members) -> members.forEach((member, entries) -> {
+            // A field of the name is a member of its own; a method named without descriptor is every overload.
             List<Entry> everyOverload = entries.stream().filter(entry -> entry.descriptor().isEmpty()).toList();
             Set<String> overloads = new LinkedHashSet<>();
+            Set<String> fields = new LinkedHashSet<>();
             for (Entry entry : entries) {
-                if (!entry.descriptor().isEmpty()) overloads.add(entry.descriptor());
+                if (entry.descriptor().startsWith("(")) overloads.add(entry.descriptor());
+                else if (!entry.descriptor().isEmpty()) fields.add(entry.descriptor());
+            }
+            for (String field : fields) {
+                rows.add(new Row(target, member, field, entries.stream().filter(entry -> entry.descriptor().equals(field)).toList()));
             }
             if (overloads.isEmpty()) {
-                rows.add(new Row(target, member, "", List.copyOf(entries)));
+                if (!everyOverload.isEmpty()) rows.add(new Row(target, member, "", everyOverload));
                 return;
             }
             for (String overload : overloads) {
@@ -238,8 +249,9 @@ public final class MixinsPanel extends JPanel {
                 rows.add(new Row(target, member, overload, List.copyOf(picked)));
             }
         }));
+        // A field of a name comes before the methods of that name.
         rows.sort(Comparator.comparing((Row row) -> simple(row.target())).thenComparing(Row::target).thenComparing(Row::member)
-                .thenComparing(Row::descriptor));
+                .thenComparing(row -> row.field() ? 0 : 1).thenComparing(Row::descriptor));
         return rows;
     }
 
