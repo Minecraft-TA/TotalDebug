@@ -576,6 +576,10 @@ abstract class PackResourceEditor<V> extends JPanel {
         return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
     }
 
+    protected final boolean disposed() {
+        return this.disposed;
+    }
+
     void dispose() {
         this.disposed = true;
         this.stopListening.run();
