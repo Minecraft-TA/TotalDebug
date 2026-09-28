@@ -48,6 +48,8 @@ public final class GlobalConfig {
     private volatile boolean debuggerInlineValues = true;
     private volatile boolean inlineDiagnostics = true;
     private volatile boolean automaticDebuggerPreviews = true;
+    /** The program textures open in, or null for the system's app for images. */
+    private volatile String imageEditor;
     /** The width each kind of sidebar was last dragged to, by kind, such as {@code resource-categories}. */
     private final Map<String, Integer> sidebarWidths = new ConcurrentHashMap<>();
     private JsonStateWriter writer;
@@ -167,6 +169,19 @@ public final class GlobalConfig {
         scheduleSave();
     }
 
+    /** The program textures open in, or null for the system's app for images. */
+    public String imageEditor() {
+        return this.imageEditor;
+    }
+
+    /** Sets the program textures open in; null or blank goes back to the system's app. */
+    public synchronized void setImageEditor(String program) {
+        String chosen = program == null || program.isBlank() ? null : program;
+        if (Objects.equals(this.imageEditor, chosen)) return;
+        this.imageEditor = chosen;
+        scheduleSave();
+    }
+
     public void addEditorFontSizeListener(PropertyChangeListener listener) {
         pcs.addPropertyChangeListener(EDITOR_FONT_SIZE_PROPERTY, listener);
     }
@@ -211,6 +226,7 @@ public final class GlobalConfig {
                 JsonFiles.bool(json, "debuggerInlineValues");
                 JsonFiles.bool(json, "automaticDebuggerPreviews");
                 if (json.has("inlineDiagnostics")) JsonFiles.bool(json, "inlineDiagnostics");
+                if (json.has("imageEditor")) JsonFiles.string(json, "imageEditor");
                 for (String font : List.of("editorFontSize", "uiFontSize")) {
                     var value = json.get(font);
                     if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()
@@ -254,6 +270,7 @@ public final class GlobalConfig {
         this.debuggerInlineValues = persisted.debuggerInlineValues;
         this.automaticDebuggerPreviews = persisted.automaticDebuggerPreviews;
         this.inlineDiagnostics = persisted.inlineDiagnostics == null || persisted.inlineDiagnostics;
+        this.imageEditor = persisted.imageEditor == null || persisted.imageEditor.isBlank() ? null : persisted.imageEditor;
         this.sidebarWidths.clear();
         if (persisted.sidebarWidths != null) this.sidebarWidths.putAll(persisted.sidebarWidths);
         this.debuggerWindowBounds = persisted.debuggerWindowX == null ? null : new Rectangle(
@@ -285,7 +302,8 @@ public final class GlobalConfig {
                 this.debuggerInlineValues,
                 this.automaticDebuggerPreviews,
                 this.inlineDiagnostics,
-                new TreeMap<>(this.sidebarWidths)
+                new TreeMap<>(this.sidebarWidths),
+                this.imageEditor
         );
 
         this.writer.schedule(GSON.toJsonTree(snapshot));
@@ -311,7 +329,8 @@ public final class GlobalConfig {
             Boolean debuggerInlineValues,
             Boolean automaticDebuggerPreviews,
             Boolean inlineDiagnostics,
-            Map<String, Integer> sidebarWidths
+            Map<String, Integer> sidebarWidths,
+            String imageEditor
     ) {
     }
 

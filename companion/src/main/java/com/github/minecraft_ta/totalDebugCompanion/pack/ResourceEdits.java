@@ -109,6 +109,10 @@ public final class ResourceEdits {
     private Batch next;
     /** Saves and reverts queued but not yet past asking for their reload; the next reload waits for them. */
     private int writing;
+    /** The hash of what Companion last wrote to each resource, by the write queue, so a program's save is told from it. */
+    private final Map<ChangeRecord.Resource, String> lastWritten = new ConcurrentHashMap<>();
+    /** Opens resources in other programs and takes their saves; started when the first is opened. */
+    private final ExternalEdits external = new ExternalEdits(this);
 
     /**
      * {@code workspace} is the game directory, {@code writes} the project's write queue, {@code gameRunning} tells
@@ -126,6 +130,16 @@ public final class ResourceEdits {
 
     public ChangeRecord record() {
         return this.record;
+    }
+
+    /** Opens resources in other programs, such as an image editor, and takes each save they make as a change. */
+    public ExternalEdits external() {
+        return this.external;
+    }
+
+    /** Stops following the files opened in other programs. */
+    public void close() {
+        this.external.close();
     }
 
     public void gameConnected(Predicate<AbstractMessage> send) {
@@ -499,6 +513,7 @@ public final class ResourceEdits {
                 ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
                 if (this.record.change(target) == null) this.originals.keep(previous);
                 AtomicFiles.replace(file, staged -> Files.write(staged, content));
+                this.lastWritten.put(target, ResourceOriginals.hash(content));
                 this.record.changed(target, ResourceOriginals.hash(previous), ResourceOriginals.hash(content));
                 return pack;
             } catch (IOException exception) {
@@ -532,6 +547,7 @@ public final class ResourceEdits {
                     if (original == null) Files.deleteIfExists(file);
                     else AtomicFiles.replace(file, staged -> Files.write(staged, original));
                 }
+                this.lastWritten.put(target, change.original());
                 this.record.changed(target, change.current(), change.original());
                 return target.location();
             } catch (IOException exception) {
@@ -544,6 +560,46 @@ public final class ResourceEdits {
             return PackFolders.isPack(pack) ? saved : new Saved(saved.effect(), pack, saved.problems(),
                     saved.reloadFailure(), "The " + PackFolders.label(pack) + " is gone or has no readable pack.mcmeta, so the game does not load it");
         });
+    }
+
+    /**
+     * Takes what another program saved to {@code path} in {@code pack} as a change Companion made: recorded, so Changes
+     * can revert it, and used by the game as a save is. {@code before} is what the file held when the program opened it,
+     * the original where neither Companion nor the program changed it since. Completes with null when the file holds
+     * what Companion or the last taken save left, such as after Companion's own save.
+     */
+    public CompletableFuture<Saved> adopt(String path, Path pack, byte[] before) {
+        ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
+        synchronized (this) {
+            this.writing++;
+        }
+        // Checked in the write queue, after every save and revert queued before it has written and been recorded.
+        CompletableFuture<Boolean> taken = write(() -> {
+            try {
+                Path file = pack.resolve(path);
+                String now = ResourceOriginals.hash(Files.isRegularFile(file) ? Files.readAllBytes(file) : null);
+                ChangeRecord.Change change = this.record.change(target);
+                String known = this.lastWritten.get(target);
+                String expected = change != null ? change.current() : known != null ? known : ResourceOriginals.hash(before);
+                if (expected.equals(now)) return false;
+                if (change == null) this.originals.keep(known != null ? this.originals.read(known) : before);
+                this.lastWritten.put(target, now);
+                this.record.changed(target, expected, now);
+                return true;
+            } catch (IOException exception) {
+                throw new CompletionException(exception);
+            }
+        });
+        return finished(taken.handle((changed, failure) -> {
+            try {
+                if (failure != null) return CompletableFuture.<Saved>failedFuture(failure);
+                if (!changed) return CompletableFuture.<Saved>completedFuture(null);
+                return apply(path, List.of(), pack).thenApply(saved -> new Saved(saved.effect(), saved.pack(), saved.problems(),
+                        saved.reloadFailure(), unusedBecause(path, saved.pack()).orElse("")));
+            } finally {
+                wrote();
+            }
+        }).thenCompose(Function.identity()));
     }
 
     /**

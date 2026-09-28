@@ -163,7 +163,7 @@ public final class ProjectScope implements AutoCloseable {
             pending.clear();
         }
         // Writes still queued finish first, so each is recorded before the change record closes.
-        try { configChanges.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
+        try { resources.close(); configChanges.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
     }
 
     public String loadBreakpointScript(String name) {

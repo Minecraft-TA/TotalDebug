@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureAnimation;
@@ -22,6 +23,7 @@ import javax.swing.JColorChooser;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
@@ -45,7 +47,8 @@ import java.util.function.Consumer;
  * an animation is drawn on, or the whole sheet. Tools: Pencil (B), Eraser (E), Fill (G) and Color Picker (I); with none
  * chosen (Escape) a drag moves the view, as the middle button always does. Alt+click with the pencil picks the color
  * under it, Shift+click draws a line from the last pixel drawn. Ctrl+Z undoes a stroke, Ctrl+Shift+Z or Ctrl+Y redoes
- * it.
+ * it. Open in External Editor saves the texture into its pack, opens that file in the image editor chosen in Settings,
+ * and takes each save made there as a change, used by the game at once.
  */
 final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
     /**
@@ -78,6 +81,11 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
     private final FlatIconButton picker = new FlatIconButton(Icons.COLOR_PICKER, true);
     private final FlatIconButton undo = new FlatIconButton(Icons.UNDO, false);
     private final FlatIconButton redo = new FlatIconButton(Icons.REDO, false);
+    private final FlatIconButton external = new FlatIconButton(Icons.EXTERNAL_EDITOR, false);
+    /** Stops showing what became of the image editor's saves, or does nothing before it opened the texture. */
+    private Runnable stopExternal = () -> { };
+    /** The pack whose file the image editor has open, or null. */
+    private Path externalPack;
     private final JButton color = new FlatIconButton(null, false);
     private final JPanel palette = new JPanel(new FlowLayout(FlowLayout.LEFT, 1, 0));
     /** The color drawn with, as ARGB. */
@@ -118,7 +126,8 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
                 tool(this.fill, Tool.FILL, "Fill", "G"), tool(this.picker, Tool.PICKER, "Color Picker", "I"),
                 Box.createHorizontalStrut(10), this.color, this.palette, Box.createHorizontalStrut(10),
                 action(this.undo, "Undo", "Ctrl+Z", this::undo),
-                action(this.redo, "Redo", "Ctrl+Shift+Z", this::redo));
+                action(this.redo, "Redo", "Ctrl+Shift+Z", this::redo), Box.createHorizontalStrut(10),
+                action(this.external, "Open in External Editor", null, this::openExternally));
         this.color.addActionListener(event -> chooseColor());
         this.view.setPainter(new Painter());
         takeMostUsedColor();
@@ -227,6 +236,7 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
 
     /** Shows what can be undone and the colors of the shown pixels. */
     private void refresh() {
+        this.external.setEnabled(this.editable);
         this.undo.setEnabled(this.editable && this.pixels.canUndo());
         this.redo.setEnabled(this.editable && this.pixels.canRedo());
         this.palette.removeAll();
@@ -485,9 +495,35 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
         return "texture";
     }
 
+    /**
+     * Saves the texture into its pack where the pack does not hold what is shown, then opens that file in the image
+     * editor chosen in Settings, or the system's app for images.
+     */
+    private void openExternally() {
+        saveThen(pack -> edits().external().openLater(path(), pack, GlobalConfig.getInstance().imageEditor())
+                .whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
+                    if (disposed()) return;
+                    if (failure != null) {
+                        showNotice("Not opened: " + message(failure), ThemeColors::error);
+                        return;
+                    }
+                    if (pack.equals(this.externalPack)) return;
+                    // The image editor's saves come as changes of the pack's copy, which this tab reads; what the game
+                    // made of each is shown here.
+                    this.stopExternal.run();
+                    this.externalPack = pack;
+                    this.stopExternal = edits().external().addListener(path(), pack, (saved, problem) -> SwingUtilities.invokeLater(() -> {
+                        if (disposed()) return;
+                        if (problem != null) showNotice("Not taken from the image editor: " + message(problem), ThemeColors::error);
+                        else showSaved(saved);
+                    }));
+                })));
+    }
+
     @Override
     void dispose() {
         super.dispose();
+        this.stopExternal.run();
         this.view.dispose();
     }
 }
