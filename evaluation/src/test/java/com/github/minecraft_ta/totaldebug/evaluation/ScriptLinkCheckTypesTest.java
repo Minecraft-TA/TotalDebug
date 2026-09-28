@@ -4,20 +4,16 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import javax.tools.ToolProvider;
-import java.lang.reflect.InvocationTargetException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Differential review probes: compile against the client, then check and execute against the server. */
-class ScriptTypeLinkProbeTest {
+/** The link check against the JVM, for classes that changed between the client and the server. */
+class ScriptLinkCheckTypesTest {
     @TempDir Path directory;
 
     record Probe(String name, String client, String server, String source, Class<? extends Throwable> failure) {
@@ -56,35 +52,11 @@ class ScriptTypeLinkProbeTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("probes")
-    void preflightMatchesActualLinkage(Probe probe) throws Exception {
-        Path client = compileFixture("client", probe.client());
-        Path server = compileFixture("server", probe.server());
-        try (var compiler = new InMemoryJavaCompiler();
-             var target = new URLClassLoader(new URL[]{server.toUri().toURL()}, getClass().getClassLoader())) {
-            var bytecode = compiler.compile(probe.source(), "Probe", client.toString());
-            List<String> unresolved = ScriptReferences.read(bytecode).unresolved(target);
-            Throwable failure = null;
-            try {
-                new ScriptClassLoader(target, bytecode).loadClass("Probe").getMethod("run").invoke(null);
-            } catch (InvocationTargetException exception) {
-                failure = exception.getCause();
-            } catch (LinkageError exception) {
-                failure = exception;
-            }
-            String observed = probe.name() + ": preflight=" + unresolved + ", execution=" + failure;
-            System.out.println(observed);
-            if (probe.failure() == null) assertEquals(null, failure, observed);
-            else assertTrue(probe.failure().isInstance(failure), observed);
-            assertEquals(probe.failure() != null, !unresolved.isEmpty(), observed);
-        }
-    }
-
-    private Path compileFixture(String name, String source) throws Exception {
-        Path output = Files.createDirectories(directory.resolve(name));
-        Path file = output.resolve("Api.java");
-        Files.writeString(file, source);
-        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null,
-                "--release", "21", "-d", output.toString(), file.toString()));
-        return output;
+    void theCheckAgreesWithTheJvm(Probe probe) throws Exception {
+        LinkCheckProbe.Outcome outcome = LinkCheckProbe.run(this.directory, probe.client(), probe.server(), List.of(),
+                probe.source(), "Probe");
+        if (probe.failure() == null) assertNull(outcome.failure(), outcome.toString());
+        else assertTrue(probe.failure().isInstance(outcome.failure()), outcome.toString());
+        assertEquals(probe.failure() != null, !outcome.unresolved().isEmpty(), outcome.toString());
     }
 }

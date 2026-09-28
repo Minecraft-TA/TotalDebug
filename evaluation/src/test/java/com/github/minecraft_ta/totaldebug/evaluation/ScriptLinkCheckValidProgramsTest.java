@@ -2,15 +2,19 @@ package com.github.minecraft_ta.totaldebug.evaluation;
 
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Path;
 
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Review probes: normal Java 21 programs must execute and pass the server's link check. */
-class ScriptValidLinkProbeTest {
+/** Ordinary Java 21 programs run, and the link check lets them. */
+class ScriptLinkCheckValidProgramsTest {
+    @TempDir Path directory;
+
     private record Probe(String name, String members, String body, Object expected) {}
 
     @TestFactory
@@ -149,7 +153,7 @@ class ScriptValidLinkProbeTest {
         ).map(probe -> DynamicTest.dynamicTest(probe.name(), () -> check(probe)));
     }
 
-    private static void check(Probe probe) throws Exception {
+    private void check(Probe probe) throws Exception {
         String source = """
                 package review.valid;
                 import java.io.*;
@@ -162,15 +166,8 @@ class ScriptValidLinkProbeTest {
                     }
                 }
                 """.formatted(probe.members(), probe.body());
-        Map<String, byte[]> classes;
-        try (InMemoryJavaCompiler compiler = new InMemoryJavaCompiler()) {
-            classes = compiler.compile(source, "review.valid.ValidProbe", "");
-        }
-        ClassLoader parent = ScriptValidLinkProbeTest.class.getClassLoader();
-        ClassLoader execution = new ScriptClassLoader(parent, classes);
-        Object actual = execution.loadClass("review.valid.ValidProbe").getMethod("run").invoke(null);
-        assertEquals(probe.expected(), actual, "The real JVM executes the compiled program");
-        assertEquals(List.of(), ScriptReferences.read(classes).unresolved(parent),
-                "An executable script must pass its link check");
+        LinkCheckProbe.Outcome outcome = LinkCheckProbe.run(this.directory, "", "", List.of(), source, "review.valid.ValidProbe");
+        assertEquals(probe.expected(), outcome.value(), () -> "The JVM runs the compiled program: " + outcome);
+        assertEquals(List.of(), outcome.unresolved(), "A program that runs passes its link check");
     }
 }

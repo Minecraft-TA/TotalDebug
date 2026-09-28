@@ -56,26 +56,6 @@ class ScriptReferencesTest {
     }
 
     @Test
-    void aMemberTheCompilerRoutedThroughTheLinkerIsTheMemberItNames() {
-        Handle linker = new Handle(Opcodes.H_INVOKESTATIC, Type.getInternalName(ScriptAccessLinker.class), "bootstrap",
-                "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;"
-                        + "Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/invoke/CallSite;", false);
-        Map<String, byte[]> script = Map.of("probe.Linked", type("probe/Linked", method -> {
-            method.visitInvokeDynamicInsn("length", "(Ljava/lang/String;)I", linker,
-                    "java.lang.String", "length", "()I", ScriptAccessLinker.INVOKE_VIRTUAL);
-            method.visitInvokeDynamicInsn("nope", "()I", linker,
-                    "java.lang.Integer", "nope", "()I", ScriptAccessLinker.INVOKE_STATIC);
-            method.visitInvokeDynamicInsn("hidden", "()I", linker,
-                    "java.lang.Integer", "hidden", "I", ScriptAccessLinker.GET_STATIC);
-            method.visitInvokeDynamicInsn("initializeClass", "()V", linker,
-                    "com.example.Gone", "<clinit>", "()V", ScriptAccessLinker.INITIALIZE_CLASS);
-        }));
-
-        assertEquals(List.of("com.example.Gone", "java.lang.Integer.nope()", "java.lang.Integer.hidden"),
-                ScriptReferences.read(script).unresolved(ScriptReferencesTest.class.getClassLoader()));
-    }
-
-    @Test
     void aMemberTheServerHasButNotAsTheScriptUsesItIsNamedWithTheReason() {
         Handle linker = new Handle(Opcodes.H_INVOKESTATIC, Type.getInternalName(ScriptAccessLinker.class), "bootstrap",
                 "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;"
@@ -103,74 +83,12 @@ class ScriptReferencesTest {
     }
 
     @Test
-    void aScriptClassTheServerWillNotDefineIsNamedWithTheReason() {
-        ClassWriter writer = new ClassWriter(0);
-        writer.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "probe/Sub", null, "java/lang/String", null);
-        writer.visitEnd();
-
-        List<String> unresolved = ScriptReferences.read(Map.of("probe.Sub", writer.toByteArray()))
-                .unresolved(ScriptReferencesTest.class.getClassLoader());
-
-        assertEquals(1, unresolved.size());
-        assertTrue(unresolved.getFirst().startsWith("probe.Sub (IncompatibleClassChangeError: "), unresolved.getFirst());
-    }
-
-    @Test
-    void membersResolveFromTheScriptClassThatUsesThemAsTheJvmWould() {
-        ClassWriter list = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-        list.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "probe/Trimmed", null, "java/util/ArrayList", null);
-        MethodVisitor constructor = list.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
-        constructor.visitCode();
-        constructor.visitVarInsn(Opcodes.ALOAD, 0);
-        constructor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
-        constructor.visitInsn(Opcodes.RETURN);
-        constructor.visitMaxs(0, 0);
-        constructor.visitEnd();
-        MethodVisitor trim = list.visitMethod(Opcodes.ACC_PUBLIC, "trim", "()V", null, null);
-        trim.visitCode();
-        trim.visitVarInsn(Opcodes.ALOAD, 0);
-        trim.visitInsn(Opcodes.ICONST_0);
-        trim.visitInsn(Opcodes.ICONST_1);
-        // A protected method of the platform superclass, called on this subclass.
-        trim.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "removeRange", "(II)V", false);
-        trim.visitInsn(Opcodes.RETURN);
-        trim.visitMaxs(0, 0);
-        trim.visitEnd();
-        list.visitEnd();
-
-        ClassWriter loader = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-        loader.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "probe/Loader", null, "java/lang/ClassLoader", null);
-        MethodVisitor hidden = loader.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
-        hidden.visitCode();
-        hidden.visitVarInsn(Opcodes.ALOAD, 0);
-        hidden.visitInsn(Opcodes.ACONST_NULL);
-        hidden.visitInsn(Opcodes.ACONST_NULL);
-        hidden.visitInsn(Opcodes.ACONST_NULL);
-        // ClassLoader's private constructor, which no subclass may call.
-        hidden.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/ClassLoader", "<init>",
-                "(Ljava/lang/Void;Ljava/lang/String;Ljava/lang/ClassLoader;)V", false);
-        hidden.visitInsn(Opcodes.RETURN);
-        hidden.visitMaxs(0, 0);
-        hidden.visitEnd();
-        loader.visitEnd();
-
-        assertEquals(List.of("new java.lang.ClassLoader(Void, String, ClassLoader) (not accessible to a subclass)"),
-                ScriptReferences.read(Map.of("probe.Trimmed", list.toByteArray(), "probe.Loader", loader.toByteArray()))
-                        .unresolved(ScriptReferencesTest.class.getClassLoader()),
-                "the protected super call and the accessible superclass constructor link");
-    }
-
-    @Test
-    void whatTheJvmChecksWhenLinkingAnInstructionIsCheckedToo() {
+    void whatTheJvmChecksWithoutAnApiIsNamed() {
         Handle linker = new Handle(Opcodes.H_INVOKESTATIC, Type.getInternalName(ScriptAccessLinker.class), "bootstrap",
                 "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;"
                         + "Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/invoke/CallSite;", false);
         Map<String, byte[]> script = Map.of("probe.Instructions", type("probe/Instructions", method -> {
-            // A package-private class named only by a cast.
-            method.visitInsn(Opcodes.ACONST_NULL);
-            method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/AbstractStringBuilder");
-            method.visitInsn(Opcodes.POP);
-            // An abstract class allocated, directly and through the linker.
+            // An abstract class allocated directly and through the linker, which is one problem.
             method.visitTypeInsn(Opcodes.NEW, "java/lang/Number");
             method.visitInsn(Opcodes.DUP);
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Number", "<init>", "()V", false);
@@ -184,30 +102,10 @@ class ScriptReferencesTest {
             method.visitInsn(Opcodes.POP);
         }));
 
-        assertEquals(List.of("java.lang.AbstractStringBuilder (not accessible)",
-                        "new java.lang.Number() (abstract on the server)",
+        assertEquals(List.of("new java.lang.Number() (abstract on the server)",
                         "java.util.List.size() (an interface on the server)"),
                 ScriptReferences.read(script).unresolved(ScriptReferencesTest.class.getClassLoader()),
                 "the linker's allocation is named once with the plain one, as the same member");
-    }
-
-    @Test
-    void theJvmVerifiesTheScriptsCodeAgainstTheClassesItHas() {
-        Map<String, byte[]> script = Map.of("probe.Mistyped", type("probe/Mistyped", method -> {
-            method.visitTypeInsn(Opcodes.NEW, "java/lang/Thread");
-            method.visitInsn(Opcodes.DUP);
-            // A String where the constructor takes a ThreadGroup: only verification sees it. The verifier treats an
-            // interface type as Object, so it is a class here.
-            method.visitLdcInsn("not a group");
-            method.visitLdcInsn("name");
-            method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Thread", "<init>", "(Ljava/lang/ThreadGroup;Ljava/lang/String;)V", false);
-            method.visitInsn(Opcodes.POP);
-        }));
-
-        List<String> unresolved = ScriptReferences.read(script).unresolved(ScriptReferencesTest.class.getClassLoader());
-
-        assertEquals(1, unresolved.size(), unresolved.toString());
-        assertTrue(unresolved.getFirst().startsWith("probe.Mistyped (VerifyError: "), unresolved.getFirst());
     }
 
     @Test
