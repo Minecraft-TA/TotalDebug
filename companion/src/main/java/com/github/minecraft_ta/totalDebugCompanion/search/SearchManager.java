@@ -195,17 +195,21 @@ public class SearchManager {
             clear();
             return;
         }
-        Pattern pattern;
-        try {
-            pattern = Pattern.compile(this.useRegex ? this.query : Pattern.quote(this.query),
-                    this.matchCase ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-        } catch (PatternSyntaxException invalid) {
-            clear();
-            return;
-        }
+        String source = this.useRegex ? this.query : Pattern.quote(this.query);
+        int flags = this.matchCase ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
         String text = this.textPane.getText();
         int caret = this.textPane.getCaretPosition();
         this.searcher.execute(() -> {
+            // Compiled here too: a long pasted pattern takes a while, and a stale one is never compiled.
+            Pattern pattern;
+            try {
+                pattern = Pattern.compile(source, flags);
+            } catch (PatternSyntaxException invalid) {
+                SwingUtilities.invokeLater(() -> {
+                    if (search == this.searches) clear();
+                });
+                return;
+            }
             int[] foundStarts = new int[64];
             int[] foundEnds = new int[64];
             int count = 0;
