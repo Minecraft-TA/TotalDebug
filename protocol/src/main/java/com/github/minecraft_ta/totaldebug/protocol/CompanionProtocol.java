@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 29;
+    public static final int VERSION = 30;
 
     public static final short READY = 1;
     public static final short OPEN_CLASS = 2;
@@ -27,6 +27,8 @@ public final class CompanionProtocol {
     public static final short RELOAD = 36;
     public static final short RELOAD_RESULT = 37;
     public static final short SET_PACKS = 38;
+    // 39 and 40 belong to game-rule messages.
+    public static final short PLAYING = 41;
 
     private CompanionProtocol() {
     }

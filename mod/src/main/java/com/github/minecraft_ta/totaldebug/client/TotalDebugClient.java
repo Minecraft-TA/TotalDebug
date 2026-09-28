@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totaldebug.client.inspection.ResourceSnapshots;
 import com.github.minecraft_ta.totaldebug.client.input.Selection;
 import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.client.resource.PackStackPublisher;
+import com.github.minecraft_ta.totaldebug.client.world.PlayingPublisher;
 import com.github.minecraft_ta.totaldebug.client.resource.ResourceReloads;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
@@ -19,6 +20,7 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.network.ServerSourceRequestPayload;
@@ -49,6 +51,7 @@ public final class TotalDebugClient {
     private final ResourceSnapshots resources;
     private final PackCatalogPublisher catalogs;
     private final PackStackPublisher packStacks;
+    private final PlayingPublisher playing;
     private final AtomicReference<PackCatalogCapture> catalogCapture = new AtomicReference<>();
     private volatile boolean snapshotRequested;
     private volatile String gameSessionId;
@@ -89,7 +92,11 @@ public final class TotalDebugClient {
                 companionApp::sendPackCatalog
         );
         this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
-        companionApp.setSessionOpenedHandler(this.packStacks::republish);
+        this.playing = new PlayingPublisher(playing -> companionApp.sendPlaying(new PlayingMessage(playing)));
+        companionApp.setSessionOpenedHandler(() -> {
+            this.packStacks.republish();
+            this.playing.republish();
+        });
         companionApp.setPackCatalogHandler((inventoryId, modules) -> {
             // Icons are drawn from the resource snapshot, which must follow the current packs even when the
             // saved catalog is reused.
@@ -189,6 +196,7 @@ public final class TotalDebugClient {
             return;
         }
         this.packStacks.tick();
+        this.playing.tick();
         ResourceReloads.tick();
         PackCatalogCapture capture = this.catalogCapture.get();
         if (capture != null) {
