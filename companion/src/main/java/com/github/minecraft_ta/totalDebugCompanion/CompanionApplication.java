@@ -69,6 +69,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -100,10 +101,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::sendRun);
     private final ItemIconService itemIcons = new ItemIconService();
     private volatile CompanionMcpServer mcpServer;
-    /** The world or server whose scripts were last asked about on this connection, or null. */
+    /** The world whose server was last asked about scripts on this connection, as {@code PLAYING} names it, or null. */
     private volatile String serverScriptsTarget;
-    /** The correlation of the question whether the server runs scripts; script runs count from 1. */
-    private static final int SERVER_SCRIPTS_REQUEST = 0;
+    /** Correlates the questions whether the server runs scripts; they count down from -1, script runs up from 1. */
+    private final AtomicInteger serverScriptsRequests = new AtomicInteger();
+    private volatile int serverScriptsRequest;
     // Job tracking must survive HTTP shutdown so project retirement can still cancel submitted code.
     private volatile CodeModeJobService mcpJobs;
     private final DebuggerSessionController debuggerController;
@@ -252,13 +254,17 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
                 @Override
                 public void relayFailed(RelayFailedMessage message) {
-                    if (message.correlation() == SERVER_SCRIPTS_REQUEST) scriptCompiler.serverAccess(message.reason());
-                    else if (executionRuns != null) executionRuns.relayFailed(message.correlation(), message.reason());
+                    if (message.correlation() < 0) {
+                        if (message.correlation() == serverScriptsRequest) scriptCompiler.serverAccess("", message.reason());
+                    } else if (executionRuns != null) {
+                        executionRuns.relayFailed(message.correlation(), message.reason());
+                    }
                 }
 
                 @Override
                 public void serverScripts(ServerScriptsMessage message) {
-                    if (serverScriptsTarget != null) scriptCompiler.serverAccess(message.refusal());
+                    String target = serverScriptsTarget;
+                    if (target != null) scriptCompiler.serverAccess(target, message.refusal());
                 }
 
                 @Override
@@ -610,7 +616,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 current.location().connected(message -> connected.send(established, message));
                 // What the game told before the connection was taken as established names the server to ask.
                 this.serverScriptsTarget = null;
-                scriptCompiler.serverAccess(ScriptCompilationService.NO_SERVER);
+                scriptCompiler.serverAccess("", ScriptCompilationService.NO_SERVER);
                 PlayingPayload playing = current.location().playing();
                 if (playing != null) requestServerScripts(playing);
             }
@@ -1190,12 +1196,12 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         return current != null && current.send(message);
     }
 
-    /** A server run goes to the server through the relay, bound to the world its target was inspected in. */
+    /** A server run goes to the server through the relay, bound to the world it is meant for. */
     private boolean sendRun(RunScriptMessage message) {
         if (message.side() != Side.SERVER) return send(message);
         if (switching) return false;
         CompanionSession current = session;
-        return current != null && current.sendToServer(message, message.scriptId(), message.subjectSessionId());
+        return current != null && current.sendToServer(message, message.scriptId(), message.world());
     }
 
     /**
@@ -1204,23 +1210,24 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
      */
     private void requestServerScripts(PlayingPayload playing) {
         String target = switch (playing) {
-            case PlayingPayload.Singleplayer singleplayer -> "world " + singleplayer.world();
-            case PlayingPayload.Multiplayer multiplayer when multiplayer.totalDebug() -> "server " + multiplayer.address();
+            case PlayingPayload.Singleplayer singleplayer -> singleplayer.identity();
+            case PlayingPayload.Multiplayer multiplayer when multiplayer.totalDebug() -> multiplayer.identity();
             default -> null;
         };
         if (Objects.equals(target, this.serverScriptsTarget)) return;
         if (this.serverScriptsTarget != null && executionRuns != null) executionRuns.serverSessionEnded();
         this.serverScriptsTarget = target;
         if (target == null) {
-            scriptCompiler.serverAccess(ScriptCompilationService.NO_SERVER);
+            scriptCompiler.serverAccess("", ScriptCompilationService.NO_SERVER);
             return;
         }
-        scriptCompiler.serverAccess("Waiting for the server");
+        scriptCompiler.serverAccess("", "Waiting for the server");
+        int request = this.serverScriptsRequests.decrementAndGet();
+        this.serverScriptsRequest = request;
         CompanionSession current = session;
-        if (switching || current == null
-                || !current.sendToServer(new ServerScriptsRequestMessage(), SERVER_SCRIPTS_REQUEST, "")) {
+        if (switching || current == null || !current.sendToServer(new ServerScriptsRequestMessage(), request, target)) {
             this.serverScriptsTarget = null;
-            scriptCompiler.serverAccess("Minecraft disconnected");
+            scriptCompiler.serverAccess("", "Minecraft disconnected");
         }
     }
 

@@ -22,6 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class ServerRelay {
     private final Map<UUID, RelayAssembler> assemblers = new ConcurrentHashMap<>();
+    /** The newest Companion connection each player's client carried a message of. */
+    private final Map<UUID, Integer> companions = new ConcurrentHashMap<>();
     private volatile ServerOperations operations;
 
     /** Hands the server's messages to {@code operations}. */
@@ -45,6 +47,8 @@ public final class ServerRelay {
                 TotalDebug.LOGGER.warn("Discarding a relayed message {} before the server's operations are ready", message.messageId());
                 return;
             }
+            // Connection numbers only grow; a message from an earlier connection was queued before it closed.
+            if (chunk.companion() < this.companions.merge(player.getUUID(), chunk.companion(), Math::max)) return;
             handler.handle(player, chunk.companion(), decoded);
         });
     }
@@ -71,10 +75,12 @@ public final class ServerRelay {
     /** Forgets what {@code player}'s client was carrying. */
     public void removePlayer(ServerPlayer player) {
         this.assemblers.remove(player.getUUID());
+        this.companions.remove(player.getUUID());
     }
 
     /** Forgets every player's transfers, such as when the server stops. */
     public void clear() {
         this.assemblers.clear();
+        this.companions.clear();
     }
 }

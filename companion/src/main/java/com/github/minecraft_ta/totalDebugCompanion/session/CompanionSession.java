@@ -216,10 +216,10 @@ public final class CompanionSession implements AutoCloseable {
     /**
      * Sends {@code message} to the game's server through the game client, which carries it unread (see
      * {@code docs/MOD_SIDES.md}). {@code correlation} is the request's id, such as a script run, which a failure to
-     * deliver names; {@code gameSession} is the joined world the message is only valid in, or empty.
+     * deliver names; {@code world} is the world the message is only valid in, as {@code PLAYING} names it, or empty.
      */
-    public boolean sendToServer(AbstractMessage message, int correlation, String gameSession) {
-        return send(new ToServerMessage(RelayedMessages.toServer(message, correlation, gameSession)));
+    public boolean sendToServer(AbstractMessage message, int correlation, String world) {
+        return send(new ToServerMessage(RelayedMessages.toServer(message, correlation, world)));
     }
 
     public boolean send(AbstractMessage message) {

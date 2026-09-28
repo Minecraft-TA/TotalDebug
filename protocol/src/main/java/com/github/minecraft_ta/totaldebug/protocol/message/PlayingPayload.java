@@ -37,6 +37,18 @@ public sealed interface PlayingPayload {
         }
     }
 
+    /**
+     * The world a message bound to it names, the same on both endpoints: its folder for a singleplayer world, the
+     * address for a server, empty in the menu. A request for a world the game no longer plays is refused.
+     */
+    default String identity() {
+        return switch (this) {
+            case Menu ignored -> "";
+            case Singleplayer singleplayer -> "world " + singleplayer.world();
+            case Multiplayer multiplayer -> "server " + multiplayer.address();
+        };
+    }
+
     static PlayingPayload read(ByteBufferInputStream input) {
         byte kind = input.readByte();
         return switch (kind) {

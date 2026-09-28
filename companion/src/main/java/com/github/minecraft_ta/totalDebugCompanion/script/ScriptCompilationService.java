@@ -50,11 +50,11 @@ public final class ScriptCompilationService implements AutoCloseable {
     private InMemoryJavaCompiler compiler;
     private volatile boolean closed;
     /**
-     * Whether the game's server runs this player's scripts: {@code refusal} is empty when it does. Replaced on every
-     * change, so a server compilation queued before one is not sent after it.
+     * Whether the server of {@code world} runs this player's scripts: {@code refusal} is empty when it does. Replaced on
+     * every change, so a server compilation queued before one is not sent after it.
      */
-    private record ServerAccess(String refusal) {}
-    private volatile ServerAccess serverAccess = new ServerAccess(NO_SERVER);
+    private record ServerAccess(String world, String refusal) {}
+    private volatile ServerAccess serverAccess = new ServerAccess("", NO_SERVER);
     private CompletableFuture<Void> readinessChange = new CompletableFuture<>();
     /** Identical source compiled against the same runtime yields identical bytecode. */
     private record CompiledKey(ReadySnapshot selected, String source, String entryClass) {}
@@ -91,11 +91,12 @@ public final class ScriptCompilationService implements AutoCloseable {
     }
 
     /**
-     * What the game's server answered about running this player's scripts, or why it cannot be asked: {@code refusal}
-     * is empty when server runs may start. The server checks each run's references itself.
+     * What the server of {@code world}, as {@code PLAYING} names it, answered about running this player's scripts, or
+     * why it cannot be asked: {@code refusal} is empty when server runs may start there. Server runs are sent for that
+     * world, and the server checks each run's references itself.
      */
-    public synchronized void serverAccess(String refusal) {
-        this.serverAccess = new ServerAccess(refusal);
+    public synchronized void serverAccess(String world, String refusal) {
+        this.serverAccess = new ServerAccess(world, refusal);
         readinessChanged();
     }
 
@@ -208,7 +209,8 @@ public final class ScriptCompilationService implements AutoCloseable {
                 if (this.pending.get(id) != task) return;
                 if (this.snapshot != selected || (server != null && this.serverAccess != server) || !this.sender.test(new RunScriptMessage(
                         id, compiled.bytecode(), compiled.inventoryId(), side, environment.name(),
-                        subject == null ? "" : subject.subject().format(), subject == null ? "" : subject.gameSessionId(),
+                        subject == null ? "" : subject.subject().format(),
+                        subject != null ? subject.world() : server != null ? server.world() : "",
                         subject == null ? "" : subject.expectedId()))) {
                     throw new IllegalStateException("Minecraft disconnected or the runtime changed before the script was submitted");
                 }
@@ -257,7 +259,7 @@ public final class ScriptCompilationService implements AutoCloseable {
     }
 
     public void runtimeDisconnected() {
-        serverAccess("Minecraft disconnected");
+        serverAccess("", "Minecraft disconnected");
         for (int id : this.pending.keySet()) cancel(id);
     }
 

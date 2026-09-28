@@ -144,7 +144,7 @@ class ScriptCompilationServiceTest {
             assertFalse(server.ready());
             assertEquals(ScriptCompilationService.NO_SERVER, server.detail());
 
-            compiler.serverAccess("");
+            compiler.serverAccess("world test", "");
 
             assertTrue(server.changed().isDone(), "the server's answer is a change");
             assertTrue(compiler.readiness(Side.SERVER).ready());
@@ -170,7 +170,7 @@ class ScriptCompilationServiceTest {
 
             assertNotNull(message, () -> this.failures.toString());
             assertEquals("entity 0f8fad5b-d9cb-469f-a165-70867728950e", message.subject());
-            assertEquals("game-session", message.subjectSessionId());
+            assertEquals("game-session", message.world());
             assertEquals("minecraft:pig", message.subjectExpectedId());
         }
     }
@@ -213,12 +213,13 @@ class ScriptCompilationServiceTest {
             assertEquals(ExecutionStatus.COMPILATION_FAILED, failure.status());
             assertTrue(failure.error().text().contains("missing"));
             assertTrue(this.sent.isEmpty());
-            compiler.serverAccess("");
+            compiler.serverAccess("world test", "");
             compiler.submit(1, "import fixture.ScriptProgram; public class Good extends ScriptProgram { public Object run() { return 42; } }",
                     Side.SERVER, ScriptExecutionEnvironment.THREAD, recovered -> this.failures.add(recovered.result()));
             RunScriptMessage message = this.sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(message);
             assertEquals(Side.SERVER, message.side());
+            assertEquals("world test", message.world(), "a server run without a target is meant for the server that allowed it");
             assertEquals(List.of("Good"), List.copyOf(message.bytecode().classes().keySet()));
         }
     }
@@ -363,7 +364,7 @@ class ScriptCompilationServiceTest {
                     """, "fixture.Api", snapshot.sources().get(1).path().toString()));
             var paths = List.of(serverApi, snapshot.sources().get(1).path(), snapshot.sources().get(2).path());
             compiler.bind(snapshot);
-            compiler.serverAccess("");
+            compiler.serverAccess("world test", "");
             compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             RunScriptMessage compiled = this.sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(compiled, () -> this.failures.toString());
@@ -384,17 +385,17 @@ class ScriptCompilationServiceTest {
     void aServerCompilationQueuedBeforeTheServerChangedIsNotSent() throws Exception {
         try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
             compiler.bind(snapshot);
-            compiler.serverAccess("");
+            compiler.serverAccess("world test", "");
             var release = new CountDownLatch(1);
             var held = holdCacheLock(release);
             try {
                 compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-                compiler.serverAccess("Waiting for the server");
+                compiler.serverAccess("", "Waiting for the server");
             } finally { release.countDown(); }
             held.get(10, TimeUnit.SECONDS);
             assertNotNull(this.failures.poll(10, TimeUnit.SECONDS));
             assertTrue(this.sent.isEmpty());
-            compiler.serverAccess("");
+            compiler.serverAccess("world test", "");
             compiler.submit(2, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertEquals(2, this.sent.poll(10, TimeUnit.SECONDS).scriptId());
         }
@@ -406,7 +407,7 @@ class ScriptCompilationServiceTest {
             compiler.bind(snapshot);
             compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertEquals(ScriptCompilationService.NO_SERVER, this.failures.poll(10, TimeUnit.SECONDS).error().text());
-            compiler.serverAccess("Server-side scripts are disabled by the server configuration");
+            compiler.serverAccess("", "Server-side scripts are disabled by the server configuration");
             compiler.submit(2, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             assertEquals("Server-side scripts are disabled by the server configuration",
                     this.failures.poll(10, TimeUnit.SECONDS).error().text());

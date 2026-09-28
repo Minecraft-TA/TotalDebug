@@ -32,7 +32,7 @@ public final class InspectionView implements IEditorPanel {
     /** Whether this tab shows {@code other}'s subject in the same game session, whatever occupies it now. */
     public boolean shows(InspectSubjectPayload other) {
         return this.subject.subject().equals(other.subject())
-                && this.subject.gameSessionId().equals(other.gameSessionId());
+                && this.subject.world().equals(other.world());
     }
 
     public void refresh() {

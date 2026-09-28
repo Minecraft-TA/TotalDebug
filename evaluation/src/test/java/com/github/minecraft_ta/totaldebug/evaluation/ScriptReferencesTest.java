@@ -76,7 +76,7 @@ class ScriptReferencesTest {
     }
 
     @Test
-    void aMemberUsedAsAnotherKindIsNamedWithTheKindTheServerHas() {
+    void aMemberTheServerHasButNotAsTheScriptUsesItIsNamedWithTheReason() {
         Handle linker = new Handle(Opcodes.H_INVOKESTATIC, Type.getInternalName(ScriptAccessLinker.class), "bootstrap",
                 "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;"
                         + "Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/invoke/CallSite;", false);
@@ -87,14 +87,15 @@ class ScriptReferencesTest {
             method.visitInsn(Opcodes.POP);
             method.visitInvokeDynamicInsn("valueOf", "(Ljava/lang/Integer;I)Ljava/lang/Integer;", linker,
                     "java.lang.Integer", "valueOf", "(I)Ljava/lang/Integer;", ScriptAccessLinker.INVOKE_VIRTUAL);
-            method.visitInvokeDynamicInsn("newInstance", "()Ljava/lang/Number;", linker,
-                    "java.lang.Number", "<init>", "()V", ScriptAccessLinker.NEW_INSTANCE);
+            method.visitInsn(Opcodes.ICONST_0);
+            method.visitInvokeDynamicInsn("MAX_VALUE", "(I)V", linker,
+                    "java.lang.Integer", "MAX_VALUE", "I", ScriptAccessLinker.PUT_STATIC);
         }));
 
         assertEquals(List.of("java.lang.Integer.value (not static on the server)",
                         "java.lang.String.length() (not static on the server)",
                         "java.lang.Integer.valueOf(int) (static on the server)",
-                        "new java.lang.Number() (abstract on the server)"),
+                        "java.lang.Integer.MAX_VALUE (unexpected set of a final field)"),
                 ScriptReferences.read(script).unresolved(ScriptReferencesTest.class.getClassLoader()));
     }
 

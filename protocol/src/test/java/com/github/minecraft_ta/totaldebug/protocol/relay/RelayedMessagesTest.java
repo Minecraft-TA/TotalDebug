@@ -43,7 +43,7 @@ class RelayedMessagesTest {
         read.read(new ByteBufferInputStream(written(envelope)));
 
         assertEquals(7, read.payload().correlation());
-        assertEquals("game-session", read.payload().gameSession());
+        assertEquals("game-session", read.payload().world());
         RunScriptMessage decoded = assertInstanceOf(RunScriptMessage.class, RelayedMessages.decodeToServer(read.payload()));
         assertEquals(7, decoded.scriptId());
         assertEquals(Side.SERVER, decoded.side());
@@ -84,7 +84,7 @@ class RelayedMessagesTest {
 
     @Test
     void theLargestBodyWithTheLongestSessionFitsOneFrame() {
-        RelayedMessage largest = new RelayedMessage(Integer.MAX_VALUE, "\u20ac".repeat(RelayedMessage.MAX_SESSION_LENGTH),
+        RelayedMessage largest = new RelayedMessage(Integer.MAX_VALUE, "\u20ac".repeat(RelayedMessage.MAX_WORLD_LENGTH),
                 CompanionProtocol.EXECUTION_RESULT, new byte[RelayedMessage.MAX_BODY_BYTES]);
         ByteBufferOutputStream output = new ByteBufferOutputStream();
 

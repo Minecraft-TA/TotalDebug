@@ -38,7 +38,7 @@ class ScriptProtocolCodecTest {
         assertEquals(Side.SERVER, message.side());
         assertEquals("POST_TICK", message.executionEnvironment());
         assertEquals("", message.subject());
-        assertEquals("", message.subjectSessionId());
+        assertEquals("", message.world());
         assertEquals("", message.subjectExpectedId());
     }
 
@@ -61,7 +61,7 @@ class ScriptProtocolCodecTest {
         read.read(new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output))));
 
         assertEquals("block minecraft:overworld 1 64 -2", read.subject());
-        assertEquals("game-session", read.subjectSessionId());
+        assertEquals("game-session", read.world());
         assertEquals("minecraft:furnace", read.subjectExpectedId());
     }
 

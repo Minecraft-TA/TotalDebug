@@ -209,7 +209,7 @@ public final class InspectionSession {
         if (!awaitReadiness(current, selected)) return;
         try {
             this.active = this.snippets.get().execute(source, selected, ScriptExecutionEnvironment.POST_TICK,
-                    new ScriptSubject(SubjectRef.parseOccurrence(this.subject.subject()), this.subject.gameSessionId()));
+                    new ScriptSubject(SubjectRef.parseOccurrence(this.subject.subject()), this.subject.world()));
         } catch (RuntimeException exception) {
             readFailed(exception.getMessage());
             scheduleLive(current);
@@ -410,7 +410,7 @@ public final class InspectionSession {
             source = JavaSnippetSource.body(tool.name(), tool.text());
             source.requireExecutableSize();
             execution = this.snippets.get().execute(source, selected, ScriptExecutionEnvironment.POST_TICK,
-                    new ScriptSubject(SubjectRef.parseOccurrence(this.subject.subject()), this.subject.gameSessionId(), registryId));
+                    new ScriptSubject(SubjectRef.parseOccurrence(this.subject.subject()), this.subject.world(), registryId));
         } catch (RuntimeException exception) {
             finishTool(tool, List.of(), "", failureText(exception.getMessage(), "The tool failed"));
             return CompletableFuture.completedFuture(null);

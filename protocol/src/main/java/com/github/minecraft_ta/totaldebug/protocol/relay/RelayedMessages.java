@@ -35,9 +35,9 @@ public final class RelayedMessages {
     private RelayedMessages() {
     }
 
-    /** {@code message}, for the server, with the request's correlation and the game session it is valid in. */
-    public static RelayedMessage toServer(AbstractMessage message, int correlation, String gameSession) {
-        return new RelayedMessage(correlation, gameSession, id(TO_SERVER, message), encode(message));
+    /** {@code message}, for the server, with the request's correlation and the world it is valid in. */
+    public static RelayedMessage toServer(AbstractMessage message, int correlation, String world) {
+        return new RelayedMessage(correlation, world, id(TO_SERVER, message), encode(message));
     }
 
     /** {@code message}, from the server, for Companion. */

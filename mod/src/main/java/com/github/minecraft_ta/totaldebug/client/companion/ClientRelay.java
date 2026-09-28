@@ -15,26 +15,30 @@ import java.util.function.Supplier;
 
 /**
  * The game client's end of the relay (see {@code docs/MOD_SIDES.md}): carries Companion's messages for the server there
- * and the server's back, without reading them. It checks only the envelope: the game session a message is valid in, and
+ * and the server's back, without reading them. It checks only the envelope: the world a message is valid in, and
  * whether the server has TotalDebug. The one message it writes itself tells the server that Companion left.
  */
 public final class ClientRelay {
     private final CompanionAppClient companionApp;
-    private final Supplier<String> gameSession;
+    private final Supplier<String> world;
     private final RelayAssembler fromServer = RelayAssembler.toClient();
     /** The Companion connection whose replies {@link #fromServer} is putting together. Client thread. */
     private int assembling;
 
-    /** {@code gameSession} is the joined world's session, or null before the player inspected anything in it. */
-    public ClientRelay(CompanionAppClient companionApp, Supplier<String> gameSession) {
+    /** {@code world} is the world the game last told Companion it plays, as {@code PLAYING} names it. */
+    public ClientRelay(CompanionAppClient companionApp, Supplier<String> world) {
         this.companionApp = Objects.requireNonNull(companionApp, "companionApp");
-        this.gameSession = Objects.requireNonNull(gameSession, "gameSession");
+        this.world = Objects.requireNonNull(world, "world");
     }
 
-    /** Carries a message Companion connection {@code companion} addressed to the server. Client thread. */
+    /**
+     * Carries a message Companion connection {@code companion} addressed to the server; a message from an earlier
+     * connection is dropped. Client thread.
+     */
     public void toServer(int companion, RelayedMessage message) {
-        if (!message.gameSession().isEmpty() && !message.gameSession().equals(this.gameSession.get())) {
-            this.companionApp.sendRelayFailed(companion, message.correlation(), "The world containing this target was left; inspect it again");
+        if (companion != this.companionApp.companionConnection()) return;
+        if (!message.world().isEmpty() && !message.world().equals(this.world.get())) {
+            this.companionApp.sendRelayFailed(companion, message.correlation(), "The game left the world this was meant for");
             return;
         }
         ClientPacketListener connection = Minecraft.getInstance().getConnection();

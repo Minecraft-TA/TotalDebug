@@ -9,19 +9,20 @@ import java.util.Objects;
 
 /**
  * Field order and encoding are shared by both endpoints. {@code subject} is an optional
- * {@link SubjectRef} text bound to the run's target, valid
- * only while the client is still in {@code subjectSessionId}'s world. Both are empty for a run without a target.
+ * {@link SubjectRef} text bound to the run's target. {@code world} is the world the run is meant for, as
+ * {@link PlayingPayload#identity()} names it: every server run and every run with a target has one, and the game refuses
+ * the run once it plays another.
  * {@code subjectExpectedId}, when not empty, is the registry id the target must still have; a run against a subject
  * that changed since then fails instead of running.
  */
-public record RunScriptPayload(int scriptId, ScriptBytecode bytecode, String inventoryId, Side side, String executionEnvironment, String subject, String subjectSessionId, String subjectExpectedId) {
+public record RunScriptPayload(int scriptId, ScriptBytecode bytecode, String inventoryId, Side side, String executionEnvironment, String subject, String world, String subjectExpectedId) {
     public RunScriptPayload {
         Objects.requireNonNull(side, "side");
         subject = Objects.requireNonNullElse(subject, "");
-        subjectSessionId = Objects.requireNonNullElse(subjectSessionId, "");
+        world = Objects.requireNonNullElse(world, "");
         subjectExpectedId = Objects.requireNonNullElse(subjectExpectedId, "");
-        if (subject.isEmpty() != subjectSessionId.isEmpty()) {
-            throw new IllegalArgumentException("A script subject requires its game session and vice versa");
+        if (!subject.isEmpty() && world.isEmpty()) {
+            throw new IllegalArgumentException("A script subject requires its world");
         }
         if (subject.isEmpty() && !subjectExpectedId.isEmpty()) {
             throw new IllegalArgumentException("An expected subject id requires a subject");
@@ -38,7 +39,7 @@ public record RunScriptPayload(int scriptId, ScriptBytecode bytecode, String inv
         output.writeBoolean(this.side == Side.SERVER);
         output.writeString(this.executionEnvironment);
         output.writeString(this.subject);
-        output.writeString(this.subjectSessionId);
+        output.writeString(this.world);
         output.writeString(this.subjectExpectedId);
     }
 }

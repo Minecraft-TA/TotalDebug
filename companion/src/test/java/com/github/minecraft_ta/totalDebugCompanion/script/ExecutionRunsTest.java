@@ -190,7 +190,7 @@ class ExecutionRunsTest {
             assertNotNull(message, "A fresh run must still execute on the replacement connection");
             assertEquals(replacementId, message.scriptId());
             assertEquals(targeted ? subject.subject().format() : "", message.subject());
-            assertEquals(targeted ? subject.gameSessionId() : "", message.subjectSessionId());
+            assertEquals(targeted ? subject.world() : "", message.world());
             assertEquals(targeted ? subject.expectedId() : "", message.subjectExpectedId());
             compiler.compile("public class Fence {}", "Fence").get(10, TimeUnit.SECONDS);
             assertTrue(sent.isEmpty(), "No untracked execution may be emitted");

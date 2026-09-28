@@ -51,4 +51,13 @@ class PlayingProtocolCodecTest {
         buffer.flip();
         return buffer;
     }
+
+    @Test
+    void theWorldIsNamedByItsFolderOrItsServerAndTheMenuNamesNone() {
+        assertEquals("", new PlayingPayload.Menu().identity());
+        assertEquals("world C:/saves/New World", new PlayingPayload.Singleplayer("C:/saves/New World", true).identity());
+        assertEquals("server play.example.net", new PlayingPayload.Multiplayer("play.example.net", false, true, 0).identity());
+        assertEquals(new PlayingPayload.Singleplayer("C:/saves/New World", false).identity(),
+                new PlayingPayload.Singleplayer("C:/saves/New World", true).identity(), "opening to LAN is the same world");
+    }
 }

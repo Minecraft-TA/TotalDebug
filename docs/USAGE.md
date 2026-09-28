@@ -60,13 +60,13 @@ Stop an active script before renaming, moving, or deleting it or a containing fo
 
 The client and server execution choices target their respective game contexts. Both compile against the client's classes. Once the game plays a world or a server with TotalDebug, Companion asks the server whether it runs scripts for this player; the server's configuration decides (`enableScripts`, `enableScriptsOnlyForOp`).
 
-Before a server script runs, the server resolves every class, field and method the script refers to through the classes it has loaded, and refuses the run with the names that do not resolve. A server script may not refer to client classes (`net.minecraft.client`, `net.neoforged.neoforge.client`, `com.mojang.blaze3d`), even in singleplayer. Classes that only the server has cannot be compiled against.
+Before a server script runs, the server resolves every class, field and method the script refers to through the classes it has loaded, and refuses the run with the names that do not resolve. A server script may not refer to client classes (`net.minecraft.client`, `net.neoforged.neoforge.client`, `com.mojang.blaze3d`), even in singleplayer.
 
-Disconnecting invalidates pending server compilations, and the receiving server rejects bytecode carrying an old identity. Reopening Companion or replacing its client index repeats comparison against the retained baseline; delayed replies from older comparisons cannot complete the new one. The server keeps shared source details until that server runtime ends.
+Leaving the world or server ends the runs there, and a run meant for a world the game no longer plays is refused. An inspected target stays valid when you rejoin the same world.
 
-The comparison describes prepared filesystem class files, not final post-Mixin or agent-transformed definitions. It does not guarantee identical behavior or validate types named dynamically through reflection. Server-only types remain unavailable to client-index completion. Source inspection and remote debugger support are separate from compilation.
+The check covers what the script refers to, not what it does: a method body may behave differently on the server, and types named only through reflection are not checked. Classes only the server has are unavailable to completion and compilation, since Companion indexes the client.
 
-Server execution follows the server's script configuration and operator restrictions. Install matching TotalDebug builds on both endpoints and use the matching Companion build. Compiled scripts are limited to 1 MiB, with a 30,000-byte compressed limit for server runs.
+Server execution follows the server's script configuration and operator restrictions. Install matching TotalDebug builds on both endpoints and use the matching Companion build. Compiled scripts are limited to 1 MiB.
 
 Evaluate Everywhere supports expressions and compiled Java statement bodies. The interpreter supports common Java operations but is not a complete Java compile-time binder. Generic overload binding and some conditional type inference can differ from compiler behavior.
 
