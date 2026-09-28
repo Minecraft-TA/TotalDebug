@@ -315,6 +315,36 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aWaitingReloadOfTheLeftWorldsDataAloneIsDroppedAndLaterReloadsStillGo() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        LevelDatFixture.write(world, LevelDatFixture.world("World"));
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        edits.location().connected(message -> {
+            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
+            return true;
+        });
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.packStack(STACK);
+
+        CompletableFuture<ResourceEdits.Saved> running = edits.save(LANG, bytes("{}"));
+        awaitSent(sent, 1);
+        CompletableFuture<ResourceEdits.Saved> data = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
+        edits.location().playing(new PlayingPayload.Menu());
+        assertTrue(data.get(5, TimeUnit.SECONDS).reloadFailure().contains("another world"));
+
+        edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
+        running.get(5, TimeUnit.SECONDS);
+        Thread.sleep(100);
+        assertEquals(1, sent.size(), "nothing is left to ask for");
+
+        CompletableFuture<ResourceEdits.Saved> later = edits.save("assets/testmod/lang/de_de.json", bytes("{}"));
+        awaitSent(sent, 2);
+        edits.answered(new ReloadResultPayload(sent.get(1).requestId(), 10, List.of(), ""));
+        assertEquals(ConfigChanges.Effect.NOW, later.get(5, TimeUnit.SECONDS).effect(), "later reloads are not held up");
+    }
+
+    @Test
     void reloadsAskedForDuringAReloadRunTogetherAfterIt() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);

@@ -829,7 +829,10 @@ public final class ResourceEdits {
 
     /** Drops the waiting reload's data when the game no longer plays its world. */
     private synchronized void dropLeftWorldData() {
-        if (this.next != null && this.next.dataWorld != null && !this.location.read().plays(this.next.dataWorld)) dropData(this.next);
+        if (this.next == null || this.next.dataWorld == null || this.location.read().plays(this.next.dataWorld)) return;
+        dropData(this.next);
+        // A reload of that data alone leaves nothing to ask for.
+        if (this.next.kinds.isEmpty()) this.next = null;
     }
 
     /**
@@ -864,10 +867,16 @@ public final class ResourceEdits {
         this.waiting.put(id, batch.result);
         List<String> watched = new ArrayList<>(batch.watched);
         if (watched.size() > ReloadPayload.MAX_WATCHED) watched = watched.subList(0, ReloadPayload.MAX_WATCHED);
-        if (send == null || !send.send(new ReloadMessage(new ReloadPayload(id, batch.kinds, batch.managedAssets ? PACK_ID : "",
-                batch.managedData ? PACK_ID : "", batch.dataWorld == null ? "" : batch.dataWorld.toString(), watched)))) {
+        try {
+            if (send == null || !send.send(new ReloadMessage(new ReloadPayload(id, batch.kinds, batch.managedAssets ? PACK_ID : "",
+                    batch.managedData ? PACK_ID : "", batch.dataWorld == null ? "" : batch.dataWorld.toString(), watched)))) {
+                this.waiting.remove(id);
+                batch.result.completeExceptionally(new IOException("The game is not connected"));
+            }
+        } catch (RuntimeException unsendable) {
+            // A reload that cannot be asked for fails its saves; the next reload is not held up behind it.
             this.waiting.remove(id);
-            batch.result.completeExceptionally(new IOException("The game is not connected"));
+            batch.result.completeExceptionally(unsendable);
         }
         batch.result.orTimeout(RELOAD_MINUTES, TimeUnit.MINUTES).whenComplete((ignored, failure) -> {
             this.waiting.remove(id);
