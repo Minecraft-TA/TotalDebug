@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.resource;
 
+import net.minecraft.world.level.storage.LevelResource;
+import java.nio.file.Path;
 import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
@@ -68,7 +70,7 @@ public final class ResourceReloads {
     public static void select(SetPacksPayload request, Consumer<ReloadResultPayload> answer) {
         long started = System.nanoTime();
         attempt(() -> request.side() == SetPacksPayload.Side.RESOURCES ? selectResources(request.enabled())
-                : selectData(request.enabled())).whenComplete((ignored, failure) -> answer.accept(new ReloadResultPayload(
+                : selectData(request.world(), request.enabled())).whenComplete((ignored, failure) -> answer.accept(new ReloadResultPayload(
                 request.requestId(), (System.nanoTime() - started) / 1_000_000, List.of(), failure == null ? "" : message(failure))));
     }
 
@@ -87,10 +89,16 @@ public final class ResourceReloads {
         return reloadAll(minecraft);
     }
 
-    private static CompletableFuture<Void> selectData(List<String> enabled) {
+    private static CompletableFuture<Void> selectData(String world, List<String> enabled) {
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
         if (server == null) {
             return CompletableFuture.failedFuture(new IllegalStateException("No singleplayer world is open"));
+        }
+        // Chosen for the world Companion saw the game play; the game may have gone to another since.
+        Path played = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
+        if (!played.equals(Path.of(world).toAbsolutePath().normalize())) {
+            return CompletableFuture.failedFuture(new IllegalStateException("The game no longer plays the world "
+                    + Path.of(world).getFileName() + "; nothing was changed"));
         }
         return CompletableFuture.supplyAsync(() -> {
             PackRepository packs = server.getPackRepository();

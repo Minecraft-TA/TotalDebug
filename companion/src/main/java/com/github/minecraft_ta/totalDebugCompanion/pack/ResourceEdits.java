@@ -81,8 +81,9 @@ public final class ResourceEdits {
         }
     }
 
-    /** Reloads to send together. */
+    /** Reloads to send together, to the game on one connection. */
     private static final class Batch {
+        final GameLocation.Connection connection;
         final Set<ReloadPayload.Kind> kinds = EnumSet.noneOf(ReloadPayload.Kind.class);
         final Set<String> watched = new LinkedHashSet<>();
         final CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
@@ -92,6 +93,10 @@ public final class ResourceEdits {
          */
         boolean managedAssets;
         boolean managedData;
+
+        Batch(GameLocation.Connection connection) {
+            this.connection = connection;
+        }
     }
 
     private final GameLocation location;
@@ -132,8 +137,11 @@ public final class ResourceEdits {
         this.state = Objects.requireNonNull(state, "state");
         location.addListener(change -> {
             if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
-            // What the game plays decides which world's packs the pages show.
-            else if (change == GameLocation.Change.PLAYING) this.stackListeners.forEach(Runnable::run);
+            else if (change == GameLocation.Change.PLAYING) {
+                // The packs the game named belong to what it played; it names them again for what it plays now.
+                this.stack = null;
+                this.stackListeners.forEach(Runnable::run);
+            }
         });
     }
 
@@ -753,8 +761,9 @@ public final class ResourceEdits {
             return CompletableFuture.completedFuture(new Saved(ConfigChanges.Effect.REJOIN, pack, List.of(), ""));
         }
         // Files written beside it join the same reload, which they are part of.
-        for (String beside : alsoWatched) reload(kind(beside), beside, managed(pack));
-        return reload(kind(path), path, managed(pack)).handle((result, failure) -> {
+        GameLocation.Connection connection = ((Access.Live) access).connection();
+        for (String beside : alsoWatched) reload(connection, kind(beside), beside, managed(pack));
+        return reload(connection, kind(path), path, managed(pack)).handle((result, failure) -> {
             if (failure != null) {
                 return new Saved(assets ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS, pack,
                         List.of(), message(failure));
@@ -765,14 +774,16 @@ public final class ResourceEdits {
     }
 
     /**
-     * Asks the game on {@code send} to enable exactly {@code enabled}, lowest first, among the resource packs or the open
-     * world's datapacks, and reload what that needs; completes with its answer, or fails once that connection ended.
+     * Asks the game on {@code send} to enable exactly {@code enabled}, lowest first, among the resource packs or the
+     * datapacks of {@code world}, which it must still play, and reload what that needs; completes with its answer, or fails
+     * once that connection ended. {@code world} is null for resource packs.
      */
-    public CompletableFuture<ReloadResultPayload> select(GameLocation.Connection send, SetPacksPayload.Side side, List<String> enabled) {
+    public CompletableFuture<ReloadResultPayload> select(GameLocation.Connection send, SetPacksPayload.Side side, Path world,
+                                                         List<String> enabled) {
         int id = this.requests.incrementAndGet();
         CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
         this.waiting.put(id, result);
-        if (send == null || !send.send(new SetPacksMessage(new SetPacksPayload(id, side, enabled)))) {
+        if (send == null || !send.send(new SetPacksMessage(new SetPacksPayload(id, side, world == null ? "" : world.toAbsolutePath().normalize().toString(), enabled)))) {
             this.waiting.remove(id);
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));
         }
@@ -780,8 +791,14 @@ public final class ResourceEdits {
     }
 
     /** Asks the game to reload {@code kind}, merged into the next reload while one runs. */
-    private synchronized CompletableFuture<ReloadResultPayload> reload(ReloadPayload.Kind kind, String path, boolean managed) {
-        if (this.next == null) this.next = new Batch();
+    private synchronized CompletableFuture<ReloadResultPayload> reload(GameLocation.Connection connection, ReloadPayload.Kind kind,
+                                                                       String path, boolean managed) {
+        if (this.next != null && this.next.connection != connection) {
+            // Asked for on an earlier connection: that game is gone, and the one connected now never saw these writes.
+            this.next.result.completeExceptionally(new IOException("The game disconnected before it reloaded"));
+            this.next = null;
+        }
+        if (this.next == null) this.next = new Batch(connection);
         this.next.kinds.add(kind);
         this.next.watched.add(path);
         if (path.startsWith("assets/")) this.next.managedAssets |= managed;
@@ -802,7 +819,7 @@ public final class ResourceEdits {
             batch.kinds.remove(ReloadPayload.Kind.LANGUAGE);
             batch.kinds.remove(ReloadPayload.Kind.TEXTURES);
         }
-        GameLocation.Connection send = this.location.connection();
+        GameLocation.Connection send = batch.connection;
         int id = this.requests.incrementAndGet();
         this.waiting.put(id, batch.result);
         List<String> watched = new ArrayList<>(batch.watched);

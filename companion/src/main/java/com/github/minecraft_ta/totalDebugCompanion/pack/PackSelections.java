@@ -122,7 +122,8 @@ public final class PackSelections {
                 return CompletableFuture.completedFuture(new Applied(target.side() == SetPacksPayload.Side.RESOURCES
                         ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS));
             }
-            return this.edits.select(read.live(), target.side(), enabled).thenApply(result -> {
+            return this.edits.select(read.live(), target.side(),
+                    target.side() == SetPacksPayload.Side.DATA ? target.location() : null, enabled).thenApply(result -> {
                 if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
                 this.record.changed(target, json(read.previous()), json(enabled));
                 return new Applied(ConfigChanges.Effect.NOW);

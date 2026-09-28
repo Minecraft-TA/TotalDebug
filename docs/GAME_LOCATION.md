@@ -77,6 +77,9 @@ A world of the instance is never live while the game plays on a remote server: t
 - No category checks the game lock, a `session.lock` or the connection itself. It asks `GameLocation`. The file primitives keep their own last guard: `LevelDat` never writes a held world.
 - A live answer's connection sends only on the connection it was given for. Once that connection has ended its sends fail, so a message never goes to a game that connected since.
 - A category that waits for the game's answers listens to `GameLocation` to fail them when the game disconnects.
+- A live request for a world names that world, and the game refuses it when it plays another by the time the request arrives: what the game plays is told once a second, so Companion can be a moment behind.
+- What the game reports about a world, such as its datapacks, belongs to what it plays. Companion drops it when the game plays something else, and the game reports it again.
+- Reloads asked for together go to the game on one connection; asked for on an earlier connection, they fail rather than reach a game that connected since.
 
 ## One side type
 

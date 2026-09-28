@@ -94,7 +94,11 @@ public final class TotalDebugClient {
                 companionApp::sendPackCatalog
         );
         this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
-        this.playing = new ChangePublisher<>(Playing::capture, playing -> companionApp.sendPlaying(new PlayingMessage(playing)));
+        this.playing = new ChangePublisher<>(Playing::capture, playing -> {
+            companionApp.sendPlaying(new PlayingMessage(playing));
+            // Companion drops the packs of what the game played before; they are named again for what it plays now.
+            this.packStacks.republish();
+        });
         companionApp.setSessionOpenedHandler(() -> {
             this.packStacks.republish();
             this.playing.republish();

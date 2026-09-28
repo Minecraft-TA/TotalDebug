@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
@@ -24,6 +25,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -133,6 +135,37 @@ class PackSelectionsTest {
         assertEquals("[\"vanilla\",\"mod_resources\"]", record.changes().getFirst().original(),
                 "as options.txt keeps it: without the parts of the mods' pack");
         assertFalse(Files.exists(this.directory.resolve("options.txt")), "the game saves options.txt itself");
+    }
+
+    @Test
+    void aDatapackSelectionNamesTheWorldTheGamePlays() throws Exception {
+        Path world = this.directory.resolve("saves/Test");
+        LevelDatFixture.write(world, LevelDatFixture.world("Test"));
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record, true);
+        List<SetPacksPayload> sent = new CopyOnWriteArrayList<>();
+        edits.location().connected(message -> {
+            if (message instanceof SetPacksMessage packs) sent.add(packs.payload());
+            return true;
+        });
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.packStack(new PackStackPayload(34, 48, List.of(), List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+
+        selections(record, edits).set(SetPacksPayload.Side.DATA, world, List.of("vanilla", "file/Tweaks"));
+
+        assertEquals(world.toAbsolutePath().normalize().toString(), sent.getFirst().world(),
+                "the game refuses it if it plays another world by the time it arrives");
+    }
+
+    @Test
+    void anotherWorldPlayedDropsThePacksTheGameNamedBefore() {
+        ResourceEdits edits = edits(ChangeRecord.inMemory(), true);
+        edits.location().connected(message -> true);
+        edits.packStack(new PackStackPayload(34, 48, List.of(), List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+
+        edits.location().playing(new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString(), false));
+
+        assertNull(edits.packStack(), "the packs named were the previous world's; the game names them again");
     }
 
     private ResourceEdits edits(ChangeRecord record, boolean gameRunning) {
