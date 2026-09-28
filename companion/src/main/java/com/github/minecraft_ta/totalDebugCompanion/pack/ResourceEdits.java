@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
@@ -112,6 +113,8 @@ public final class ResourceEdits {
     private final AtomicInteger requests = new AtomicInteger();
     private final Map<Integer, CompletableFuture<ReloadResultPayload>> waiting = new ConcurrentHashMap<>();
     private volatile PackStackPayload stack;
+    /** What the game played when it named {@link #stack}, whose packs they are. */
+    private volatile PlayingPayload stackFor;
     /** Run whenever the game names its packs again, such as after another world opened. */
     private final List<Runnable> stackListeners = new CopyOnWriteArrayList<>();
     /** Run after a save or revert has written its file and the game used it, or failed to. */
@@ -143,7 +146,7 @@ public final class ResourceEdits {
             if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
             else if (change == GameLocation.Change.PLAYING) {
                 // The packs the game named belong to what it played; it names them again for what it plays now.
-                this.stack = null;
+                if (!Objects.equals(this.stackFor, location.playing())) this.stack = null;
                 dropLeftWorldData();
                 this.stackListeners.forEach(Runnable::run);
             }
@@ -181,6 +184,7 @@ public final class ResourceEdits {
 
     /** Takes the game's enabled packs. */
     public void packStack(PackStackPayload stack) {
+        this.stackFor = this.location.playing();
         this.stack = stack;
         this.stackListeners.forEach(Runnable::run);
     }

@@ -345,6 +345,18 @@ class ResourceEditsTest {
     }
 
     @Test
+    void packsNamedBeforeTheConnectionWasEstablishedStayForTheWorldTheyBelongTo() {
+        Path world = this.directory.resolve("saves/World");
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.packStack(STACK);
+
+        edits.location().connected(message -> true);
+
+        assertEquals(STACK, edits.packStack(), "they were named for the world the connection now plays");
+    }
+
+    @Test
     void reloadsAskedForDuringAReloadRunTogetherAfterIt() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);

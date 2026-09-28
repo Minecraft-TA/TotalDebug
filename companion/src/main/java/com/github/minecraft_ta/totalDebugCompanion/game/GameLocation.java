@@ -84,13 +84,20 @@ public final class GameLocation {
         return this.workspace;
     }
 
-    /** The game's connection is established, with what the game has told on it so far. */
+    /**
+     * The game's connection is established, with what the game has told on it so far; listeners hear of that as well, as
+     * if it was told now.
+     */
     public void connected(Connection connection) {
         Objects.requireNonNull(connection, "connection");
+        Link established;
         synchronized (this) {
-            this.link = new Link(connection, this.toldProcess, this.toldPlaying);
+            established = new Link(connection, this.toldProcess, this.toldPlaying);
+            this.link = established;
         }
         tell(Change.CONNECTED);
+        if (established.process() != 0) tell(Change.PROCESS);
+        if (established.playing() != null) tell(Change.PLAYING);
     }
 
     /** The game's process, as it announced it on the current connection. */
@@ -131,6 +138,11 @@ public final class GameLocation {
     public Connection connection() {
         Link current = this.link;
         return current == null ? null : current.connection();
+    }
+
+    /** What the game told it plays on the current connection, or null. Not blocking. */
+    public synchronized PlayingPayload playing() {
+        return this.toldPlaying;
     }
 
     /** The connected game's process, or 0 while unknown or without a connection. Not blocking. */

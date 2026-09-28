@@ -146,9 +146,13 @@ class GameStateTest {
         GameLocation location = new GameLocation(GAME, new Files(true, Set.of(WORLD), null));
         location.process(7);
         location.playing(new PlayingPayload.Singleplayer(WORLD.toString(), false));
+        List<GameLocation.Change> heard = new ArrayList<>();
+        location.addListener(heard::add);
 
         location.connected(SEND);
 
+        assertEquals(List.of(GameLocation.Change.CONNECTED, GameLocation.Change.PROCESS, GameLocation.Change.PLAYING), heard,
+                "what the game told before is heard as told now");
         assertEquals(7, location.process());
         assertInstanceOf(Access.Live.class, location.read().world(WORLD, "change its rules"));
 

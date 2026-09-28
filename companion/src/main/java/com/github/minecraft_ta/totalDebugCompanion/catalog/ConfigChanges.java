@@ -82,10 +82,7 @@ public final class ConfigChanges {
         this.record = Objects.requireNonNull(record, "record");
         location.addListener(change -> {
             switch (change) {
-                case CONNECTED, PROCESS -> {
-                    // The process may have been announced before the connection was taken as established.
-                    if (location.process() != 0) gameProcess(location.process());
-                }
+                case PROCESS -> gameProcess(location.process());
                 case DISCONNECTED -> gameDisconnected();
                 default -> { }
             }
