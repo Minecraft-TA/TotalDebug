@@ -60,8 +60,8 @@ class MixinsTest {
         assertEquals(List.of(LEVEL), level.targets());
         assertEquals(Mixins.Side.BOTH, level.side());
         assertEquals(900, level.priority());
-        assertEquals(List.of(new Mixins.Change("Inject", "tick"), new Mixins.Change("Redirect", "explode", LEVEL),
-                new Mixins.Change("WrapOperation", "tick")), level.changes());
+        assertEquals(List.of(new Mixins.Change("Inject", "tick", "()V", ""), new Mixins.Change("Redirect", "explode", "(DDD)V", LEVEL),
+                new Mixins.Change("WrapOperation", "tick")), level.changes(), "each with the overload its descriptor picks");
         Mixins.Mixin accessor = mixins.get(1);
         assertEquals(Mixins.Side.CLIENT, accessor.side());
         assertEquals(1200, accessor.priority(), "without its own priority, the configuration's");
@@ -101,6 +101,8 @@ class MixinsTest {
         assertEquals("tick", Mixins.member("Lnet/minecraft/world/level/Level;tick()V"));
         assertEquals(LEVEL, Mixins.owner("Lnet/minecraft/world/level/Level;tick()V"));
         assertEquals("", Mixins.owner("tick()V"));
+        assertEquals("(I)V", Mixins.descriptor("Lnet/minecraft/world/level/Level;tick(I)V"));
+        assertEquals("", Mixins.descriptor("tick"));
         assertEquals("<init>", Mixins.member("<init>(Ljava/lang/String;)V"));
         assertEquals("get*", Mixins.member("get*"), "a wildcard names several members, not the class");
     }

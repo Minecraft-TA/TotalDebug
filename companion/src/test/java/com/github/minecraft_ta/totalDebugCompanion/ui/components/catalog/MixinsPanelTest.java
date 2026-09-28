@@ -31,6 +31,22 @@ class MixinsPanelTest {
     }
 
     @Test
+    void overloadsPickedByDescriptorAreRowsOfTheirOwn() {
+        List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(
+                new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.A", List.of(LEVEL), Mixins.Side.BOTH, 1000,
+                        List.of(new Mixins.Change("Inject", "tick", "()V", ""))),
+                new Mixins.Mixin("speed", "speed.mixins.json", "com.speed.mixin.B", List.of(LEVEL), Mixins.Side.BOTH, 1000,
+                        List.of(new Mixins.Change("Overwrite", "tick", "(I)V", ""))),
+                new Mixins.Mixin("glow", "glow.mixins.json", "com.glow.mixin.C", List.of(LEVEL), Mixins.Side.BOTH, 1000,
+                        List.of(new Mixins.Change("Inject", "tick")))));
+        assertEquals(List.of("tick()V", "tick(I)V"), rows.stream().map(MixinsPanel.Row::shownMember).toList());
+        assertEquals(List.of(2, 2), rows.stream().map(row -> row.mods().size()).toList(),
+                "a change naming the member alone reaches every overload; the two picked ones do not meet");
+        assertTrue(rows.get(1).overwritten());
+        assertFalse(rows.get(0).overwritten(), "the overwrite is of the other overload");
+    }
+
+    @Test
     void aSelectorNamingItsOwnerChangesOnlyThatTarget() {
         List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.Both",
                 List.of(LEVEL, "net.minecraft.server.level.ServerLevel"), Mixins.Side.BOTH, 1000,

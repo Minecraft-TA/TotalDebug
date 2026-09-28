@@ -82,18 +82,24 @@ public final class Mixins {
     }
 
     /**
-     * One change a mixin makes: how, such as {@code Inject}, to which member, empty for the class itself, and the target
-     * class its selector names by binary name, or empty for every target of the mixin.
+     * One change a mixin makes: how, such as {@code Inject}, to which member, empty for the class itself, the descriptor
+     * that picks one of its overloads, or empty for all of them, and the target class its selector names by binary name,
+     * or empty for every target of the mixin.
      */
-    public record Change(String kind, String member, String owner) {
+    public record Change(String kind, String member, String descriptor, String owner) {
         public Change {
             Objects.requireNonNull(kind, "kind");
             Objects.requireNonNull(member, "member");
+            Objects.requireNonNull(descriptor, "descriptor");
             Objects.requireNonNull(owner, "owner");
         }
 
         public Change(String kind, String member) {
-            this(kind, member, "");
+            this(kind, member, "", "");
+        }
+
+        public Change(String kind, String member, String owner) {
+            this(kind, member, "", owner);
         }
 
         /** Whether the change applies to {@code target}, one of the mixin's targets. */
@@ -331,13 +337,13 @@ public final class Mixins {
 
                 @Override
                 public void visitEnd() {
-                    if (!member[0].isEmpty()) SelectorVisitor.this.named.add(new Change("", member[0], owner[0]));
+                    if (!member[0].isEmpty()) SelectorVisitor.this.named.add(new Change("", member[0], "", owner[0]));
                 }
             };
         }
 
         private Change selected(String selector) {
-            return new Change("", member(selector), owner(selector));
+            return new Change("", member(selector), descriptor(selector), owner(selector));
         }
 
         @Override
@@ -345,9 +351,11 @@ public final class Mixins {
             switch (this.kind) {
                 case "Overwrite" -> this.changes.add(new Change(this.kind, this.methodName));
                 case "Accessor", "Invoker" -> this.changes.add(this.named.isEmpty() ? new Change(this.kind, accessed(this.kind, this.methodName))
-                        : new Change(this.kind, this.named.getFirst().member(), this.named.getFirst().owner()));
+                        : new Change(this.kind, this.named.getFirst().member(), this.named.getFirst().descriptor(), this.named.getFirst().owner()));
                 default -> {
-                    for (Change target : this.named) this.changes.add(new Change(this.kind, target.member(), target.owner()));
+                    for (Change target : this.named) {
+                        this.changes.add(new Change(this.kind, target.member(), target.descriptor(), target.owner()));
+                    }
                 }
             }
         }
@@ -367,6 +375,13 @@ public final class Mixins {
         int colon = member.indexOf(':');
         if (colon >= 0) member = member.substring(0, colon);
         return member.strip();
+    }
+
+    /** The descriptor a selector such as {@code tick(I)V} gives, which picks one overload, or empty for all of them. */
+    static String descriptor(String selector) {
+        String text = selector.strip();
+        int start = text.indexOf('(');
+        return start < 0 ? "" : text.substring(start);
     }
 
     /** The class a selector such as {@code Lnet/minecraft/world/level/Level;tick()V} names by binary name, or empty. */

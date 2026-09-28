@@ -32,8 +32,10 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,8 +52,21 @@ import java.util.function.Consumer;
  * out. A row opens its target class; its menu opens each mixin class and mod.
  */
 public final class MixinsPanel extends JPanel {
-    /** A changed member of a target class, empty for the class itself, and the mixins that change it. */
-    record Row(String target, String member, List<Entry> entries) {
+    /**
+     * A changed member of a target class, empty for the class itself, with the descriptor of the overload the changes
+     * pick, or empty when they name the member alone, and the mixins that change it.
+     */
+    record Row(String target, String member, String descriptor, List<Entry> entries) {
+        /** The member as the table shows it: with its descriptor where it is one overload. */
+        String shownMember() {
+            return this.member.isEmpty() ? "The class" : this.member + this.descriptor;
+        }
+
+        /** What identifies the row across reloads. */
+        String key() {
+            return this.target + "#" + this.member + this.descriptor;
+        }
+
         Set<String> mods() {
             Set<String> mods = new LinkedHashSet<>();
             for (Entry entry : this.entries) mods.add(entry.mixin().modId());
@@ -75,7 +90,7 @@ public final class MixinsPanel extends JPanel {
     }
 
     /** One mixin's change to a row's member. */
-    record Entry(Mixins.Mixin mixin, String kind) {
+    record Entry(Mixins.Mixin mixin, String kind, String descriptor) {
     }
 
     /** The rows read, and why files or classes could not be read. */
@@ -161,7 +176,11 @@ public final class MixinsPanel extends JPanel {
         };
     }
 
-    /** One row per changed member of each target, targets by their name as shown, then package, and members by name. */
+    /**
+     * One row per changed member of each target, targets by their name as shown, then package, and members by name. A
+     * member whose overloads are picked by descriptor has a row per overload; a change naming the member alone applies to
+     * each of them, as it does in the game.
+     */
     static List<Row> rows(List<Mixins.Mixin> mixins) {
         Map<String, Map<String, List<Entry>>> byTarget = new LinkedHashMap<>();
         for (Mixins.Mixin mixin : mixins) {
@@ -170,13 +189,32 @@ public final class MixinsPanel extends JPanel {
                     // A selector naming its owner changes only that one of the mixin's targets.
                     if (!change.appliesTo(target)) continue;
                     byTarget.computeIfAbsent(target, ignored -> new LinkedHashMap<>())
-                            .computeIfAbsent(change.member(), ignored -> new ArrayList<>()).add(new Entry(mixin, change.kind()));
+                            .computeIfAbsent(change.member(), ignored -> new ArrayList<>())
+                            .add(new Entry(mixin, change.kind(), change.descriptor()));
                 }
             }
         }
         List<Row> rows = new ArrayList<>();
-        byTarget.forEach((target, members) -> members.forEach((member, entries) -> rows.add(new Row(target, member, List.copyOf(entries)))));
-        rows.sort(Comparator.comparing((Row row) -> simple(row.target())).thenComparing(Row::target).thenComparing(Row::member));
+        byTarget.forEach((target, members) -> members.forEach((member, entries) -> {
+            List<Entry> everyOverload = entries.stream().filter(entry -> entry.descriptor().isEmpty()).toList();
+            Set<String> overloads = new LinkedHashSet<>();
+            for (Entry entry : entries) {
+                if (!entry.descriptor().isEmpty()) overloads.add(entry.descriptor());
+            }
+            if (overloads.isEmpty()) {
+                rows.add(new Row(target, member, "", List.copyOf(entries)));
+                return;
+            }
+            for (String overload : overloads) {
+                List<Entry> picked = new ArrayList<>(everyOverload);
+                for (Entry entry : entries) {
+                    if (entry.descriptor().equals(overload)) picked.add(entry);
+                }
+                rows.add(new Row(target, member, overload, List.copyOf(picked)));
+            }
+        }));
+        rows.sort(Comparator.comparing((Row row) -> simple(row.target())).thenComparing(Row::target).thenComparing(Row::member)
+                .thenComparing(Row::descriptor));
         return rows;
     }
 
@@ -192,18 +230,27 @@ public final class MixinsPanel extends JPanel {
     }
 
     private void applyFilter() {
+        // The selected rows stay selected where they are still shown, as a reload of the catalog keeps them.
+        Set<String> selected = new HashSet<>();
+        for (int row : this.table.getSelectedRows()) {
+            if (row < this.model.shown.size()) selected.add(this.model.shown.get(row).key());
+        }
         String query = this.body.query().toLowerCase(Locale.ROOT);
         boolean shared = this.sharedOnly.isSelected();
         List<Row> shown = new ArrayList<>();
         for (Row row : this.all) {
             if (shared && !row.shared()) continue;
-            if (query.isEmpty() || row.target().toLowerCase(Locale.ROOT).contains(query) || row.member().toLowerCase(Locale.ROOT).contains(query)
-                    || mods(row).toLowerCase(Locale.ROOT).contains(query) || row.mods().stream().anyMatch(mod -> mod.contains(query))) {
+            if (query.isEmpty() || row.target().toLowerCase(Locale.ROOT).contains(query) || row.shownMember().toLowerCase(Locale.ROOT).contains(query)
+                    || mods(row).toLowerCase(Locale.ROOT).contains(query) || row.mods().stream().anyMatch(mod -> mod.contains(query))
+                    || row.kinds().toLowerCase(Locale.ROOT).contains(query)) {
                 shown.add(row);
             }
         }
         this.model.shown = List.copyOf(shown);
         this.model.fireTableDataChanged();
+        for (int row = 0; row < shown.size(); row++) {
+            if (selected.contains(shown.get(row).key())) this.table.addRowSelectionInterval(row, row);
+        }
         if (!shown.isEmpty()) this.body.showContent();
         else if (!this.unavailable.isEmpty()) this.body.showMessage(this.unavailable);
         else if (this.all.isEmpty()) this.body.showMessage("No mod declares mixins.");
@@ -226,11 +273,11 @@ public final class MixinsPanel extends JPanel {
     }
 
     private String tooltip(Row row) {
-        Tooltip tooltip = Tooltip.of(simple(row.target()) + (row.member().isEmpty() ? "" : "." + row.member())).detail(row.target());
+        Tooltip tooltip = Tooltip.of(simple(row.target()) + (row.member().isEmpty() ? "" : "." + row.member() + row.descriptor())).detail(row.target());
         for (Entry entry : row.entries()) {
             Mixins.Mixin mixin = entry.mixin();
             tooltip.fact(modName(mixin.modId()), entry.kind() + " in " + simple(mixin.className()) + ", " + mixin.side().label()
-                    + (mixin.priority() == 1000 ? "" : ", priority " + mixin.priority()));
+                    + (mixin.priority() == 1000 ? "" : ", priority " + NumberFormat.getIntegerInstance(Locale.ROOT).format(mixin.priority())));
         }
         if (row.member().isEmpty()) tooltip.text("Adds members or interfaces to the class");
         if (row.overwritten()) tooltip.text("One mod replaces the member whole; the others' changes may not reach it");
@@ -312,7 +359,7 @@ public final class MixinsPanel extends JPanel {
             Row row = this.shown.get(rowIndex);
             return switch (column) {
                 case 0 -> simple(row.target());
-                case 1 -> row.member().isEmpty() ? "The class" : row.member();
+                case 1 -> row.shownMember();
                 case 2 -> mods(row);
                 default -> row.kinds();
             };

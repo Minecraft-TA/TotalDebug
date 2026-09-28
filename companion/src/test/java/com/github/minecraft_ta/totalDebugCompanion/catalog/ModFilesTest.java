@@ -49,6 +49,9 @@ class ModFilesTest {
     void splitsNestingMarkers() {
         assertEquals(List.of("/C:/mods/a.jar", "META-INF/jarjar/b.jar", "META-INF/jarjar/c.jar"),
                 ModFiles.nesting("jij:/C:/mods/a.jar%2312!/META-INF/jarjar/b.jar%233!/META-INF/jarjar/c.jar"));
+        assertEquals(List.of("/C:/my%20mods/a.jar", "META-INF/jarjar/example api+1.jar"),
+                ModFiles.nesting("jij:/C:/my%20mods/a.jar%2312!/META-INF/jarjar/example%20api+1.jar"),
+                "entry names are decoded as the ZIP names them; the outer path is decoded apart");
     }
 
     private static byte[] jar(String entry, String content) throws IOException {

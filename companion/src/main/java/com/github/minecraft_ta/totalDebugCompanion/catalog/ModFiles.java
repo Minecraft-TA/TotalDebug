@@ -162,7 +162,11 @@ public final class ModFiles {
     static List<String> nesting(String uri) {
         String path = uri.substring(uri.indexOf(':') + 1);
         List<String> parts = new ArrayList<>();
-        for (String part : path.split("!/")) parts.add(part.replaceFirst("%23\\d+$", ""));
+        for (String part : path.split("!/")) {
+            String entry = part.replaceFirst("%23\\d+$", "");
+            // Entry names inside a file are written as in a URI, such as a space as %20; the outer path is decoded apart.
+            parts.add(parts.isEmpty() ? entry : URLDecoder.decode(entry.replace("+", "%2B"), StandardCharsets.UTF_8));
+        }
         if (parts.size() < 2) throw new IllegalArgumentException("Not a nested mod file: " + uri);
         return parts;
     }
