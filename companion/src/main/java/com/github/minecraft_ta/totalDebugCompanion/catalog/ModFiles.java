@@ -60,10 +60,23 @@ public final class ModFiles {
     }
 
     private static byte[] whole(byte[] jar, String name) throws IOException {
-        if (jar.length > MAXIMUM_NESTED_JAR_BYTES) {
-            throw new IOException(name + " is larger than " + MAXIMUM_NESTED_JAR_BYTES / (1024 * 1024) + " MiB, which Companion reads");
-        }
+        if (jar.length > MAXIMUM_NESTED_JAR_BYTES) throw tooLarge(name, MAXIMUM_NESTED_JAR_BYTES);
         return jar;
+    }
+
+    /**
+     * {@code entry}'s bytes from {@code input}, at most {@code maximumBytes}: a larger entry is refused with its size
+     * limit rather than cut off, which would leave it unreadable without saying why.
+     */
+    private static byte[] limited(InputStream input, int maximumBytes, String entry) throws IOException {
+        byte[] bytes = input.readNBytes(maximumBytes == Integer.MAX_VALUE ? maximumBytes : maximumBytes + 1);
+        if (bytes.length > maximumBytes) throw tooLarge(entry, maximumBytes);
+        return bytes;
+    }
+
+    private static IOException tooLarge(String entry, int maximumBytes) {
+        String limit = maximumBytes >= 1024 * 1024 ? maximumBytes / (1024 * 1024) + " MiB" : maximumBytes / 1024 + " KiB";
+        return new IOException(entry + " is larger than " + limit + ", which Companion reads");
     }
 
     /** A mod file opened for many reads, closed when done. */
@@ -100,7 +113,7 @@ public final class ModFiles {
                     ZipEntry found = archive.getEntry(entry);
                     if (found == null || found.isDirectory()) return Optional.empty();
                     try (InputStream input = archive.getInputStream(found)) {
-                        return Optional.of(input.readNBytes(maximumBytes));
+                        return Optional.of(limited(input, maximumBytes, entry));
                     }
                 }
 
@@ -130,7 +143,7 @@ public final class ModFiles {
                 ZipEntry found = archive.getEntry(entry);
                 if (found == null || found.isDirectory()) return Optional.empty();
                 try (InputStream input = archive.getInputStream(found)) {
-                    return Optional.of(input.readNBytes(maximumBytes));
+                    return Optional.of(limited(input, maximumBytes, entry));
                 }
             }
 
@@ -148,7 +161,8 @@ public final class ModFiles {
     private static Optional<byte[]> read(Path file, String entry, int maximumBytes) throws IOException {
         if (Files.isDirectory(file)) {
             Path path = file.resolve(entry).normalize();
-            if (!path.startsWith(file) || !Files.isRegularFile(path) || Files.size(path) > maximumBytes) return Optional.empty();
+            if (!path.startsWith(file) || !Files.isRegularFile(path)) return Optional.empty();
+            if (Files.size(path) > maximumBytes) throw tooLarge(entry, maximumBytes);
             return Optional.of(Files.readAllBytes(path));
         }
         if (!Files.isRegularFile(file)) return Optional.empty();
@@ -156,7 +170,7 @@ public final class ModFiles {
             ZipEntry found = archive.getEntry(entry);
             if (found == null || found.isDirectory()) return Optional.empty();
             try (InputStream input = archive.getInputStream(found)) {
-                return Optional.of(input.readNBytes(maximumBytes));
+                return Optional.of(limited(input, maximumBytes, entry));
             }
         }
     }
@@ -183,7 +197,7 @@ public final class ModFiles {
     private static Optional<byte[]> entry(byte[] jar, String name, int maximumBytes) throws IOException {
         try (ZipInputStream input = new ZipInputStream(new ByteArrayInputStream(jar))) {
             for (ZipEntry entry = input.getNextEntry(); entry != null; entry = input.getNextEntry()) {
-                if (entry.getName().equals(name) && !entry.isDirectory()) return Optional.of(input.readNBytes(maximumBytes));
+                if (entry.getName().equals(name) && !entry.isDirectory()) return Optional.of(limited(input, maximumBytes, name));
             }
         }
         return Optional.empty();

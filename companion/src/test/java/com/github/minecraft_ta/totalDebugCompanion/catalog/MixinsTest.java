@@ -109,16 +109,24 @@ class MixinsTest {
     }
 
     @Test
-    void theNameOfAMemberDropsItsOwnerAndDescriptor() {
-        assertEquals("tick", Mixins.member("tick"));
-        assertEquals("tick", Mixins.member("tick()V"));
-        assertEquals("tick", Mixins.member("Lnet/minecraft/world/level/Level;tick()V"));
-        assertEquals(LEVEL, Mixins.owner("Lnet/minecraft/world/level/Level;tick()V"));
-        assertEquals("", Mixins.owner("tick()V"));
-        assertEquals("(I)V", Mixins.descriptor("Lnet/minecraft/world/level/Level;tick(I)V"));
-        assertEquals("", Mixins.descriptor("tick"));
-        assertEquals("<init>", Mixins.member("<init>(Ljava/lang/String;)V"));
-        assertEquals("get*", Mixins.member("get*"), "a wildcard names several members, not the class");
+    void selectorsAreReadAsMixinReadsThem() {
+        assertEquals(selected("tick", "", ""), Mixins.selector("tick"));
+        assertEquals(selected("tick", "()V", ""), Mixins.selector(" tick ()V "), "whitespace is dropped");
+        assertEquals(selected("tick", "(I)V", LEVEL), Mixins.selector("Lnet/minecraft/world/level/Level;tick(I)V"));
+        assertEquals(selected("tick", "", LEVEL), Mixins.selector("net.minecraft.world.level.Level.tick"));
+        assertEquals(selected("<init>", "(Ljava/lang/String;)V", ""), Mixins.selector("<init>(Ljava/lang/String;)V"));
+        assertEquals(selected("tick", "(I)V", ""), Mixins.selector("tick{2}(I)V"), "a quantifier counts matches");
+        assertEquals(selected("render", "", ""), Mixins.selector("render*"), "every method named render, not a prefix");
+        assertEquals(selected("render", "", ""), Mixins.selector("render+"));
+        assertEquals(selected("", "", ""), Mixins.selector("*"), "every method");
+        assertEquals(new Mixins.Selected(new MixinMember.Matching("^render"), ""), Mixins.selector("/^render/"));
+        assertEquals(new Mixins.Selected(new MixinMember.Matching("^on"), ""), Mixins.selector("name=/^on/ desc=/V$/"));
+        assertEquals("gears.mixins.json", Mixins.basicString("gears\\u002Emixins.json"), "a TOML escape");
+        assertEquals("a\"b", Mixins.basicString("a\\\"b"));
+    }
+
+    private static Mixins.Selected selected(String name, String descriptor, String owner) {
+        return new Mixins.Selected(new MixinMember.Method(name, descriptor), owner);
     }
 
     private Path jar(String name, Map<String, byte[]> entries) throws IOException {

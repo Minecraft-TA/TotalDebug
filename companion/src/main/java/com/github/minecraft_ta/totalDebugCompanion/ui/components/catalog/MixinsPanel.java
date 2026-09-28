@@ -58,7 +58,7 @@ public final class MixinsPanel extends JPanel {
     record Row(String target, MixinMember member, List<Entry> entries) {
         /** What identifies the row across reloads. */
         String key() {
-            return this.target + "#" + this.member.getClass().getSimpleName() + ":" + this.member.reference();
+            return this.target + "#" + this.member.getClass().getSimpleName() + ":" + this.member.shown();
         }
 
         Set<String> mods() {
@@ -97,7 +97,7 @@ public final class MixinsPanel extends JPanel {
 
         /** The row as a reference: the target, and the member with its overload where it gives one. */
         String reference() {
-            return this.target + (this.member instanceof MixinMember.Whole ? "" : "#" + this.member.reference());
+            return this.target + (this.member instanceof MixinMember.Whole ? "" : "#" + this.member.shown());
         }
 
         String kinds() {
@@ -196,8 +196,9 @@ public final class MixinsPanel extends JPanel {
 
     /**
      * One row per member of each target that changes reach, by target, then member. The rows are the members the changes
-     * name, except a method named without its descriptor or by a wildcard: it joins the rows of the methods it reaches,
-     * and is a row of its own only where it reaches none. Each row holds every change that reaches its member.
+     * name, except one that joins the rows of the more exact members it reaches ({@link MixinMember#precision}), such as a
+     * method named without its descriptor, which is a row of its own only where it reaches none. Each row holds every
+     * change that reaches its member.
      */
     static List<Row> rows(List<Mixins.Mixin> mixins) {
         Map<String, List<Entry>> byTarget = new LinkedHashMap<>();
@@ -215,18 +216,13 @@ public final class MixinsPanel extends JPanel {
             Set<MixinMember> named = new LinkedHashSet<>();
             for (Entry entry : entries) named.add(entry.member());
             for (MixinMember member : named) {
-                if (wide(member) && named.stream().anyMatch(other -> !wide(other) && member.reaches(other))) continue;
+                if (named.stream().anyMatch(other -> other.precision() > member.precision() && member.reaches(other))) continue;
                 rows.add(new Row(target, member, entries.stream().filter(entry -> entry.member().reaches(member)).toList()));
             }
         });
         rows.sort(Comparator.comparing((Row row) -> simple(row.target())).thenComparing(Row::target)
-                .thenComparing(row -> row.member().name()).thenComparing(row -> order(row.member())).thenComparing(row -> row.member().shown()));
+                .thenComparing(row -> row.member() instanceof MixinMember.Matching).thenComparing(row -> row.member().name()).thenComparing(row -> order(row.member())).thenComparing(row -> row.member().shown()));
         return rows;
-    }
-
-    /** Whether a method is named without its descriptor or by a wildcard, so it reaches the rows of several methods. */
-    private static boolean wide(MixinMember member) {
-        return member instanceof MixinMember.Method method && (method.descriptor().isEmpty() || method.wildcard());
     }
 
     /** The class itself first, then a field, then the methods of a name. */
@@ -235,6 +231,7 @@ public final class MixinsPanel extends JPanel {
             case MixinMember.Whole ignored -> 0;
             case MixinMember.Field ignored -> 1;
             case MixinMember.Method ignored -> 2;
+            case MixinMember.Matching ignored -> 3;
         };
     }
 
@@ -244,8 +241,10 @@ public final class MixinsPanel extends JPanel {
         this.unavailable = "";
         // The list leaves out what could not be read, which the line under the bar names.
         List<String> problems = loaded.problems();
+        // The line names the first three; its tooltip lists every one.
         this.body.showNotice(problems.isEmpty() ? "" : "Not read: " + String.join("; ", problems.subList(0, Math.min(3, problems.size())))
-                + (problems.size() > 3 ? " and " + (problems.size() - 3) + " more" : ""));
+                + (problems.size() > 3 ? " and " + (problems.size() - 3) + " more" : ""),
+                problems.size() > 3 ? Tooltip.of("Not read").text(String.join("\n", problems)).html() : null);
         applyFilter();
     }
 

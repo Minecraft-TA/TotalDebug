@@ -104,7 +104,13 @@ public final class BrowserBody extends JPanel {
 
     /** Shows {@code text} in the line under the bar, or hides the line for an empty text. */
     public void showNotice(String text) {
+        showNotice(text, null);
+    }
+
+    /** Shows {@code text} in the line under the bar with {@code tooltip}, such as the whole list it shortens, or null. */
+    public void showNotice(String text, String tooltip) {
         this.notice.setText(text);
+        this.notice.setToolTipText(tooltip);
         this.notice.setVisible(!text.isEmpty());
     }
 }

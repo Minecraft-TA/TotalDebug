@@ -42,7 +42,7 @@ public final class Mixins {
     /** A {@code [[mixins]]} table header, which a comment may follow. */
     private static final Pattern MIXIN_TABLE = Pattern.compile("(?m)^\\s*\\[\\[\\s*mixins\\s*]]\\s*(#.*)?$");
     /** A table's {@code config} key, as a basic or a literal string. */
-    private static final Pattern CONFIG = Pattern.compile("(?m)^\\s*config\\s*=\\s*(?:\"([^\"]+)\"|'([^']+)')");
+    private static final Pattern CONFIG = Pattern.compile("(?m)^\\s*config\\s*=\\s*(?:\"((?:[^\"\\\\]|\\\\.)+)\"|'([^']+)')");
     private static final String MIXIN = "Lorg/spongepowered/asm/mixin/Mixin;";
     private static final String DESC = "Lorg/spongepowered/asm/mixin/injection/Desc;";
     /** What a method annotation of Mixin or MixinExtras does to its target, by the annotation's descriptor. */
@@ -230,7 +230,7 @@ public final class Mixins {
                 // The table's keys run to the next table.
                 int end = text.indexOf("\n[", table.end());
                 Matcher config = CONFIG.matcher(text.substring(table.end(), end < 0 ? text.length() : end));
-                if (config.find()) configs.add(config.group(1) != null ? config.group(1) : config.group(2));
+                if (config.find()) configs.add(config.group(1) != null ? basicString(config.group(1)) : config.group(2));
             }
         }
         Optional<byte[]> manifest = archive.read("META-INF/MANIFEST.MF", MAXIMUM_CONFIG_BYTES);
@@ -243,6 +243,38 @@ public final class Mixins {
             }
         }
         return configs;
+    }
+
+    /** The text of a TOML basic string's contents, with its escapes such as {@code \\u002E} decoded. */
+    static String basicString(String escaped) {
+        StringBuilder text = new StringBuilder();
+        for (int index = 0; index < escaped.length(); index++) {
+            char character = escaped.charAt(index);
+            if (character != '\\' || index + 1 >= escaped.length()) {
+                text.append(character);
+                continue;
+            }
+            char code = escaped.charAt(++index);
+            switch (code) {
+                case 'b' -> text.append('\b');
+                case 't' -> text.append('\t');
+                case 'n' -> text.append('\n');
+                case 'f' -> text.append('\f');
+                case 'r' -> text.append('\r');
+                case 'u', 'U' -> {
+                    int digits = code == 'u' ? 4 : 8;
+                    // A short or malformed escape, which TOML refuses, stays as written.
+                    if (index + digits >= escaped.length() || !escaped.substring(index + 1, index + 1 + digits).matches("[0-9A-Fa-f]+")) {
+                        text.append('\\').append(code);
+                        continue;
+                    }
+                    text.appendCodePoint(Integer.parseInt(escaped.substring(index + 1, index + 1 + digits), 16));
+                    index += digits;
+                }
+                default -> text.append(code);
+            }
+        }
+        return text.toString();
     }
 
     private static String owner(String config, List<String> mods) {
@@ -302,7 +334,7 @@ public final class Mixins {
 
     /**
      * Reads the members an injector, overwrite, accessor or invoker names: its {@code method} or {@code value} selectors,
-     * and its {@code target} descriptors, each with the owner it names, if any.
+     * its {@code target} descriptors, each with the owner it names, if any, and an overwrite's {@code aliases}.
      */
     private static final class SelectorVisitor extends AnnotationVisitor {
         private final String kind;
@@ -311,6 +343,8 @@ public final class Mixins {
         private final String methodDescriptor;
         private final List<Change> changes;
         private final List<Selected> named = new ArrayList<>();
+        /** Other names an overwrite replaces its method by, where the target has one of those instead. */
+        private final List<String> aliases = new ArrayList<>();
 
         SelectorVisitor(String kind, String methodName, String methodDescriptor, List<Change> changes) {
             super(Opcodes.ASM9);
@@ -332,6 +366,14 @@ public final class Mixins {
                     @Override
                     public AnnotationVisitor visitAnnotation(String ignored, String descriptor) {
                         return DESC.equals(descriptor) ? described() : null;
+                    }
+                };
+            }
+            if ("aliases".equals(name)) {
+                return new AnnotationVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visit(String ignored, Object value) {
+                        if (value instanceof String alias) SelectorVisitor.this.aliases.add(alias);
                     }
                 };
             }
@@ -376,33 +418,36 @@ public final class Mixins {
                 public void visitEnd() {
                     if (member[0].isEmpty()) return;
                     String descriptor = Type.getMethodDescriptor(returned[0], arguments.toArray(Type[]::new));
-                    SelectorVisitor.this.named.add(new Selected(member[0], descriptor, owner[0]));
+                    SelectorVisitor.this.named.add(new Selected(new MixinMember.Method(member[0], descriptor), owner[0]));
                 }
             };
         }
 
         private Selected selected(String selector) {
-            return new Selected(member(selector), descriptor(selector), owner(selector));
+            return selector(selector);
         }
 
         @Override
         public void visitEnd() {
             switch (this.kind) {
-                // An overwrite replaces the method of its own name and signature.
-                case "Overwrite" -> this.changes.add(new Change(this.kind, new MixinMember.Method(this.methodName, this.methodDescriptor)));
+                // An overwrite replaces the method of its own name and signature, or of one of its aliases.
+                case "Overwrite" -> {
+                    this.changes.add(new Change(this.kind, new MixinMember.Method(this.methodName, this.methodDescriptor)));
+                    for (String alias : this.aliases) {
+                        this.changes.add(new Change(this.kind, new MixinMember.Method(alias, this.methodDescriptor)));
+                    }
+                }
                 // An accessor reaches a field; an invoker the method of its own signature, or a constructor.
                 case "Accessor" -> {
-                    String name = this.named.isEmpty() ? accessed(this.kind, this.methodName) : this.named.getFirst().name();
+                    String name = this.named.isEmpty() ? accessed(this.kind, this.methodName) : this.named.getFirst().member().name();
                     this.changes.add(new Change(this.kind, new MixinMember.Field(name), namedOwner()));
                 }
                 case "Invoker" -> {
-                    String name = this.named.isEmpty() ? accessed(this.kind, this.methodName) : this.named.getFirst().name();
+                    String name = this.named.isEmpty() ? accessed(this.kind, this.methodName) : this.named.getFirst().member().name();
                     this.changes.add(new Change(this.kind, new MixinMember.Method(name, invoked(name, this.methodDescriptor)), namedOwner()));
                 }
                 default -> {
-                    for (Selected target : this.named) {
-                        this.changes.add(new Change(this.kind, new MixinMember.Method(target.name(), target.descriptor()), target.owner()));
-                    }
+                    for (Selected target : this.named) this.changes.add(new Change(this.kind, target.member(), target.owner()));
                 }
             }
         }
@@ -413,24 +458,67 @@ public final class Mixins {
         }
     }
 
-    /** What an annotation names: a member's name, the descriptor it gives or empty, and the owner it names or empty. */
-    private record Selected(String name, String descriptor, String owner) {
+    /** What a selector names: a method, or methods matching a pattern, and the owner it names, or empty for any target. */
+    record Selected(MixinMember member, String owner) {
     }
 
+    /** Mixin's regular-expression selector: {@code /pattern/}, or parts such as {@code name=/pattern/}. */
+    private static final Pattern MATCHER = Pattern.compile("((owner|name|desc)\\s*=\\s*)?/(.*?)(?<!\\\\)/");
+
     /**
-     * The member a target selector names, without its owner or descriptor: {@code tick}, {@code tick()V} and
-     * {@code Lnet/minecraft/world/level/Level;tick()V} are all {@code tick}. A wildcard such as {@code *} or
-     * {@code get*} stays as written, since it names several members.
+     * What a target selector names, read as Mixin's {@code MemberInfo.parse} reads it: whitespace dropped, an owner
+     * before the last dot or as {@code Lowner;}, the descriptor from {@code (} or after {@code :}, and a quantifier at the
+     * end of the name ({@code *}, {@code +} or {@code {1,3}}), which counts matches and is not part of the name. An empty
+     * name, as {@code *} leaves, names every method. A selector ending in a slash names the methods whose names its name
+     * pattern matches.
      */
-    static String member(String selector) {
-        String member = selector.strip();
-        int owner = member.indexOf(';');
-        if (member.startsWith("L") && owner > 0) member = member.substring(owner + 1);
-        int descriptor = member.indexOf('(');
-        if (descriptor >= 0) member = member.substring(0, descriptor);
-        int colon = member.indexOf(':');
-        if (colon >= 0) member = member.substring(0, colon);
-        return member.strip();
+    static Selected selector(String selector) {
+        String trimmed = selector.strip();
+        // As Mixin's TargetSelector: only a regular-expression selector ends with a slash, and a dynamic one starts with @,
+        // whose member only the game resolves, so it is named as written.
+        if (trimmed.endsWith("/")) {
+            String name = ".*";
+            Matcher patterns = MATCHER.matcher(trimmed);
+            while (patterns.find()) {
+                String part = patterns.group(2);
+                if (part == null || part.equals("name")) name = patterns.group(3);
+            }
+            return new Selected(new MixinMember.Matching(name), "");
+        }
+        if (trimmed.startsWith("@")) return new Selected(new MixinMember.Method(trimmed, ""), "");
+        String text = trimmed.replaceAll("\\s", "");
+        int arrow = text.indexOf("->");
+        if (arrow >= 0) text = text.substring(0, arrow);
+        String owner = "";
+        String name = text;
+        int dot = name.lastIndexOf('.');
+        int semicolon = name.indexOf(';');
+        if (dot >= 0) {
+            owner = name.substring(0, dot);
+            name = name.substring(dot + 1);
+        } else if (semicolon >= 0 && name.startsWith("L")) {
+            owner = name.substring(1, semicolon).replace('/', '.');
+            name = name.substring(semicolon + 1);
+        }
+        String descriptor = "";
+        int paren = name.indexOf('(');
+        int colon = name.indexOf(':');
+        if (paren >= 0) {
+            descriptor = name.substring(paren);
+            name = name.substring(0, paren);
+        } else if (colon >= 0) {
+            name = name.substring(0, colon);
+        }
+        if ((name.indexOf('/') >= 0 || name.indexOf('.') >= 0) && owner.isEmpty()) {
+            owner = name.replace('/', '.');
+            name = "";
+        }
+        if (name.endsWith("*") || name.endsWith("+")) {
+            name = name.substring(0, name.length() - 1);
+        } else if (name.endsWith("}") && name.indexOf('{') >= 0) {
+            name = name.substring(0, name.indexOf('{'));
+        }
+        return new Selected(new MixinMember.Method(name, descriptor), owner);
     }
 
     /**
@@ -439,20 +527,6 @@ public final class Mixins {
      */
     static String invoked(String name, String method) {
         return name.equals("<init>") ? Type.getMethodDescriptor(Type.VOID_TYPE, Type.getArgumentTypes(method)) : method;
-    }
-
-    /** The descriptor a selector such as {@code tick(I)V} gives, which picks one overload, or empty for all of them. */
-    static String descriptor(String selector) {
-        String text = selector.strip();
-        int start = text.indexOf('(');
-        return start < 0 ? "" : text.substring(start);
-    }
-
-    /** The class a selector such as {@code Lnet/minecraft/world/level/Level;tick()V} names by binary name, or empty. */
-    static String owner(String selector) {
-        String text = selector.strip();
-        int end = text.indexOf(';');
-        return text.startsWith("L") && end > 0 ? text.substring(1, end).replace('/', '.') : "";
     }
 
     /**

@@ -54,17 +54,20 @@ class MixinsPanelTest {
     }
 
     @Test
-    void aWildcardJoinsTheMethodsItMatchesOrStandsAlone() {
+    void broadSelectorsJoinTheMoreExactRowsTheyReachOrStandAlone() {
         List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(
-                mixin("gears", Mixins.Side.BOTH, change("Inject", method("render*", ""))),
+                mixin("gears", Mixins.Side.BOTH, change("Inject", new MixinMember.Matching("^render"))),
                 mixin("speed", Mixins.Side.BOTH, change("Overwrite", method("renderSky", "()V"))),
-                mixin("glow", Mixins.Side.BOTH, change("Inject", method("tick*", "")))));
-        assertEquals(List.of("renderSky()V", "tick*"), shown(rows), "render* joins renderSky; tick* matches nothing named");
+                mixin("glow", Mixins.Side.BOTH, change("Inject", method("tick", ""))),
+                mixin("dusk", Mixins.Side.BOTH, change("Inject", method("", ""))),
+                mixin("dawn", Mixins.Side.BOTH, change("Inject", new MixinMember.Matching("^zzz")))));
+        assertEquals(List.of("renderSky()V", "tick", "/^zzz/"), shown(rows),
+                "the pattern joins renderSky, every method joins both named rows, and a pattern matching nothing named stands alone");
+        assertEquals(3, rows.getFirst().mods().size(), "gears, speed and dusk");
         assertTrue(rows.getFirst().overwritten());
-        assertTrue(method("*Sky*", "").reaches(method("renderSky", "()V")));
-        assertTrue(method("*", "").reaches(method("tick", "()V")), "every method");
-        assertFalse(method("render*Sky", "").reaches(method("renderSkyBox", "()V")));
-        assertFalse(method("renderSky*", "()V").reaches(method("renderSkyBox", "(I)V")), "another overload");
+        assertEquals(2, rows.get(1).mods().size(), "glow and dusk");
+        assertTrue(new MixinMember.Matching("Sky").reaches(method("renderSky", "()V")), "a pattern found anywhere in the name");
+        assertFalse(method("renderSky", "()V").reaches(method("renderSky", "(I)V")), "another overload");
     }
 
     @Test
