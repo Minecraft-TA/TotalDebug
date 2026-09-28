@@ -113,6 +113,51 @@ class ScriptReferencesTest {
     }
 
     @Test
+    void membersResolveFromTheScriptClassThatUsesThemAsTheJvmWould() {
+        ClassWriter list = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        list.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "probe/Trimmed", null, "java/util/ArrayList", null);
+        MethodVisitor constructor = list.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        constructor.visitCode();
+        constructor.visitVarInsn(Opcodes.ALOAD, 0);
+        constructor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
+        constructor.visitInsn(Opcodes.RETURN);
+        constructor.visitMaxs(0, 0);
+        constructor.visitEnd();
+        MethodVisitor trim = list.visitMethod(Opcodes.ACC_PUBLIC, "trim", "()V", null, null);
+        trim.visitCode();
+        trim.visitVarInsn(Opcodes.ALOAD, 0);
+        trim.visitInsn(Opcodes.ICONST_0);
+        trim.visitInsn(Opcodes.ICONST_1);
+        // A protected method of the platform superclass, called on this subclass.
+        trim.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "removeRange", "(II)V", false);
+        trim.visitInsn(Opcodes.RETURN);
+        trim.visitMaxs(0, 0);
+        trim.visitEnd();
+        list.visitEnd();
+
+        ClassWriter loader = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        loader.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "probe/Loader", null, "java/lang/ClassLoader", null);
+        MethodVisitor hidden = loader.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        hidden.visitCode();
+        hidden.visitVarInsn(Opcodes.ALOAD, 0);
+        hidden.visitInsn(Opcodes.ACONST_NULL);
+        hidden.visitInsn(Opcodes.ACONST_NULL);
+        hidden.visitInsn(Opcodes.ACONST_NULL);
+        // ClassLoader's private constructor, which no subclass may call.
+        hidden.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/ClassLoader", "<init>",
+                "(Ljava/lang/Void;Ljava/lang/String;Ljava/lang/ClassLoader;)V", false);
+        hidden.visitInsn(Opcodes.RETURN);
+        hidden.visitMaxs(0, 0);
+        hidden.visitEnd();
+        loader.visitEnd();
+
+        assertEquals(List.of("new java.lang.ClassLoader(Void, String, ClassLoader) (not accessible to a subclass)"),
+                ScriptReferences.read(Map.of("probe.Trimmed", list.toByteArray(), "probe.Loader", loader.toByteArray()))
+                        .unresolved(ScriptReferencesTest.class.getClassLoader()),
+                "the protected super call and the accessible superclass constructor link");
+    }
+
+    @Test
     void theScriptsOwnClassesAreNotReferencesOutsideIt() {
         ScriptReferences references = ScriptReferences.read(SCRIPT);
 

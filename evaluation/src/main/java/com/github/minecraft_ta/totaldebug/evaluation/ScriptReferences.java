@@ -14,6 +14,8 @@ import org.objectweb.asm.Type;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -27,19 +29,23 @@ import java.util.stream.Collectors;
 /**
  * The classes, fields and methods a script's compiled classes refer to, read from their bytecode, and which of them do
  * not link under a class loader. The loader and the JVM decide, not rules of this class: classes are loaded without
- * initializing them, the script's own classes are defined so the JVM checks their supertypes, a member the compiler
- * routed through {@link ScriptAccessLinker} is linked by the linker's own bootstrap, and any other member is looked up
- * from the script's position with {@link MethodHandles.Lookup}, which resolves as the matching instruction does.
+ * initializing them, the script's own classes are defined so the JVM checks their supertypes, and each member is
+ * resolved from the script class whose code uses it: through the linker's own bootstrap where the compiler routed it
+ * through {@link ScriptAccessLinker}, otherwise with {@link MethodHandles.Lookup}, which resolves as the matching
+ * instruction does. The one exception is a superclass constructor, which no lookup can reach from a subclass.
  */
 public final class ScriptReferences {
     private static final String LINKER = Type.getInternalName(ScriptAccessLinker.class);
     private static final String PROBE = "TotalDebug$LinkProbe";
+    /** A superclass or own constructor called from a constructor, rather than an allocation. */
+    private static final int SUPER_CONSTRUCTOR = -1;
 
     /**
-     * A member and how the script uses it, as a {@link ScriptAccessLinker} operation. {@code callSite} is the type of the
-     * linker call site that uses it, or null for an instruction that uses it directly.
+     * A member and how the script uses it, as a {@link ScriptAccessLinker} operation or {@link #SUPER_CONSTRUCTOR}.
+     * {@code callSite} is the type of the linker call site that uses it, or null for an instruction that uses it
+     * directly; {@code referrer} is the script class whose code does.
      */
-    private record Member(String owner, String name, String descriptor, int operation, String callSite) {
+    private record Member(String owner, String name, String descriptor, int operation, String callSite, String referrer) {
     }
 
     private final Map<String, byte[]> script;
@@ -88,14 +94,27 @@ public final class ScriptReferences {
                 if (refused != null) unresolved.add(name + " (" + refused + ")");
             }
         }
-        MethodHandles.Lookup lookup;
+        MethodHandles.Lookup probeLookup;
         try {
-            lookup = (MethodHandles.Lookup) loader.loadClass(probe).getMethod("lookup").invoke(null);
+            probeLookup = (MethodHandles.Lookup) loader.loadClass(probe).getMethod("lookup").invoke(null);
         } catch (ReflectiveOperationException unexpected) {
             throw new IllegalStateException("Unable to look up members from the script's position", unexpected);
         }
+        Map<String, MethodHandles.Lookup> lookups = new HashMap<>();
         for (Member member : this.members) {
-            String problem = problem(member, lookup, loader);
+            String problem;
+            try {
+                MethodHandles.Lookup lookup = lookups.get(member.referrer());
+                if (lookup == null) {
+                    // The script's classes share the probe's loader and module, so each lookup has its full access.
+                    lookup = MethodHandles.privateLookupIn(Class.forName(member.referrer(), false, loader), probeLookup);
+                    lookups.put(member.referrer(), lookup);
+                }
+                problem = problem(member, lookup, loader);
+            } catch (ReflectiveOperationException | LinkageError referrer) {
+                // A script class the JVM refused to define is named above.
+                continue;
+            }
             if (problem != null) unresolved.add(problem.isEmpty() ? display(member) : display(member) + " (" + problem + ")");
         }
         return List.copyOf(unresolved);
@@ -152,18 +171,26 @@ public final class ScriptReferences {
             case ScriptAccessLinker.GET_STATIC -> lookup.findStaticGetter(owner, member.name(), fieldType(member, loader));
             case ScriptAccessLinker.PUT_STATIC -> lookup.findStaticSetter(owner, member.name(), fieldType(member, loader));
             case ScriptAccessLinker.INVOKE_STATIC -> lookup.findStatic(owner, member.name(), methodType(member, loader));
-            // Only the script's own subclass could name the special caller, and it is no different to look up.
-            case ScriptAccessLinker.INVOKE_VIRTUAL, ScriptAccessLinker.INVOKE_SPECIAL ->
-                    lookup.findVirtual(owner, member.name(), methodType(member, loader));
-            default -> {
-                // A constructor called directly is either allocated here or a superclass constructor the script's own
-                // constructor calls, which a lookup from outside that subclass cannot reach; its existence decides.
-                for (Constructor<?> constructor : owner.getDeclaredConstructors()) {
-                    if (Type.getConstructorDescriptor(constructor).equals(member.descriptor())) return;
-                }
-                throw new NoSuchMethodException(member.owner() + ".<init>" + member.descriptor());
-            }
+            case ScriptAccessLinker.INVOKE_VIRTUAL -> lookup.findVirtual(owner, member.name(), methodType(member, loader));
+            case ScriptAccessLinker.INVOKE_SPECIAL ->
+                    lookup.findSpecial(owner, member.name(), methodType(member, loader), lookup.lookupClass());
+            case ScriptAccessLinker.NEW_INSTANCE -> lookup.findConstructor(owner, methodType(member, loader));
+            default -> superConstructor(owner, member);
         }
+    }
+
+    /**
+     * A constructor the script's constructor calls on its superclass. No lookup reaches it, since a lookup only finds a
+     * constructor to allocate with; from another runtime package, which the script's loader always is, the JVM lets a
+     * subclass call a public or protected one.
+     */
+    private static void superConstructor(Class<?> owner, Member member) throws ReflectiveOperationException {
+        for (Constructor<?> constructor : owner.getDeclaredConstructors()) {
+            if (!Type.getConstructorDescriptor(constructor).equals(member.descriptor())) continue;
+            if (Modifier.isPublic(constructor.getModifiers()) || Modifier.isProtected(constructor.getModifiers())) return;
+            throw new IllegalAccessException("not accessible to a subclass: " + member.owner());
+        }
+        throw new NoSuchMethodException(member.owner() + ".<init>" + member.descriptor());
     }
 
     private static boolean isStatic(Member member) {
@@ -203,7 +230,7 @@ public final class ScriptReferences {
     }
 
     private static String display(Member member) {
-        boolean field = member.operation() <= ScriptAccessLinker.PUT_STATIC;
+        boolean field = member.operation() >= ScriptAccessLinker.GET_FIELD && member.operation() <= ScriptAccessLinker.PUT_STATIC;
         if (field) return member.owner() + "." + member.name();
         String parameters = Arrays.stream(Type.getArgumentTypes(member.descriptor()))
                 .map(type -> type.getClassName().substring(type.getClassName().lastIndexOf('.') + 1))
@@ -212,7 +239,10 @@ public final class ScriptReferences {
                 : member.owner() + "." + member.name() + "(" + parameters + ")";
     }
 
-    /** The {@link ScriptAccessLinker} operation matching a field or method instruction, or a method handle's tag. */
+    /**
+     * The {@link ScriptAccessLinker} operation matching a field or method instruction, or a method handle's tag. A
+     * constructor call counts as an allocation until {@link Reader} finds it allocates nothing.
+     */
     private static int operation(int opcode, String name) {
         return switch (opcode) {
             case Opcodes.GETFIELD, Opcodes.H_GETFIELD -> ScriptAccessLinker.GET_FIELD;
@@ -245,17 +275,17 @@ public final class ScriptReferences {
         if (name != null) type(name.startsWith("[") ? Type.getType(name) : Type.getObjectType(name));
     }
 
-    private void member(String owner, String name, String descriptor, int operation, String callSite) {
+    private void member(String referrer, String owner, String name, String descriptor, int operation, String callSite) {
         internalName(owner);
         type(Type.getType(descriptor));
         // Arrays answer only length and Object's methods; the script's own members were compiled with it.
         String binary = owner.replace('/', '.');
         if (owner.startsWith("[") || this.script.containsKey(binary)) return;
-        this.members.add(new Member(binary, name, descriptor, operation, callSite));
+        this.members.add(new Member(binary, name, descriptor, operation, callSite, referrer));
     }
 
     /** A call site {@link ScriptBytecodeTransformer} made for a member: its declaring class, name, descriptor and use. */
-    private boolean linked(String callSite, Handle bootstrap, Object[] arguments) {
+    private boolean linked(String referrer, String callSite, Handle bootstrap, Object[] arguments) {
         if (!bootstrap.getOwner().equals(LINKER) || arguments.length != 4 || !(arguments[0] instanceof String declaration)
                 || !(arguments[1] instanceof String name) || !(arguments[2] instanceof String descriptor)
                 || !(arguments[3] instanceof Integer operation)) {
@@ -263,20 +293,20 @@ public final class ScriptReferences {
         }
         String owner = declaration.replace('.', '/');
         if (operation == ScriptAccessLinker.INITIALIZE_CLASS) internalName(owner);
-        else member(owner, name, descriptor, operation, callSite);
+        else member(referrer, owner, name, descriptor, operation, callSite);
         return true;
     }
 
-    private void constant(Object value) {
+    private void constant(String referrer, Object value) {
         switch (value) {
             case Type type -> type(type);
-            case Handle handle -> member(handle.getOwner(), handle.getName(), handle.getDesc(),
+            case Handle handle -> member(referrer, handle.getOwner(), handle.getName(), handle.getDesc(),
                     operation(handle.getTag(), handle.getName()), null);
             case ConstantDynamic dynamic -> {
                 type(Type.getType(dynamic.getDescriptor()));
-                constant(dynamic.getBootstrapMethod());
+                constant(referrer, dynamic.getBootstrapMethod());
                 for (int index = 0; index < dynamic.getBootstrapMethodArgumentCount(); index++) {
-                    constant(dynamic.getBootstrapMethodArgument(index));
+                    constant(referrer, dynamic.getBootstrapMethodArgument(index));
                 }
             }
             default -> {
@@ -285,12 +315,15 @@ public final class ScriptReferences {
     }
 
     private final class Reader extends ClassVisitor {
+        private String referrer;
+
         private Reader() {
             super(Opcodes.ASM9);
         }
 
         @Override
         public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+            this.referrer = name.replace('/', '.');
             internalName(superName);
             if (interfaces != null) for (String implemented : interfaces) internalName(implemented);
         }
@@ -305,33 +338,43 @@ public final class ScriptReferences {
         public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
             type(Type.getMethodType(descriptor));
             if (exceptions != null) for (String exception : exceptions) internalName(exception);
+            String referrer = this.referrer;
             return new MethodVisitor(Opcodes.ASM9) {
+                /** The types allocated and not yet constructed, innermost first: a constructor call pairs with one. */
+                private final ArrayDeque<String> allocations = new ArrayDeque<>();
+
                 @Override
                 public void visitTypeInsn(int opcode, String type) {
                     internalName(type);
+                    if (opcode == Opcodes.NEW) this.allocations.push(type);
                 }
 
                 @Override
                 public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
-                    member(owner, name, descriptor, operation(opcode, name), null);
+                    member(referrer, owner, name, descriptor, operation(opcode, name), null);
                 }
 
                 @Override
                 public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
-                    member(owner, name, descriptor, operation(opcode, name), null);
+                    int operation = operation(opcode, name);
+                    if (operation == ScriptAccessLinker.NEW_INSTANCE) {
+                        if (owner.equals(this.allocations.peek())) this.allocations.pop();
+                        else operation = SUPER_CONSTRUCTOR;
+                    }
+                    member(referrer, owner, name, descriptor, operation, null);
                 }
 
                 @Override
                 public void visitInvokeDynamicInsn(String name, String descriptor, Handle bootstrap, Object... arguments) {
                     type(Type.getMethodType(descriptor));
-                    if (linked(descriptor, bootstrap, arguments)) return;
-                    constant(bootstrap);
-                    for (Object argument : arguments) constant(argument);
+                    if (linked(referrer, descriptor, bootstrap, arguments)) return;
+                    constant(referrer, bootstrap);
+                    for (Object argument : arguments) constant(referrer, argument);
                 }
 
                 @Override
                 public void visitLdcInsn(Object value) {
-                    constant(value);
+                    constant(referrer, value);
                 }
 
                 @Override

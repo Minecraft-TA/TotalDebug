@@ -65,20 +65,21 @@ class RelayedMessagesTest {
     @Test
     void theServersRefusalOfScriptsIsReadBackByCompanion() {
         ServerScriptsMessage decoded = assertInstanceOf(ServerScriptsMessage.class, RelayedMessages.decodeFromServer(
-                RelayedMessages.fromServer(new ServerScriptsMessage("Server-side scripts are disabled by the server configuration"))));
+                RelayedMessages.fromServer(new ServerScriptsMessage(-3, "Server-side scripts are disabled by the server configuration"))));
 
         assertEquals("Server-side scripts are disabled by the server configuration", decoded.refusal());
-        assertTrue(RelayedMessages.decodeFromServer(RelayedMessages.fromServer(ServerScriptsMessage.allowed())) instanceof ServerScriptsMessage allowed
+        assertEquals(-3, decoded.request(), "the answer names the question it answers");
+        assertTrue(RelayedMessages.decodeFromServer(RelayedMessages.fromServer(ServerScriptsMessage.allowed(-4))) instanceof ServerScriptsMessage allowed
                 && allowed.isAllowed());
     }
 
     @Test
-    void anAccessRequestAndCompanionLeavingHaveNoBody() {
-        RelayedMessage relayed = RelayedMessages.toServer(new ServerScriptsRequestMessage(), 0, "");
+    void anAccessRequestCarriesItsIdAndCompanionLeavingNothing() {
+        RelayedMessage relayed = RelayedMessages.toServer(new ServerScriptsRequestMessage(-3), -3, "");
         RelayedMessage left = RelayedMessages.toServer(new CompanionLeftMessage(), 0, "");
 
-        assertEquals(0, relayed.body().length);
-        assertInstanceOf(ServerScriptsRequestMessage.class, RelayedMessages.decodeToServer(relayed));
+        assertEquals(-3, assertInstanceOf(ServerScriptsRequestMessage.class, RelayedMessages.decodeToServer(relayed)).request());
+        assertEquals(0, left.body().length);
         assertInstanceOf(CompanionLeftMessage.class, RelayedMessages.decodeToServer(left));
     }
 
@@ -99,14 +100,14 @@ class RelayedMessagesTest {
     void onlyTheServersMessagesTravelEachWay() {
         assertThrows(IllegalArgumentException.class,
                 () -> RelayedMessages.toServer(new PlayingMessage(new PlayingPayload.Menu()), 0, ""), "the game's own message");
-        RelayedMessage toServer = RelayedMessages.toServer(new ServerScriptsRequestMessage(), 0, "");
+        RelayedMessage toServer = RelayedMessages.toServer(new ServerScriptsRequestMessage(-3), 0, "");
         assertThrows(IllegalArgumentException.class, () -> RelayedMessages.decodeFromServer(toServer),
                 "a request is not an answer");
     }
 
     @Test
     void bytesAfterAMessagesEndAreRefused() {
-        RelayedMessage padded = new RelayedMessage(0, "", RelayedMessages.toServer(new ServerScriptsRequestMessage(), 0, "").messageId(),
+        RelayedMessage padded = new RelayedMessage(0, "", RelayedMessages.toServer(new CompanionLeftMessage(), 0, "").messageId(),
                 new byte[]{1});
 
         assertThrows(IllegalArgumentException.class, () -> RelayedMessages.decodeToServer(padded));

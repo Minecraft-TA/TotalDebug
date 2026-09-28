@@ -27,7 +27,8 @@ public final class ServerOperations {
     public ServerOperations(ServerScriptService scripts) {
         Objects.requireNonNull(scripts, "scripts");
         this.operations = Map.of(
-                ServerScriptsRequestMessage.class, (player, companion, message) -> scripts.sendAccess(player, companion),
+                ServerScriptsRequestMessage.class, (player, companion, message) ->
+                        scripts.sendAccess(player, companion, ((ServerScriptsRequestMessage) message).request()),
                 RunScriptMessage.class, (player, companion, message) -> scripts.runScript(player, companion, (RunScriptMessage) message),
                 StopScriptMessage.class, (player, companion, message) ->
                         scripts.stopScript(player, companion, ((StopScriptMessage) message).scriptId()),

@@ -263,8 +263,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
                 @Override
                 public void serverScripts(ServerScriptsMessage message) {
+                    // An answer to an earlier question may still arrive after the game moved on.
                     String target = serverScriptsTarget;
-                    if (target != null) scriptCompiler.serverAccess(target, message.refusal());
+                    if (target != null && message.request() == serverScriptsRequest) {
+                        scriptCompiler.serverAccess(target, message.refusal());
+                    }
                 }
 
                 @Override
@@ -1225,7 +1228,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         int request = this.serverScriptsRequests.decrementAndGet();
         this.serverScriptsRequest = request;
         CompanionSession current = session;
-        if (switching || current == null || !current.sendToServer(new ServerScriptsRequestMessage(), request, target)) {
+        if (switching || current == null || !current.sendToServer(new ServerScriptsRequestMessage(request), request, target)) {
             this.serverScriptsTarget = null;
             scriptCompiler.serverAccess("", "Minecraft disconnected");
         }

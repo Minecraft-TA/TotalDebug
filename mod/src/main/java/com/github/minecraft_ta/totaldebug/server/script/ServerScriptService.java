@@ -45,13 +45,13 @@ public final class ServerScriptService {
         this.relay = Objects.requireNonNull(relay, "relay");
     }
 
-    /** Tells Companion connection {@code companion} whether this server runs {@code player}'s scripts. */
-    public void sendAccess(ServerPlayer player, int companion) {
+    /** Answers {@code request} of Companion connection {@code companion}: whether this server runs {@code player}'s scripts. */
+    public void sendAccess(ServerPlayer player, int companion, int request) {
         MinecraftServer server = Objects.requireNonNull(player.getServer(), "player server");
         endEarlierCompanion(player, companion);
         ServerScriptPolicy.Decision decision = policyDecision(server, player);
-        this.relay.send(server, player, companion, decision.allowed() ? ServerScriptsMessage.allowed()
-                : new ServerScriptsMessage(decision.rejectionReason()));
+        this.relay.send(server, player, companion, decision.allowed() ? ServerScriptsMessage.allowed(request)
+                : new ServerScriptsMessage(request, decision.rejectionReason()));
     }
 
     public void runScript(ServerPlayer player, int companion, RunScriptMessage payload) {
