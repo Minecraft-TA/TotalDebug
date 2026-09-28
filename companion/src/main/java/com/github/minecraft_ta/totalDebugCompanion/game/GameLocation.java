@@ -139,7 +139,7 @@ public final class GameLocation {
         return current == null ? 0 : current.process();
     }
 
-    /** The state as it is now. Blocking: without a connection it reads the game's lock and the worlds' locks. */
+    /** The state as it is now. Blocking: without a connection it reads the game's lock; the worlds' locks are read by the queries. */
     public GameState read() {
         Link current = this.link;
         if (current != null) {
@@ -147,7 +147,7 @@ public final class GameLocation {
                     new GameState.Game.Connected(current.connection(), current.process(), current.playing()));
         }
         if (!this.files.gameRunning()) return new GameState(this.workspace, this.files, new GameState.Game.Closed());
-        return new GameState(this.workspace, this.files, new GameState.Game.Unconnected(this.files.heldWorld()));
+        return new GameState(this.workspace, this.files, new GameState.Game.Unconnected());
     }
 
     /** Tells {@code listener} of each change, on the thread that made it; returns what removes it. */

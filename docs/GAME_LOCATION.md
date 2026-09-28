@@ -12,7 +12,7 @@ Companion changes and reads a Minecraft instance in several situations: with no 
 
 | Fact | Evidence | Needs |
 |---|---|---|
-| A game runs in the instance | The game lock is held (`total-debug/game.lock`). A lock that cannot be checked counts as held. | Nothing; blocking file check |
+| A game runs in the instance | The game lock is held (`total-debug/game.lock`). A lock that cannot be checked counts as held. Companion checks it by taking it for a moment, so the game retries its lock for a second when it starts. | Nothing; blocking file check |
 | The game is connected | The authenticated session of the current project | Connection |
 | Which process the game is | The debug target the game announces | Connection |
 | What the game is playing | `PLAYING`, sent by the game whenever it changes and after it connects: its menu, a singleplayer world by its folder, or a server by its address | Connection |
@@ -28,12 +28,12 @@ The project's `GameLocation` combines these into one state:
 |---|---|---|
 | Closed | | No game runs in the instance |
 | Running, not connected | The world whose `session.lock` is held, if any | The game runs; Companion cannot talk to it |
-| Connected | Not told yet | Connected a moment ago; `PLAYING` has not arrived |
+| Connected | Not told yet | Connected a moment ago; `PLAYING` has not arrived. A held world is taken as the one it has open, but not changed live |
 | Connected | Menu | No world is open |
 | Connected | Singleplayer: world folder, open to LAN or not | The integrated server runs that world of the instance |
 | Connected | Multiplayer: address, Realms or not, whether the server has TotalDebug, the player's permission level | The world is on another machine |
 
-Pushed facts (connection, process, playing) change the state at once and tell listeners. File facts (game lock, world locks) are read when the state is read, so a decision made in the project's write queue sees the files as they are then. Reading the state is blocking; the Swing thread never reads it.
+Pushed facts (connection, process, playing) change the state at once and tell listeners; what the game tells before Companion takes its connection as established is kept for it. File facts are read when the state is read: the game lock at once, the worlds' locks by the queries that need them. A decision made in the project's write queue therefore sees the files as they are then. Reading the state is blocking; the Swing thread never reads it.
 
 ## Who owns what
 
@@ -75,7 +75,7 @@ A world of the instance is never live while the game plays on a remote server: t
 ## Rules for the rest of Companion
 
 - No category checks the game lock, a `session.lock` or the connection itself. It asks `GameLocation`. The file primitives keep their own last guard: `LevelDat` never writes a held world.
-- A category sends to the game only through the connection the live answer gives it, so a message never goes to a game that has since disconnected.
+- A live answer's connection sends only on the connection it was given for. Once that connection has ended its sends fail, so a message never goes to a game that connected since.
 - A category that waits for the game's answers listens to `GameLocation` to fail them when the game disconnects.
 
 ## One side type

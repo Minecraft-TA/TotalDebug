@@ -132,6 +132,8 @@ public final class ResourceEdits {
         this.state = Objects.requireNonNull(state, "state");
         location.addListener(change -> {
             if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
+            // What the game plays decides which world's packs the pages show.
+            else if (change == GameLocation.Change.PLAYING) this.stackListeners.forEach(Runnable::run);
         });
     }
 
@@ -176,8 +178,8 @@ public final class ResourceEdits {
     }
 
     /**
-     * Runs {@code listener} whenever the game names its packs again, or disconnects, on the thread that saw it; returns
-     * its removal.
+     * Runs {@code listener} whenever the game names its packs again, says what it plays, or disconnects, on the thread
+     * that saw it; returns its removal.
      */
     public Runnable addStackListener(Runnable listener) {
         this.stackListeners.add(listener);
@@ -312,14 +314,15 @@ public final class ResourceEdits {
         boolean assets = path.startsWith("assets/");
         PackStackPayload current = this.stack;
         // The game names the open world's datapacks only; another world's and a closed game's are read from their files.
-        if (current == null || !assets && !this.location.read().plays(pack.getParent().getParent())) return disabledOnDisk(path, pack);
+        GameState game = this.location.read();
+        if (current == null || !assets && !game.plays(pack.getParent().getParent())) return disabledOnDisk(game, path, pack);
         List<PackStackPayload.Pack> packs = assets ? current.resourcePacks() : current.dataPacks();
         int position = position(packs, pack);
         if (position < 0) {
             // The managed pack is enabled by the reload after a save, and so is a datapack the world does not know yet, as
             // /reload does. One its level.dat lists, but the open world does not use, was disabled since.
             if (managed(pack)) return Optional.empty();
-            return assets || !newToTheWorld(pack) ? Optional.of(notEnabled(pack)) : Optional.empty();
+            return assets || !newToTheWorld(game, pack) ? Optional.of(notEnabled(pack)) : Optional.empty();
         }
         return supplierAbove(packs, position, path)
                 .map(above -> above + " is above the " + PackFolders.label(pack) + " and supplies this file too, so the game shows its copy");
@@ -369,7 +372,7 @@ public final class ResourceEdits {
      * Why the game will not use {@code pack}'s copy when it next starts or loads the world: the pack not being enabled in
      * {@code options.txt}, or disabled in the world's {@code level.dat}. The managed pack is enabled when saved to.
      */
-    private Optional<String> disabledOnDisk(String path, Path pack) {
+    private Optional<String> disabledOnDisk(GameState game, String path, Path pack) {
         if (managed(pack)) return Optional.empty();
         String id = "file/" + pack.getFileName();
         try {
@@ -377,7 +380,7 @@ public final class ResourceEdits {
                 return PackResources.enabledInOptions(this.workspace.resolve("options.txt")).contains(id)
                         ? Optional.empty() : Optional.of(notEnabled(pack));
             }
-            boolean disabled = CurrentWorld.read(this.location.read(), pack.getParent().getParent()).datapacks().stream()
+            boolean disabled = CurrentWorld.read(game, pack.getParent().getParent()).datapacks().stream()
                     .anyMatch(listed -> listed.id().equals(id) && listed.state() == ListedPack.State.DISABLED);
             return disabled ? Optional.of(notEnabled(pack)) : Optional.empty();
         } catch (IOException | RuntimeException unreadable) {
@@ -386,10 +389,10 @@ public final class ResourceEdits {
     }
 
     /** Whether the datapack is in its world's folder but in neither of the lists its {@code level.dat} keeps. */
-    private boolean newToTheWorld(Path pack) {
+    private static boolean newToTheWorld(GameState game, Path pack) {
         String id = "file/" + pack.getFileName();
         try {
-            return CurrentWorld.read(this.location.read(), pack.getParent().getParent()).datapacks().stream()
+            return CurrentWorld.read(game, pack.getParent().getParent()).datapacks().stream()
                     .anyMatch(listed -> listed.id().equals(id) && listed.state() == ListedPack.State.NEW);
         } catch (IOException | RuntimeException unreadable) {
             return false;
@@ -762,11 +765,10 @@ public final class ResourceEdits {
     }
 
     /**
-     * Asks the connected game to enable exactly {@code enabled}, lowest first, among the resource packs or the open
-     * world's datapacks, and reload what that needs; completes with its answer, or fails without a game.
+     * Asks the game on {@code send} to enable exactly {@code enabled}, lowest first, among the resource packs or the open
+     * world's datapacks, and reload what that needs; completes with its answer, or fails once that connection ended.
      */
-    public CompletableFuture<ReloadResultPayload> select(SetPacksPayload.Side side, List<String> enabled) {
-        GameLocation.Connection send = this.location.connection();
+    public CompletableFuture<ReloadResultPayload> select(GameLocation.Connection send, SetPacksPayload.Side side, List<String> enabled) {
         int id = this.requests.incrementAndGet();
         CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
         this.waiting.put(id, result);

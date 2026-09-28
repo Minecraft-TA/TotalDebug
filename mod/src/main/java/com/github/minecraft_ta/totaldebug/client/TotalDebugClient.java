@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.client;
 import com.github.minecraft_ta.totaldebug.client.catalog.KeyBindingEdits;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogCapture;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogPublisher;
+import com.github.minecraft_ta.totaldebug.client.companion.ChangePublisher;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionProgressActionBar;
 import com.github.minecraft_ta.totaldebug.client.decompile.ClientCodeOpenService;
@@ -12,7 +13,7 @@ import com.github.minecraft_ta.totaldebug.client.inspection.ResourceSnapshots;
 import com.github.minecraft_ta.totaldebug.client.input.Selection;
 import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.client.resource.PackStackPublisher;
-import com.github.minecraft_ta.totaldebug.client.world.PlayingPublisher;
+import com.github.minecraft_ta.totaldebug.client.world.Playing;
 import com.github.minecraft_ta.totaldebug.client.resource.ResourceReloads;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
@@ -20,6 +21,7 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
@@ -51,7 +53,7 @@ public final class TotalDebugClient {
     private final ResourceSnapshots resources;
     private final PackCatalogPublisher catalogs;
     private final PackStackPublisher packStacks;
-    private final PlayingPublisher playing;
+    private final ChangePublisher<PlayingPayload> playing;
     private final AtomicReference<PackCatalogCapture> catalogCapture = new AtomicReference<>();
     private volatile boolean snapshotRequested;
     private volatile String gameSessionId;
@@ -92,7 +94,7 @@ public final class TotalDebugClient {
                 companionApp::sendPackCatalog
         );
         this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
-        this.playing = new PlayingPublisher(playing -> companionApp.sendPlaying(new PlayingMessage(playing)));
+        this.playing = new ChangePublisher<>(Playing::capture, playing -> companionApp.sendPlaying(new PlayingMessage(playing)));
         companionApp.setSessionOpenedHandler(() -> {
             this.packStacks.republish();
             this.playing.republish();
@@ -192,11 +194,12 @@ public final class TotalDebugClient {
      * snapshot Companion draws its icons from. Client thread only.
      */
     public void onClientTick() {
+        // What the game plays is told first, and during a loading overlay too, since Companion reads the packs by it.
+        this.playing.tick();
         if (Minecraft.getInstance().getOverlay() != null) {
             return;
         }
         this.packStacks.tick();
-        this.playing.tick();
         ResourceReloads.tick();
         PackCatalogCapture capture = this.catalogCapture.get();
         if (capture != null) {

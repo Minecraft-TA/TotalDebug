@@ -61,7 +61,7 @@ public final class ConfigSources {
      */
     private static Path loaded(Path workspace, PackCatalog.ConfigFile file) {
         if (file.path() == null) return null;
-        if (workspace == null || file.type() == PackCatalog.ConfigType.SERVER) return file.path();
+        if (file.type() == PackCatalog.ConfigType.SERVER) return file.path();
         return workspace.resolve("config").resolve(file.fileName()).normalize();
     }
 
@@ -83,7 +83,7 @@ public final class ConfigSources {
      */
     public static List<Source> of(GameLocation location, PackCatalog.ConfigFile file) {
         Path workspace = location.workspace();
-        if (file.type() != PackCatalog.ConfigType.SERVER || workspace == null) {
+        if (file.type() != PackCatalog.ConfigType.SERVER) {
             Path loaded = loaded(workspace, file);
             return loaded == null ? List.of() : List.of(new Source(file.fileName(), loaded));
         }

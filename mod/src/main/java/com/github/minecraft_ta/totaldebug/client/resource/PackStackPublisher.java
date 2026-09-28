@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.resource;
 
+import com.github.minecraft_ta.totaldebug.client.companion.ChangePublisher;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
@@ -24,37 +25,22 @@ import java.util.function.Consumer;
  * connects again. Checked once a second on the client thread.
  */
 public final class PackStackPublisher {
-    private static final int CHECK_TICKS = 20;
-
     private final Path gameDirectory;
-    private final Consumer<PackStackPayload> publish;
-    private PackStackPayload published;
-    private int ticks;
+    private final ChangePublisher<PackStackPayload> publisher;
 
     public PackStackPublisher(Path gameDirectory, Consumer<PackStackPayload> publish) {
         this.gameDirectory = Objects.requireNonNull(gameDirectory, "gameDirectory");
-        this.publish = Objects.requireNonNull(publish, "publish");
+        this.publisher = new ChangePublisher<>(this::capture, publish);
     }
 
     /** Publishes the stacks again at the next check, such as for a newly connected Companion. */
-    public synchronized void republish() {
-        this.published = null;
-        this.ticks = CHECK_TICKS;
+    public void republish() {
+        this.publisher.republish();
     }
 
     /** Client thread only. */
     public void tick() {
-        PackStackPayload current;
-        synchronized (this) {
-            if (++this.ticks < CHECK_TICKS) return;
-            this.ticks = 0;
-        }
-        current = capture();
-        synchronized (this) {
-            if (current.equals(this.published)) return;
-            this.published = current;
-        }
-        this.publish.accept(current);
+        this.publisher.tick();
     }
 
     private PackStackPayload capture() {

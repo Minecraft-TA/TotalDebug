@@ -85,14 +85,14 @@ public final class PackSelections {
     public boolean holds(ChangeRecord.Change change) {
         if (!(change.target() instanceof ChangeRecord.PackSelection target)) return true;
         try {
-            return comparable(current(target)).equals(comparable(parse(change.current())));
+            return comparable(current(this.location.read(), target)).equals(comparable(parse(change.current())));
         } catch (IOException unreadable) {
             return true;
         }
     }
 
-    /** What a change reads before it writes: the selection before it, and whether the connected game applies it. */
-    private record Read(List<String> previous, boolean live) {
+    /** What a change reads before it writes: the selection before it, and the connection that applies it, or null. */
+    private record Read(List<String> previous, GameLocation.Connection live) {
     }
 
     private CompletableFuture<Applied> apply(ChangeRecord.PackSelection target, List<String> enabled, ChangeRecord.Change reverting) {
@@ -100,13 +100,14 @@ public final class PackSelections {
         // one, and never on the Swing thread.
         CompletableFuture<Read> before = write(() -> {
             try {
-                boolean live = live(target);
-                List<String> previous = current(target);
+                GameState game = this.location.read();
+                GameLocation.Connection live = live(game, target);
+                List<String> previous = current(game, target);
                 if (reverting != null && !comparable(previous).equals(comparable(parse(reverting.current())))
                         && !comparable(previous).equals(comparable(enabled))) {
                     throw new IOException(label(target) + " changed outside Companion since, and reverting would replace that");
                 }
-                if (!live) {
+                if (live == null) {
                     if (target.side() == SetPacksPayload.Side.RESOURCES) writeOptions(previous, enabled);
                     else writeLevel(target.location(), enabled);
                     this.record.changed(target, json(previous), json(enabled));
@@ -117,11 +118,11 @@ public final class PackSelections {
             }
         });
         return before.thenCompose(read -> {
-            if (!read.live()) {
+            if (read.live() == null) {
                 return CompletableFuture.completedFuture(new Applied(target.side() == SetPacksPayload.Side.RESOURCES
                         ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS));
             }
-            return this.edits.select(target.side(), enabled).thenApply(result -> {
+            return this.edits.select(read.live(), target.side(), enabled).thenApply(result -> {
                 if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
                 this.record.changed(target, json(read.previous()), json(enabled));
                 return new Applied(ConfigChanges.Effect.NOW);
@@ -130,22 +131,22 @@ public final class PackSelections {
     }
 
     /**
-     * Whether the connected game applies the selection; fails where a running game would write it over: a game running
-     * without a connection, or a world open in a game Companion is not connected to or in another program. Blocking.
+     * The connection of the game that applies the selection, or null where the files are written; fails where a running
+     * game would write it over: a game running without a connection, or a world open in a game Companion is not
+     * connected to or in another program. Blocking.
      */
-    private boolean live(ChangeRecord.PackSelection target) throws IOException {
-        GameState game = this.location.read();
+    private static GameLocation.Connection live(GameState game, ChangeRecord.PackSelection target) throws IOException {
         Access access = target.side() == SetPacksPayload.Side.RESOURCES ? game.client("change its resource packs")
                 : game.world(target.location(), "change its datapacks");
         return switch (access) {
-            case Access.Live ignored -> true;
-            case Access.Files ignored -> false;
+            case Access.Live live -> live.connection();
+            case Access.Files ignored -> null;
             case Access.Refused refused -> throw new IOException(refused.reason());
         };
     }
 
     /** The enabled packs, lowest first: as the connected game names them, or as the file keeps them. Blocking. */
-    List<String> current(ChangeRecord.PackSelection target) throws IOException {
+    List<String> current(GameState game, ChangeRecord.PackSelection target) throws IOException {
         PackStackPayload stack = this.edits.packStack();
         if (target.side() == SetPacksPayload.Side.RESOURCES) {
             if (stack != null) {
@@ -155,7 +156,7 @@ public final class PackSelections {
             }
             return PackResources.enabledInOptions(options());
         }
-        if (stack != null && this.location.read().plays(target.location())) {
+        if (stack != null && game.plays(target.location())) {
             return stack.dataPacks().stream().filter(pack -> !pack.is(PackStackPayload.HIDDEN)).map(PackStackPayload.Pack::id).toList();
         }
         NbtData.CompoundTag packs = dataPacks(LevelDat.read(LevelDat.file(target.location())).tag());

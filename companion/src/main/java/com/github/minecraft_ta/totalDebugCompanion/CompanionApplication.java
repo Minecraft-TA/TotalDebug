@@ -593,7 +593,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             updateGameStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft is connected and authenticated."));
             if (current != null) {
                 CompanionSession connected = session;
-                current.location().connected(connected::send);
+                long established = connected.connection();
+                // Sends only on this connection, never to a game that connected after it.
+                current.location().connected(message -> connected.connection() == established && connected.send(message));
             }
             if (reconnect != null && reconnect.project == current) {
                 var completed = reconnect;

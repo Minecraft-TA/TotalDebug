@@ -116,7 +116,7 @@ class GameStateTest {
         assertNull(CLOSED.read().openWorld());
         assertNull(CLOSED_WORLD_HELD.read().openWorld(), "a world held while no game runs is open in another program");
         assertEquals(WORLD, UNCONNECTED_IN_WORLD.read().openWorld(), "a game without a connection has the held world open");
-        assertNull(CONNECTED_UNTOLD.read().openWorld());
+        assertEquals(WORLD, CONNECTED_UNTOLD.read().openWorld(), "until the game says what it plays, the held world is taken as its own");
         assertNull(MENU_WORLD_HELD.read().openWorld());
         assertEquals(WORLD, SINGLEPLAYER.read().openWorld());
         assertEquals(OTHER, SINGLEPLAYER_OTHER.read().openWorld());
@@ -155,7 +155,8 @@ class GameStateTest {
         location.disconnected();
         location.connected(SEND);
         assertEquals(0, location.process(), "what the game told on an ended connection no longer holds");
-        assertNull(location.read().openWorld());
+        assertFalse(location.read().plays(WORLD));
+        assertInstanceOf(Access.Refused.class, location.read().world(WORLD, "change its rules"));
     }
 
     @Test

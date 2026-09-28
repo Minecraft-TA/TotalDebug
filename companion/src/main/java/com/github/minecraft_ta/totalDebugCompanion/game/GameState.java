@@ -8,7 +8,7 @@ import java.util.Optional;
 
 /**
  * One reading of where the game is, and how a change of what the game or a world owns can be made then; see
- * {@code docs/GAME_LOCATION.md}. The queries about worlds read their locks, so they are blocking too.
+ * {@code docs/GAME_LOCATION.md}. The worlds' locks are read only by the queries that need them, so those are blocking.
  */
 public final class GameState {
     /** The game of the instance. */
@@ -17,8 +17,8 @@ public final class GameState {
         record Closed() implements Game {
         }
 
-        /** A game runs but is not connected; {@code world} is the world held while it runs, or null. */
-        record Unconnected(Path world) implements Game {
+        /** A game runs but is not connected. */
+        record Unconnected() implements Game {
         }
 
         /** The connected game: its process, or 0 while unknown, and what it plays, or null until it has said. */
@@ -32,6 +32,8 @@ public final class GameState {
     private final Path workspace;
     private final GameLocation.Files files;
     private final Game game;
+    private boolean heldRead;
+    private Path held;
 
     GameState(Path workspace, GameLocation.Files files, Game game) {
         this.workspace = workspace;
@@ -93,19 +95,20 @@ public final class GameState {
     }
 
     /**
-     * The world the game has open: the one the connected game plays in singleplayer, or the one held while a game runs
-     * without a connection; null otherwise.
+     * The world the game has open: the one the connected game plays in singleplayer; the held one while the game runs
+     * without a connection, or while the connected game has not said yet what it plays; null otherwise. Blocking.
      */
     public Path openWorld() {
         return switch (this.game) {
+            case Game.Connected connected when connected.playing() == null -> held();
             case Game.Connected connected -> connected.playing() instanceof PlayingPayload.Singleplayer singleplayer
                     ? normalize(Path.of(singleplayer.world())) : null;
-            case Game.Unconnected unconnected -> unconnected.world() == null ? null : normalize(unconnected.world());
+            case Game.Unconnected ignored -> held();
             case Game.Closed ignored -> null;
         };
     }
 
-    /** Whether the game has {@code world} open, as {@link #openWorld()} says. */
+    /** Whether the game has {@code world} open, as {@link #openWorld()} says. Blocking. */
     public boolean isOpen(Path world) {
         Path open = openWorld();
         return open != null && open.equals(normalize(world));
@@ -128,6 +131,16 @@ public final class GameState {
     /** The game directory. */
     public Path workspace() {
         return this.workspace;
+    }
+
+    /** A held world of the instance, or null, read once for this state. */
+    private synchronized Path held() {
+        if (!this.heldRead) {
+            Path found = this.files.heldWorld();
+            this.held = found == null ? null : normalize(found);
+            this.heldRead = true;
+        }
+        return this.held;
     }
 
     private static Path normalize(Path path) {

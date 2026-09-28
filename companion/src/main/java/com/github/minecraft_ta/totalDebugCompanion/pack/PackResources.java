@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.pack;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
@@ -91,10 +92,10 @@ public final class PackResources {
      * current world's {@code level.dat} names them; a pack the game builds in memory, such as one a mod generates, adds
      * nothing Companion can read. Blocking.
      */
-    public static List<Source> data(PackStackPayload stack, CatalogIndex index, GameState game) throws IOException {
+    public static List<Source> data(PackStackPayload stack, CatalogIndex index, GameLocation location) throws IOException {
         if (stack != null) return stack.dataPacks().stream().map(pack -> source(pack, index)).toList();
         // The game enables a new pack of the world's folder above the others when it loads the world.
-        List<ListedPack> listed = worldDatapacks(game);
+        List<ListedPack> listed = worldDatapacks(location.read());
         List<ListedPack> enabled = new ArrayList<>(listed.stream().filter(pack -> pack.state() == ListedPack.State.ENABLED).toList().reversed());
         enabled.addAll(listed.stream().filter(pack -> pack.state() == ListedPack.State.NEW).toList());
         List<Source> sources = new ArrayList<>();
