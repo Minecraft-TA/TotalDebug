@@ -169,6 +169,8 @@ public class SearchManager {
      * negative, as the text's own positions move; the matches are searched again once typing pauses.
      */
     private void moved(int offset, int change) {
+        // A search still reading the text as it was before the edit would put its matches in the wrong places.
+        this.searches++;
         for (int index = 0; index < this.starts.length; index++) {
             this.starts[index] = moved(this.starts[index], offset, change);
             this.ends[index] = moved(this.ends[index], offset, change);
@@ -202,7 +204,7 @@ public class SearchManager {
             return;
         }
         String text = this.textPane.getText();
-        int caret = this.textPane.getSelectionStart();
+        int caret = this.textPane.getCaretPosition();
         this.searcher.execute(() -> {
             int[] foundStarts = new int[64];
             int[] foundEnds = new int[64];
@@ -287,7 +289,17 @@ public class SearchManager {
     }
 
     /** Text that stops a search reading it once {@code stale} says a newer one started. */
-    private record Stoppable(CharSequence text, BooleanSupplier stale) implements CharSequence {
+    private static final class Stoppable implements CharSequence {
+        private final CharSequence text;
+        private final BooleanSupplier stale;
+        /** Characters read; a pattern may read only every fourth character, so reads are counted, not positions. */
+        private int reads;
+
+        private Stoppable(CharSequence text, BooleanSupplier stale) {
+            this.text = text;
+            this.stale = stale;
+        }
+
         @Override
         public int length() {
             return this.text.length();
@@ -295,8 +307,8 @@ public class SearchManager {
 
         @Override
         public char charAt(int index) {
-            // Looking at every character would cost more than the search; every 4096th is soon enough.
-            if ((index & 4095) == 0 && this.stale.getAsBoolean()) throw new CancellationException();
+            // Looking every time would cost more than the search; every 4096th read is soon enough.
+            if ((++this.reads & 4095) == 0 && this.stale.getAsBoolean()) throw new CancellationException();
             return this.text.charAt(index);
         }
 
@@ -320,10 +332,18 @@ public class SearchManager {
             if (clip == null) clip = bounds.getBounds();
             Color match = ThemeColors.accent();
             Color focused = match.darker();
-            // Only the text in the painted area: on a long line, the part of it that is visible.
-            int first = component.viewToModel2D(new Point(clip.x, clip.y));
-            int last = component.viewToModel2D(new Point(clip.x + clip.width, clip.y + clip.height));
+            // Only the text in the painted area: on a long line, the part of it that is visible. Below the last line a
+            // point stands for the end of the text, so the bottom is taken inside the last line the area shows.
             int length = component.getDocument().getLength();
+            int bottom = clip.y + clip.height - 1;
+            try {
+                Rectangle2D end = component.modelToView2D(length);
+                if (end != null) bottom = (int) Math.min(bottom, end.getMaxY() - 1);
+            } catch (BadLocationException unreachable) {
+                // The end of the text always has a place.
+            }
+            int first = component.viewToModel2D(new Point(clip.x, clip.y));
+            int last = component.viewToModel2D(new Point(clip.x + clip.width, bottom));
             for (int index = firstEndingAfter(first); index < starts.length && starts[index] <= last; index++) {
                 if (ends[index] > length) break;
                 graphics.setColor(index == focusedMatchIndex ? focused : match);

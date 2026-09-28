@@ -124,7 +124,7 @@ class SearchManagerTest {
                 }
             });
             // A highlight for every match took about 14 seconds for this paint.
-            assertTrue(millis[0] < 3_000, "painting took " + millis[0] + " ms");
+            assertTrue(millis[0] < 1_000, "painting took " + millis[0] + " ms");
             assertTrue(painted[0] > 0, "the matches in view are marked");
         } finally {
             SwingUtilities.invokeAndWait(frame[0]::dispose);
