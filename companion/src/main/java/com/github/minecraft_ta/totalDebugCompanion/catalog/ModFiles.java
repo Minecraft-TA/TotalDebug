@@ -31,6 +31,15 @@ public final class ModFiles {
             return read(Path.of(modFile), entry, maximumBytes);
         }
         if (!"jij".equalsIgnoreCase(modFile.getScheme())) return Optional.empty();
+        Optional<byte[]> jar = nestedJar(modFile);
+        return jar.isEmpty() ? Optional.empty() : entry(jar.get(), entry, maximumBytes);
+    }
+
+    /**
+     * The bytes of a nested mod file, read through the files it is nested in; empty when one of them is gone. A file
+     * larger than Companion reads is refused rather than cut off, which would leave it unreadable without saying why.
+     */
+    private static Optional<byte[]> nestedJar(URI modFile) throws IOException {
         List<String> parts = nesting(modFile.toString());
         Path outer = outerPath(parts.getFirst());
         if (!Files.isRegularFile(outer)) return Optional.empty();
@@ -39,15 +48,22 @@ public final class ModFiles {
             ZipEntry inner = archive.getEntry(parts.get(1));
             if (inner == null) return Optional.empty();
             try (InputStream input = archive.getInputStream(inner)) {
-                jar = input.readNBytes(MAXIMUM_NESTED_JAR_BYTES);
+                jar = whole(input.readNBytes(MAXIMUM_NESTED_JAR_BYTES + 1), parts.get(1));
             }
         }
         for (String inner : parts.subList(2, parts.size())) {
-            Optional<byte[]> nested = entry(jar, inner, MAXIMUM_NESTED_JAR_BYTES);
+            Optional<byte[]> nested = entry(jar, inner, MAXIMUM_NESTED_JAR_BYTES + 1);
             if (nested.isEmpty()) return Optional.empty();
-            jar = nested.get();
+            jar = whole(nested.get(), inner);
         }
-        return entry(jar, entry, maximumBytes);
+        return Optional.of(jar);
+    }
+
+    private static byte[] whole(byte[] jar, String name) throws IOException {
+        if (jar.length > MAXIMUM_NESTED_JAR_BYTES) {
+            throw new IOException(name + " is larger than " + MAXIMUM_NESTED_JAR_BYTES / (1024 * 1024) + " MiB, which Companion reads");
+        }
+        return jar;
     }
 
     /** A mod file opened for many reads, closed when done. */
@@ -95,22 +111,9 @@ public final class ModFiles {
             });
         }
         if (!"jij".equalsIgnoreCase(modFile.getScheme())) return Optional.empty();
-        List<String> parts = nesting(modFile.toString());
-        Path outer = outerPath(parts.getFirst());
-        if (!Files.isRegularFile(outer)) return Optional.empty();
-        byte[] jar;
-        try (ZipFile archive = new ZipFile(outer.toFile())) {
-            ZipEntry inner = archive.getEntry(parts.get(1));
-            if (inner == null) return Optional.empty();
-            try (InputStream input = archive.getInputStream(inner)) {
-                jar = input.readNBytes(MAXIMUM_NESTED_JAR_BYTES);
-            }
-        }
-        for (String inner : parts.subList(2, parts.size())) {
-            Optional<byte[]> nested = entry(jar, inner, MAXIMUM_NESTED_JAR_BYTES);
-            if (nested.isEmpty()) return Optional.empty();
-            jar = nested.get();
-        }
+        Optional<byte[]> nested = nestedJar(modFile);
+        if (nested.isEmpty()) return Optional.empty();
+        byte[] jar = nested.get();
         // A copy on disk is read like any JAR, one entry at a time, however much its entries would expand to.
         Path copy = Files.createTempFile("totaldebug-nested", ".jar");
         ZipFile archive;

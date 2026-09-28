@@ -61,13 +61,16 @@ class MixinsTest {
         assertEquals(List.of(LEVEL), level.targets());
         assertEquals(Mixins.Side.BOTH, level.side());
         assertEquals(900, level.priority());
-        assertEquals(List.of(new Mixins.Change("Inject", "tick", "()V", ""), new Mixins.Change("Redirect", "explode", "(DDD)V", LEVEL),
-                new Mixins.Change("WrapOperation", "tick")), level.changes(), "each with the overload its descriptor picks");
+        assertEquals(List.of(new Mixins.Change("Inject", new MixinMember.Method("tick", "()V")),
+                new Mixins.Change("Redirect", new MixinMember.Method("explode", "(DDD)V"), LEVEL),
+                new Mixins.Change("WrapOperation", new MixinMember.Method("tick", ""))), level.changes(),
+                "each with the overload its descriptor picks, or every one");
         Mixins.Mixin accessor = mixins.get(1);
         assertEquals(Mixins.Side.CLIENT, accessor.side());
         assertEquals(1200, accessor.priority(), "without its own priority, the configuration's");
-        assertEquals(List.of(new Mixins.Change("Accessor", "width", "I", ""), new Mixins.Change("Invoker", "<init>", "(Ljava/lang/String;)V", "")),
-                accessor.changes(), "named after the methods getWidth, a field by its type, and newScreen, the constructor it calls");
+        assertEquals(List.of(new Mixins.Change("Accessor", new MixinMember.Field("width")),
+                new Mixins.Change("Invoker", new MixinMember.Method("<init>", "(Ljava/lang/String;)V"))), accessor.changes(),
+                "named after the methods getWidth, a field, and newScreen, the constructor it calls");
     }
 
     @Test
@@ -95,8 +98,14 @@ class MixinsTest {
 
         Mixins.Mixin read = Mixins.mixin("gears", "gears.mixins.json", "com.gears.mixin.DescMixin", Mixins.Side.BOTH, 1000,
                 writer.toByteArray()).orElseThrow();
-        assertEquals(List.of(new Mixins.Change("Inject", "tickChunk", "(I)V", "")), read.changes(),
+        assertEquals(List.of(new Mixins.Change("Inject", new MixinMember.Method("tickChunk", "(I)V"))), read.changes(),
                 "the overload its arguments pick; not a mixin that only adds members");
+    }
+
+    @Test
+    void aModFileThatIsGoneMayDeclareMixins() {
+        assertTrue(Mixins.declared(new CatalogIndex(CatalogFixtures.catalog(this.directory.resolve("gone.jar")))),
+                "the Mixins page is where the missing file is named");
     }
 
     @Test

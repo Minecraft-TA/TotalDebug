@@ -82,24 +82,18 @@ public final class Mixins {
     }
 
     /**
-     * One change a mixin makes: how, such as {@code Inject}, to which member, empty for the class itself, the descriptor
-     * that picks one of its overloads, or empty for all of them, and the target class its selector names by binary name,
-     * or empty for every target of the mixin.
+     * One change a mixin makes: how, such as {@code Inject}, to which member, and the target class its selector names by
+     * binary name, or empty for every target of the mixin.
      */
-    public record Change(String kind, String member, String descriptor, String owner) {
+    public record Change(String kind, MixinMember member, String owner) {
         public Change {
             Objects.requireNonNull(kind, "kind");
             Objects.requireNonNull(member, "member");
-            Objects.requireNonNull(descriptor, "descriptor");
             Objects.requireNonNull(owner, "owner");
         }
 
-        public Change(String kind, String member) {
-            this(kind, member, "", "");
-        }
-
-        public Change(String kind, String member, String owner) {
-            this(kind, member, "", owner);
+        public Change(String kind, MixinMember member) {
+            this(kind, member, "");
         }
 
         /** Whether the change applies to {@code target}, one of the mixin's targets. */
@@ -212,7 +206,8 @@ public final class Mixins {
         for (URI file : files) {
             try {
                 Optional<ModFiles.Archive> opened = ModFiles.open(file);
-                if (opened.isEmpty()) continue;
+                // A file that is gone may have named some; the page names it.
+                if (opened.isEmpty()) return true;
                 try (ModFiles.Archive archive = opened.get()) {
                     if (!configs(archive).isEmpty()) return true;
                 }
@@ -301,7 +296,7 @@ public final class Mixins {
             }
         }, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
         if (!annotated[0] || targets.isEmpty()) return Optional.empty();
-        if (changes.isEmpty()) changes.add(new Change("Adds", ""));
+        if (changes.isEmpty()) changes.add(new Change("Adds", new MixinMember.Whole()));
         return Optional.of(new Mixin(modId, config, className, targets, side, effective[0], changes.stream().distinct().toList()));
     }
 
@@ -315,7 +310,7 @@ public final class Mixins {
         /** The annotated method's own descriptor, which an overwrite shares with the member it replaces. */
         private final String methodDescriptor;
         private final List<Change> changes;
-        private final List<Change> named = new ArrayList<>();
+        private final List<Selected> named = new ArrayList<>();
 
         SelectorVisitor(String kind, String methodName, String methodDescriptor, List<Change> changes) {
             super(Opcodes.ASM9);
@@ -381,31 +376,45 @@ public final class Mixins {
                 public void visitEnd() {
                     if (member[0].isEmpty()) return;
                     String descriptor = Type.getMethodDescriptor(returned[0], arguments.toArray(Type[]::new));
-                    SelectorVisitor.this.named.add(new Change("", member[0], descriptor, owner[0]));
+                    SelectorVisitor.this.named.add(new Selected(member[0], descriptor, owner[0]));
                 }
             };
         }
 
-        private Change selected(String selector) {
-            return new Change("", member(selector), descriptor(selector), owner(selector));
+        private Selected selected(String selector) {
+            return new Selected(member(selector), descriptor(selector), owner(selector));
         }
 
         @Override
         public void visitEnd() {
             switch (this.kind) {
-                case "Overwrite" -> this.changes.add(new Change(this.kind, this.methodName, this.methodDescriptor, ""));
-                case "Accessor", "Invoker" -> {
-                    String member = this.named.isEmpty() ? accessed(this.kind, this.methodName) : this.named.getFirst().member();
-                    String owner = this.named.isEmpty() ? "" : this.named.getFirst().owner();
-                    this.changes.add(new Change(this.kind, member, reached(this.kind, member, this.methodDescriptor), owner));
+                // An overwrite replaces the method of its own name and signature.
+                case "Overwrite" -> this.changes.add(new Change(this.kind, new MixinMember.Method(this.methodName, this.methodDescriptor)));
+                // An accessor reaches a field; an invoker the method of its own signature, or a constructor.
+                case "Accessor" -> {
+                    String name = this.named.isEmpty() ? accessed(this.kind, this.methodName) : this.named.getFirst().name();
+                    this.changes.add(new Change(this.kind, new MixinMember.Field(name), namedOwner()));
+                }
+                case "Invoker" -> {
+                    String name = this.named.isEmpty() ? accessed(this.kind, this.methodName) : this.named.getFirst().name();
+                    this.changes.add(new Change(this.kind, new MixinMember.Method(name, invoked(name, this.methodDescriptor)), namedOwner()));
                 }
                 default -> {
-                    for (Change target : this.named) {
-                        this.changes.add(new Change(this.kind, target.member(), target.descriptor(), target.owner()));
+                    for (Selected target : this.named) {
+                        this.changes.add(new Change(this.kind, new MixinMember.Method(target.name(), target.descriptor()), target.owner()));
                     }
                 }
             }
         }
+
+        /** The owner the annotation's own name gives, or empty. */
+        private String namedOwner() {
+            return this.named.isEmpty() ? "" : this.named.getFirst().owner();
+        }
+    }
+
+    /** What an annotation names: a member's name, the descriptor it gives or empty, and the owner it names or empty. */
+    private record Selected(String name, String descriptor, String owner) {
     }
 
     /**
@@ -425,17 +434,11 @@ public final class Mixins {
     }
 
     /**
-     * What an accessor or invoker with the descriptor {@code method} reaches: an accessor a field, by its type, which
-     * its getter returns or its setter takes; an invoker the method of its own signature, or for a constructor, the one
-     * taking its arguments.
+     * The descriptor of the method an invoker with the descriptor {@code method} calls: its own, or for a constructor,
+     * which returns nothing, the one taking its arguments.
      */
-    static String reached(String kind, String member, String method) {
-        Type type = Type.getMethodType(method);
-        if (kind.equals("Accessor")) {
-            Type field = type.getArgumentTypes().length == 0 ? type.getReturnType() : type.getArgumentTypes()[0];
-            return field.getDescriptor();
-        }
-        return member.equals("<init>") ? Type.getMethodDescriptor(Type.VOID_TYPE, type.getArgumentTypes()) : method;
+    static String invoked(String name, String method) {
+        return name.equals("<init>") ? Type.getMethodDescriptor(Type.VOID_TYPE, Type.getArgumentTypes(method)) : method;
     }
 
     /** The descriptor a selector such as {@code tick(I)V} gives, which picks one overload, or empty for all of them. */

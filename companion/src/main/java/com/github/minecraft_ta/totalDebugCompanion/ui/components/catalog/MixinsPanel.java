@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.MixinMember;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.Mixins;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -53,24 +54,11 @@ import java.util.function.Consumer;
  * out. A row opens its target class; its menu opens each mixin class and mod.
  */
 public final class MixinsPanel extends JPanel {
-    /**
-     * A changed member of a target class, empty for the class itself, with the descriptor of the overload the changes
-     * pick, or empty when they name the member alone, and the mixins that change it.
-     */
-    record Row(String target, String member, String descriptor, List<Entry> entries) {
-        /** Whether the member is a field, which accessors reach, rather than a method. */
-        boolean field() {
-            return !this.descriptor.isEmpty() && !this.descriptor.startsWith("(");
-        }
-
-        /** The member as the table shows it: a method with its descriptor where it is one overload. */
-        String shownMember() {
-            return this.member.isEmpty() ? "The class" : field() ? this.member : this.member + this.descriptor;
-        }
-
+    /** A member of a target class that mixins change, and the changes that reach it. */
+    record Row(String target, MixinMember member, List<Entry> entries) {
         /** What identifies the row across reloads. */
         String key() {
-            return this.target + "#" + this.member + this.descriptor;
+            return this.target + "#" + this.member.getClass().getSimpleName() + ":" + this.member.reference();
         }
 
         Set<String> mods() {
@@ -107,9 +95,9 @@ public final class MixinsPanel extends JPanel {
                     && (one == Mixins.Side.BOTH || two == Mixins.Side.BOTH || one == two);
         }
 
-        /** The row as a reference: the target, and the member with its overload where it is one. */
+        /** The row as a reference: the target, and the member with its overload where it gives one. */
         String reference() {
-            return this.target + (this.member.isEmpty() ? "" : "#" + this.member + (field() ? "" : this.descriptor));
+            return this.target + (this.member instanceof MixinMember.Whole ? "" : "#" + this.member.reference());
         }
 
         String kinds() {
@@ -119,8 +107,8 @@ public final class MixinsPanel extends JPanel {
         }
     }
 
-    /** One mixin's change to a row's member. */
-    record Entry(Mixins.Mixin mixin, String kind, String descriptor) {
+    /** One mixin's change, to the member it names. */
+    record Entry(Mixins.Mixin mixin, String kind, MixinMember member) {
     }
 
     /** The rows read, and why files or classes could not be read. */
@@ -207,52 +195,47 @@ public final class MixinsPanel extends JPanel {
     }
 
     /**
-     * One row per changed member of each target, targets by their name as shown, then package, and members by name. A
-     * member whose overloads are picked by descriptor has a row per overload; a change naming the member alone applies to
-     * each of them, as it does in the game.
+     * One row per member of each target that changes reach, by target, then member. The rows are the members the changes
+     * name, except a method named without its descriptor or by a wildcard: it joins the rows of the methods it reaches,
+     * and is a row of its own only where it reaches none. Each row holds every change that reaches its member.
      */
     static List<Row> rows(List<Mixins.Mixin> mixins) {
-        Map<String, Map<String, List<Entry>>> byTarget = new LinkedHashMap<>();
+        Map<String, List<Entry>> byTarget = new LinkedHashMap<>();
         for (Mixins.Mixin mixin : mixins) {
             for (String target : mixin.targets()) {
                 for (Mixins.Change change : mixin.changes()) {
                     // A selector naming its owner changes only that one of the mixin's targets.
                     if (!change.appliesTo(target)) continue;
-                    byTarget.computeIfAbsent(target, ignored -> new LinkedHashMap<>())
-                            .computeIfAbsent(change.member(), ignored -> new ArrayList<>())
-                            .add(new Entry(mixin, change.kind(), change.descriptor()));
+                    byTarget.computeIfAbsent(target, ignored -> new ArrayList<>()).add(new Entry(mixin, change.kind(), change.member()));
                 }
             }
         }
         List<Row> rows = new ArrayList<>();
-        byTarget.forEach((target, members) -> members.forEach((member, entries) -> {
-            // A field of the name is a member of its own; a method named without descriptor is every overload.
-            List<Entry> everyOverload = entries.stream().filter(entry -> entry.descriptor().isEmpty()).toList();
-            Set<String> overloads = new LinkedHashSet<>();
-            Set<String> fields = new LinkedHashSet<>();
-            for (Entry entry : entries) {
-                if (entry.descriptor().startsWith("(")) overloads.add(entry.descriptor());
-                else if (!entry.descriptor().isEmpty()) fields.add(entry.descriptor());
+        byTarget.forEach((target, entries) -> {
+            Set<MixinMember> named = new LinkedHashSet<>();
+            for (Entry entry : entries) named.add(entry.member());
+            for (MixinMember member : named) {
+                if (wide(member) && named.stream().anyMatch(other -> !wide(other) && member.reaches(other))) continue;
+                rows.add(new Row(target, member, entries.stream().filter(entry -> entry.member().reaches(member)).toList()));
             }
-            for (String field : fields) {
-                rows.add(new Row(target, member, field, entries.stream().filter(entry -> entry.descriptor().equals(field)).toList()));
-            }
-            if (overloads.isEmpty()) {
-                if (!everyOverload.isEmpty()) rows.add(new Row(target, member, "", everyOverload));
-                return;
-            }
-            for (String overload : overloads) {
-                List<Entry> picked = new ArrayList<>(everyOverload);
-                for (Entry entry : entries) {
-                    if (entry.descriptor().equals(overload)) picked.add(entry);
-                }
-                rows.add(new Row(target, member, overload, List.copyOf(picked)));
-            }
-        }));
-        // A field of a name comes before the methods of that name.
-        rows.sort(Comparator.comparing((Row row) -> simple(row.target())).thenComparing(Row::target).thenComparing(Row::member)
-                .thenComparing(row -> row.field() ? 0 : 1).thenComparing(Row::descriptor));
+        });
+        rows.sort(Comparator.comparing((Row row) -> simple(row.target())).thenComparing(Row::target)
+                .thenComparing(row -> row.member().name()).thenComparing(row -> order(row.member())).thenComparing(row -> row.member().shown()));
         return rows;
+    }
+
+    /** Whether a method is named without its descriptor or by a wildcard, so it reaches the rows of several methods. */
+    private static boolean wide(MixinMember member) {
+        return member instanceof MixinMember.Method method && (method.descriptor().isEmpty() || method.wildcard());
+    }
+
+    /** The class itself first, then a field, then the methods of a name. */
+    private static int order(MixinMember member) {
+        return switch (member) {
+            case MixinMember.Whole ignored -> 0;
+            case MixinMember.Field ignored -> 1;
+            case MixinMember.Method ignored -> 2;
+        };
     }
 
     private void show(Loaded loaded) {
@@ -277,7 +260,7 @@ public final class MixinsPanel extends JPanel {
         List<Row> shown = new ArrayList<>();
         for (Row row : this.all) {
             if (shared && !row.shared()) continue;
-            if (query.isEmpty() || row.target().toLowerCase(Locale.ROOT).contains(query) || row.shownMember().toLowerCase(Locale.ROOT).contains(query)
+            if (query.isEmpty() || row.target().toLowerCase(Locale.ROOT).contains(query) || row.member().shown().toLowerCase(Locale.ROOT).contains(query)
                     || mods(row).toLowerCase(Locale.ROOT).contains(query) || row.mods().stream().anyMatch(mod -> mod.contains(query))
                     || row.kinds().toLowerCase(Locale.ROOT).contains(query)) {
                 shown.add(row);
@@ -310,13 +293,14 @@ public final class MixinsPanel extends JPanel {
     }
 
     private String tooltip(Row row) {
-        Tooltip tooltip = Tooltip.of(simple(row.target()) + (row.member().isEmpty() ? "" : "." + row.member() + row.descriptor())).detail(row.target());
+        Tooltip tooltip = Tooltip.of(simple(row.target()) + (row.member() instanceof MixinMember.Whole ? "" : "." + row.member().shown()))
+                .detail(row.target());
         for (Entry entry : row.entries()) {
             Mixins.Mixin mixin = entry.mixin();
             tooltip.fact(modName(mixin.modId()), entry.kind() + " in " + simple(mixin.className()) + ", " + mixin.side().label()
                     + (mixin.priority() == 1000 ? "" : ", priority " + NumberFormat.getIntegerInstance(Locale.ROOT).format(mixin.priority())));
         }
-        if (row.member().isEmpty()) tooltip.text("Adds members or interfaces to the class");
+        if (row.member() instanceof MixinMember.Whole) tooltip.text("Adds members or interfaces to the class");
         if (row.overwritten()) tooltip.text("One mod replaces the member whole; the others' changes may not reach it");
         return tooltip.html();
     }
@@ -396,7 +380,7 @@ public final class MixinsPanel extends JPanel {
             Row row = this.shown.get(rowIndex);
             return switch (column) {
                 case 0 -> simple(row.target());
-                case 1 -> row.shownMember();
+                case 1 -> row.member().shown();
                 case 2 -> mods(row);
                 default -> row.kinds();
             };
@@ -413,7 +397,7 @@ public final class MixinsPanel extends JPanel {
             Row row = MixinsPanel.this.model.shown.get(rowIndex);
             if (!selected) {
                 setForeground(column == 3 && row.overwritten() ? ThemeColors.warning()
-                        : column == 0 || column == 1 && !row.member().isEmpty() ? ThemeColors.text() : ThemeColors.secondaryText());
+                        : column == 0 || column == 1 && !(row.member() instanceof MixinMember.Whole) ? ThemeColors.text() : ThemeColors.secondaryText());
             }
             return this;
         }

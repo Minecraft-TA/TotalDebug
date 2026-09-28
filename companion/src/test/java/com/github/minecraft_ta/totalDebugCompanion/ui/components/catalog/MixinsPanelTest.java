@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.MixinMember;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.Mixins;
 import org.junit.jupiter.api.Test;
 
@@ -15,14 +16,12 @@ class MixinsPanelTest {
     @Test
     void aMemberSeveralModsChangeIsSharedAndAnOverwriteAmongThemStandsOut() {
         List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(
-                new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.LevelMixin", List.of(LEVEL), Mixins.Side.BOTH, 1000,
-                        List.of(new Mixins.Change("Inject", "tick"), new Mixins.Change("Inject", "explode"))),
-                new Mixins.Mixin("speed", "speed.mixins.json", "com.speed.mixin.LevelMixin", List.of(LEVEL), Mixins.Side.BOTH, 1000,
-                        List.of(new Mixins.Change("Overwrite", "tick"))),
-                new Mixins.Mixin("speed", "speed.mixins.json", "com.speed.mixin.LevelAccess", List.of(LEVEL), Mixins.Side.BOTH, 1000,
-                        List.of(new Mixins.Change("Adds", "")))));
+                mixin("gears", Mixins.Side.BOTH, change("Inject", method("tick", "")), change("Inject", method("explode", ""))),
+                mixin("speed", Mixins.Side.BOTH, change("Overwrite", method("tick", "()V"))),
+                mixin("speed", Mixins.Side.BOTH, new Mixins.Change("Adds", new MixinMember.Whole()))));
 
-        assertEquals(List.of("", "explode", "tick"), rows.stream().map(MixinsPanel.Row::member).toList(), "by member, the class first");
+        assertEquals(List.of("The class", "explode", "tick()V"), shown(rows),
+                "the class first; tick named alone joins the overload the overwrite names");
         MixinsPanel.Row tick = rows.get(2);
         assertTrue(tick.shared());
         assertTrue(tick.overwritten(), "one mod replaces what another injects into");
@@ -33,13 +32,10 @@ class MixinsPanelTest {
     @Test
     void overloadsPickedByDescriptorAreRowsOfTheirOwn() {
         List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(
-                new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.A", List.of(LEVEL), Mixins.Side.BOTH, 1000,
-                        List.of(new Mixins.Change("Inject", "tick", "()V", ""))),
-                new Mixins.Mixin("speed", "speed.mixins.json", "com.speed.mixin.B", List.of(LEVEL), Mixins.Side.BOTH, 1000,
-                        List.of(new Mixins.Change("Overwrite", "tick", "(I)V", ""))),
-                new Mixins.Mixin("glow", "glow.mixins.json", "com.glow.mixin.C", List.of(LEVEL), Mixins.Side.BOTH, 1000,
-                        List.of(new Mixins.Change("Inject", "tick")))));
-        assertEquals(List.of("tick()V", "tick(I)V"), rows.stream().map(MixinsPanel.Row::shownMember).toList());
+                mixin("gears", Mixins.Side.BOTH, change("Inject", method("tick", "()V"))),
+                mixin("speed", Mixins.Side.BOTH, change("Overwrite", method("tick", "(I)V"))),
+                mixin("glow", Mixins.Side.BOTH, change("Inject", method("tick", "")))));
+        assertEquals(List.of("tick()V", "tick(I)V"), shown(rows));
         assertEquals(List.of(2, 2), rows.stream().map(row -> row.mods().size()).toList(),
                 "a change naming the member alone reaches every overload; the two picked ones do not meet");
         assertTrue(rows.get(1).overwritten());
@@ -49,35 +45,60 @@ class MixinsPanelTest {
     @Test
     void aFieldAndAMethodOfOneNameStayApart() {
         List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(
-                new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.A", List.of(LEVEL), Mixins.Side.BOTH, 1000,
-                        List.of(new Mixins.Change("Accessor", "value", "I", ""))),
-                new Mixins.Mixin("speed", "speed.mixins.json", "com.speed.mixin.B", List.of(LEVEL), Mixins.Side.BOTH, 1000,
-                        List.of(new Mixins.Change("Overwrite", "value", "()I", ""))),
-                new Mixins.Mixin("glow", "glow.mixins.json", "com.glow.mixin.C", List.of(LEVEL), Mixins.Side.BOTH, 1000,
-                        List.of(new Mixins.Change("Inject", "value")))));
-        assertEquals(List.of("value", "value()I"), rows.stream().map(MixinsPanel.Row::shownMember).toList());
+                mixin("gears", Mixins.Side.BOTH, change("Accessor", new MixinMember.Field("value"))),
+                mixin("speed", Mixins.Side.BOTH, change("Overwrite", method("value", "()I"))),
+                mixin("glow", Mixins.Side.BOTH, change("Inject", method("value", "")))));
+        assertEquals(List.of("value", "value()I"), shown(rows), "the field first");
         assertFalse(rows.getFirst().shared(), "the field's accessor meets no method change");
         assertTrue(rows.get(1).overwritten(), "the injection naming the method alone meets the overwrite");
     }
 
     @Test
+    void aWildcardJoinsTheMethodsItMatchesOrStandsAlone() {
+        List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(
+                mixin("gears", Mixins.Side.BOTH, change("Inject", method("render*", ""))),
+                mixin("speed", Mixins.Side.BOTH, change("Overwrite", method("renderSky", "()V"))),
+                mixin("glow", Mixins.Side.BOTH, change("Inject", method("tick*", "")))));
+        assertEquals(List.of("renderSky()V", "tick*"), shown(rows), "render* joins renderSky; tick* matches nothing named");
+        assertTrue(rows.getFirst().overwritten());
+        assertTrue(method("*Sky*", "").reaches(method("renderSky", "()V")));
+        assertTrue(method("*", "").reaches(method("tick", "()V")), "every method");
+        assertFalse(method("render*Sky", "").reaches(method("renderSkyBox", "()V")));
+        assertFalse(method("renderSky*", "()V").reaches(method("renderSkyBox", "(I)V")), "another overload");
+    }
+
+    @Test
     void changesOnSidesThatNeverMeetAreNotShared() {
         List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(
-                new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.A", List.of(LEVEL), Mixins.Side.CLIENT, 1000,
-                        List.of(new Mixins.Change("Overwrite", "tick"))),
-                new Mixins.Mixin("speed", "speed.mixins.json", "com.speed.mixin.B", List.of(LEVEL), Mixins.Side.SERVER, 1000,
-                        List.of(new Mixins.Change("Inject", "tick")))));
+                mixin("gears", Mixins.Side.CLIENT, change("Overwrite", method("tick", ""))),
+                mixin("speed", Mixins.Side.SERVER, change("Inject", method("tick", "")))));
         assertFalse(rows.getFirst().shared(), "a client-only and a server-only change never apply together");
         assertFalse(rows.getFirst().overwritten());
-        assertEquals("net.minecraft.world.level.Level#tick", rows.getFirst().reference());
+        assertEquals(LEVEL + "#tick", rows.getFirst().reference());
     }
 
     @Test
     void aSelectorNamingItsOwnerChangesOnlyThatTarget() {
         List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.Both",
                 List.of(LEVEL, "net.minecraft.server.level.ServerLevel"), Mixins.Side.BOTH, 1000,
-                List.of(new Mixins.Change("Inject", "tick", LEVEL), new Mixins.Change("Inject", "save")))));
+                List.of(new Mixins.Change("Inject", method("tick", ""), LEVEL), change("Inject", method("save", ""))))));
         assertEquals(List.of("Level#save", "Level#tick", "ServerLevel#save"), rows.stream()
-                .map(row -> row.target().substring(row.target().lastIndexOf('.') + 1) + "#" + row.member()).toList());
+                .map(row -> row.target().substring(row.target().lastIndexOf('.') + 1) + "#" + row.member().shown()).toList());
+    }
+
+    private static Mixins.Mixin mixin(String mod, Mixins.Side side, Mixins.Change... changes) {
+        return new Mixins.Mixin(mod, mod + ".mixins.json", "com." + mod + ".mixin.M", List.of(LEVEL), side, 1000, List.of(changes));
+    }
+
+    private static Mixins.Change change(String kind, MixinMember member) {
+        return new Mixins.Change(kind, member);
+    }
+
+    private static MixinMember method(String name, String descriptor) {
+        return new MixinMember.Method(name, descriptor);
+    }
+
+    private static List<String> shown(List<MixinsPanel.Row> rows) {
+        return rows.stream().map(row -> row.member().shown()).toList();
     }
 }
