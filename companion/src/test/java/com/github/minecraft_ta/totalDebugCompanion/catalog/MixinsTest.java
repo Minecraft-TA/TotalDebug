@@ -75,7 +75,7 @@ class MixinsTest {
         Mixins.Mixin accessor = mixins.get(1);
         assertEquals(Mixins.Side.CLIENT, accessor.side());
         assertEquals(1300, accessor.priority(), "without its own priority, the configuration's, as Java 21 reads a multi-release file");
-        assertEquals(List.of(new Mixins.Change("Accessor", new MixinSelector.Field("width")),
+        assertEquals(List.of(new Mixins.Change("Accessor", new MixinSelector.Field("width", "I")),
                 new Mixins.Change("Invoker", new MixinSelector.Method("<init>", "(Ljava/lang/String;)V"))), accessor.changes(),
                 "named after the methods getWidth, a field, and newScreen, the constructor it calls");
     }
@@ -120,7 +120,7 @@ class MixinsTest {
 
         MixinTarget target = MixinTarget.read(writer.toByteArray());
         assertEquals("net/minecraft/world/level/Level", target.internalName());
-        assertEquals(List.of("speed"), target.fields());
+        assertEquals(List.of(new MixinTarget.Field("speed", "I")), target.fields());
         assertEquals(List.of(new MixinTarget.Method("tick", "()V", false), new MixinTarget.Method("create", "()V", true)), target.methods(),
                 "in the order the class declares them");
     }

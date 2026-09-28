@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MixinsPanelTest {
     private static final String LEVEL = "net.minecraft.world.level.Level";
     private static final String SERVER_LEVEL = "net.minecraft.server.level.ServerLevel";
-    private static final MixinTarget LEVEL_CLASS = new MixinTarget("net/minecraft/world/level/Level", List.of("value"), List.of(
+    private static final MixinTarget LEVEL_CLASS = new MixinTarget("net/minecraft/world/level/Level", List.of(new MixinTarget.Field("value", "I"), new MixinTarget.Field("value", "J")), List.of(
             new MixinTarget.Method("tick", "()V", false),
             new MixinTarget.Method("tick", "(I)V", false),
             new MixinTarget.Method("explode", "(DDD)V", false),
@@ -62,12 +62,13 @@ class MixinsPanelTest {
     @Test
     void aFieldAndAMethodOfOneNameStayApart() {
         List<MixinsPanel.Row> rows = rows(
-                mixin("gears", Mixins.Side.BOTH, change("Accessor", new MixinSelector.Field("value"))),
+                mixin("gears", Mixins.Side.BOTH, change("Accessor", new MixinSelector.Field("value", "I"))),
+                mixin("dusk", Mixins.Side.BOTH, change("Accessor", new MixinSelector.Field("value", "J"))),
                 mixin("speed", Mixins.Side.BOTH, change("Overwrite", method("value", "()I", 1))),
                 mixin("glow", Mixins.Side.BOTH, change("Inject", method("value", "", 1))));
-        assertEquals(List.of("value", "value()I"), shown(rows), "the field first");
-        assertFalse(rows.getFirst().shared(), "the field's accessor meets no method change");
-        assertTrue(rows.get(1).overwritten(), "the injection naming the method alone meets the overwrite");
+        assertEquals(List.of("value:I", "value:J", "value()I"), shown(rows), "the fields first, each of its own type");
+        assertFalse(rows.getFirst().shared(), "the field's accessor meets no method change, nor the other field's");
+        assertTrue(rows.get(2).overwritten(), "the injection naming the method alone meets the overwrite");
     }
 
     @Test

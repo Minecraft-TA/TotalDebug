@@ -462,7 +462,7 @@ public final class Mixins {
                     this.changes.add(new Change(this.kind, choices.size() == 1 ? choices.getFirst() : new MixinSelector.First(choices)));
                 }
                 // An accessor reaches a field; an invoker the method of its own signature, or a constructor.
-                case "Accessor" -> this.changes.add(new Change(this.kind, new MixinSelector.Field(accessedName()), namedOwner()));
+                case "Accessor" -> this.changes.add(new Change(this.kind, new MixinSelector.Field(accessedName(), accessedType()), namedOwner()));
                 case "Invoker" -> {
                     String name = accessedName();
                     this.changes.add(new Change(this.kind, new MixinSelector.Method(name, invoked(name, this.methodDescriptor)), namedOwner()));
@@ -479,6 +479,13 @@ public final class Mixins {
         private String accessedName() {
             return !this.named.isEmpty() && this.named.getFirst().selector() instanceof MixinSelector.Method method && !method.name().isEmpty()
                     ? method.name() : accessed(this.kind, this.methodName);
+        }
+
+        /** The type of the field an accessor gets, as its return type, or sets, as its argument. */
+        private String accessedType() {
+            Type returned = Type.getReturnType(this.methodDescriptor);
+            Type[] arguments = Type.getArgumentTypes(this.methodDescriptor);
+            return returned.getSort() != Type.VOID || arguments.length == 0 ? returned.getDescriptor() : arguments[0].getDescriptor();
         }
 
         /** The owner the annotation's own name gives, or empty. */

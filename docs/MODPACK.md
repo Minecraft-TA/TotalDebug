@@ -73,7 +73,7 @@ The game's `logs/latest.log` and `logs/debug.log`, then its crash reports, the n
 - **Changes:** Mixin's `Inject`, `Redirect`, `ModifyArg`, `ModifyArgs`, `ModifyVariable`, `ModifyConstant`, `Overwrite`, `Accessor` and `Invoker`, and MixinExtras' `ModifyExpressionValue`, `ModifyReturnValue`, `ModifyReceiver`, `WrapWithCondition`, `WrapOperation` and `WrapMethod`. A class without its own priority takes its configuration's `mixinPriority`. Each selector and `@Mixin` target string first passes through the configuration's `refmap`, as in Mixin.
 - **Selectors** (`MixinSelector`): what each change names, read as Mixin reads it; one that names its owner changes only that one of the mixin's targets.
   - **The class itself**, for a mixin with none of the changes above, which adds members or interfaces.
-  - **A field**, by its name, for an accessor.
+  - **A field**, by its name and the type its accessor gets or sets (`speed:I`), for an accessor.
   - **Methods**, by name and descriptor as the selector, `@Desc`, overwrite or invoker gives them: spaces dropped, an owner before the last `.`, dotted or with slashes, or as `Lowner;`, a descriptor from `(`. Without a descriptor, any overload; without a name (`*`), any method. A quantifier after the name limits the count: none selects the first match, `*` and `+` every match, `{2}` two. An invoker named `new…` or `create…` makes an object, so it names the constructor taking its arguments. An overwrite names its own method, or else its first alias the class has.
   - **Patterns**, such as `/^render/` or `owner=/Level$/ desc=/V$/`, every method they find a match in; as in Mixin, the last pattern given decides.
   - **Dynamic** selectors, starting with `@`, which only the game resolves.

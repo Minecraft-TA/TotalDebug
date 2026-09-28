@@ -14,7 +14,15 @@ import java.util.Objects;
  * A class that mixins target, as its bytecode declares it: its internal name, fields and methods, in the order the class
  * file lists them, which is the order Mixin selects them in.
  */
-public record MixinTarget(String internalName, List<String> fields, List<Method> methods) {
+public record MixinTarget(String internalName, List<Field> fields, List<Method> methods) {
+    /** A field the class declares, by name and type descriptor; a class file may hold two of one name. */
+    public record Field(String name, String descriptor) {
+        public Field {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(descriptor, "descriptor");
+        }
+    }
+
     /** A method the class declares, and whether it is static. */
     public record Method(String name, String descriptor, boolean isStatic) {
         public Method {
@@ -32,12 +40,12 @@ public record MixinTarget(String internalName, List<String> fields, List<Method>
     /** The class {@code bytes} declare. */
     public static MixinTarget read(byte[] bytes) {
         ClassReader reader = new ClassReader(bytes);
-        List<String> fields = new ArrayList<>();
+        List<Field> fields = new ArrayList<>();
         List<Method> methods = new ArrayList<>();
         reader.accept(new ClassVisitor(Opcodes.ASM9) {
             @Override
             public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
-                fields.add(name);
+                fields.add(new Field(name, descriptor));
                 return null;
             }
 

@@ -15,15 +15,16 @@ public sealed interface MixinMember {
         }
     }
 
-    /** A field, by its name. */
-    record Field(String name) implements MixinMember {
+    /** A field, by its name and type descriptor, as Mixin writes it: {@code speed:I}. */
+    record Field(String name, String descriptor) implements MixinMember {
         public Field {
             Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(descriptor, "descriptor");
         }
 
         @Override
         public String shown() {
-            return this.name;
+            return this.name + ":" + this.descriptor;
         }
     }
 

@@ -25,20 +25,22 @@ public sealed interface MixinSelector {
         }
     }
 
-    /** A field by its name, as an accessor names it. */
-    record Field(String name) implements MixinSelector {
+    /** A field by its name and the type its accessor gets or sets, as an accessor names it. */
+    record Field(String name, String descriptor) implements MixinSelector {
         public Field {
             Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(descriptor, "descriptor");
         }
 
         @Override
         public String shown() {
-            return this.name;
+            return this.name + ":" + this.descriptor;
         }
 
         @Override
         public List<MixinMember> select(MixinTarget target, boolean staticHandler) {
-            return target.fields().contains(this.name) ? List.of(new MixinMember.Field(this.name)) : List.of();
+            MixinTarget.Field field = new MixinTarget.Field(this.name, this.descriptor);
+            return target.fields().contains(field) ? List.of(new MixinMember.Field(this.name, this.descriptor)) : List.of();
         }
     }
 
