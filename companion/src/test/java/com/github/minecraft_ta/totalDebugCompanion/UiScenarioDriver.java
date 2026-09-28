@@ -572,6 +572,18 @@ final class UiScenarioDriver {
                             .findFirst().ifPresent(field -> field.setText("unknownRule")));
                 }
             }
+            case WORLD_RULE_REFUSED -> {
+                context.once("world-rule-refused", () -> navigate(new NavigationTarget.World(WorldTab.GAME_RULES)));
+                if (showsTable("Test World", "Rule")) {
+                    context.once("world-rule-refused-edit", () -> findComponents(mainWindow, JTable.class).stream()
+                            .filter(table -> table.isShowing() && "Rule".equals(table.getColumnName(0)))
+                            .findFirst().ifPresent(table -> {
+                                for (int row = 0; row < table.getRowCount(); row++) {
+                                    if ("randomTickSpeed".equals(table.getValueAt(row, 0))) table.setValueAt("fast", row, 1);
+                                }
+                            }));
+                }
+            }
             case WORLD_UNREADABLE -> context.once("world-unreadable", () -> {
                 writeWorldFile("level.dat", new byte[]{1, 2, 3});
                 navigate(new NavigationTarget.World(WorldTab.OVERVIEW));
@@ -729,6 +741,7 @@ final class UiScenarioDriver {
             case WORLD_RULES -> showsTable("Test World", "Rule");
             case WORLD_DATAPACKS -> showsTable("Test World", "Pack");
             case WORLD_NO_MATCH -> showsMessage("No game rule matches the filter.");
+            case WORLD_RULE_REFUSED -> showsMessage("Not set: randomTickSpeed: Enter a whole number");
             case WORLD_UNREADABLE -> showsMessage("The world Test World could not be read");
             case WORLD_NONE -> showsMessage("No world has been played in this instance yet.");
             case PACK_PAGE -> {

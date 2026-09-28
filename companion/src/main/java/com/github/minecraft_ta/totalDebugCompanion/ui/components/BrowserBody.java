@@ -107,4 +107,9 @@ public final class BrowserBody extends JPanel {
         this.notice.setText(text);
         this.notice.setVisible(!text.isEmpty());
     }
+
+    /** The text of the line under the bar, empty while it is hidden. */
+    public String noticeText() {
+        return this.notice.isVisible() ? this.notice.getText() : "";
+    }
 }

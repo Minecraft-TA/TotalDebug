@@ -15,7 +15,7 @@ public final class ChangesView implements IEditorPanel {
     public ChangesView(EditorContext context) {
         this.panel = new ChangesPanel(context.project().catalog(), context.project().configChanges(),
                 context.project().keyBindings(), context.project().resources(), context.project().packSelections(),
-                context.navigation()::navigate);
+                context.project().gameRules(), context.navigation()::navigate);
     }
 
     /** Reads the changed files again. */

@@ -94,15 +94,11 @@ public final class PackSelections {
     }
 
     private CompletableFuture<Applied> apply(ChangeRecord.PackSelection target, List<String> enabled, ChangeRecord.Change reverting) {
-        boolean live;
-        try {
-            live = live(target);
-        } catch (IOException refused) {
-            return CompletableFuture.failedFuture(refused);
-        }
-        // The selection before is read in the write queue, after every change queued before this one.
-        CompletableFuture<List<String>> before = write(() -> {
+        // The selection before is read in the write queue, after every change queued before this one, and so is whether a
+        // world is open, which reads its lock: never on the Swing thread.
+        CompletableFuture<Read> before = write(() -> {
             try {
+                boolean live = live(target);
                 List<String> previous = current(target);
                 if (reverting != null && !comparable(previous).equals(comparable(parse(reverting.current())))
                         && !comparable(previous).equals(comparable(enabled))) {
@@ -113,20 +109,26 @@ public final class PackSelections {
                     else writeLevel(target.location(), enabled);
                     this.record.changed(target, json(previous), json(enabled));
                 }
-                return previous;
+                return new Read(previous, live);
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
         });
-        if (!live) {
-            return before.thenApply(ignored -> new Applied(target.side() == SetPacksPayload.Side.RESOURCES
-                    ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS));
-        }
-        return before.thenCompose(previous -> this.edits.select(target.side(), enabled).thenApply(result -> {
-            if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
-            this.record.changed(target, json(previous), json(enabled));
-            return new Applied(ConfigChanges.Effect.NOW);
-        }));
+        return before.thenCompose(read -> {
+            if (!read.live()) {
+                return CompletableFuture.completedFuture(new Applied(target.side() == SetPacksPayload.Side.RESOURCES
+                        ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS));
+            }
+            return this.edits.select(target.side(), enabled).thenApply(result -> {
+                if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
+                this.record.changed(target, json(read.previous()), json(enabled));
+                return new Applied(ConfigChanges.Effect.NOW);
+            });
+        });
+    }
+
+    /** What a change reads before it writes: the selection, and whether the connected game applies it. */
+    private record Read(List<String> previous, boolean live) {
     }
 
     /**
@@ -189,7 +191,11 @@ public final class PackSelections {
      * disabled, so the game does not enable it again as a new one.
      */
     private static void writeLevel(Path world, List<String> enabled) throws IOException {
-        LevelDat.Root root = LevelDat.read(LevelDat.file(world));
+        LevelDat.update(world, root -> written(world, root, enabled));
+    }
+
+    /** {@code root} with {@code enabled} as its world's datapacks. */
+    private static LevelDat.Root written(Path world, LevelDat.Root root, List<String> enabled) throws IOException {
         if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
             throw new IOException("The level.dat of " + world.getFileName() + " holds no world data");
         }
@@ -200,7 +206,7 @@ public final class PackSelections {
         enabled.forEach(disabled::remove);
         NbtData.CompoundTag written = LevelDat.with(LevelDat.with(packs == null ? new NbtData.CompoundTag(Map.of()) : packs,
                 "Enabled", list(enabled)), "Disabled", list(List.copyOf(disabled)));
-        LevelDat.write(world, new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written))));
+        return new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written)));
     }
 
     private static NbtData.CompoundTag dataPacks(NbtData.CompoundTag root) {

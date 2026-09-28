@@ -21,11 +21,13 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLab
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.PlateIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
+import com.github.minecraft_ta.totalDebugCompanion.pack.GameRuleEdits;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackResources;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
+import com.github.minecraft_ta.totaldebug.protocol.message.GameRulesPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 
@@ -73,7 +75,8 @@ public final class WorldPanel extends JPanel {
             .withZone(ZoneId.systemDefault());
 
     /** A read world with its icon, or null for either; {@code problem} says why there is no world. */
-    private record Loaded(CurrentWorld.Saved saved, List<ListedPack> datapacks, BufferedImage icon, String problem) {
+    private record Loaded(CurrentWorld.Saved saved, Map<String, String> rules, List<ListedPack> datapacks, BufferedImage icon,
+                          String problem) {
     }
 
     private final Path workspace;
@@ -103,13 +106,19 @@ public final class WorldPanel extends JPanel {
      * {@code readings}, which the Project tree follows.
      */
     public WorldPanel(Path workspace, PackCatalogService catalog, ItemIconService icons, WorldReadings readings,
-                      ResourceEdits edits, PackSelections selections, Consumer<NavigationTarget> navigator) {
+                      ResourceEdits edits, PackSelections selections, GameRuleEdits gameRules,
+                      Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.readings = Objects.requireNonNull(readings, "readings");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         this.icons = Objects.requireNonNull(icons, "icons");
         this.datapacks = new PacksPanel(PacksPanel.Side.DATA, Objects.requireNonNull(navigator, "navigator"));
+        this.rules.setSetter((name, value) -> {
+            CurrentWorld.Saved shown = this.saved;
+            if (shown == null) return CompletableFuture.failedFuture(new IllegalStateException("No world is shown"));
+            return gameRules.set(shown.directory(), name, value);
+        });
         this.datapacks.setApplier(enabled -> {
             CurrentWorld.Saved shown = this.saved;
             if (shown == null) return CompletableFuture.failedFuture(new IllegalStateException("No world is shown"));
@@ -144,19 +153,28 @@ public final class WorldPanel extends JPanel {
         // A change of the game's datapacks, or one Companion wrote, is read again at once.
         this.loader = new PageLoader<>(() -> {
             PackStackPayload stack = edits.packStack();
-            return () -> read(this.workspace, stack);
-        }, this::show, failure -> show(new Loaded(null, List.of(), null, "The world could not be read: " + failure.getMessage())))
+            GameRulesPayload rules = edits.gameRules();
+            return () -> read(this.workspace, stack, rules);
+        }, this::show, failure -> show(new Loaded(null, Map.of(), List.of(), null, "The world could not be read: " + failure.getMessage())))
                 .whenShown(this).follow(edits::addStackListener).follow(edits.record()::addListener);
     }
 
-    private static Loaded read(Path workspace, PackStackPayload stack) {
+    /**
+     * Reads the current world; while the connected game has it open, its game rules and datapacks are those the game
+     * names, which its level.dat catches up with only when the game saves.
+     */
+    private static Loaded read(Path workspace, PackStackPayload stack, GameRulesPayload rules) {
         Optional<Path> world = CurrentWorld.directory(workspace);
-        if (world.isEmpty()) return new Loaded(null, List.of(), null, "No world has been played in this instance yet.");
+        if (world.isEmpty()) return new Loaded(null, Map.of(), List.of(), null, "No world has been played in this instance yet.");
         try {
             CurrentWorld.Saved saved = CurrentWorld.read(world.get());
-            return new Loaded(saved, PackResources.worldDatapacks(stack, saved), icon(world.get().resolve("icon.png")), "");
+            // An open world's level.dat lags behind the game, so its rules are only the game's own, or none while unknown.
+            Map<String, String> liveRules = !saved.open() ? saved.gameRules()
+                    : rules != null && rules.of(saved.directory().getFileName().toString()) ? rules.rules() : null;
+            return new Loaded(saved, liveRules, PackResources.worldDatapacks(stack, saved), icon(world.get().resolve("icon.png")), "");
         } catch (IOException | RuntimeException unreadable) {
-            return new Loaded(null, List.of(), null, "The world " + world.get().getFileName() + " could not be read: " + unreadable.getMessage());
+            return new Loaded(null, Map.of(), List.of(), null, "The world " + world.get().getFileName() + " could not be read: "
+                    + unreadable.getMessage());
         }
     }
 
@@ -191,9 +209,13 @@ public final class WorldPanel extends JPanel {
         this.header.setSubtitle(subtitle);
 
         showOverview(saved);
-        this.rules.setRules(saved.gameRules());
+        if (loaded.rules() != null) {
+            this.rules.setRules(saved.directory(), loaded.rules());
+        } else {
+            this.rules.showUnavailable(saved.directory(), "The game has the world open; its game rules show once the game is connected to Companion.");
+        }
         this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
-        setTab(WorldTab.GAME_RULES, saved.gameRules().size());
+        setTab(WorldTab.GAME_RULES, loaded.rules() != null ? loaded.rules().size() : saved.gameRules().size());
         setTab(WorldTab.DATAPACKS, this.datapackList.size());
         ((CardLayout) this.cards.getLayout()).show(this.cards, PAGE_CARD);
         if (this.requested != null) show(this.requested);

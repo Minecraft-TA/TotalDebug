@@ -30,6 +30,8 @@ public final class ProtocolBindings {
         processor.registerOutgoing(CompanionProtocol.PACK_STACK, PackStackMessage.class);
         processor.registerIncoming(CompanionProtocol.RELOAD, ReloadMessage.class, ReloadMessage::new);
         processor.registerIncoming(CompanionProtocol.SET_PACKS, SetPacksMessage.class, SetPacksMessage::new);
+        processor.registerOutgoing(CompanionProtocol.GAME_RULES, GameRulesMessage.class);
+        processor.registerIncoming(CompanionProtocol.SET_GAME_RULE, SetGameRuleMessage.class, SetGameRuleMessage::new);
         processor.registerOutgoing(CompanionProtocol.RELOAD_RESULT, ReloadResultMessage.class);
     }
 
@@ -55,6 +57,8 @@ public final class ProtocolBindings {
         processor.registerIncoming(CompanionProtocol.PACK_STACK, PackStackMessage.class, PackStackMessage::new);
         processor.registerOutgoing(CompanionProtocol.RELOAD, ReloadMessage.class);
         processor.registerOutgoing(CompanionProtocol.SET_PACKS, SetPacksMessage.class);
+        processor.registerIncoming(CompanionProtocol.GAME_RULES, GameRulesMessage.class, GameRulesMessage::new);
+        processor.registerOutgoing(CompanionProtocol.SET_GAME_RULE, SetGameRuleMessage.class);
         processor.registerIncoming(CompanionProtocol.RELOAD_RESULT, ReloadResultMessage.class, ReloadResultMessage::new);
     }
 }

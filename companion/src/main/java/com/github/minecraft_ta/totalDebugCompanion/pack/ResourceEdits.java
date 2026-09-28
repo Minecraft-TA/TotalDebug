@@ -9,11 +9,14 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
+import com.github.minecraft_ta.totaldebug.protocol.message.GameRulesPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.SetGameRulePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.SetGameRuleMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.tth05.scnet.message.AbstractMessage;
@@ -28,6 +31,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -61,7 +65,7 @@ import java.util.zip.ZipFile;
 public final class ResourceEdits {
     public static final String PACK_NAME = "TotalDebug";
     public static final String PACK_ID = "file/" + PACK_NAME;
-    private static final long RELOAD_MINUTES = 10;
+    static final long RELOAD_MINUTES = 10;
 
     /**
      * What a write did: when the game uses it, the pack folder it went to, and the problems
@@ -105,6 +109,8 @@ public final class ResourceEdits {
     private final Map<Integer, CompletableFuture<ReloadResultPayload>> waiting = new ConcurrentHashMap<>();
     private volatile Predicate<AbstractMessage> game;
     private volatile PackStackPayload stack;
+    /** The game rules of the world the connected game has open, or null while no game is connected. */
+    private volatile GameRulesPayload gameRules;
     /** Run whenever the game names its packs again, such as after another world opened. */
     private final List<Runnable> stackListeners = new CopyOnWriteArrayList<>();
     /** Run after a save or revert has written its file and the game used it, or failed to. */
@@ -156,9 +162,10 @@ public final class ResourceEdits {
     public void gameDisconnected() {
         this.game = null;
         this.stack = null;
+        this.gameRules = null;
         this.stackListeners.forEach(Runnable::run);
         for (CompletableFuture<ReloadResultPayload> request : this.waiting.values()) {
-            request.completeExceptionally(new IOException("The game disconnected before it finished reloading"));
+            request.completeExceptionally(new IOException("The game disconnected before it answered"));
         }
         this.waiting.clear();
     }
@@ -167,6 +174,46 @@ public final class ResourceEdits {
     public void packStack(PackStackPayload stack) {
         this.stack = stack;
         this.stackListeners.forEach(Runnable::run);
+    }
+
+    /** Takes the game rules of the world the game has open; the stack listeners hear of it, as the world's state changed. */
+    public void gameRules(GameRulesPayload rules) {
+        this.gameRules = rules;
+        this.stackListeners.forEach(Runnable::run);
+    }
+
+    /**
+     * Takes {@code value} as the rule's value once the game set it, until the game names its rules again; nothing while
+     * the game named none.
+     */
+    public void gameRuleSet(String name, String value) {
+        GameRulesPayload rules = this.gameRules;
+        if (rules == null || !rules.rules().containsKey(name)) return;
+        Map<String, String> updated = new HashMap<>(rules.rules());
+        updated.put(name, value);
+        gameRules(new GameRulesPayload(rules.world(), updated));
+    }
+
+    /** The game rules the running game named last, empty without an open world, or null while no game is connected. */
+    public GameRulesPayload gameRules() {
+        return this.gameRules;
+    }
+
+    /**
+     * Asks the connected game to set the game rule {@code name} of the world in the folder {@code world} to {@code value},
+     * as {@code /gamerule} does, provided it still is {@code expected}; completes with its answer, however late, or fails
+     * without a game or when it disconnects. The caller times its own wait.
+     */
+    public CompletableFuture<ReloadResultPayload> setGameRule(String world, String name, String expected, String value) {
+        Predicate<AbstractMessage> send = this.game;
+        int id = this.requests.incrementAndGet();
+        CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
+        this.waiting.put(id, result);
+        if (send == null || !send.test(new SetGameRuleMessage(new SetGameRulePayload(id, world, name, expected, value)))) {
+            this.waiting.remove(id);
+            return CompletableFuture.failedFuture(new IOException("The game is not connected"));
+        }
+        return result.whenComplete((ignored, failure) -> this.waiting.remove(id));
     }
 
     /** The packs the running game named last, or null while no game is connected. */
