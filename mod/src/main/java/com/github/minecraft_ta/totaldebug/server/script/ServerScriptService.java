@@ -35,6 +35,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 /** Owns isolated server-side script runners for the players that requested them. */
 public final class ServerScriptService {
@@ -67,10 +69,15 @@ public final class ServerScriptService {
         this.relay = Objects.requireNonNull(relay, "relay");
     }
 
-    /** Starts a new class manifest session for {@code player}, as Companion asked through the relay. */
+    /**
+     * Starts a new class manifest session for {@code player}, as Companion asked through the relay. The runs of the
+     * session before end with it: Companion ends them on the new baseline, and a Companion started since counts its run
+     * ids from the beginning again. Server thread.
+     */
     public synchronized void sendManifest(ServerPlayer player) {
         if (!ServerRelay.reaches(player)) return;
         MinecraftServer server = Objects.requireNonNull(player.getServer());
+        closeRunner(player);
         var session = new ManifestSession(player, UUID.randomUUID().toString());
         this.manifestSessions.put(player.getUUID(), session);
         this.relay.send(server, player, ServerManifestMessage.unavailable("Preparing server archive baseline"));
@@ -195,6 +202,10 @@ public final class ServerScriptService {
         Objects.requireNonNull(player, "player");
         this.manifestSessions.computeIfPresent(player.getUUID(), (id, manifest) ->
                 manifest.player() == player ? null : manifest);
+        closeRunner(player);
+    }
+
+    private void closeRunner(ServerPlayer player) {
         RunnerSession session = this.runners.get(player.getUUID());
         if (session != null
                 && session.player() == player
@@ -222,13 +233,17 @@ public final class ServerScriptService {
             existing.runner().close();
         }
 
+        // A runner's results go out only while it is the player's runner: a closed one still reports its stopped runs.
+        AtomicReference<RunnerSession> self = new AtomicReference<>();
+        BooleanSupplier current = () -> this.runners.get(playerId) == self.get();
         ScriptRunner created = new ScriptRunner(
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(Side.SERVER, phase, task),
-                (scriptId, result) -> sendResult(server, player, scriptId, result),
+                (scriptId, result) -> sendResult(server, player, scriptId, result, current),
                 new ServerScriptTargets(server)
         );
-        this.runners.put(playerId, new RunnerSession(player, created));
+        self.set(new RunnerSession(player, created));
+        this.runners.put(playerId, self.get());
         return created;
     }
 
@@ -238,22 +253,24 @@ public final class ServerScriptService {
             int scriptId,
             String message
     ) {
-        sendResult(server, sessionPlayer, scriptId, ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED, message));
+        sendResult(server, sessionPlayer, scriptId, ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED, message),
+                () -> true);
     }
 
     private void sendResult(
             MinecraftServer server,
             ServerPlayer sessionPlayer,
             int scriptId,
-            ExecutionResult result
+            ExecutionResult result,
+            BooleanSupplier current
     ) {
         try {
-            this.resultEncoder.execute(() -> encodeAndSend(server, sessionPlayer, scriptId, result));
+            this.resultEncoder.execute(() -> encodeAndSend(server, sessionPlayer, scriptId, result, current));
         } catch (RejectedExecutionException exception) {
             TotalDebug.LOGGER.warn("Discarding an execution result for script {} because the encoder is overloaded",
                     scriptId);
             this.relay.send(server, sessionPlayer,
-                    new ExecutionResultMessage(scriptId, result.deliveryFailure("The server result encoder is overloaded")));
+                    new ExecutionResultMessage(scriptId, result.deliveryFailure("The server result encoder is overloaded")), current);
         }
     }
 
@@ -261,14 +278,15 @@ public final class ServerScriptService {
             MinecraftServer server,
             ServerPlayer sessionPlayer,
             int scriptId,
-            ExecutionResult result
+            ExecutionResult result,
+            BooleanSupplier current
     ) {
         try {
-            this.relay.send(server, sessionPlayer, new ExecutionResultMessage(scriptId, result));
+            this.relay.send(server, sessionPlayer, new ExecutionResultMessage(scriptId, result), current);
         } catch (RuntimeException exception) {
             TotalDebug.LOGGER.error("Unable to encode execution result for script {}", scriptId, exception);
             this.relay.send(server, sessionPlayer, new ExecutionResultMessage(scriptId,
-                    result.deliveryFailure("Unable to encode the server execution result")));
+                    result.deliveryFailure("Unable to encode the server execution result")), current);
         }
     }
 

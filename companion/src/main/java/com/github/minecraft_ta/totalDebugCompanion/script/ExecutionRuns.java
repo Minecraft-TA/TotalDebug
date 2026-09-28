@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * Allocates script run ids and routes every execution result to the observer that opened the run.
@@ -38,7 +38,7 @@ public final class ExecutionRuns implements AutoCloseable {
     private final CompanionSession session;
     private final ScriptExecutionService scripts;
     private final Map<Integer, Run> runs = new ConcurrentHashMap<>();
-    private final Consumer<ExecutionResultMessage> listener = message -> result(message.scriptId(), message.result());
+    private final BiConsumer<Side, ExecutionResultMessage> listener = (from, message) -> result(from, message.scriptId(), message.result());
     private int lastId;
     private boolean closed;
 
@@ -144,9 +144,15 @@ public final class ExecutionRuns implements AutoCloseable {
         disconnected(Long.MAX_VALUE, expected);
     }
 
-    private void result(int id, ExecutionResult result) {
-        Run run = result.status().terminal() ? this.runs.remove(id) : this.runs.get(id);
-        if (run != null) run.observer().result(id, result);
+    /** A result counts only from the side the run went to, so a stale one from the other side cannot end it. */
+    private void result(Side from, int id, ExecutionResult result) {
+        Run[] matched = new Run[1];
+        this.runs.computeIfPresent(id, (key, run) -> {
+            if (run.side() != from) return run;
+            matched[0] = run;
+            return result.status().terminal() ? null : run;
+        });
+        if (matched[0] != null) matched[0].observer().result(id, result);
     }
 
     private void failed(int id, ScriptCompilationService.Failure failure) {

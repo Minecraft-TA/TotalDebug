@@ -10,8 +10,11 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
+import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
+import com.github.tth05.scnet.message.IMessageBus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -79,6 +82,19 @@ class ExecutionRunsTest {
 
             assertEquals(1, recorder.events.size());
             assertTrue(recorder.events.getFirst().startsWith("result " + id + " "), recorder.events.getFirst());
+        }
+    }
+
+    @Test void aResultCountsOnlyFromTheSideTheRunWentTo() throws Exception {
+        try (var fixture = new Fixture(true)) {
+            var recorder = new Recorder();
+            int id = fixture.runs.open(recorder);
+
+            fixture.deliverFromServer(id, ExecutionStatus.RUN_COMPLETED);
+            assertTrue(recorder.events.isEmpty(), "a stale server run with the same id does not end a client run");
+
+            fixture.deliver(id, ExecutionStatus.RUN_COMPLETED);
+            assertEquals(List.of("result " + id + " RUN_COMPLETED"), recorder.events);
         }
     }
 
@@ -226,6 +242,8 @@ class ExecutionRunsTest {
     private final class Fixture implements AutoCloseable {
         final CompanionSession session = new CompanionSession("execution-runs-test-token");
         final EditorScriptRunServiceTest.ResultBus bus = new EditorScriptRunServiceTest.ResultBus();
+        /** The session's own bus, which unwraps what the server sends through the relay. */
+        final IMessageBus sessionBus = session.server().getMessageBus();
         final ScriptCompilationService compiler = new ScriptCompilationService(message -> false, message -> false);
         final ProjectScope project = new ProjectScope(new Object(), new CompanionProfile("project", directory, directory), InstanceState.inMemory(), ChangeRecord.inMemory());
         final ExecutionRuns runs;
@@ -237,6 +255,11 @@ class ExecutionRunsTest {
 
         void deliver(int id, ExecutionStatus status) {
             bus.deliver(new ExecutionResultMessage(id, ExecutionResult.fromStatus(status, "fixture result")));
+        }
+
+        void deliverFromServer(int id, ExecutionStatus status) {
+            sessionBus.post(new FromServerMessage(RelayedMessages.fromServer(
+                    new ExecutionResultMessage(id, ExecutionResult.fromStatus(status, "fixture result")))));
         }
 
         @Override public void close() throws Exception {

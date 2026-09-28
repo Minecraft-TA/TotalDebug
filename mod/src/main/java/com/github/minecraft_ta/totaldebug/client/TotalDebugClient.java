@@ -216,6 +216,9 @@ public final class TotalDebugClient {
             this.gameSessionId = null;
         }
         this.relay.serverLeft();
+        // A rejoin of the same server between two checks would otherwise look unchanged, and Companion would not ask
+        // the new server session for its manifest.
+        this.playing.publish(new PlayingPayload.Menu());
         this.scripts.onServerDisconnect();
     }
 

@@ -1,9 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
@@ -33,6 +34,8 @@ import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.List;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
@@ -42,6 +45,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class CompanionSession implements AutoCloseable {
+    private final List<BiConsumer<Side, ExecutionResultMessage>> serverResultListeners = new CopyOnWriteArrayList<>();
     private enum State {
         WAITING_FOR_HELLO,
         AUTHENTICATING,
@@ -146,12 +150,16 @@ public final class CompanionSession implements AutoCloseable {
         descriptor = next;
     }
 
-    public void addExecutionResultListener(Consumer<ExecutionResultMessage> listener) {
-        this.server.getMessageBus().listenAlways(ExecutionResultMessage.class, listener, listener);
+    /** Receives script results with the side that sent them: the game client, or the server through the relay. */
+    public void addExecutionResultListener(BiConsumer<Side, ExecutionResultMessage> listener) {
+        this.server.getMessageBus().listenAlways(ExecutionResultMessage.class, listener,
+                message -> listener.accept(Side.CLIENT, message));
+        this.serverResultListeners.add(listener);
     }
 
-    public void removeExecutionResultListener(Consumer<ExecutionResultMessage> listener) {
+    public void removeExecutionResultListener(BiConsumer<Side, ExecutionResultMessage> listener) {
         this.server.getMessageBus().unregister(ExecutionResultMessage.class, listener);
+        this.serverResultListeners.remove(listener);
     }
 
     public void setProjectSelectionHandler(AttachmentHandler handler) {
@@ -259,7 +267,11 @@ public final class CompanionSession implements AutoCloseable {
                         "Discarding a message from the server that could not be read", invalid);
                 return;
             }
-            this.server.getMessageBus().post(unwrapped);
+            if (unwrapped instanceof ExecutionResultMessage result) {
+                for (var resultListener : this.serverResultListeners) resultListener.accept(Side.SERVER, result);
+            } else {
+                this.server.getMessageBus().post(unwrapped);
+            }
         });
         this.server.getMessageBus().listenAlways(PlayingMessage.class, this.listener::playing);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);

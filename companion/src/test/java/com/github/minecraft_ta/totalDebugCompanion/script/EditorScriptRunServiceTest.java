@@ -265,6 +265,10 @@ class EditorScriptRunServiceTest {
             super.unregister(type, listener);
             if (type == ExecutionResultMessage.class) results.clear();
         }
+        @Override public <T extends AbstractMessage> void unregister(Class<T> type, Object owner) {
+            super.unregister(type, owner);
+            if (type == ExecutionResultMessage.class) results.clear();
+        }
         void deliver(ExecutionResultMessage message) { results.forEach(listener -> listener.accept(message)); }
     }
 }

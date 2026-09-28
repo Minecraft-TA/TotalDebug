@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 
 /**
  * The server's end of the relay (see {@code docs/MOD_SIDES.md}): puts together the Companion messages players' clients
@@ -59,10 +60,15 @@ public final class ServerRelay {
      * the calling thread and sends on the server thread.
      */
     public void send(MinecraftServer server, ServerPlayer player, AbstractMessage message) {
+        send(server, player, message, () -> true);
+    }
+
+    /** As {@link #send(MinecraftServer, ServerPlayer, AbstractMessage)}, dropped unless {@code current} still holds then. */
+    public void send(MinecraftServer server, ServerPlayer player, AbstractMessage message, BooleanSupplier current) {
         RelayedMessage relayed = RelayedMessages.fromServer(message);
         List<RelayChunk> chunks = RelayChunk.split(relayed.messageId(), relayed.body(), RelayChunk.TO_CLIENT_BYTES);
         server.execute(() -> {
-            if (server.getPlayerList().getPlayer(player.getUUID()) != player || !reaches(player)) return;
+            if (!current.getAsBoolean() || server.getPlayerList().getPlayer(player.getUUID()) != player || !reaches(player)) return;
             for (RelayChunk chunk : chunks) player.connection.send(new ToCompanionPayload(chunk));
         });
     }
