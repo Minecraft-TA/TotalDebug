@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -38,7 +39,7 @@ class ExpressionHistoryTest {
     private static ExpressionHistory.Entry entry(String expression) {
         return new ExpressionHistory.Entry(
                 expression,
-                SnippetExecutionService.Side.SERVER,
+                Side.SERVER,
                 List.of("java.util.List")
         );
     }

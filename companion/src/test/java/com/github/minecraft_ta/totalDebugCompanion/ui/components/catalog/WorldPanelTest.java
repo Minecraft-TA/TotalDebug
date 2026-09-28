@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,7 @@ class WorldPanelTest {
         Path world = this.directory.resolve("world");
         LevelDatFixture.write(world, data);
 
-        List<FactSection> sections = WorldPanel.sections(CurrentWorld.read(world));
+        List<FactSection> sections = WorldPanel.sections(CurrentWorld.read(GameLocations.of(this.directory, false).read(), world));
         assertEquals(List.of("World", "Time and weather"), sections.stream().map(FactSection::title).toList());
         assertEquals("21, 77, -28", value(sections.getFirst(), "Spawn"));
         assertEquals("Allowed", value(sections.getFirst(), "Commands"));

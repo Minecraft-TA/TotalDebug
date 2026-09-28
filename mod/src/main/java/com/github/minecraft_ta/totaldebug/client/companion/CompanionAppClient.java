@@ -21,6 +21,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
@@ -290,6 +291,10 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     public void sendPackStack(PackStackMessage message) {
+        send(message);
+    }
+
+    public void sendPlaying(PlayingMessage message) {
         send(message);
     }
 

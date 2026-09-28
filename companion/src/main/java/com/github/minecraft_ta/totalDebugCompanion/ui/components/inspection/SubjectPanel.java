@@ -8,7 +8,6 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.SubjectLinks;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
-import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
@@ -22,6 +21,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.Subject
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.values.ScriptResultTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;

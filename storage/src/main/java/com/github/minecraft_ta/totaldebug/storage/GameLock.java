@@ -13,6 +13,9 @@ import java.nio.file.StandardOpenOption;
  * one by it, without a connection, as the game tells a running Companion by its instance lock.
  */
 public final class GameLock implements AutoCloseable {
+    private static final int HOLD_ATTEMPTS = 20;
+    private static final long HOLD_RETRY_MILLIS = 50;
+
     private final FileChannel channel;
     private final FileLock lock;
 
@@ -21,12 +24,24 @@ public final class GameLock implements AutoCloseable {
         this.lock = lock;
     }
 
-    /** Takes the lock for this game process. */
+    /**
+     * Takes the lock for this game process. Companion checks the lock by taking it for a moment, so a lock held only that
+     * long is tried again for a second before another game is taken to run.
+     */
     public static GameLock hold(Path file) throws IOException {
         Files.createDirectories(file.getParent());
         FileChannel channel = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
         try {
             FileLock lock = channel.tryLock();
+            for (int attempt = 0; lock == null && attempt < HOLD_ATTEMPTS; attempt++) {
+                try {
+                    Thread.sleep(HOLD_RETRY_MILLIS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+                lock = channel.tryLock();
+            }
             if (lock == null) throw new IOException("Another game already runs in this instance");
             return new GameLock(channel, lock);
         } catch (IOException | RuntimeException failure) {

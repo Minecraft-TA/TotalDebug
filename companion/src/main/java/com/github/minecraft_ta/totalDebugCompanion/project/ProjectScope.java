@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
@@ -19,7 +20,6 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
-import com.github.minecraft_ta.totaldebug.storage.GameLock;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import java.io.IOException;
 import java.net.URI;
@@ -48,6 +48,9 @@ public final class ProjectScope implements AutoCloseable {
     public ScriptFiles scriptFiles() { return scriptFiles; }
     private final PackCatalogService catalog;
     public PackCatalogService catalog() { return catalog; }
+    private final GameLocation location;
+    /** Where the instance's game is: closed, running without a connection, or connected, and what it plays. */
+    public GameLocation location() { return location; }
     private final ChangeRecord changes;
     /** What Companion changed in the pack, kept with the instance. */
     public ChangeRecord changes() { return changes; }
@@ -78,14 +81,12 @@ public final class ProjectScope implements AutoCloseable {
         this.scriptFiles = new ScriptFiles(paths().scripts());
         this.catalog = new PackCatalogService(paths());
         this.changes = Objects.requireNonNull(changes);
-        this.configChanges = new ConfigChanges(profile.workspaceDirectory(), changes);
-        Path gameLock = InstancePaths.forGame(profile.workspaceDirectory()).gameLock();
-        this.keyBindings = new KeyBindingControl(profile.workspaceDirectory().resolve("options.txt"), changes,
-                () -> GameLock.held(gameLock), this.configChanges.writes());
-        this.resources = new ResourceEdits(profile.workspaceDirectory(), changes, new ResourceOriginals(paths().originals()),
-                this.configChanges.writes(), () -> GameLock.held(gameLock), state);
-        this.packSelections = new PackSelections(profile.workspaceDirectory(), changes, this.resources,
-                () -> GameLock.held(gameLock), this.configChanges.writes());
+        this.location = new GameLocation(profile.workspaceDirectory());
+        this.configChanges = new ConfigChanges(this.location, changes);
+        this.keyBindings = new KeyBindingControl(this.location, changes, this.configChanges.writes());
+        this.resources = new ResourceEdits(this.location, changes, new ResourceOriginals(paths().originals()),
+                this.configChanges.writes(), state);
+        this.packSelections = new PackSelections(changes, this.resources, this.configChanges.writes());
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {

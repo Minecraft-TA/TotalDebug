@@ -3,7 +3,9 @@ package com.github.minecraft_ta.totalDebugCompanion.pack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDat;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.Worlds;
+import com.github.minecraft_ta.totalDebugCompanion.game.Access;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
@@ -27,7 +29,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -40,21 +41,18 @@ public final class PackSelections {
     public record Applied(ConfigChanges.Effect effect) {
     }
 
+    private final GameLocation location;
     private final Path workspace;
     private final ChangeRecord record;
     private final ResourceEdits edits;
-    private final BooleanSupplier gameRunning;
     private final Executor writes;
 
-    /**
-     * {@code workspace} is the game directory, {@code edits} talks to the connected game, {@code gameRunning} tells
-     * whether a game runs in the instance, connected or not, and {@code writes} is the project's write queue.
-     */
-    public PackSelections(Path workspace, ChangeRecord record, ResourceEdits edits, BooleanSupplier gameRunning, Executor writes) {
-        this.workspace = Objects.requireNonNull(workspace, "workspace").toAbsolutePath().normalize();
+    /** {@code edits} talks to the connected game of its location, and {@code writes} is the project's write queue. */
+    public PackSelections(ChangeRecord record, ResourceEdits edits, Executor writes) {
+        this.location = edits.location();
+        this.workspace = this.location.workspace();
         this.record = Objects.requireNonNull(record, "record");
         this.edits = Objects.requireNonNull(edits, "edits");
-        this.gameRunning = Objects.requireNonNull(gameRunning, "gameRunning");
         this.writes = Objects.requireNonNull(writes, "writes");
     }
 
@@ -87,69 +85,69 @@ public final class PackSelections {
     public boolean holds(ChangeRecord.Change change) {
         if (!(change.target() instanceof ChangeRecord.PackSelection target)) return true;
         try {
-            return comparable(current(target)).equals(comparable(parse(change.current())));
+            return comparable(current(this.location.read(), target)).equals(comparable(parse(change.current())));
         } catch (IOException unreadable) {
             return true;
         }
     }
 
+    /** What a change reads before it writes: the selection before it, and the connection that applies it, or null. */
+    private record Read(List<String> previous, GameLocation.Connection live) {
+    }
+
     private CompletableFuture<Applied> apply(ChangeRecord.PackSelection target, List<String> enabled, ChangeRecord.Change reverting) {
-        boolean live;
-        try {
-            live = live(target);
-        } catch (IOException refused) {
-            return CompletableFuture.failedFuture(refused);
-        }
-        // The selection before is read in the write queue, after every change queued before this one.
-        CompletableFuture<List<String>> before = write(() -> {
+        // Where the game is and the selection before are read in the write queue, after every change queued before this
+        // one, and never on the Swing thread.
+        CompletableFuture<Read> before = write(() -> {
             try {
-                List<String> previous = current(target);
+                GameState game = this.location.read();
+                GameLocation.Connection live = live(game, target);
+                List<String> previous = current(game, target);
                 if (reverting != null && !comparable(previous).equals(comparable(parse(reverting.current())))
                         && !comparable(previous).equals(comparable(enabled))) {
                     throw new IOException(label(target) + " changed outside Companion since, and reverting would replace that");
                 }
-                if (!live) {
+                if (live == null) {
                     if (target.side() == SetPacksPayload.Side.RESOURCES) writeOptions(previous, enabled);
                     else writeLevel(target.location(), enabled);
                     this.record.changed(target, json(previous), json(enabled));
                 }
-                return previous;
+                return new Read(previous, live);
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
         });
-        if (!live) {
-            return before.thenApply(ignored -> new Applied(target.side() == SetPacksPayload.Side.RESOURCES
-                    ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS));
-        }
-        return before.thenCompose(previous -> this.edits.select(target.side(), enabled).thenApply(result -> {
-            if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
-            this.record.changed(target, json(previous), json(enabled));
-            return new Applied(ConfigChanges.Effect.NOW);
-        }));
+        return before.thenCompose(read -> {
+            if (read.live() == null) {
+                return CompletableFuture.completedFuture(new Applied(target.side() == SetPacksPayload.Side.RESOURCES
+                        ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS));
+            }
+            return this.edits.select(read.live(), target.side(),
+                    target.side() == SetPacksPayload.Side.DATA ? target.location() : null, enabled).thenApply(result -> {
+                if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
+                this.record.changed(target, json(read.previous()), json(enabled));
+                return new Applied(ConfigChanges.Effect.NOW);
+            });
+        });
     }
 
     /**
-     * Whether the connected game applies the selection; fails where a running game would write it over: a game running
-     * without a connection, or a world open in a game Companion is not connected to.
+     * The connection of the game that applies the selection, or null where the files are written; fails where a running
+     * game would write it over: a game running without a connection, or a world open in a game Companion is not
+     * connected to or in another program. Blocking.
      */
-    private boolean live(ChangeRecord.PackSelection target) throws IOException {
-        PackStackPayload stack = this.edits.packStack();
-        if (target.side() == SetPacksPayload.Side.RESOURCES) {
-            if (stack != null) return true;
-            if (this.gameRunning.getAsBoolean()) {
-                throw new IOException("The game is running but not connected to Companion; connect it, or close it, to change its resource packs");
-            }
-            return false;
-        }
-        if (!Worlds.isOpen(target.location())) return false;
-        if (stack != null && !stack.dataPacks().isEmpty()) return true;
-        throw new IOException("The world " + target.location().getFileName()
-                + " is open in a game that is not connected to Companion; connect it, or close the world, to change its datapacks");
+    private static GameLocation.Connection live(GameState game, ChangeRecord.PackSelection target) throws IOException {
+        Access access = target.side() == SetPacksPayload.Side.RESOURCES ? game.client("change its resource packs")
+                : game.world(target.location(), "change its datapacks");
+        return switch (access) {
+            case Access.Live live -> live.connection();
+            case Access.Files ignored -> null;
+            case Access.Refused refused -> throw new IOException(refused.reason());
+        };
     }
 
     /** The enabled packs, lowest first: as the connected game names them, or as the file keeps them. Blocking. */
-    List<String> current(ChangeRecord.PackSelection target) throws IOException {
+    List<String> current(GameState game, ChangeRecord.PackSelection target) throws IOException {
         PackStackPayload stack = this.edits.packStack();
         if (target.side() == SetPacksPayload.Side.RESOURCES) {
             if (stack != null) {
@@ -159,7 +157,7 @@ public final class PackSelections {
             }
             return PackResources.enabledInOptions(options());
         }
-        if (Worlds.isOpen(target.location()) && stack != null && !stack.dataPacks().isEmpty()) {
+        if (stack != null && game.plays(target.location())) {
             return stack.dataPacks().stream().filter(pack -> !pack.is(PackStackPayload.HIDDEN)).map(PackStackPayload.Pack::id).toList();
         }
         NbtData.CompoundTag packs = dataPacks(LevelDat.read(LevelDat.file(target.location())).tag());
@@ -189,18 +187,19 @@ public final class PackSelections {
      * disabled, so the game does not enable it again as a new one.
      */
     private static void writeLevel(Path world, List<String> enabled) throws IOException {
-        LevelDat.Root root = LevelDat.read(LevelDat.file(world));
-        if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
-            throw new IOException("The level.dat of " + world.getFileName() + " holds no world data");
-        }
-        NbtData.CompoundTag packs = dataPacks(root.tag());
-        Set<String> disabled = new LinkedHashSet<>(strings(packs, "Enabled"));
-        disabled.addAll(strings(packs, "Disabled"));
-        disabled.addAll(PackFolders.list(world.resolve("datapacks")).keySet());
-        enabled.forEach(disabled::remove);
-        NbtData.CompoundTag written = LevelDat.with(LevelDat.with(packs == null ? new NbtData.CompoundTag(Map.of()) : packs,
-                "Enabled", list(enabled)), "Disabled", list(List.copyOf(disabled)));
-        LevelDat.write(world, new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written))));
+        LevelDat.update(world, root -> {
+            if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
+                throw new IOException("The level.dat of " + world.getFileName() + " holds no world data");
+            }
+            NbtData.CompoundTag packs = dataPacks(root.tag());
+            Set<String> disabled = new LinkedHashSet<>(strings(packs, "Enabled"));
+            disabled.addAll(strings(packs, "Disabled"));
+            disabled.addAll(PackFolders.list(world.resolve("datapacks")).keySet());
+            enabled.forEach(disabled::remove);
+            NbtData.CompoundTag written = LevelDat.with(LevelDat.with(packs == null ? new NbtData.CompoundTag(Map.of()) : packs,
+                    "Enabled", list(enabled)), "Disabled", list(List.copyOf(disabled)));
+            return new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written)));
+        });
     }
 
     private static NbtData.CompoundTag dataPacks(NbtData.CompoundTag root) {

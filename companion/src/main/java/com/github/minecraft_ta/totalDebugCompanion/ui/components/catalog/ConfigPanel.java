@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
@@ -34,6 +35,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.JTextComponent;
+import javax.swing.SwingUtilities;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
@@ -61,7 +63,7 @@ final class ConfigPanel extends JPanel {
     private static final String MESSAGE_CARD = "message";
 
     private final String modId;
-    private final Path workspace;
+    private final GameLocation location;
     private final ConfigWriter writer;
     private final Consumer<NavigationTarget> navigator;
     /** What the file could not show, such as a read error; it takes the place of {@link #status}. */
@@ -96,10 +98,10 @@ final class ConfigPanel extends JPanel {
     private Object shownSource;
 
     /** {@code modId} is the mod whose files are shown. */
-    ConfigPanel(String modId, Path workspace, ConfigChanges changes, Consumer<NavigationTarget> navigator) {
+    ConfigPanel(String modId, ConfigChanges changes, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
-        this.workspace = workspace;
+        this.location = changes.location();
         this.writer = new ConfigWriter(changes, this::setStatus, this::load);
         this.textEditor = new ConfigTextEditor(this.writer, this::setStatus, this::load);
         this.navigator = Objects.requireNonNull(navigator, "navigator");
@@ -107,7 +109,15 @@ final class ConfigPanel extends JPanel {
                 read.values() == null ? "" : read.values().text(), read.problem()),
                 failure -> showFailure("Could not read the file: " + failure.getMessage())).whenShown(this);
         this.sources = new PageLoader<>(this::prepareSources, read -> showSources(read.file(), read.found(), true),
-                failure -> showFailure("Could not list the worlds' copies: " + failure.getMessage()));
+                failure -> showFailure("Could not list the worlds' copies: " + failure.getMessage()))
+                // A server configuration is shown from the world the game has open first; it follows the game to another
+                // world, unless its text has unsaved changes, which stay with the file they were made in.
+                .follow(listener -> this.location.addListener(change -> {
+                    if (change == GameLocation.Change.PLAYING) SwingUtilities.invokeLater(() -> {
+                        PackCatalog.ConfigFile file = selectedFile();
+                        if (file != null && file.type() == PackCatalog.ConfigType.SERVER && !this.textEditor.modified()) listener.run();
+                    });
+                }));
         configureFiles();
         this.content.add(toolbar(), BorderLayout.NORTH);
         JPanel settings = new JPanel(new BorderLayout());
@@ -309,7 +319,7 @@ final class ConfigPanel extends JPanel {
         this.sources.cancel();
         this.modifiedOnly.setVisible(file != null && !file.settings().isEmpty());
         if (file == null || file.type() != PackCatalog.ConfigType.SERVER) {
-            showSources(file, file == null ? List.of() : ConfigSources.of(this.workspace, file), true);
+            showSources(file, file == null ? List.of() : ConfigSources.of(this.location, file), true);
             return;
         }
         // A server configuration's copies are found by listing the worlds, which reads the disk. Until they are known,
@@ -323,7 +333,7 @@ final class ConfigPanel extends JPanel {
     private Callable<SourcesRead> prepareSources() {
         PackCatalog.ConfigFile file = selectedFile();
         if (file == null) return null;
-        return () -> new SourcesRead(file, ConfigSources.of(this.workspace, file));
+        return () -> new SourcesRead(file, ConfigSources.of(this.location, file));
     }
 
     /** Shows {@code file}'s copies; {@code known} tells whether they are all listed, so its values can be read. */

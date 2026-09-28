@@ -10,13 +10,15 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Protocol-29 payload asking the game to reload what edited resources need. {@code managedResourcePack} and
+ * Protocol-30 payload asking the game to reload what edited resources need. {@code managedResourcePack} and
  * {@code managedDataPack} are the id of the pack Companion manages, such as {@code file/TotalDebug}, among the resource
  * packs and the datapacks, which the game enables at the top of that stack before the reload; empty where no edit of the
- * reload went into it. {@code watched} are the edited resource paths whose problems the answer reports.
+ * reload went into it. {@code dataWorld} is the folder of the world whose data was edited, as {@code PLAYING} names it,
+ * and empty without {@link Kind#DATA}; the game refuses to reload the data of a world it no longer plays.
+ * {@code watched} are the edited resource paths whose problems the answer reports.
  */
 public record ReloadPayload(int requestId, Set<Kind> kinds, String managedResourcePack, String managedDataPack,
-                            List<String> watched) {
+                            String dataWorld, List<String> watched) {
     public static final int MAX_WATCHED = 1_024;
 
     /** What to reload. */
@@ -36,6 +38,10 @@ public record ReloadPayload(int requestId, Set<Kind> kinds, String managedResour
         if (kinds.isEmpty()) throw new IllegalArgumentException("Nothing to reload");
         Objects.requireNonNull(managedResourcePack, "managedResourcePack");
         Objects.requireNonNull(managedDataPack, "managedDataPack");
+        Objects.requireNonNull(dataWorld, "dataWorld");
+        if (dataWorld.isEmpty() == kinds.contains(Kind.DATA)) {
+            throw new IllegalArgumentException("A data reload names its world, and a reload without data none");
+        }
         watched = List.copyOf(watched);
         if (watched.size() > MAX_WATCHED) throw new IllegalArgumentException("Too many watched paths");
     }
@@ -49,11 +55,12 @@ public record ReloadPayload(int requestId, Set<Kind> kinds, String managedResour
         }
         String managedResourcePack = input.readString();
         String managedDataPack = input.readString();
+        String dataWorld = input.readString();
         int count = input.readInt();
         if (count < 0 || count > MAX_WATCHED) throw new IllegalArgumentException("Invalid watched path count: " + count);
         List<String> watched = new ArrayList<>(count);
         for (int index = 0; index < count; index++) watched.add(input.readString());
-        return new ReloadPayload(requestId, kinds, managedResourcePack, managedDataPack, watched);
+        return new ReloadPayload(requestId, kinds, managedResourcePack, managedDataPack, dataWorld, watched);
     }
 
     public void write(ByteBufferOutputStream output) {
@@ -63,6 +70,7 @@ public record ReloadPayload(int requestId, Set<Kind> kinds, String managedResour
         output.writeInt(mask);
         output.writeString(this.managedResourcePack);
         output.writeString(this.managedDataPack);
+        output.writeString(this.dataWorld);
         output.writeInt(this.watched.size());
         for (String path : this.watched) output.writeString(path);
     }

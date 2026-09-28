@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.CopyValue;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import org.junit.jupiter.api.Test;
 import com.github.minecraft_ta.totalDebugCompanion.testui.RequiresDesktop;
@@ -312,7 +313,7 @@ class StatusInteractionTest extends StatusBarTestFixture {
                 });
                 try {
                     String label = longName ? "Long script name ".repeat(30) : "Test";
-                    runs.start(project, Source.capture(project, label, null), "", false, ScriptExecutionEnvironment.THREAD);
+                    runs.start(project, Source.capture(project, label, null), "", Side.CLIENT, ScriptExecutionEnvironment.THREAD);
                     assertTrue(inspected.get());
                     assertFalse(field(activity, "popup", JPopupMenu.class).isVisible());
                 } finally {

@@ -1,9 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.storage.GameLock;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -26,10 +29,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigChangesTest {
     @TempDir Path directory;
+    private GameLocation location;
+
+    @BeforeEach
+    void location() {
+        this.location = new GameLocation(this.directory);
+    }
 
     @Test
     void closingFinishesTheWritesAlreadyTakenAndRefusesLaterOnes() throws Exception {
-        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
+        ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
         CountDownLatch release = new CountDownLatch(1);
         CompletableFuture<String> taken = changes.write(() -> {
             try {
@@ -52,7 +61,7 @@ class ConfigChangesTest {
 
     @Test
     void closingWaitsThroughAnInterruptionAndKeepsItForTheCaller() throws Exception {
-        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
+        ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         CompletableFuture<String> taken = changes.write(() -> {
@@ -87,8 +96,8 @@ class ConfigChangesTest {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "key_key.jump:key.keyboard.space\n");
         ChangeRecord record = ChangeRecord.inMemory();
-        ConfigChanges changes = new ConfigChanges(this.directory, record);
-        KeyBindingControl keys = new KeyBindingControl(options, record, () -> false, changes.writes());
+        ConfigChanges changes = new ConfigChanges(this.location, record);
+        KeyBindingControl keys = new KeyBindingControl(this.location, record, changes.writes());
         CountDownLatch release = new CountDownLatch(1);
         changes.write(() -> {
             try {
@@ -113,13 +122,13 @@ class ConfigChangesTest {
 
     @Test
     void theFirstGameToConnectKeepsTheEditsMadeWhileItRan() throws Exception {
-        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
+        ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
         try (GameLock ignored = GameLock.hold(InstancePaths.forGame(this.directory).gameLock())) {
             edit(changes, config(), PackCatalog.Restart.GAME, "1", "2");
             assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"));
 
-            changes.gameConnected();
-            changes.gameProcess(42);
+            this.location.connected(message -> true);
+            this.location.process(42);
 
             assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"),
                     "the game that runs now is the one the edit waits in");
@@ -128,7 +137,7 @@ class ConfigChangesTest {
 
     @Test
     void aClosedGameUsesEditsWhenItStarts() {
-        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
+        ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
 
         assertEquals(ConfigChanges.Effect.GAME_STARTS, edit(changes, config(), PackCatalog.Restart.GAME, "1", "2"));
         assertEquals(ConfigChanges.Effect.WORLD_OPENS, edit(changes, world("World").resolve("serverconfig/testmod-server.toml"),
@@ -140,8 +149,8 @@ class ConfigChangesTest {
 
     @Test
     void aRunningGameReloadsFilesAndWaitsForARestartWhereTheSettingSaysSo() {
-        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
-        changes.gameConnected();
+        ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
+        this.location.connected(message -> true);
 
         assertEquals(ConfigChanges.Effect.NOW, edit(changes, config(), PackCatalog.Restart.NONE, "1", "2"));
         assertNull(changes.pending(config(), "speed"));
@@ -157,27 +166,27 @@ class ConfigChangesTest {
         assertNull(changes.pending(config(), "speed"));
 
         edit(changes, config(), PackCatalog.Restart.GAME, "1", "2");
-        changes.gameDisconnected();
+        this.location.disconnected();
         assertNull(changes.pending(config(), "speed"));
     }
 
     @Test
     void editsWaitingForARestartOutlastAReconnectToTheSameGame() throws Exception {
-        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
+        ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
         try (GameLock ignored = GameLock.hold(InstancePaths.forGame(this.directory).gameLock())) {
-            changes.gameConnected();
-            changes.gameProcess(42);
+            this.location.connected(message -> true);
+            this.location.process(42);
             edit(changes, config(), PackCatalog.Restart.GAME, "1", "2");
 
-            changes.gameDisconnected();
+            this.location.disconnected();
             changes.refresh();
             assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"),
                     "the game still runs with the old value");
-            changes.gameConnected();
-            changes.gameProcess(42);
+            this.location.connected(message -> true);
+            this.location.process(42);
             assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"));
 
-            changes.gameProcess(43);
+            this.location.process(43);
             assertNull(changes.pending(config(), "speed"), "a restarted game read the file when it started");
         }
     }
@@ -186,8 +195,8 @@ class ConfigChangesTest {
     void aDisabledConfigWatcherMeansEveryEditWaitsForARestart() throws Exception {
         Files.createDirectories(this.directory.resolve("config"));
         Files.writeString(this.directory.resolve("config/fml.toml"), "disableConfigWatcher = true\n");
-        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
-        changes.gameConnected();
+        ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
+        this.location.connected(message -> true);
 
         assertEquals(ConfigChanges.Effect.RESTART, edit(changes, config(), PackCatalog.Restart.NONE, "1", "2"));
     }
@@ -196,22 +205,33 @@ class ConfigChangesTest {
     void aSettingThatNeedsARejoinWaitsUntilTheOpenWorldCloses() throws Exception {
         Path world = world("World");
         Path file = world.resolve("serverconfig/testmod-server.toml");
-        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
-        changes.gameConnected();
+        ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
+        this.location.connected(message -> true);
+        this.location.playing(new PlayingPayload.Menu());
         assertEquals(ConfigChanges.Location.WORLD, changes.location(file));
         assertEquals(ConfigChanges.Effect.WORLD_OPENS, edit(changes, file, PackCatalog.Restart.WORLD, "1", "2"));
 
-        try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.WRITE);
-             FileLock ignored = channel.lock()) {
-            assertTrue(Worlds.isOpen(world));
-            assertEquals(ConfigChanges.Effect.NOW, edit(changes, file, PackCatalog.Restart.NONE, "1", "2"));
-            assertEquals(ConfigChanges.Effect.REJOIN, edit(changes, file, PackCatalog.Restart.WORLD, "2", "3"));
-            changes.refresh();
-            assertEquals(ConfigChanges.Effect.REJOIN, changes.pending(file, "speed"));
-        }
-        assertFalse(Worlds.isOpen(world));
+        this.location.playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        assertEquals(ConfigChanges.Effect.NOW, edit(changes, file, PackCatalog.Restart.NONE, "1", "2"));
+        assertEquals(ConfigChanges.Effect.REJOIN, edit(changes, file, PackCatalog.Restart.WORLD, "2", "3"));
         changes.refresh();
-        assertNull(changes.pending(file, "speed"));
+        assertEquals(ConfigChanges.Effect.REJOIN, changes.pending(file, "speed"));
+
+        this.location.playing(new PlayingPayload.Menu());
+        changes.refresh();
+        assertNull(changes.pending(file, "speed"), "the world was left, and reads the file when it opens again");
+    }
+
+    @Test
+    void aWorldOpenInTheUnconnectedGameIsTheOneItHasOpen() throws Exception {
+        Path world = world("World");
+        Path file = world.resolve("serverconfig/testmod-server.toml");
+        ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
+        try (GameLock ignored = GameLock.hold(InstancePaths.forGame(this.directory).gameLock());
+             FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.WRITE);
+             FileLock held = channel.lock()) {
+            assertEquals(ConfigChanges.Effect.REJOIN, edit(changes, file, PackCatalog.Restart.WORLD, "1", "2"));
+        }
     }
 
     private Path config() {

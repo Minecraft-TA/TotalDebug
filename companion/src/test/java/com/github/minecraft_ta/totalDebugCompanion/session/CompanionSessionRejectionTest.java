@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
@@ -174,13 +175,13 @@ class CompanionSessionRejectionTest {
             var scripts = new ScriptExecutionService(session, compiler, session::isConnected);
             session.bindAndPublish(configuration);
             var response = connect(client, CompanionSessionDescriptor.read(configuration.descriptorFile(), CompanionProtocol.VERSION));
-            assertFalse(scripts.run(scope, 1, "source", false, ScriptExecutionEnvironment.THREAD, failure -> {}));
+            assertFalse(scripts.run(scope, 1, "source", Side.CLIENT, ScriptExecutionEnvironment.THREAD, failure -> {}));
             client.getMessageProcessor().enqueueMessage(new TestClientHello(token));
             assertTrue(response.get(2, TimeUnit.SECONDS).accepted);
             assertTrue(session.isConnected());
             var result = new CompletableFuture<Boolean>();
             Thread submitter = Thread.ofPlatform().unstarted(() -> {
-                try { result.complete(scripts.run(scope, 2, "source", false, ScriptExecutionEnvironment.THREAD, failure -> {})); }
+                try { result.complete(scripts.run(scope, 2, "source", Side.CLIENT, ScriptExecutionEnvironment.THREAD, failure -> {})); }
                 catch (Throwable failure) { result.completeExceptionally(failure); }
             });
             synchronized (lifecycle) {

@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
 import com.github.minecraft_ta.totalDebugCompanion.session.PrismInstances;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectDirectories;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
@@ -162,8 +163,8 @@ public final class CompanionMcpServer implements AutoCloseable {
                 case "status" -> status();
                 case "project_list" -> projectList(Boolean.TRUE.equals(request.arguments().get("include_prism")));
                 case "project_open" -> openProject(request.arguments());
-                case "client_code_execute" -> execute(request.arguments(), CodeModeJobService.ExecutionSide.CLIENT, project);
-                case "server_code_execute" -> execute(request.arguments(), CodeModeJobService.ExecutionSide.SERVER, project);
+                case "client_code_execute" -> execute(request.arguments(), Side.CLIENT, project);
+                case "server_code_execute" -> execute(request.arguments(), Side.SERVER, project);
                 case "job_wait" -> this.jobs.waitFor(
                         requiredString(request.arguments(), "job_id"),
                         optionalInteger(request.arguments(), "wait_ms", 30_000)
@@ -256,7 +257,7 @@ public final class CompanionMcpServer implements AutoCloseable {
 
     private Map<String, Object> execute(
             Map<String, Object> arguments,
-            CodeModeJobService.ExecutionSide side, ProjectScope project
+            Side side, ProjectScope project
     ) {
         String code = requiredString(arguments, "code");
         List<String> imports = optionalStringList(arguments, "imports");

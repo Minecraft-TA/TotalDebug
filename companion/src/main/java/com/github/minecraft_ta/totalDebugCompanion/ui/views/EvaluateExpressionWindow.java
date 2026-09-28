@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.ScriptFileActions;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerResultPanel;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
@@ -235,7 +236,7 @@ public final class EvaluateExpressionWindow extends JDialog {
             evaluatePaused(requested);
             return;
         }
-        SnippetExecutionService.Side selectedSide =
+        Side selectedSide =
                 selectedContext().side();
         JavaSnippetSource.GeneratedSource source;
         try {
@@ -302,7 +303,7 @@ public final class EvaluateExpressionWindow extends JDialog {
                         this.status.setText("Evaluation completed in " + frame.name());
                     }));
                     this.history.record(new ExpressionHistory.Entry(requested,
-                            SnippetExecutionService.Side.CLIENT, this.expressionSupport.imports(),
+                            Side.CLIENT, this.expressionSupport.imports(),
                             JavaSnippetSource.detectMode(requested)));
                     this.historyIndex = -1;
                 }));
@@ -436,7 +437,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         configureTextPane(this.problems, palette, ThemeColors.error());
     }
 
-    private record EvaluationContext(SnippetExecutionService.Side side, String pauseId,
+    private record EvaluationContext(Side side, String pauseId,
                                      DebugEngine.StackFrame frame, String label) {
         @Override public String toString() { return this.label; }
     }
@@ -455,8 +456,8 @@ public final class EvaluateExpressionWindow extends JDialog {
         EvaluationContext previous = selectedContext();
         this.refreshingContexts = true;
         this.context.removeAllItems();
-        this.context.addItem(new EvaluationContext(SnippetExecutionService.Side.CLIENT, null, null, "Client"));
-        this.context.addItem(new EvaluationContext(SnippetExecutionService.Side.SERVER, null, null, "Server"));
+        this.context.addItem(new EvaluationContext(Side.CLIENT, null, null, "Client"));
+        this.context.addItem(new EvaluationContext(Side.SERVER, null, null, "Server"));
         var snapshot = editorContext.debugger().snapshot();
         if (snapshot.pause() != null) {
             for (var frame : snapshot.pause().frames()) {

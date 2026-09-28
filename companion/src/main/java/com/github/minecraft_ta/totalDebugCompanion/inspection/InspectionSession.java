@@ -6,7 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationServi
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptSubject;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
-import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;

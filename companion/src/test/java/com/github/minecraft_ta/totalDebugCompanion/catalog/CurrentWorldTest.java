@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -27,7 +28,7 @@ class CurrentWorldTest {
         Path world = this.directory.resolve("saves/New World");
         LevelDatFixture.write(world, LevelDatFixture.world("Test"));
 
-        CurrentWorld.Saved saved = CurrentWorld.read(world);
+        CurrentWorld.Saved saved = CurrentWorld.read(GameLocations.of(this.directory, false).read(), world);
         assertEquals("Test", saved.name());
         assertFalse(saved.open());
         assertEquals(8_757_790_292_842_126_093L, saved.seed());
@@ -48,13 +49,13 @@ class CurrentWorldTest {
         Map<String, Object> data = LevelDatFixture.world("Test");
         data.put("DayTime", 30_000L);
         LevelDatFixture.write(world, data);
-        CurrentWorld.Saved saved = CurrentWorld.read(world);
+        CurrentWorld.Saved saved = CurrentWorld.read(GameLocations.of(this.directory, false).read(), world);
         assertEquals(2, saved.day(), "24000 ticks make a day");
         assertEquals("12:00", saved.timeOfDay());
 
         data.put("DayTime", 18_500L);
         LevelDatFixture.write(world, data);
-        assertEquals("00:30", CurrentWorld.read(world).timeOfDay());
+        assertEquals("00:30", CurrentWorld.read(GameLocations.of(this.directory, false).read(), world).timeOfDay());
     }
 
     @Test
@@ -64,7 +65,7 @@ class CurrentWorldTest {
         data.put("DataPacks", Map.of("Enabled", List.of("vanilla", "file/Gone"), "Disabled", List.of("file/AlsoGone")));
         LevelDatFixture.write(world, data);
 
-        assertEquals(List.of("vanilla"), CurrentWorld.read(world).datapacks().stream().map(ListedPack::id).toList(),
+        assertEquals(List.of("vanilla"), CurrentWorld.read(GameLocations.of(this.directory, false).read(), world).datapacks().stream().map(ListedPack::id).toList(),
                 "the game drops it when it loads the world");
     }
 
@@ -75,8 +76,8 @@ class CurrentWorldTest {
         // The game stopped between renaming level.dat to level.dat_old and writing the new one.
         Files.move(world.resolve("level.dat"), world.resolve("level.dat_old"));
 
-        assertEquals(world, CurrentWorld.directory(this.directory).orElseThrow());
-        assertEquals("Stopped", CurrentWorld.read(world).name());
+        assertEquals(world, CurrentWorld.directory(GameLocations.of(this.directory, false).read()).orElseThrow());
+        assertEquals("Stopped", CurrentWorld.read(GameLocations.of(this.directory, false).read(), world).name());
     }
 
     @Test
@@ -90,7 +91,7 @@ class CurrentWorldTest {
         Files.createDirectories(world.resolve("datapacks/backup"));
         Files.writeString(world.resolve("datapacks/Old.ZIP"), "");
 
-        List<ListedPack> packs = CurrentWorld.read(world).datapacks();
+        List<ListedPack> packs = CurrentWorld.read(GameLocations.of(this.directory, false).read(), world).datapacks();
         assertEquals(List.of("file/Tweaks", "mod_data", "vanilla", "bundle", "mod/testmod:data/testmod/datapacks/extra", "file/Added.zip"),
                 packs.stream().map(ListedPack::id).toList(),
                 "the highest enabled pack comes first, as in the game, which skips a folder or zip without pack.mcmeta and a .ZIP");
@@ -109,8 +110,8 @@ class CurrentWorldTest {
         Files.setLastModifiedTime(LevelDatFixture.write(older, LevelDatFixture.world("Older")), FileTime.fromMillis(1_000));
         Files.setLastModifiedTime(LevelDatFixture.write(newer, LevelDatFixture.world("Newer")), FileTime.fromMillis(2_000));
 
-        assertEquals(newer, CurrentWorld.directory(this.directory).orElseThrow());
-        assertTrue(CurrentWorld.directory(this.directory.resolve("empty")).isEmpty());
+        assertEquals(newer, CurrentWorld.directory(GameLocations.of(this.directory, false).read()).orElseThrow());
+        assertTrue(CurrentWorld.directory(GameLocations.of(this.directory.resolve("empty"), false).read()).isEmpty());
     }
 
     @Test
@@ -119,7 +120,7 @@ class CurrentWorldTest {
         Path level = LevelDatFixture.write(world, LevelDatFixture.world("Test"));
         Files.move(level, world.resolve("level.dat_old"));
 
-        assertEquals("Test", CurrentWorld.read(world).name(), "the game renames level.dat to level.dat_old before it writes the new one");
+        assertEquals("Test", CurrentWorld.read(GameLocations.of(this.directory, false).read(), world).name(), "the game renames level.dat to level.dat_old before it writes the new one");
     }
 
     @Test
@@ -128,10 +129,10 @@ class CurrentWorldTest {
         try (OutputStream output = new GZIPOutputStream(Files.newOutputStream(world.resolve("level.dat")))) {
             output.write(new byte[]{8, 0, 0});
         }
-        IOException failure = assertThrows(IOException.class, () -> CurrentWorld.read(world));
+        IOException failure = assertThrows(IOException.class, () -> CurrentWorld.read(GameLocations.of(this.directory, false).read(), world));
         assertTrue(failure.getMessage().endsWith("does not start with a compound"), failure.getMessage());
 
         Files.write(world.resolve("level.dat"), new byte[]{1, 2, 3});
-        assertThrows(IOException.class, () -> CurrentWorld.read(world), "a file that is not gzipped");
+        assertThrows(IOException.class, () -> CurrentWorld.read(GameLocations.of(this.directory, false).read(), world), "a file that is not gzipped");
     }
 }

@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.protocol.message.KeyBindingResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetKeyBindingMessage;
@@ -28,7 +30,7 @@ class KeyBindingControlTest {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "version:3955\nkey_key.jump:key.keyboard.space\nsoundCategory_master:1.0\n");
         ChangeRecord record = ChangeRecord.inMemory();
-        KeyBindingControl control = new KeyBindingControl(options, record, () -> false, Runnable::run);
+        KeyBindingControl control = new KeyBindingControl(GameLocations.of(this.directory, false), record, Runnable::run);
         KeyBindings.Assignment space = new KeyBindings.Assignment("key.keyboard.space", "NONE");
 
         KeyBindingControl.Result jump = control.set("key.jump", space, new KeyBindings.Assignment("key.keyboard.g", "CONTROL"))
@@ -53,13 +55,13 @@ class KeyBindingControlTest {
     void aGameRunningWithoutAConnectionKeepsItsOptions() throws Exception {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "key_key.jump:key.keyboard.space\n");
-        KeyBindingControl control = new KeyBindingControl(options, ChangeRecord.inMemory(), () -> true, Runnable::run);
+        KeyBindingControl control = new KeyBindingControl(GameLocations.of(this.directory, true), ChangeRecord.inMemory(), Runnable::run);
 
         var refused = control.set("key.jump", new KeyBindings.Assignment("key.keyboard.space", "NONE"),
                 new KeyBindings.Assignment("key.keyboard.g", "NONE"));
 
         ExecutionException failure = assertThrows(ExecutionException.class, () -> refused.get(5, TimeUnit.SECONDS));
-        assertEquals("The game is running but not connected to Companion; connect it to change keys",
+        assertEquals("The game is running but not connected to Companion; connect it, or close it, to change keys",
                 failure.getCause().getMessage());
         assertEquals("key_key.jump:key.keyboard.space\n", Files.readString(options), "the running game would undo it");
         assertNull(control.original("key.jump"));
@@ -67,11 +69,11 @@ class KeyBindingControlTest {
 
     @Test
     void anAnswerAfterTheCallerStoppedWaitingIsStillRecorded() throws Exception {
-        KeyBindingControl control = new KeyBindingControl(this.directory.resolve("options.txt"), ChangeRecord.inMemory(),
-                () -> true, Runnable::run);
+        GameLocation location = GameLocations.of(this.directory, true);
+        KeyBindingControl control = new KeyBindingControl(location, ChangeRecord.inMemory(), Runnable::run);
         List<SetKeyBindingMessage> sent = new ArrayList<>();
-        control.gameConnected(message -> {
-            sent.add(message);
+        location.connected(message -> {
+            if (message instanceof SetKeyBindingMessage key) sent.add(key);
             return true;
         });
 
@@ -88,7 +90,7 @@ class KeyBindingControlTest {
     void bindingsChangedTogetherAllStayInOptions() throws Exception {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "version:3955\n");
-        KeyBindingControl control = new KeyBindingControl(options, ChangeRecord.inMemory(), () -> false, Runnable::run);
+        KeyBindingControl control = new KeyBindingControl(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run);
         List<KeyBindingControl.Change> changes = new ArrayList<>();
         for (int number = 1; number <= 9; number++) {
             changes.add(new KeyBindingControl.Change("key.hotbar." + number,
@@ -102,10 +104,11 @@ class KeyBindingControlTest {
     @Test
     void aRunningGameChangesTheBindingItselfAndAnswers() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        KeyBindingControl control = new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false, Runnable::run);
+        GameLocation location = GameLocations.of(this.directory, true);
+        KeyBindingControl control = new KeyBindingControl(location, record, Runnable::run);
         List<SetKeyBindingMessage> sent = new ArrayList<>();
-        control.gameConnected(message -> {
-            sent.add(message);
+        location.connected(message -> {
+            if (message instanceof SetKeyBindingMessage key) sent.add(key);
             return true;
         });
 
@@ -127,7 +130,7 @@ class KeyBindingControlTest {
         assertEquals("Unknown key name: key.keyboard.nope", failure.getCause().getMessage());
 
         var unanswered = control.set("key.jump", result.current(), new KeyBindings.Assignment("key.keyboard.h", "NONE"));
-        control.gameDisconnected();
+        location.disconnected();
         assertThrows(ExecutionException.class, () -> unanswered.get(5, TimeUnit.SECONDS));
     }
 

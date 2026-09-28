@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
@@ -30,8 +31,8 @@ class ResourceTextEditorTest {
     @Test
     void aRevertElsewhereShowsTheOpenedFileAgain() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        ResourceEdits edits = new ResourceEdits(this.directory, record,
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record,
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
@@ -56,8 +57,8 @@ class ResourceTextEditorTest {
     @Test
     void aDeletedFileOfTheManagedPackStaysAsUnsavedText() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        ResourceEdits edits = new ResourceEdits(this.directory, record,
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record,
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
@@ -80,8 +81,8 @@ class ResourceTextEditorTest {
 
     @Test
     void aSaveRightAfterChoosingAnotherPackGoesIntoThatPack() throws Exception {
-        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
@@ -121,8 +122,8 @@ class ResourceTextEditorTest {
 
     @Test
     void theWarningThatTheGameDoesNotUseTheCopyEndsWhenItDoes() throws Exception {
-        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         PackStackPayload.Pack managed = new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "");
         edits.packStack(new PackStackPayload(34, 48, List.of(managed), List.of()));
@@ -147,8 +148,8 @@ class ResourceTextEditorTest {
 
     @Test
     void aSaveOverTextAnotherTabSavedSinceAsksFirst() throws Exception {
-        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
@@ -200,8 +201,8 @@ class ResourceTextEditorTest {
 
     @Test
     void aTabWhoseChangesAnotherTabSavedSavesItsNextChangeWithoutAsking() throws Exception {
-        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
@@ -247,8 +248,8 @@ class ResourceTextEditorTest {
 
     @Test
     void changesCarriedToAnotherPackAreSavedThereWithoutAsking() throws Exception {
-        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
@@ -280,8 +281,8 @@ class ResourceTextEditorTest {
 
     @Test
     void aMinifiedLanguageFileIsReformattedAsOneEditThatUndoTakesBack() throws Exception {
-        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
-                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         StringBuilder minified = new StringBuilder("{");
         for (int entry = 0; entry < 100; entry++) minified.append("\"item.testmod.gear_").append(entry).append("\":\"Gear\",");

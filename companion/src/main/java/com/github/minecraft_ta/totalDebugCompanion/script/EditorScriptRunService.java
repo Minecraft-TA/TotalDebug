@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCent
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -93,7 +94,7 @@ public final class EditorScriptRunService implements AutoCloseable {
         this.notifications = notifications;
     }
 
-    public Run start(ProjectScope project, Source source, String code, boolean server, ScriptExecutionEnvironment environment) {
+    public Run start(ProjectScope project, Source source, String code, Side side, ScriptExecutionEnvironment environment) {
         Run run;
         synchronized (this) {
             if (closed) throw new IllegalStateException("Editor script service is closed");
@@ -102,7 +103,7 @@ public final class EditorScriptRunService implements AutoCloseable {
         }
         changed();
         try {
-            boolean accepted = executions.submit(run.id, project, code, server, environment);
+            boolean accepted = executions.submit(run.id, project, code, side, environment);
             if (!accepted) accept(run.id, new State(Phase.FAILED, new ExecutionResultMessage(run.id,
                     ExecutionResult.failed("", null, "Minecraft disconnected or the project changed before submission")), List.of()));
             boolean stop;

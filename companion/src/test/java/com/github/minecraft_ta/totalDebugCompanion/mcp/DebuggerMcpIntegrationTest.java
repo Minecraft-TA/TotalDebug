@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugTargetDescripto
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.McpDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.tth05.jindex.ClassIndex;
 import com.google.gson.Gson;
 import com.google.gson.JsonParser;
@@ -211,7 +212,7 @@ class DebuggerMcpIntegrationTest {
     private static final class NoOpTransport implements CodeModeJobService.Transport {
         private int lastScriptId;
         public int open(ExecutionRuns.Observer observer) { return ++lastScriptId; }
-        public void execute(int id, String source, CodeModeJobService.ExecutionSide side, CodeModeJobService.ExecutionEnvironment environment) { }
+        public void execute(int id, String source, Side side, CodeModeJobService.ExecutionEnvironment environment) { }
         public void discard(int id) { }
         public void cancel(int id) { }
     }

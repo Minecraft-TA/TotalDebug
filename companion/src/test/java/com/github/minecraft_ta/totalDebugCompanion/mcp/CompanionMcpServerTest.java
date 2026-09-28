@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.net.URI;
@@ -256,7 +257,7 @@ class CompanionMcpServerTest {
         public void execute(
                 int scriptId,
                 String source,
-                CodeModeJobService.ExecutionSide side,
+                Side side,
                 CodeModeJobService.ExecutionEnvironment environment
         ) {
         }

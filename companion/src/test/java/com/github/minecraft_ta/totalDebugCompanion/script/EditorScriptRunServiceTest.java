@@ -20,6 +20,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService.ReadySnapshot;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -78,7 +79,7 @@ class EditorScriptRunServiceTest {
             var view = edt(() -> new ScriptView(runContext, script));
             edt(() -> window.getEditorTabs().openEditorTab(view)).get(10, TimeUnit.SECONDS);
             var run = fixture.runs.start(project, Source.capture(project, "Test.tdscript", new NavigationTarget.LocalFile(script)),
-                    CODE, false, ScriptExecutionEnvironment.THREAD);
+                    CODE, Side.CLIENT, ScriptExecutionEnvironment.THREAD);
             fixture.awaitSubmission(run);
             run.stop();
             assertFalse(run.state().terminal(), "A failed cancellation does not confirm that the run ended");
@@ -240,7 +241,7 @@ class EditorScriptRunServiceTest {
             executions = new ExecutionRuns(session, new ScriptExecutionService(session, compiler, () -> true));
             runs = new EditorScriptRunService(executions, notifications);
         }
-        EditorScriptRunService.Run start(String code) { return runs.start(project, Source.capture(project, "Test", null), code, false, ScriptExecutionEnvironment.THREAD); }
+        EditorScriptRunService.Run start(String code) { return runs.start(project, Source.capture(project, "Test", null), code, Side.CLIENT, ScriptExecutionEnvironment.THREAD); }
         void awaitSubmission(EditorScriptRunService.Run run) throws Exception {
             RunScriptMessage message = sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(message);

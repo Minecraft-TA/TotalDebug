@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
@@ -204,12 +205,12 @@ class ClientScriptServiceTest {
 
     private static RunScriptMessage serverRun(int scriptId) {
         return new RunScriptMessage(scriptId, new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2})),
-                "inventory", true, ScriptExecutionEnvironment.THREAD.name(), "server-session");
+                "inventory", Side.SERVER, ScriptExecutionEnvironment.THREAD.name(), "server-session");
     }
 
     private static RunScriptMessage targetedServerRun(int scriptId, String gameSession) {
         return new RunScriptMessage(scriptId, new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2})),
-                "inventory", true, ScriptExecutionEnvironment.POST_TICK.name(), "server-session",
+                "inventory", Side.SERVER, ScriptExecutionEnvironment.POST_TICK.name(), "server-session",
                 "block minecraft:overworld 1 64 -2", gameSession, "");
     }
 

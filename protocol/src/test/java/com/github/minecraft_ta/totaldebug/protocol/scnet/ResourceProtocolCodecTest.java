@@ -14,6 +14,7 @@ import java.util.EnumSet;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ResourceProtocolCodecTest {
     @Test
@@ -32,7 +33,7 @@ class ResourceProtocolCodecTest {
     @Test
     void aReloadAndItsAnswerSurviveTheWire() {
         ReloadPayload request = new ReloadPayload(3, EnumSet.of(ReloadPayload.Kind.LANGUAGE, ReloadPayload.Kind.DATA, ReloadPayload.Kind.TEXTURES),
-                "file/TotalDebug", "", List.of("assets/testmod/lang/en_us.json"));
+                "file/TotalDebug", "", "C:/game/saves/World", List.of("assets/testmod/lang/en_us.json"));
         ReloadMessage readRequest = new ReloadMessage();
         readRequest.read(new ByteBufferInputStream(written(new ReloadMessage(request))));
         assertEquals(request, readRequest.payload());
@@ -46,10 +47,23 @@ class ResourceProtocolCodecTest {
 
     @Test
     void aPackSelectionSurvivesTheWire() {
-        SetPacksPayload request = new SetPacksPayload(4, SetPacksPayload.Side.DATA, List.of("vanilla", "mod_data", "file/Tweaks"));
+        SetPacksPayload request = new SetPacksPayload(4, SetPacksPayload.Side.DATA, "C:/game/saves/World", List.of("vanilla", "mod_data", "file/Tweaks"));
         SetPacksMessage read = new SetPacksMessage();
         read.read(new ByteBufferInputStream(written(new SetPacksMessage(request))));
         assertEquals(request, read.payload());
+    }
+
+    @Test
+    void aDatapackSelectionNamesItsWorldAndAResourcePackSelectionNone() {
+        assertThrows(IllegalArgumentException.class, () -> new SetPacksPayload(1, SetPacksPayload.Side.DATA, "", List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new SetPacksPayload(1, SetPacksPayload.Side.RESOURCES, "C:/game/saves/World", List.of()));
+    }
+
+    @Test
+    void aDataReloadNamesItsWorldAndAReloadWithoutDataNone() {
+        assertThrows(IllegalArgumentException.class, () -> new ReloadPayload(1, EnumSet.of(ReloadPayload.Kind.DATA), "", "", "", List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ReloadPayload(1, EnumSet.of(ReloadPayload.Kind.LANGUAGE), "", "",
+                "C:/game/saves/World", List.of()));
     }
 
     private static ByteBuffer written(AbstractMessage message) {

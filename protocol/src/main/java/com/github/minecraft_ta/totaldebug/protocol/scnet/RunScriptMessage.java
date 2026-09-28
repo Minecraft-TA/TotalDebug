@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.protocol.message.RunScriptPayload;
 import com.github.tth05.scnet.message.AbstractMessage;
@@ -12,12 +13,12 @@ public final class RunScriptMessage extends AbstractMessage {
     public RunScriptMessage() {
     }
 
-    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, String executionEnvironment, String serverSessionId) {
-        this(scriptId, bytecode, inventoryId, serverSide, executionEnvironment, serverSessionId, "", "", "");
+    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, Side side, String executionEnvironment, String serverSessionId) {
+        this(scriptId, bytecode, inventoryId, side, executionEnvironment, serverSessionId, "", "", "");
     }
 
-    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, String executionEnvironment, String serverSessionId, String subject, String subjectSessionId, String subjectExpectedId) {
-        this.payload = new RunScriptPayload(scriptId, bytecode, inventoryId, serverSide, executionEnvironment, serverSessionId, subject, subjectSessionId, subjectExpectedId);
+    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, Side side, String executionEnvironment, String serverSessionId, String subject, String subjectSessionId, String subjectExpectedId) {
+        this.payload = new RunScriptPayload(scriptId, bytecode, inventoryId, side, executionEnvironment, serverSessionId, subject, subjectSessionId, subjectExpectedId);
     }
 
     @Override
@@ -44,8 +45,8 @@ public final class RunScriptMessage extends AbstractMessage {
         return this.payload.inventoryId();
     }
 
-    public boolean serverSide() {
-        return this.payload.serverSide();
+    public Side side() {
+        return this.payload.side();
     }
 
     public String executionEnvironment() {

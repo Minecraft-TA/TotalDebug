@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 
 import java.awt.event.ActionEvent;
@@ -241,7 +242,7 @@ public class FileTreeView extends JScrollPane {
             rootItems.add(mods);
         }
         if (Files.isDirectory(scope.profile().workspaceDirectory().resolve("saves"))) {
-            rootItems.add(new WorldTreeItems.Root(scope.profile().workspaceDirectory(), scope.world()));
+            rootItems.add(new WorldTreeItems.Root(scope.location(), scope.world()));
         }
         if (binding != null && !catalog.modules().isEmpty()) {
             rootItems.add(new DecompiledSourcesTreeItem(this.tree, binding.decompiler()));
@@ -266,11 +267,19 @@ public class FileTreeView extends JScrollPane {
             this.tree.refreshRootNodes(roots);
         } else {
             this.tree.setRootNodes(roots);
-            // The World rows follow what the World page read last.
+            // The World rows follow what the World page read last, and the game to another world.
             this.removeWorldListener.run();
-            this.removeWorldListener = scope.world().addListener(() -> SwingUtilities.invokeLater(() -> {
+            Runnable refresh = () -> SwingUtilities.invokeLater(() -> {
                 if (!this.disposed && project.get() == scope) this.tree.refreshRoot(WorldTreeItems.ROOT);
-            }));
+            });
+            Runnable removeRead = scope.world().addListener(refresh);
+            Runnable removePlayed = scope.location().addListener(change -> {
+                if (change == GameLocation.Change.PLAYING) refresh.run();
+            });
+            this.removeWorldListener = () -> {
+                removeRead.run();
+                removePlayed.run();
+            };
         }
         this.displayedProject = scope;
     }

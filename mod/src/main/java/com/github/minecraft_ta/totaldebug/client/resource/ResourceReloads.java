@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.resource;
 
+import net.minecraft.world.level.storage.LevelResource;
+import java.nio.file.Path;
 import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
@@ -41,7 +43,7 @@ public final class ResourceReloads {
         ReloadProblems problems = ReloadProblems.open(request.watched());
         // Data and resources reload independently, so one failing does not keep the other from the game.
         List<CompletableFuture<Void>> reloads = new ArrayList<>();
-        if (request.kinds().contains(ReloadPayload.Kind.DATA)) reloads.add(attempt(() -> reloadData(request.managedDataPack())));
+        if (request.kinds().contains(ReloadPayload.Kind.DATA)) reloads.add(attempt(() -> reloadData(request.dataWorld(), request.managedDataPack())));
         Set<ReloadPayload.Kind> kinds = request.kinds();
         if (kinds.contains(ReloadPayload.Kind.RESOURCES) || kinds.contains(ReloadPayload.Kind.LANGUAGE)
                 || kinds.contains(ReloadPayload.Kind.TEXTURES)) {
@@ -68,7 +70,7 @@ public final class ResourceReloads {
     public static void select(SetPacksPayload request, Consumer<ReloadResultPayload> answer) {
         long started = System.nanoTime();
         attempt(() -> request.side() == SetPacksPayload.Side.RESOURCES ? selectResources(request.enabled())
-                : selectData(request.enabled())).whenComplete((ignored, failure) -> answer.accept(new ReloadResultPayload(
+                : selectData(request.world(), request.enabled())).whenComplete((ignored, failure) -> answer.accept(new ReloadResultPayload(
                 request.requestId(), (System.nanoTime() - started) / 1_000_000, List.of(), failure == null ? "" : message(failure))));
     }
 
@@ -87,11 +89,12 @@ public final class ResourceReloads {
         return reloadAll(minecraft);
     }
 
-    private static CompletableFuture<Void> selectData(List<String> enabled) {
+    private static CompletableFuture<Void> selectData(String world, List<String> enabled) {
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
         if (server == null) {
             return CompletableFuture.failedFuture(new IllegalStateException("No singleplayer world is open"));
         }
+        if (!plays(server, world)) return CompletableFuture.failedFuture(notPlayed(world));
         return CompletableFuture.supplyAsync(() -> {
             PackRepository packs = server.getPackRepository();
             packs.reload();
@@ -106,6 +109,18 @@ public final class ResourceReloads {
             if (!refused.isEmpty()) throw new IllegalArgumentException(String.join("; ", refused));
             return server.reloadResources(enabled);
         }, server).thenCompose(reload -> reload);
+    }
+
+    /**
+     * Whether {@code server} runs the world {@code world} names. A request is made for the world Companion saw the game
+     * play, and the game may have gone to another since.
+     */
+    private static boolean plays(IntegratedServer server, String world) {
+        return server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().equals(Path.of(world).toAbsolutePath().normalize());
+    }
+
+    private static IllegalStateException notPlayed(String world) {
+        return new IllegalStateException("The game no longer plays the world " + Path.of(world).getFileName() + "; nothing was changed");
     }
 
     /** Saves the selected resource packs into {@code options.txt}, as {@code Options.updateResourcePacks} does. */
@@ -215,12 +230,13 @@ public final class ResourceReloads {
     }
 
     /** Reloads the singleplayer server's data with every pack the world does not disable, as {@code /reload} does. */
-    private static CompletableFuture<Void> reloadData(String managedPack) {
+    private static CompletableFuture<Void> reloadData(String world, String managedPack) {
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
         if (server == null) {
             return CompletableFuture.failedFuture(new IllegalStateException(
                     "Data is reloaded only in a singleplayer world, and none is open"));
         }
+        if (!plays(server, world)) return CompletableFuture.failedFuture(notPlayed(world));
         return CompletableFuture.supplyAsync(() -> {
             PackRepository packs = server.getPackRepository();
             packs.reload();

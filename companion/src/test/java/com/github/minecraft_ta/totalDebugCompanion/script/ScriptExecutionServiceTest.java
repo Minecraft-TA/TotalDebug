@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -27,7 +28,7 @@ class ScriptExecutionServiceTest {
             var scripts = new ScriptExecutionService(session, compiler, () -> true);
             var result = new AtomicReference<ExecutionResult>();
             assertFalse(scripts.isReady());
-            assertTrue(scripts.run(project, 1, "source", false, ScriptExecutionEnvironment.THREAD, failure -> result.set(failure.result())),
+            assertTrue(scripts.run(project, 1, "source", Side.CLIENT, ScriptExecutionEnvironment.THREAD, failure -> result.set(failure.result())),
                     "False is reserved for disconnected or inactive projects");
             assertNotNull(result.get());
             assertEquals(ExecutionStatus.COMPILATION_FAILED, result.get().status());

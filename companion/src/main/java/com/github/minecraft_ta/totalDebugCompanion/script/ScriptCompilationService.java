@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryCompilationException;
 import com.github.minecraft_ta.totaldebug.evaluation.CompilationDiagnostic;
 import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
@@ -82,11 +83,11 @@ public final class ScriptCompilationService implements AutoCloseable {
     public record Readiness(boolean ready, String detail, CompletableFuture<Void> changed) {
     }
 
-    public synchronized Readiness readiness(boolean serverSide) {
+    public synchronized Readiness readiness(Side side) {
         ReadySnapshot selected = this.snapshot;
         ServerSnapshot server = this.serverSnapshot;
         String detail = this.closed || selected == null ? "The runtime class index is not ready for compilation"
-                : serverSide && (server == null || !server.inventoryId().equals(selected.inventoryId())) ? this.serverUnavailable
+                : side == Side.SERVER && (server == null || !server.inventoryId().equals(selected.inventoryId())) ? this.serverUnavailable
                 : "";
         return new Readiness(detail.isEmpty(), detail, this.readinessChange.copy());
     }
@@ -304,21 +305,21 @@ public final class ScriptCompilationService implements AutoCloseable {
         return !this.closed && current != null && current.inventoryId().equals(inventoryId);
     }
 
-    public void submit(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
+    public void submit(int id, String source, Side side, ScriptExecutionEnvironment environment,
                        Consumer<Failure> failureHandler) {
-        submit(id, source, serverSide, environment, null, failureHandler);
+        submit(id, source, side, environment, null, failureHandler);
     }
 
     /** Compiles and sends a run whose {@code target()} resolves {@code subject}, or has no target when null. */
-    public void submit(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
+    public void submit(int id, String source, Side side, ScriptExecutionEnvironment environment,
                        ScriptSubject subject, Consumer<Failure> failureHandler) {
         ReadySnapshot selected = this.snapshot;
         if (this.closed || selected == null) {
             failureHandler.accept(failure("The runtime class index is not ready for compilation"));
             return;
         }
-        ServerSnapshot server = serverSide ? this.serverSnapshot : null;
-        if (serverSide && (server == null || !server.inventoryId().equals(selected.inventoryId()))) {
+        ServerSnapshot server = side == Side.SERVER ? this.serverSnapshot : null;
+        if (side == Side.SERVER && (server == null || !server.inventoryId().equals(selected.inventoryId()))) {
             failureHandler.accept(failure(this.serverUnavailable));
             return;
         }
@@ -329,7 +330,7 @@ public final class ScriptCompilationService implements AutoCloseable {
         }
         synchronized (task) {
             try {
-                task.future = this.worker.submit(() -> compileAndSend(id, source, serverSide, environment, subject, selected, server, task));
+                task.future = this.worker.submit(() -> compileAndSend(id, source, side, environment, subject, selected, server, task));
             } catch (RuntimeException exception) {
                 this.pending.remove(id, task);
                 failureHandler.accept(failure("Unable to start compilation: " + exception.getMessage()));
@@ -337,7 +338,7 @@ public final class ScriptCompilationService implements AutoCloseable {
         }
     }
 
-    private void compileAndSend(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
+    private void compileAndSend(int id, String source, Side side, ScriptExecutionEnvironment environment,
                                 ScriptSubject subject, ReadySnapshot selected, ServerSnapshot server, Pending task) {
         try {
             var matcher = SCRIPT_CLASS.matcher(source);
@@ -349,7 +350,7 @@ public final class ScriptCompilationService implements AutoCloseable {
             synchronized (task) {
                 if (this.pending.get(id) != task) return;
                 if (this.snapshot != selected || (server != null && this.serverSnapshot != server) || !this.sender.test(new RunScriptMessage(
-                        id, compiled.bytecode(), compiled.inventoryId(), serverSide, environment.name(), server == null ? "" : server.sessionId(),
+                        id, compiled.bytecode(), compiled.inventoryId(), side, environment.name(), server == null ? "" : server.sessionId(),
                         subject == null ? "" : subject.subject().format(), subject == null ? "" : subject.gameSessionId(),
                         subject == null ? "" : subject.expectedId()))) {
                     throw new IllegalStateException("Minecraft disconnected or the runtime changed before the script was submitted");

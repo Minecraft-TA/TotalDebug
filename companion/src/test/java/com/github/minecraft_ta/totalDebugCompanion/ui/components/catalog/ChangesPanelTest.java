@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
@@ -42,11 +43,11 @@ class ChangesPanelTest {
         ChangeRecord record = ChangeRecord.inMemory();
         record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", file, "widgets.speed"), "9", "12");
         ChangesPanel[] panel = new ChangesPanel[1];
-        ResourceEdits edits = new ResourceEdits(this.directory, record, new ResourceOriginals(this.directory.resolve("originals")),
-                Runnable::run, () -> false, InstanceState.inMemory());
-        SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(this.directory, record),
-                new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false, Runnable::run), edits,
-                new PackSelections(this.directory, record, edits, () -> false, Runnable::run), target -> { }));
+        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record, new ResourceOriginals(this.directory.resolve("originals")),
+                Runnable::run, InstanceState.inMemory());
+        SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(GameLocations.of(this.directory, false), record),
+                new KeyBindingControl(GameLocations.of(this.directory, false), record, Runnable::run), edits,
+                new PackSelections(record, edits, Runnable::run), target -> { }));
         ConfigSettingsTable table = panel[0].settingsTable();
         try {
             awaitOnSwing(() -> table.getRowCount() == 3);

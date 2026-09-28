@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
@@ -61,16 +62,16 @@ public final class SnippetExecutionService implements AutoCloseable {
         int id = this.executions.open(this.observer);
         CompletableFuture<ExecutionResult> completion = new CompletableFuture<>();
         this.runs.put(id, completion);
-        if (!this.executions.submit(id, project, source.source(), side == Side.SERVER, environment, subject)) {
+        if (!this.executions.submit(id, project, source.source(), side, environment, subject)) {
             this.runs.remove(id, completion);
             throw new IllegalStateException("Minecraft is not connected");
         }
         return new Execution(id, completion, () -> cancel(id));
     }
 
-    /** Whether a snippet on {@code side} can run now; see {@link ScriptCompilationService#readiness(boolean)}. */
+    /** Whether a snippet on {@code side} can run now; see {@link ScriptCompilationService#readiness(Side)}. */
     public ScriptCompilationService.Readiness readiness(Side side) {
-        return this.executions.readiness(side == Side.SERVER);
+        return this.executions.readiness(side);
     }
 
     private void cancel(int id) {
@@ -90,11 +91,6 @@ public final class SnippetExecutionService implements AutoCloseable {
             entry.getValue().completeExceptionally(new IllegalStateException("Snippet execution service closed"));
         }
         this.runs.clear();
-    }
-
-    public enum Side {
-        CLIENT,
-        SERVER
     }
 
     public record Execution(int id, CompletableFuture<ExecutionResult> completion, Runnable cancel) {
