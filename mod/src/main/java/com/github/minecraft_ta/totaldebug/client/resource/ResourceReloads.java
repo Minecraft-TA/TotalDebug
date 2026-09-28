@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.client.resource;
 import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.resources.ResourceLocation;
@@ -40,11 +41,11 @@ public final class ResourceReloads {
         ReloadProblems problems = ReloadProblems.open(request.watched());
         // Data and resources reload independently, so one failing does not keep the other from the game.
         List<CompletableFuture<Void>> reloads = new ArrayList<>();
-        if (request.kinds().contains(ReloadPayload.Kind.DATA)) reloads.add(attempt(() -> reloadData(request.managedPack())));
+        if (request.kinds().contains(ReloadPayload.Kind.DATA)) reloads.add(attempt(() -> reloadData(request.managedDataPack())));
         Set<ReloadPayload.Kind> kinds = request.kinds();
         if (kinds.contains(ReloadPayload.Kind.RESOURCES) || kinds.contains(ReloadPayload.Kind.LANGUAGE)
                 || kinds.contains(ReloadPayload.Kind.TEXTURES)) {
-            reloads.add(attempt(() -> reloadResources(request.managedPack(), kinds, request.watched())));
+            reloads.add(attempt(() -> reloadResources(request.managedResourcePack(), kinds, request.watched())));
         }
         CompletableFuture.allOf(reloads.toArray(CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
             List<ReloadResultPayload.Problem> found = problems.problems();
@@ -56,6 +57,83 @@ public final class ResourceReloads {
             }
             answer.accept(new ReloadResultPayload(request.requestId(), millis, found, String.join("; ", errors)));
         });
+    }
+
+    /**
+     * Enables exactly the packs {@code request} names, lowest first, as the game's pack screen or {@code /datapack} does,
+     * then answers once the reload that needs is done. Packs the game requires are added where it puts them; a pack it
+     * does not know, or a datapack that requests features the world does not have, fails the request unchanged. Client
+     * thread only.
+     */
+    public static void select(SetPacksPayload request, Consumer<ReloadResultPayload> answer) {
+        long started = System.nanoTime();
+        attempt(() -> request.side() == SetPacksPayload.Side.RESOURCES ? selectResources(request.enabled())
+                : selectData(request.enabled())).whenComplete((ignored, failure) -> answer.accept(new ReloadResultPayload(
+                request.requestId(), (System.nanoTime() - started) / 1_000_000, List.of(), failure == null ? "" : message(failure))));
+    }
+
+    private static CompletableFuture<Void> selectResources(List<String> enabled) {
+        Minecraft minecraft = Minecraft.getInstance();
+        PackRepository packs = minecraft.getResourcePackRepository();
+        packs.reload();
+        List<String> unknown = enabled.stream().filter(id -> packs.getPack(id) == null).toList();
+        if (!unknown.isEmpty()) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("The game has no resource pack " + String.join(", ", unknown)));
+        }
+        List<String> before = List.copyOf(packs.getSelectedIds());
+        packs.setSelected(enabled);
+        saveOptions(minecraft);
+        if (List.copyOf(packs.getSelectedIds()).equals(before)) return CompletableFuture.completedFuture(null);
+        return reloadAll(minecraft);
+    }
+
+    private static CompletableFuture<Void> selectData(List<String> enabled) {
+        IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
+        if (server == null) {
+            return CompletableFuture.failedFuture(new IllegalStateException("No singleplayer world is open"));
+        }
+        return CompletableFuture.supplyAsync(() -> {
+            PackRepository packs = server.getPackRepository();
+            packs.reload();
+            List<String> refused = new ArrayList<>();
+            for (String id : enabled) {
+                Pack pack = packs.getPack(id);
+                if (pack == null) refused.add(id + " is not a datapack of the world");
+                else if (!pack.getRequestedFeatures().isSubsetOf(server.getWorldData().enabledFeatures())) {
+                    refused.add(id + " needs features the world does not have");
+                }
+            }
+            if (!refused.isEmpty()) throw new IllegalArgumentException(String.join("; ", refused));
+            return server.reloadResources(enabled);
+        }, server).thenCompose(reload -> reload);
+    }
+
+    /** Saves the selected resource packs into {@code options.txt}, as {@code Options.updateResourcePacks} does. */
+    private static void saveOptions(Minecraft minecraft) {
+        minecraft.options.resourcePacks.clear();
+        minecraft.options.incompatibleResourcePacks.clear();
+        for (Pack pack : minecraft.getResourcePackRepository().getSelectedPacks()) {
+            if (pack.isFixedPosition() || pack.isHidden()) continue;
+            minecraft.options.resourcePacks.add(pack.getId());
+            if (!pack.getCompatibility().isCompatible()) minecraft.options.incompatibleResourcePacks.add(pack.getId());
+        }
+        minecraft.options.save();
+    }
+
+    /** Reloads every client resource, failing when the game turns the folder packs off after a failed reload. */
+    private static CompletableFuture<Void> reloadAll(Minecraft minecraft) {
+        CompletableFuture<Void> reload = new CompletableFuture<>();
+        minecraft.reloadResourcePacks().whenComplete((ignored, failure) -> {
+            if (failure == null) reload.complete(null);
+            else reload.completeExceptionally(failure);
+        });
+        Set<String> folderPacks = minecraft.getResourcePackRepository().getSelectedIds().stream()
+                .filter(id -> id.startsWith("file/")).collect(Collectors.toSet());
+        if (!folderPacks.isEmpty()) {
+            pendingResources = reload;
+            pendingPacks = folderPacks;
+        }
+        return reload;
     }
 
     private static CompletableFuture<Void> attempt(Supplier<CompletableFuture<Void>> reload) {
@@ -92,34 +170,14 @@ public final class ResourceReloads {
     private static CompletableFuture<Void> reloadResources(String managedPack, Set<ReloadPayload.Kind> kinds, List<String> watched) {
         Minecraft minecraft = Minecraft.getInstance();
         boolean enabled = !managedPack.isEmpty() && enableOnTop(minecraft.getResourcePackRepository(), managedPack);
-        if (enabled) {
-            // As Options.updateResourcePacks saves them, which would also start a reload of its own.
-            minecraft.options.resourcePacks.clear();
-            minecraft.options.incompatibleResourcePacks.clear();
-            for (Pack pack : minecraft.getResourcePackRepository().getSelectedPacks()) {
-                if (pack.isFixedPosition() || pack.isHidden()) continue;
-                minecraft.options.resourcePacks.add(pack.getId());
-                if (!pack.getCompatibility().isCompatible()) minecraft.options.incompatibleResourcePacks.add(pack.getId());
-            }
-            minecraft.options.save();
-        }
+        // As Options.updateResourcePacks saves them, which would also start a reload of its own.
+        if (enabled) saveOptions(minecraft);
         if (!kinds.contains(ReloadPayload.Kind.RESOURCES) && !enabled && quickly(managedPack, kinds, watched)) {
             // A full reload tells the catalog through its reload listener; these quick ones do not.
             TotalDebugClient.current().ifPresent(TotalDebugClient::resourcesReloaded);
             return CompletableFuture.completedFuture(null);
         }
-        CompletableFuture<Void> reload = new CompletableFuture<>();
-        minecraft.reloadResourcePacks().whenComplete((ignored, failure) -> {
-            if (failure == null) reload.complete(null);
-            else reload.completeExceptionally(failure);
-        });
-        Set<String> folderPacks = minecraft.getResourcePackRepository().getSelectedIds().stream()
-                .filter(id -> id.startsWith("file/")).collect(Collectors.toSet());
-        if (!folderPacks.isEmpty()) {
-            pendingResources = reload;
-            pendingPacks = folderPacks;
-        }
-        return reload;
+        return reloadAll(minecraft);
     }
 
     /**

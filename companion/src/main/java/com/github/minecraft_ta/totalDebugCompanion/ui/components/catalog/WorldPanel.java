@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
@@ -20,8 +21,13 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLab
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.PlateIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
+import com.github.minecraft_ta.totalDebugCompanion.pack.PackResources;
+import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
+import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
@@ -53,6 +59,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * The current world as its {@code level.dat} saved it: an overview of its settings, time and weather, its game rules
@@ -66,7 +73,7 @@ public final class WorldPanel extends JPanel {
             .withZone(ZoneId.systemDefault());
 
     /** A read world with its icon, or null for either; {@code problem} says why there is no world. */
-    private record Loaded(CurrentWorld.Saved saved, BufferedImage icon, String problem) {
+    private record Loaded(CurrentWorld.Saved saved, List<ListedPack> datapacks, BufferedImage icon, String problem) {
     }
 
     private final Path workspace;
@@ -86,6 +93,8 @@ public final class WorldPanel extends JPanel {
     private final JLabel message = new JLabel();
     private final JPanel cards = new JPanel(new CardLayout());
     private CurrentWorld.Saved saved;
+    /** The world's datapacks: as the connected game names them while it has the world open, or as level.dat saved them. */
+    private List<ListedPack> datapackList = List.of();
     private WorldTab requested;
     private boolean disposed;
 
@@ -94,13 +103,18 @@ public final class WorldPanel extends JPanel {
      * {@code readings}, which the Project tree follows.
      */
     public WorldPanel(Path workspace, PackCatalogService catalog, ItemIconService icons, WorldReadings readings,
-                      Consumer<NavigationTarget> navigator) {
+                      ResourceEdits edits, PackSelections selections, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.readings = Objects.requireNonNull(readings, "readings");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         this.icons = Objects.requireNonNull(icons, "icons");
         this.datapacks = new PacksPanel(PacksPanel.Side.DATA, Objects.requireNonNull(navigator, "navigator"));
+        this.datapacks.setApplier(enabled -> {
+            CurrentWorld.Saved shown = this.saved;
+            if (shown == null) return CompletableFuture.failedFuture(new IllegalStateException("No world is shown"));
+            return selections.set(SetPacksPayload.Side.DATA, shown.directory(), enabled);
+        }, "Enables the checked datapacks in this order: in the world the connected game has open, which reloads its data, otherwise in the world's level.dat");
 
         this.tabContent.put(WorldTab.OVERVIEW, scroll(this.overview));
         this.tabContent.put(WorldTab.GAME_RULES, this.rules);
@@ -124,21 +138,25 @@ public final class WorldPanel extends JPanel {
 
         // Only the names of the mods behind datapacks come from the catalog.
         this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(() -> {
-            if (!this.disposed && this.saved != null) this.datapacks.setPacks(this.saved.datapacks(), this.catalog.index().orElse(null));
+            if (!this.disposed && this.saved != null) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
         }));
         // The game saves the world while it runs, so the page reads it whenever it is shown.
-        this.loader = new PageLoader<>(() -> () -> read(this.workspace), this::show,
-                failure -> show(new Loaded(null, null, "The world could not be read: " + failure.getMessage()))).whenShown(this);
+        // A change of the game's datapacks, or one Companion wrote, is read again at once.
+        this.loader = new PageLoader<>(() -> {
+            PackStackPayload stack = edits.packStack();
+            return () -> read(this.workspace, stack);
+        }, this::show, failure -> show(new Loaded(null, List.of(), null, "The world could not be read: " + failure.getMessage())))
+                .whenShown(this).follow(edits::addStackListener).follow(edits.record()::addListener);
     }
 
-    private static Loaded read(Path workspace) {
+    private static Loaded read(Path workspace, PackStackPayload stack) {
         Optional<Path> world = CurrentWorld.directory(workspace);
-        if (world.isEmpty()) return new Loaded(null, null, "No world has been played in this instance yet.");
+        if (world.isEmpty()) return new Loaded(null, List.of(), null, "No world has been played in this instance yet.");
         try {
             CurrentWorld.Saved saved = CurrentWorld.read(world.get());
-            return new Loaded(saved, icon(world.get().resolve("icon.png")), "");
+            return new Loaded(saved, PackResources.worldDatapacks(stack, saved), icon(world.get().resolve("icon.png")), "");
         } catch (IOException | RuntimeException unreadable) {
-            return new Loaded(null, null, "The world " + world.get().getFileName() + " could not be read: " + unreadable.getMessage());
+            return new Loaded(null, List.of(), null, "The world " + world.get().getFileName() + " could not be read: " + unreadable.getMessage());
         }
     }
 
@@ -155,6 +173,7 @@ public final class WorldPanel extends JPanel {
 
     private void show(Loaded loaded) {
         this.saved = loaded.saved();
+        this.datapackList = loaded.datapacks();
         this.readings.read(WorldReadings.Summary.of(this.saved));
         if (this.saved == null) {
             this.message.setText(loaded.problem());
@@ -173,9 +192,9 @@ public final class WorldPanel extends JPanel {
 
         showOverview(saved);
         this.rules.setRules(saved.gameRules());
-        this.datapacks.setPacks(saved.datapacks(), this.catalog.index().orElse(null));
+        this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
         setTab(WorldTab.GAME_RULES, saved.gameRules().size());
-        setTab(WorldTab.DATAPACKS, saved.datapacks().size());
+        setTab(WorldTab.DATAPACKS, this.datapackList.size());
         ((CardLayout) this.cards.getLayout()).show(this.cards, PAGE_CARD);
         if (this.requested != null) show(this.requested);
         refreshTitle();

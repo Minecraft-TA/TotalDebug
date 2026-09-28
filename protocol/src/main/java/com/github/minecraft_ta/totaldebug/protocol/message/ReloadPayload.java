@@ -10,11 +10,13 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Protocol-28 payload asking the game to reload what edited resources need. {@code managedPack} is the id of the pack
- * Companion manages, such as {@code file/TotalDebug}, which the game enables at the top of its stacks before the
- * reload; empty for none. {@code watched} are the edited resource paths whose problems the answer reports.
+ * Protocol-29 payload asking the game to reload what edited resources need. {@code managedResourcePack} and
+ * {@code managedDataPack} are the id of the pack Companion manages, such as {@code file/TotalDebug}, among the resource
+ * packs and the datapacks, which the game enables at the top of that stack before the reload; empty where no edit of the
+ * reload went into it. {@code watched} are the edited resource paths whose problems the answer reports.
  */
-public record ReloadPayload(int requestId, Set<Kind> kinds, String managedPack, List<String> watched) {
+public record ReloadPayload(int requestId, Set<Kind> kinds, String managedResourcePack, String managedDataPack,
+                            List<String> watched) {
     public static final int MAX_WATCHED = 1_024;
 
     /** What to reload. */
@@ -32,7 +34,8 @@ public record ReloadPayload(int requestId, Set<Kind> kinds, String managedPack, 
     public ReloadPayload {
         kinds = Set.copyOf(kinds);
         if (kinds.isEmpty()) throw new IllegalArgumentException("Nothing to reload");
-        Objects.requireNonNull(managedPack, "managedPack");
+        Objects.requireNonNull(managedResourcePack, "managedResourcePack");
+        Objects.requireNonNull(managedDataPack, "managedDataPack");
         watched = List.copyOf(watched);
         if (watched.size() > MAX_WATCHED) throw new IllegalArgumentException("Too many watched paths");
     }
@@ -44,12 +47,13 @@ public record ReloadPayload(int requestId, Set<Kind> kinds, String managedPack, 
         for (Kind kind : Kind.values()) {
             if ((mask & (1 << kind.ordinal())) != 0) kinds.add(kind);
         }
-        String managedPack = input.readString();
+        String managedResourcePack = input.readString();
+        String managedDataPack = input.readString();
         int count = input.readInt();
         if (count < 0 || count > MAX_WATCHED) throw new IllegalArgumentException("Invalid watched path count: " + count);
         List<String> watched = new ArrayList<>(count);
         for (int index = 0; index < count; index++) watched.add(input.readString());
-        return new ReloadPayload(requestId, kinds, managedPack, watched);
+        return new ReloadPayload(requestId, kinds, managedResourcePack, managedDataPack, watched);
     }
 
     public void write(ByteBufferOutputStream output) {
@@ -57,7 +61,8 @@ public record ReloadPayload(int requestId, Set<Kind> kinds, String managedPack, 
         int mask = 0;
         for (Kind kind : this.kinds) mask |= 1 << kind.ordinal();
         output.writeInt(mask);
-        output.writeString(this.managedPack);
+        output.writeString(this.managedResourcePack);
+        output.writeString(this.managedDataPack);
         output.writeInt(this.watched.size());
         for (String path : this.watched) output.writeString(path);
     }

@@ -1,20 +1,25 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
 import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
-import java.util.zip.GZIPInputStream;
 
 /**
  * The current world as its {@code level.dat} saved it: the world the game has open, or the one played last while none
@@ -22,8 +27,6 @@ import java.util.zip.GZIPInputStream;
  * it. Blocking.
  */
 public final class CurrentWorld {
-    private static final int MAX_LEVEL_BYTES = 16 * 1024 * 1024;
-
     /** Where a player appears when they have no bed or anchor. */
     public record Spawn(int x, int y, int z) {
     }
@@ -61,6 +64,10 @@ public final class CurrentWorld {
         }
     }
 
+    /** Minecraft's datapacks that turn on a feature of their own. */
+    private static final Map<String, String> BUILT_IN_FEATURES = Map.of("bundle", "minecraft:bundle",
+            "trade_rebalance", "minecraft:trade_rebalance");
+
     private CurrentWorld() {
     }
 
@@ -75,10 +82,9 @@ public final class CurrentWorld {
      * loads that one when {@code level.dat} is missing; so does this.
      */
     public static Saved read(Path world) throws IOException {
-        Path level = world.resolve("level.dat");
-        if (!Files.exists(level) && Files.isRegularFile(world.resolve("level.dat_old"))) level = world.resolve("level.dat_old");
+        Path level = LevelDat.file(world);
         FileTime saved = Files.getLastModifiedTime(level);
-        NbtData.CompoundTag data = compound(root(level), "Data");
+        NbtData.CompoundTag data = compound(LevelDat.read(level).tag(), "Data");
         if (data == null) throw new IOException(level + " holds no world data");
         NbtData.CompoundTag generation = compound(data, "WorldGenSettings");
         NbtData.CompoundTag version = compound(data, "Version");
@@ -100,49 +106,63 @@ public final class CurrentWorld {
                 number(data, "thundering", 0) != 0,
                 new Spawn((int) number(data, "SpawnX", 0), (int) number(data, "SpawnY", 0), (int) number(data, "SpawnZ", 0)),
                 version == null ? "" : string(version, "Name"), lastPlayed > 0 ? Instant.ofEpochMilli(lastPlayed) : saved.toInstant(),
-                rules, datapacks(world, strings(packs, "Enabled"), strings(packs, "Disabled")));
+                rules, datapacks(world, strings(packs, "Enabled"), strings(packs, "Disabled"), Set.copyOf(strings(data, "enabled_features"))));
     }
 
     /**
      * The world's datapacks. The game names a pack in the world's {@code datapacks} folder {@code file/} and its file
-     * name (see {@link PackFolders}), and drops one whose folder or zip is gone when it loads the world.
+     * name (see {@link PackFolders}), and drops one whose folder or zip is gone when it loads the world. {@code features}
+     * are the ones the world has, which a pack may request.
      */
-    private static List<ListedPack> datapacks(Path world, List<String> enabled, List<String> disabled) throws IOException {
+    private static List<ListedPack> datapacks(Path world, List<String> enabled, List<String> disabled, Set<String> features)
+            throws IOException {
         Map<String, Path> files = PackFolders.list(world.resolve("datapacks"));
         List<ListedPack> packs = new ArrayList<>();
         for (String id : enabled.reversed()) {
-            if (!gone(id, files)) packs.add(new ListedPack(id, ListedPack.State.ENABLED, files.remove(id)));
+            if (!gone(id, files)) packs.add(listed(id, ListedPack.State.ENABLED, files.remove(id), features));
         }
         for (String id : disabled) {
-            if (!gone(id, files)) packs.add(new ListedPack(id, ListedPack.State.DISABLED, files.remove(id)));
+            if (!gone(id, files)) packs.add(listed(id, ListedPack.State.DISABLED, files.remove(id), features));
         }
-        files.forEach((id, file) -> packs.add(new ListedPack(id, ListedPack.State.NEW, file)));
+        files.forEach((id, file) -> packs.add(listed(id, ListedPack.State.NEW, file, features)));
         return packs;
+    }
+
+    /** A datapack with what the game allows for it: the mods' data is required, and the parts of it go with it. */
+    private static ListedPack listed(String id, ListedPack.State state, Path file, Set<String> features) {
+        Set<ListedPack.Rule> rules = EnumSet.noneOf(ListedPack.Rule.class);
+        if (id.equals("mod_data")) rules.add(ListedPack.Rule.REQUIRED);
+        if (id.startsWith("mod/")) rules.add(ListedPack.Rule.PART_OF_MODS);
+        if (!features.containsAll(requested(id, file))) rules.add(ListedPack.Rule.MISSING_FEATURES);
+        return new ListedPack(id, state, file, "", rules);
+    }
+
+    /** The features a datapack requests: Minecraft's feature packs their own, a pack of the folder those its metadata names. */
+    private static List<String> requested(String id, Path file) {
+        String builtIn = BUILT_IN_FEATURES.get(id);
+        if (builtIn != null) return List.of(builtIn);
+        if (file == null) return List.of();
+        try {
+            byte[] meta = PackFolders.read(file, "pack.mcmeta");
+            if (meta == null || !(JsonParser.parseString(new String(meta, StandardCharsets.UTF_8)) instanceof JsonObject root)
+                    || !(root.get("features") instanceof JsonObject section) || !(section.get("enabled") instanceof JsonArray list)) {
+                return List.of();
+            }
+            List<String> requested = new ArrayList<>();
+            for (JsonElement feature : list) {
+                if (feature.isJsonPrimitive()) {
+                    String name = feature.getAsString();
+                    requested.add(name.contains(":") ? name : "minecraft:" + name);
+                }
+            }
+            return requested;
+        } catch (IOException | RuntimeException unreadable) {
+            return List.of();
+        }
     }
 
     private static boolean gone(String id, Map<String, Path> files) {
         return id.startsWith("file/") && !files.containsKey(id);
-    }
-
-    /** The root compound of a gzipped NBT file, whose root is written with a name the reader does not take. */
-    private static NbtData.CompoundTag root(Path file) throws IOException {
-        byte[] named;
-        try (InputStream input = new GZIPInputStream(Files.newInputStream(file))) {
-            named = input.readNBytes(MAX_LEVEL_BYTES + 1);
-        }
-        if (named.length > MAX_LEVEL_BYTES) throw new IOException(file + " is larger than " + MAX_LEVEL_BYTES + " bytes");
-        if (named.length < 3 || named[0] != 10) throw new IOException(file + " does not start with a compound");
-        int nameLength = ((named[1] & 0xFF) << 8) | (named[2] & 0xFF);
-        if (3 + nameLength > named.length) throw new IOException(file + " ends in the root's name");
-        byte[] unnamed = new byte[named.length - 2 - nameLength];
-        unnamed[0] = named[0];
-        System.arraycopy(named, 3 + nameLength, unnamed, 1, unnamed.length - 1);
-        try {
-            if (NbtData.read(unnamed) instanceof NbtData.CompoundTag root) return root;
-        } catch (IllegalArgumentException unreadable) {
-            throw new IOException(file + " could not be read: " + unreadable.getMessage(), unreadable);
-        }
-        throw new IOException(file + " does not hold a compound");
     }
 
     private static NbtData.CompoundTag compound(NbtData.CompoundTag parent, String key) {

@@ -100,6 +100,8 @@ public final class TotalDebugClient {
                 companionApp.sendKeyBindingResult(new KeyBindingResultMessage(KeyBindingEdits.apply(message.payload())))));
         companionApp.setReloadHandler(message -> Minecraft.getInstance().execute(() -> ResourceReloads.reload(message.payload(),
                 result -> companionApp.sendReloadResult(new ReloadResultMessage(result)))));
+        companionApp.setPacksHandler(message -> Minecraft.getInstance().execute(() -> ResourceReloads.select(message.payload(),
+                result -> companionApp.sendReloadResult(new ReloadResultMessage(result)))));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(Selection subject) {

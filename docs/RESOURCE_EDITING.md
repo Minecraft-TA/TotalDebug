@@ -1,6 +1,6 @@
 # Resource editing
 
-Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`, protocol 28); textures drawn pixel by pixel, saved the same way and put in place in the running game without a full reload; the change record holds all of them and reverts them. Not yet: ordering and enabling packs, and forced values.
+Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`); textures drawn pixel by pixel, saved the same way and put in place in the running game without a full reload; resource packs and the current world's datapacks enabled and ordered, in the connected game or in `options.txt` and `level.dat` (`SET_PACKS`, protocol 29); the change record holds all of them and reverts them. Not yet: forced values.
 
 ## Goal
 
@@ -72,6 +72,36 @@ Each resource kind has a reload that makes the running game use it. The change s
 - **Offline checks:** before writing, Companion reads JSON the way the game does: models and data strictly, language files leniently. A language file is one object whose values are text, or lists of components as NeoForge allows.
 - **Singleplayer only for data:** data reloads need a singleplayer world. A dedicated server is not covered yet; it would take the forwarded server channel and the server's script policy.
 
+## Pack order
+
+Decided on 2026-09-28: the Packs tab of Resources orders and enables the resource packs, and the World page's Datapacks tab the current world's datapacks. Each row has a check box, and rows are dragged to reorder them, the highest first as in the game's pack screen. A change is one selection: the enabled packs in order, lowest first, as the game keeps it.
+
+### What can change
+
+The game's own rules for a selection hold in every mode, so Companion never writes one the game would rewrite:
+
+- **Required packs stay enabled:** Minecraft's resources (`vanilla` among resource packs) and the mods' (`mod_resources`, `mod_data`). Their check box is off; they can be moved unless fixed.
+- **Fixed packs stay where they are:** a pack whose selection config fixes its position is not dragged, and others are not dragged past it.
+- **A mod's own pack** (`mod/<id>`, for mods that show theirs separately) is ordered like any other pack. The mods whose files are not shown separately stay inside the mods' pack, as the game shows them.
+- **Datapacks need the world's features:** a datapack that requests feature flags the world does not have, such as an experimental one, cannot be enabled; the row says so. The game only lets a world gain features when it is created.
+- **Packs that are gone** are dropped, as the game drops them when it next reads the selection.
+
+### Where it is written
+
+| Pack list | Game connected | Game running, not connected | Game closed |
+|---|---|---|---|
+| Resource packs | The mod selects the packs as the pack screen does (`PackRepository.setSelected`, then `Options.updateResourcePacks`, which saves `options.txt`), and the client reloads its resources | Refused: the game writes `options.txt` when it closes, over Companion's | `resourcePacks` in `options.txt`, lowest first. A pack Companion enables is also listed in `incompatibleResourcePacks`, which the game drops again for a pack that is compatible, so it keeps a pack of another format that its pack screen would have asked about |
+| Datapacks of the world the game has open | The server reloads with the new selection, as `/datapack enable` and `disable` do (`MinecraftServer.reloadResources`); the game saves it into `level.dat` | Refused: the open world's server writes `level.dat` | Not possible: a world is only open while its game runs |
+| Datapacks of a world no game has open | Written into its `level.dat` | Written into its `level.dat` | Written into its `level.dat` |
+
+- **Writing `level.dat`:** as the game saves it: `Data.DataPacks.Enabled`, lowest first, and `Disabled`, every other pack of the world, into `level.dat_new`, then the last `level.dat` becomes `level.dat_old` and the new one `level.dat`. The rest of the file is written back as read. A world whose `session.lock` is held is not written.
+- **The managed pack:** saving a resource into the TotalDebug pack enables it again at the top, as before. Disabling it here stops the game from using Companion's edits until the next save; the Packs tab shows it like any pack.
+- **Reverting:** a selection change is recorded in Changes with the selection before the first change, and Revert writes that one back by the same rules. A selection changed since by the game, such as in its pack screen, was changed outside Companion: Revert leaves it alone and says so, as it does for a resource file, unless it is the original again, which ends the change.
+
+### Recorded as
+
+A selection is a target of its own, `PackSelection`: the side (resource packs, or datapacks with their world's folder). Its values are the enabled ids, lowest first, as a JSON array.
+
 ## Protocol
 
 | Message | Direction | Content |
@@ -79,9 +109,10 @@ Each resource kind has a reload that makes the running game use it. The change s
 | `PACK_STACK` | Game to Companion | Enabled resource packs and datapacks in order, with their files, and the pack formats; sent when the stack changes and after every handshake |
 | `RELOAD` | Companion to game | Request id, what to reload (language, textures, resources, data), the managed pack and the edited paths |
 | `RELOAD_RESULT` | Game to Companion | Request id, duration, problems naming edited paths, or the error |
+| `SET_PACKS` | Companion to game | Request id, the side, and the enabled pack ids, lowest first; answered with `RELOAD_RESULT` once the reload the selection needs is done |
 
 - These are kernel services every extension needs, so they are native messages rather than scripts run through the evaluator.
-- One protocol version bump for the step: 27; textures shown the quick way: 28.
+- One protocol version bump for the step: 27; textures shown the quick way: 28; pack order: 29, which also lists the packs that are not enabled in `PACK_STACK`, with whether each is required, fixed, compatible and the features it requests, and names the managed pack per side in `RELOAD`.
 
 ## Change record
 
@@ -160,8 +191,8 @@ Wording follows [UI_GUIDE.md](UI_GUIDE.md).
 - **External editor:** Open in External Editor, in the texture tab's toolbar, opens the texture in the image editor chosen under Settings, Resources, or the system's app for images while none is. It first saves the texture into its pack where that pack does not hold what the tab shows, such as a mod's texture no pack has a copy of. Companion then follows the file until the project closes: each save the program makes, once the file has not changed for 300 ms and decodes as an image, is recorded as a change, which Changes reverts to what the file held before the program changed it, and is put in place in the game as a save in Companion is. The tab reads the new pixels, and shows what the game made of each save. Companion's own saves and reverts of the file are told from the program's by the hash of what Companion last wrote.
 - **Two tabs of one file:** a save replaces only the copy the tab last read or saved. When another tab or program wrote the file since, the tab says so, and saving asks before overwriting that copy.
 - **Packs the game skips:** a folder or zip counts as a pack when its `pack.mcmeta` has a `pack` section with a `pack_format` number and a `description`, as the game requires; one without is not listed or offered under Save into. A revert into a pack that lost its `pack.mcmeta` puts the file back and says the game does not load the pack.
-- **Changes page:** a Resources tab for resources in the managed packs, beside Configuration and Key bindings. Revert, or Delete, reverts the selected rows; reverting a file Companion added deletes it, and Delete asks first. Revert All reports every failure in one status.
-- **Modpack tree:** the Resources row lists every resource as the game uses it ([MODPACK.md](MODPACK.md#resources)); its Packs tab lists the resource packs, and the World root the current world's datapacks; ordering and enabling them is a later step.
+- **Changes page:** a Resources tab for resources in the managed packs, and a Packs tab for pack selections, beside Configuration and Key bindings. Revert, or Delete, reverts the selected rows; reverting a file Companion added deletes it, and Delete asks first. Revert All reports every failure in one status.
+- **Modpack tree:** the Resources row lists every resource as the game uses it ([MODPACK.md](MODPACK.md#resources)); its Packs tab lists the resource packs, and the World root the current world's datapacks, each enabled and ordered as [Pack order](#pack-order) describes: a check box per row, drag or Alt+Shift+Up and Down to reorder, then Apply or Discard.
 
 ## Order
 
@@ -169,7 +200,6 @@ Later steps:
 
 | Step | Content |
 |---|---|
-| Packs tab of Resources | Order and enable packs |
 | Forced values | Read-site analysis, verification after reloads, Force; its own design for writes into the game's memory |
 | Catalog and program insights | As planned in [MODPACK.md](MODPACK.md#order) |
 | World data editing | NBT of block entities, entities and item stacks from the inspection page; own design first |

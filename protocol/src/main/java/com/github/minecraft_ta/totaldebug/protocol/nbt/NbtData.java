@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totaldebug.protocol.nbt;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -14,8 +16,8 @@ import java.util.regex.Pattern;
 
 /**
  * NBT decoded from Minecraft's binary form without Minecraft classes, so Companion can show, search and copy the exact
- * data a game read reported. {@link #snbt(Tag)} prints what Minecraft's own {@code Tag.toString()} prints for the same
- * data; {@link #path(List)} prints the path syntax {@code /data get} accepts.
+ * data a game read reported, and encoded back with {@link #write(Tag)}. {@link #snbt(Tag)} prints what Minecraft's own
+ * {@code Tag.toString()} prints for the same data; {@link #path(List)} prints the path syntax {@code /data get} accepts.
  */
 public final class NbtData {
     /** Minecraft's own nesting limit for NBT. */
@@ -127,6 +129,73 @@ public final class NbtData {
             throw new IllegalArgumentException("The NBT data ends early", exception);
         } catch (IOException exception) {
             throw new IllegalArgumentException("Unreadable NBT data: " + exception.getMessage(), exception);
+        }
+    }
+
+    /** Writes one unnamed tag as {@link #read(byte[])} reads it: its type id followed by its payload. */
+    public static byte[] write(Tag tag) {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (DataOutputStream output = new DataOutputStream(bytes)) {
+            output.writeByte(type(tag));
+            payload(output, tag);
+        } catch (IOException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+        return bytes.toByteArray();
+    }
+
+    private static int type(Tag tag) {
+        return switch (tag) {
+            case ByteTag ignored -> 1;
+            case ShortTag ignored -> 2;
+            case IntTag ignored -> 3;
+            case LongTag ignored -> 4;
+            case FloatTag ignored -> 5;
+            case DoubleTag ignored -> 6;
+            case ByteArrayTag ignored -> 7;
+            case StringTag ignored -> 8;
+            case ListTag ignored -> 9;
+            case CompoundTag ignored -> 10;
+            case IntArrayTag ignored -> 11;
+            case LongArrayTag ignored -> 12;
+        };
+    }
+
+    private static void payload(DataOutputStream output, Tag tag) throws IOException {
+        switch (tag) {
+            case ByteTag value -> output.writeByte(value.value());
+            case ShortTag value -> output.writeShort(value.value());
+            case IntTag value -> output.writeInt(value.value());
+            case LongTag value -> output.writeLong(value.value());
+            case FloatTag value -> output.writeFloat(value.value());
+            case DoubleTag value -> output.writeDouble(value.value());
+            case ByteArrayTag value -> {
+                output.writeInt(value.values().size());
+                for (byte item : value.values()) output.writeByte(item);
+            }
+            case StringTag value -> output.writeUTF(value.value());
+            case ListTag value -> {
+                // An empty list has no element type, as Minecraft writes it.
+                output.writeByte(value.items().isEmpty() ? 0 : type(value.items().getFirst()));
+                output.writeInt(value.items().size());
+                for (Tag item : value.items()) payload(output, item);
+            }
+            case CompoundTag value -> {
+                for (Map.Entry<String, Tag> entry : value.entries().entrySet()) {
+                    output.writeByte(type(entry.getValue()));
+                    output.writeUTF(entry.getKey());
+                    payload(output, entry.getValue());
+                }
+                output.writeByte(0);
+            }
+            case IntArrayTag value -> {
+                output.writeInt(value.values().size());
+                for (int item : value.values()) output.writeInt(item);
+            }
+            case LongArrayTag value -> {
+                output.writeInt(value.values().size());
+                for (long item : value.values()) output.writeLong(item);
+            }
         }
     }
 

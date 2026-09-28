@@ -6,6 +6,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.repository.Pack;
+import net.minecraft.server.packs.repository.PackRepository;
+import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforgespi.language.IModFileInfo;
@@ -57,19 +59,36 @@ public final class PackStackPublisher {
 
     private PackStackPayload capture() {
         Minecraft minecraft = Minecraft.getInstance();
-        List<PackStackPayload.Pack> resources = packs(minecraft.getResourcePackRepository().getSelectedPacks(),
-                this.gameDirectory.resolve("resourcepacks"));
+        PackRepository resourceRepository = minecraft.getResourcePackRepository();
+        Path resourceFolder = this.gameDirectory.resolve("resourcepacks");
+        List<PackStackPayload.Pack> resources = packs(resourceRepository.getSelectedPacks(), resourceFolder, null);
+        List<PackStackPayload.Pack> otherResources = packs(others(resourceRepository), resourceFolder, null);
         IntegratedServer server = minecraft.getSingleplayerServer();
-        List<PackStackPayload.Pack> data = server == null ? List.of()
-                : packs(server.getPackRepository().getSelectedPacks(), server.getWorldPath(LevelResource.DATAPACK_DIR));
+        List<PackStackPayload.Pack> data = List.of();
+        List<PackStackPayload.Pack> otherData = List.of();
+        if (server != null) {
+            Path dataFolder = server.getWorldPath(LevelResource.DATAPACK_DIR);
+            FeatureFlagSet features = server.getWorldData().enabledFeatures();
+            data = packs(server.getPackRepository().getSelectedPacks(), dataFolder, features);
+            otherData = packs(others(server.getPackRepository()), dataFolder, features);
+        }
         return new PackStackPayload(SharedConstants.getCurrentVersion().getPackVersion(PackType.CLIENT_RESOURCES),
-                SharedConstants.getCurrentVersion().getPackVersion(PackType.SERVER_DATA), resources, data);
+                SharedConstants.getCurrentVersion().getPackVersion(PackType.SERVER_DATA), resources, data, otherResources, otherData);
     }
 
-    /** The packs with their folder or file: {@code file/} packs in {@code folder}, {@code mod/} packs in their mod file. */
-    private static List<PackStackPayload.Pack> packs(Collection<Pack> selected, Path folder) {
+    /** The packs the game could enable but does not, as its pack screen lists them; the parts of another pack are not. */
+    private static List<Pack> others(PackRepository repository) {
+        Collection<Pack> selected = repository.getSelectedPacks();
+        return repository.getAvailablePacks().stream().filter(pack -> !pack.isHidden() && !selected.contains(pack)).toList();
+    }
+
+    /**
+     * The packs with their folder or file, {@code file/} packs in {@code folder} and {@code mod/} packs in their mod
+     * file, and what the game allows for each; {@code features} are the world's, for datapacks, or null.
+     */
+    private static List<PackStackPayload.Pack> packs(Collection<Pack> listed, Path folder, FeatureFlagSet features) {
         List<PackStackPayload.Pack> packs = new ArrayList<>();
-        for (Pack pack : selected) {
+        for (Pack pack : listed) {
             String id = pack.getId();
             String source = "";
             if (id.startsWith("file/")) {
@@ -78,7 +97,11 @@ public final class PackStackPublisher {
                 IModFileInfo file = ModList.get().getModFileById(id.substring("mod/".length()));
                 if (file != null) source = file.getFile().getFilePath().toAbsolutePath().normalize().toString();
             }
-            packs.add(new PackStackPayload.Pack(id, pack.getTitle().getString(), source));
+            int flags = (pack.isRequired() ? PackStackPayload.REQUIRED : 0) | (pack.isFixedPosition() ? PackStackPayload.FIXED : 0)
+                    | (pack.isHidden() ? PackStackPayload.HIDDEN : 0)
+                    | (pack.getCompatibility().isCompatible() ? 0 : PackStackPayload.INCOMPATIBLE)
+                    | (features != null && !pack.getRequestedFeatures().isSubsetOf(features) ? PackStackPayload.MISSING_FEATURES : 0);
+            packs.add(new PackStackPayload.Pack(id, pack.getTitle().getString(), source, flags));
         }
         return packs;
     }
