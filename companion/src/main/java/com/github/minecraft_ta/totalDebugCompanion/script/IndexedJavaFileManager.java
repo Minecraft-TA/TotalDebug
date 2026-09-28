@@ -22,21 +22,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Supplier;
 import java.util.jar.JarFile;
 import java.util.zip.ZipFile;
 
 /** Borrows Companion's index and opens only the archives javac actually reads. */
 final class IndexedJavaFileManager extends ForwardingJavaFileManager<StandardJavaFileManager> {
     private final ClassIndex index;
-    private final Supplier<Set<String>> unsupportedClasses;
     private final Map<Integer, Path> sources = new HashMap<>();
     private final Map<Integer, JarFile> archives = new HashMap<>();
 
-    IndexedJavaFileManager(StandardJavaFileManager standard, ClassIndex index, List<Source> sources, Supplier<Set<String>> unsupportedClasses) {
+    IndexedJavaFileManager(StandardJavaFileManager standard, ClassIndex index, List<Source> sources) {
         super(standard);
         this.index = index;
-        this.unsupportedClasses = unsupportedClasses;
         for (Source source : sources) {
             // --release supplies the platform classes from javac's own standard manager.
             if (!"jrt:/".equals(source.logicalUri())) this.sources.put(source.sourceId(), source.path());
@@ -119,11 +116,6 @@ final class IndexedJavaFileManager extends ForwardingJavaFileManager<StandardJav
 
         @Override
         public InputStream openInputStream() throws IOException {
-            Set<String> unsupported = unsupportedClasses.get();
-            if (unsupported != null && unsupported.contains(this.name)) {
-                throw new IOException("Server compilation unsupported: class " + this.name
-                        + " is absent or its declarations differ on the server. Use matching client/server classes.");
-            }
             String resource = this.name.replace('.', '/') + ".class";
             if (Files.isDirectory(this.path)) return Files.newInputStream(this.path.resolve(resource));
             JarFile archive = archives.get(this.sourceId);

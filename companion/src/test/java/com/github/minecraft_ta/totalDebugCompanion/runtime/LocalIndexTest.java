@@ -167,7 +167,7 @@ class LocalIndexTest {
         writeJar(jar, "sample/Example", 1, true);
         try (var snapshot = open();
              var bytes = RuntimeSnapshotBytecodeSource.fromLocal(snapshot.sources(), snapshot.index(), snapshot.localGuard());
-             var compiler = new ScriptCompilationService(ignored -> false, ignored -> false)) {
+             var compiler = new ScriptCompilationService(ignored -> false)) {
             assertArrayEquals(classBytes("sample/Example", 21), bytes.findClassBytes("sample.Example"));
             assertNotNull(snapshot.index().findClass("sample", "Example"));
             assertThrows(IllegalArgumentException.class, () -> compiler.bind(snapshot));

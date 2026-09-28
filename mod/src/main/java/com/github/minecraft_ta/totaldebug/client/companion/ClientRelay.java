@@ -29,8 +29,8 @@ public final class ClientRelay {
         this.gameSession = Objects.requireNonNull(gameSession, "gameSession");
     }
 
-    /** Carries a message Companion addressed to the server. Client thread. */
-    public void toServer(RelayedMessage message) {
+    /** Carries a message Companion connection {@code companion} addressed to the server. Client thread. */
+    public void toServer(int companion, RelayedMessage message) {
         if (!message.gameSession().isEmpty() && !message.gameSession().equals(this.gameSession.get())) {
             this.companionApp.sendRelayFailed(message.correlation(), "The world containing this target was left; inspect it again");
             return;
@@ -44,34 +44,37 @@ public final class ClientRelay {
             this.companionApp.sendRelayFailed(message.correlation(), "The server does not have TotalDebug");
             return;
         }
-        send(message);
+        send(companion, message);
     }
 
     /**
-     * Companion's connection closed: the server ends the manifest session Companion asked it for, and the runs in it,
-     * rather than keep them running for no one. Client thread.
+     * Companion connection {@code companion} closed: the server ends its runs rather than keep them running for no one.
+     * Client thread.
      */
-    public void companionLeft() {
+    public void companionLeft(int companion) {
         ClientPacketListener connection = Minecraft.getInstance().getConnection();
         if (connection == null || !connection.hasChannel(ToServerPayload.TYPE)) return;
-        send(RelayedMessages.toServer(new CompanionLeftMessage(), 0, ""));
+        send(companion, RelayedMessages.toServer(new CompanionLeftMessage(), 0, ""));
     }
 
-    private static void send(RelayedMessage message) {
-        for (RelayChunk chunk : RelayChunk.split(message.messageId(), message.body(), RelayChunk.TO_SERVER_BYTES)) {
+    private static void send(int companion, RelayedMessage message) {
+        for (RelayChunk chunk : RelayChunk.split(companion, message.messageId(), message.body(), RelayChunk.TO_SERVER_BYTES)) {
             PacketDistributor.sendToServer(new ToServerPayload(chunk));
         }
     }
 
-    /** Takes one piece of a message the server sent Companion. */
+    /**
+     * Takes one piece of a message the server sent Companion. An answer to an earlier Companion connection is dropped:
+     * the connected Companion counts its run ids from the beginning again.
+     */
     public void fromServer(RelayChunk chunk) {
+        if (chunk.companion() != this.companionApp.companionConnection()) return;
         this.fromServer.accept(chunk).ifPresent(message ->
                 this.companionApp.sendFromServer(new RelayedMessage(0, "", message.messageId(), message.body())));
     }
 
-    /** The player left the server: what it was sending is dropped, and Companion hears the server is gone. */
+    /** The player left the server: what it was sending is dropped. */
     public void serverLeft() {
         this.fromServer.clear();
-        this.companionApp.sendServerLeft();
     }
 }

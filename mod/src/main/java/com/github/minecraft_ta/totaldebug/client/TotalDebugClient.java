@@ -132,13 +132,13 @@ public final class TotalDebugClient {
                 this.keptStacks);
         ClientRelay relay = new ClientRelay(companionApp, () -> this.gameSessionId);
         this.relay = relay;
-        companionApp.setToServerHandler(message -> Minecraft.getInstance().execute(() -> relay.toServer(message)));
+        companionApp.setToServerHandler((message, companion) -> Minecraft.getInstance().execute(() -> relay.toServer(companion, message)));
         TotalDebug.get().network().setCompanionReceiver(relay::fromServer);
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);
-        companionApp.setSessionClosedHandler(() -> {
+        companionApp.setSessionClosedHandler(companion -> {
             this.scripts.close();
-            Minecraft.getInstance().execute(relay::companionLeft);
+            if (companion != 0) Minecraft.getInstance().execute(() -> relay.companionLeft(companion));
         });
         companionApp.startDiscovery(() -> TotalDebugConfig.CLIENT.useCompanionApp.get());
     }
@@ -219,8 +219,8 @@ public final class TotalDebugClient {
             this.gameSessionId = null;
         }
         this.relay.serverLeft();
-        // A rejoin of the same server between two checks would otherwise look unchanged, and Companion would not ask
-        // the new server session for its manifest.
+        // A rejoin of the same server between two checks would otherwise look unchanged to Companion, which ends its
+        // runs there and asks the server again when what the game plays changes.
         this.playing.publish(new PlayingPayload.Menu());
         this.scripts.onServerDisconnect();
     }

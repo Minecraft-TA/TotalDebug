@@ -4,24 +4,18 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService.R
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryCompilationException;
 import com.github.minecraft_ta.totaldebug.evaluation.CompilationDiagnostic;
-import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
-import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
-import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -49,26 +43,21 @@ public final class ScriptCompilationService implements AutoCloseable {
         return thread;
     });
     private final Map<Integer, Pending> pending = new ConcurrentHashMap<>();
+    /** Why server runs cannot start before Companion knows the game plays a server that runs its scripts. */
+    public static final String NO_SERVER = "Server scripts need a singleplayer world or a server with TotalDebug";
     private final Predicate<RunScriptMessage> sender;
     private volatile ReadySnapshot snapshot;
     private InMemoryJavaCompiler compiler;
     private volatile boolean closed;
-    private record ServerSnapshot(String sessionId, String inventoryId, Set<String> unsupported) {}
-    private record Baseline(String sessionId, ServerManifest manifest) {}
-    private record Comparison(String requestId, ReadySnapshot selected, ServerCompatibility work) {}
-    private final Predicate<ServerSourceRequestMessage> sourceRequester;
-    private volatile ServerSnapshot serverSnapshot;
-    private volatile String serverUnavailable = "No server handshake is available";
+    /**
+     * Whether the game's server runs this player's scripts: {@code refusal} is empty when it does. Replaced on every
+     * change, so a server compilation queued before one is not sent after it.
+     */
+    private record ServerAccess(String refusal) {}
+    private volatile ServerAccess serverAccess = new ServerAccess(NO_SERVER);
     private CompletableFuture<Void> readinessChange = new CompletableFuture<>();
-    private final ServerManifestMessage.Assembler manifestTransfer = new ServerManifestMessage.Assembler();
-    private final ServerManifestMessage.Assembler detailTransfer = new ServerManifestMessage.Assembler();
-    private long serverGeneration;
-    private long manifestGeneration;
-    private Baseline baseline;
-    private Comparison comparison;
-    private Set<String> compilingForServer;
-    /** Identical source compiled against the same runtime and server comparison yields identical bytecode. */
-    private record CompiledKey(ReadySnapshot selected, ServerSnapshot server, String source, String entryClass) {}
+    /** Identical source compiled against the same runtime yields identical bytecode. */
+    private record CompiledKey(ReadySnapshot selected, String source, String entryClass) {}
     private static final int MAX_COMPILED = 64;
     private final Map<CompiledKey, CompilationResult> compiled = new LinkedHashMap<>(16, 0.75f, true) {
         @Override protected boolean removeEldestEntry(Map.Entry<CompiledKey, CompilationResult> eldest) {
@@ -78,16 +67,14 @@ public final class ScriptCompilationService implements AutoCloseable {
 
     /**
      * Whether a run on one side can compile now, and otherwise why not. {@code changed} completes on the next change
-     * of the index, the server comparison or the connection, so a caller can wait instead of failing.
+     * of the index, the server's answer or the connection, so a caller can wait instead of failing.
      */
     public record Readiness(boolean ready, String detail, CompletableFuture<Void> changed) {
     }
 
     public synchronized Readiness readiness(Side side) {
-        ReadySnapshot selected = this.snapshot;
-        ServerSnapshot server = this.serverSnapshot;
-        String detail = this.closed || selected == null ? "The runtime class index is not ready for compilation"
-                : side == Side.SERVER && (server == null || !server.inventoryId().equals(selected.inventoryId())) ? this.serverUnavailable
+        String detail = this.closed || this.snapshot == null ? "The runtime class index is not ready for compilation"
+                : side == Side.SERVER ? this.serverAccess.refusal()
                 : "";
         return new Readiness(detail.isEmpty(), detail, this.readinessChange.copy());
     }
@@ -99,147 +86,23 @@ public final class ScriptCompilationService implements AutoCloseable {
         previous.complete(null);
     }
 
-    public ScriptCompilationService(Predicate<RunScriptMessage> sender,
-                                    Predicate<ServerSourceRequestMessage> sourceRequester) {
+    public ScriptCompilationService(Predicate<RunScriptMessage> sender) {
         this.sender = sender;
-        this.sourceRequester = sourceRequester;
     }
 
-    public synchronized void acceptServerManifest(ServerManifestMessage message) {
-        if (this.closed) return;
-        if (!message.baseline() && (this.baseline == null || this.comparison == null
-                || !this.baseline.sessionId().equals(message.sessionId())
-                || !this.comparison.requestId().equals(message.requestId())
-                || this.comparison.work().nextSource() != message.source())) return;
-        if (message.baseline() && message.offset() == 0) {
-            this.serverGeneration++;
-            this.manifestTransfer.clear();
-            invalidateComparison();
-            this.baseline = null;
-            this.serverUnavailable = message.total() == 0 ? message.detail() : "Preparing server class compatibility";
-            readinessChanged();
-        }
-        if (!message.baseline() && message.total() == 0) {
-            failComparison(this.manifestGeneration, message.detail());
-            return;
-        }
-        byte[] bytes;
-        try { bytes = (message.baseline() ? this.manifestTransfer : this.detailTransfer).accept(message); }
-        catch (IllegalArgumentException exception) {
-            failComparison(this.manifestGeneration, exception.getMessage());
-            return;
-        }
-        if (bytes == null) return;
-        long generation = this.manifestGeneration;
-        long serverGeneration = this.serverGeneration;
-        this.worker.execute(() -> {
-            try {
-                if (message.baseline()) {
-                    var decoded = ServerManifest.decode(bytes);
-                    long currentGeneration;
-                    synchronized (this) {
-                        if (this.closed || serverGeneration != this.serverGeneration) return;
-                        this.baseline = new Baseline(message.sessionId(), decoded);
-                        currentGeneration = this.manifestGeneration;
-                    }
-                    prepareComparison(currentGeneration);
-                } else {
-                    var details = ServerManifest.decodeDetails(bytes);
-                    synchronized (this) {
-                        if (this.closed || generation != this.manifestGeneration || this.comparison == null) return;
-                        this.comparison.work().accept(message.source(), details);
-                    }
-                    advanceComparison(generation);
-                }
-            } catch (Exception exception) {
-                synchronized (this) {
-                    if (message.baseline() && serverGeneration != this.serverGeneration) return;
-                    failComparison(message.baseline() ? this.manifestGeneration : generation, exception.getMessage());
-                }
-            }
-        });
-    }
-
-    private void prepareComparison(long generation) {
-        ReadySnapshot selected;
-        Baseline baseline;
-        synchronized (this) {
-            if (this.closed || generation != this.manifestGeneration) return;
-            selected = this.snapshot;
-            baseline = this.baseline;
-        }
-        if (selected == null || baseline == null) return;
-        try {
-            ServerCompatibility work = CacheFiles.locked(selected.indexFile().getParent(), () -> {
-                CacheFiles.requireIdentity(selected.indexFile().getParent().resolve("inventory.json"), "id", selected.inventoryId());
-                try (var phase = RuntimePhase.start("server.local-baseline")) {
-                    return new ServerCompatibility(baseline.manifest(), selected.sources());
-                }
-            });
-            synchronized (this) {
-                if (this.closed || generation != this.manifestGeneration || this.snapshot != selected) return;
-                this.comparison = new Comparison(UUID.randomUUID().toString(), selected, work);
-            }
-            advanceComparison(generation);
-        } catch (Exception exception) { failComparison(generation, exception.getMessage()); }
-    }
-
-    private void advanceComparison(long generation) throws Exception {
-        Comparison current;
-        Baseline baseline;
-        synchronized (this) {
-            if (this.closed || generation != this.manifestGeneration || this.comparison == null) return;
-            current = this.comparison;
-            baseline = this.baseline;
-            int source = current.work().nextSource();
-            if (source != -1) {
-                this.serverUnavailable = "Comparing server source " + baseline.manifest().sources().get(source).name();
-                readinessChanged();
-                if (!this.sourceRequester.test(new ServerSourceRequestMessage(baseline.sessionId(), current.requestId(), source))) {
-                    throw new IOException("Minecraft disconnected before server source details could be requested");
-                }
-                return;
-            }
-        }
-        Set<String> unsupported = CacheFiles.locked(current.selected().indexFile().getParent(), () -> {
-            synchronized (this.compilerLock) {
-                if (this.closed || this.snapshot != current.selected()) throw new IOException("The client inventory changed");
-                CacheFiles.requireIdentity(current.selected().indexFile().getParent().resolve("inventory.json"),
-                        "id", current.selected().inventoryId());
-                try (var phase = RuntimePhase.start("server.compare-declarations")) {
-                    return current.work().finish(current.selected());
-                }
-            }
-        });
-        synchronized (this) {
-            if (this.closed || generation != this.manifestGeneration || this.comparison != current
-                    || this.snapshot != current.selected()) return;
-            this.serverSnapshot = new ServerSnapshot(baseline.sessionId(), current.selected().inventoryId(), unsupported);
-            this.comparison = null;
-            readinessChanged();
-        }
-    }
-
-    private synchronized void failComparison(long generation, String detail) {
-        if (generation != this.manifestGeneration) return;
-        invalidateComparison();
-        this.serverUnavailable = detail == null ? "Server class comparison failed" : detail;
+    /**
+     * What the game's server answered about running this player's scripts, or why it cannot be asked: {@code refusal}
+     * is empty when server runs may start. The server checks each run's references itself.
+     */
+    public synchronized void serverAccess(String refusal) {
+        this.serverAccess = new ServerAccess(refusal);
         readinessChanged();
-    }
-
-    private void invalidateComparison() {
-        this.manifestGeneration++;
-        this.serverSnapshot = null;
-        this.comparison = null;
-        this.detailTransfer.clear();
     }
 
     /** Revoke compilation immediately; the runtime owner can retain its index for cached browsing. */
     public void suspendRuntime() {
         this.snapshot = null;
         synchronized (this) {
-            invalidateComparison();
-            this.serverUnavailable = "Waiting for the current Minecraft runtime inventory";
             readinessChanged();
         }
         for (int id : this.pending.keySet()) cancel(id);
@@ -258,16 +121,10 @@ public final class ScriptCompilationService implements AutoCloseable {
             this.compiled.clear();
             if (snapshot != null) {
                 this.compiler = new InMemoryJavaCompiler(standard ->
-                        new IndexedJavaFileManager(standard, snapshot.index(), snapshot.sources(), () -> this.compilingForServer));
+                        new IndexedJavaFileManager(standard, snapshot.index(), snapshot.sources()));
             }
             synchronized (this) {
-                invalidateComparison();
-                this.serverUnavailable = "Waiting for the client index and server handshake comparison";
                 readinessChanged();
-                long generation = this.manifestGeneration;
-                if (!this.closed && snapshot != null && this.baseline != null) {
-                    this.worker.execute(() -> prepareComparison(generation));
-                }
             }
         }
     }
@@ -285,7 +142,7 @@ public final class ScriptCompilationService implements AutoCloseable {
         try {
             this.worker.execute(() -> {
                 try {
-                    CompilationResult compiled = compileSelected(selected, null, source, entryClass, result::isCancelled);
+                    CompilationResult compiled = compileSelected(selected, source, entryClass, result::isCancelled);
                     if (this.closed || this.snapshot != selected) {
                         throw new IllegalStateException("The runtime changed during compilation");
                     }
@@ -318,9 +175,9 @@ public final class ScriptCompilationService implements AutoCloseable {
             failureHandler.accept(failure("The runtime class index is not ready for compilation"));
             return;
         }
-        ServerSnapshot server = side == Side.SERVER ? this.serverSnapshot : null;
-        if (side == Side.SERVER && (server == null || !server.inventoryId().equals(selected.inventoryId()))) {
-            failureHandler.accept(failure(this.serverUnavailable));
+        ServerAccess server = side == Side.SERVER ? this.serverAccess : null;
+        if (server != null && !server.refusal().isEmpty()) {
+            failureHandler.accept(failure(server.refusal()));
             return;
         }
         var task = new Pending(failureHandler);
@@ -339,18 +196,18 @@ public final class ScriptCompilationService implements AutoCloseable {
     }
 
     private void compileAndSend(int id, String source, Side side, ScriptExecutionEnvironment environment,
-                                ScriptSubject subject, ReadySnapshot selected, ServerSnapshot server, Pending task) {
+                                ScriptSubject subject, ReadySnapshot selected, ServerAccess server, Pending task) {
         try {
             var matcher = SCRIPT_CLASS.matcher(source);
             if (!matcher.find()) throw new IllegalArgumentException(
                     "Script source must contain a public class that directly extends ScriptProgram");
             String primaryClass = matcher.group(1);
-            CompilationResult compiled = compileSelected(selected, server, source, primaryClass,
+            CompilationResult compiled = compileSelected(selected, source, primaryClass,
                     () -> this.pending.get(id) != task);
             synchronized (task) {
                 if (this.pending.get(id) != task) return;
-                if (this.snapshot != selected || (server != null && this.serverSnapshot != server) || !this.sender.test(new RunScriptMessage(
-                        id, compiled.bytecode(), compiled.inventoryId(), side, environment.name(), server == null ? "" : server.sessionId(),
+                if (this.snapshot != selected || (server != null && this.serverAccess != server) || !this.sender.test(new RunScriptMessage(
+                        id, compiled.bytecode(), compiled.inventoryId(), side, environment.name(),
                         subject == null ? "" : subject.subject().format(), subject == null ? "" : subject.gameSessionId(),
                         subject == null ? "" : subject.expectedId()))) {
                     throw new IllegalStateException("Minecraft disconnected or the runtime changed before the script was submitted");
@@ -363,32 +220,26 @@ public final class ScriptCompilationService implements AutoCloseable {
         }
     }
 
-    private CompilationResult compileSelected(ReadySnapshot selected, ServerSnapshot server, String source, String entryClass,
+    private CompilationResult compileSelected(ReadySnapshot selected, String source, String entryClass,
                                                BooleanSupplier cancelled) throws Exception {
-        CompiledKey key = new CompiledKey(selected, server, source, entryClass);
+        CompiledKey key = new CompiledKey(selected, source, entryClass);
         synchronized (this.compilerLock) {
             CompilationResult cached = this.compiled.get(key);
-            if (cached != null && !this.closed && this.snapshot == selected
-                    && (server == null || this.serverSnapshot == server)) {
+            if (cached != null && !this.closed && this.snapshot == selected) {
                 return cached;
             }
         }
         return CacheFiles.locked(selected.indexFile().getParent(), () -> {
             synchronized (this.compilerLock) {
-                if (this.closed || this.snapshot != selected || (server != null && this.serverSnapshot != server) || cancelled.getAsBoolean()) {
+                if (this.closed || this.snapshot != selected || cancelled.getAsBoolean()) {
                     throw new IllegalStateException("The runtime changed or compilation was cancelled");
                 }
                 CacheFiles.requireIdentity(selected.indexFile().getParent().resolve("inventory.json"),
                         "id", selected.inventoryId());
-                this.compilingForServer = server == null ? null : server.unsupported();
-                try {
-                    CompilationResult result = new CompilationResult(new ScriptBytecode(entryClass,
-                            this.compiler.compile(source, entryClass, "")), selected.inventoryId());
-                    this.compiled.put(key, result);
-                    return result;
-                } finally {
-                    this.compilingForServer = null;
-                }
+                CompilationResult result = new CompilationResult(new ScriptBytecode(entryClass,
+                        this.compiler.compile(source, entryClass, "")), selected.inventoryId());
+                this.compiled.put(key, result);
+                return result;
             }
         });
     }
@@ -406,14 +257,7 @@ public final class ScriptCompilationService implements AutoCloseable {
     }
 
     public void runtimeDisconnected() {
-        synchronized (this) {
-            this.serverGeneration++;
-            this.manifestTransfer.clear();
-            invalidateComparison();
-            this.baseline = null;
-            this.serverUnavailable = "Minecraft disconnected";
-            readinessChanged();
-        }
+        serverAccess("Minecraft disconnected");
         for (int id : this.pending.keySet()) cancel(id);
     }
 

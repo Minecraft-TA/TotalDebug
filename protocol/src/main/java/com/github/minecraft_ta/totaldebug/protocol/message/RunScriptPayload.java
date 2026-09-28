@@ -14,7 +14,7 @@ import java.util.Objects;
  * {@code subjectExpectedId}, when not empty, is the registry id the target must still have; a run against a subject
  * that changed since then fails instead of running.
  */
-public record RunScriptPayload(int scriptId, ScriptBytecode bytecode, String inventoryId, Side side, String executionEnvironment, String serverSessionId, String subject, String subjectSessionId, String subjectExpectedId) {
+public record RunScriptPayload(int scriptId, ScriptBytecode bytecode, String inventoryId, Side side, String executionEnvironment, String subject, String subjectSessionId, String subjectExpectedId) {
     public RunScriptPayload {
         Objects.requireNonNull(side, "side");
         subject = Objects.requireNonNullElse(subject, "");
@@ -29,7 +29,7 @@ public record RunScriptPayload(int scriptId, ScriptBytecode bytecode, String inv
     }
 
     public static RunScriptPayload read(ByteBufferInputStream input) {
-        return new RunScriptPayload(input.readInt(), ScriptBytecode.read(input), input.readString(), input.readBoolean() ? Side.SERVER : Side.CLIENT, input.readString(), input.readString(), input.readString(), input.readString(), input.readString());
+        return new RunScriptPayload(input.readInt(), ScriptBytecode.read(input), input.readString(), input.readBoolean() ? Side.SERVER : Side.CLIENT, input.readString(), input.readString(), input.readString(), input.readString());
     }
     public void write(ByteBufferOutputStream output) {
         output.writeInt(this.scriptId);
@@ -37,7 +37,6 @@ public record RunScriptPayload(int scriptId, ScriptBytecode bytecode, String inv
         output.writeString(this.inventoryId);
         output.writeBoolean(this.side == Side.SERVER);
         output.writeString(this.executionEnvironment);
-        output.writeString(this.serverSessionId);
         output.writeString(this.subject);
         output.writeString(this.subjectSessionId);
         output.writeString(this.subjectExpectedId);

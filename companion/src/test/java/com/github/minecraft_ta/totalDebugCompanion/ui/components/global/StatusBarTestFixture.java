@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 public class StatusBarTestFixture {
     protected final NotificationCenter notifications = new NotificationCenter();
     private final CompanionSession session = new CompanionSession("status-bar-test-token");
-    private final ScriptCompilationService compiler = new ScriptCompilationService(message -> false, message -> false);
+    private final ScriptCompilationService compiler = new ScriptCompilationService(message -> false);
     private final ExecutionRuns executions = new ExecutionRuns(session, new ScriptExecutionService(session, compiler, () -> false));
     private final EditorScriptRunService runs = new EditorScriptRunService(executions, notifications);
     private final List<ApplicationStatusBar> bars = new ArrayList<>();

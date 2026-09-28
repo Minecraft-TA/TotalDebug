@@ -16,7 +16,7 @@ Each script operation also has its own payload type, so every new server feature
 | Part | Where | Holds | May use |
 |---|---|---|---|
 | Client | `totaldebug.client` | The Companion connection, F6 input, resource packs and assets, key bindings, options, the relay's client end, and the client's mod entry `TotalDebugClientMod` | Client classes; never `getSingleplayerServer()` |
-| Server | `totaldebug.server` | Every server operation: scripts, class manifest, datapacks, data reloads, game rules, what the server reports about its world, the relay's server end | Server classes |
+| Server | `totaldebug.server` | Every server operation: scripts and their link check, datapacks, data reloads, game rules, what the server reports about its world, the relay's server end | Server classes |
 | Common | Everything else | The mod's entry `TotalDebug`, the script API (`totaldebug.script`, `totaldebug.inspection`), runtime sources, networking contracts, configuration | Neither client classes nor the client part |
 
 - **The parts are a rule, not a move.** Scripts and inspection tools import `ScriptProgram` and the readers by their package, so the script API keeps its packages; moving them would break every saved script.
@@ -36,8 +36,8 @@ server ──ToCompanion chunks──► client ──FROM_SERVER{ message }─�
 | Part | Carries |
 |---|---|
 | `TO_SERVER` (Companion → client) | A Companion protocol message for the server as its protocol id and encoded body, with a **correlation** (Companion's id for the request, such as a script run, or 0) and a **game session** (the joined world the message is only valid in, or empty) |
-| `ToServer` (client → server, NeoForge) | That message's id and body, split into chunks |
-| `ToCompanion` (server → client, NeoForge) | A Companion protocol message from the server, the same way |
+| `ToServer` (client → server, NeoForge) | That message's id and body, split into chunks, with the number of the Companion connection that sent it |
+| `ToCompanion` (server → client, NeoForge) | A Companion protocol message from the server, the same way, with the number of the Companion connection it answers |
 | `FROM_SERVER` (client → Companion) | The server's message, which Companion unwraps and hands to the same listeners as a message from the game |
 | `RELAY_FAILED` (client → Companion) | The correlation of a message the client could not deliver, and why |
 
@@ -45,9 +45,18 @@ server ──ToCompanion chunks──► client ──FROM_SERVER{ message }─�
 - **The server speaks the Companion protocol.** It decodes and encodes the same message classes Companion does; `RelayedMessages` lists which travel to and from the server.
 - **Chunks** keep each payload below Minecraft's limits: about 32 KiB towards the server and 1 MiB towards the client. A transfer id, index and count put a message back together; an incomplete transfer is dropped when its player leaves. The transfers in progress on one connection share one byte budget, 2 MiB on the server for each player. A relayed message and its envelope fit one frame of the Companion connection, and the server's results are budgeted for it. Script bytecode then has no special 30,000-byte cap.
 - **The sender is the player** whose client relayed the message. The server answers only that player's client, and forgets a player's transfers and sessions when they leave.
-- **The server handshake is asked for.** When `PLAYING` says the game plays a world or a server with TotalDebug, Companion sends `MANIFEST_REQUEST` through the relay and the server answers with its class manifest session. The manifest serves only server scripts, so a player the script policy refuses gets the reason instead of a session. The server no longer pushes it on join, and the client no longer keeps a copy for a Companion that connects later.
-- **A server run ends with its server session.** When the client reports the server gone, or a new manifest session starts, Companion fails its runs on the server; the client keeps no bookkeeping for them. A run belongs to the manifest session that took its request, and the server drops everything about it once that session ended: when Companion asks for a new one, when Companion's connection closes (`COMPANION_LEFT`, the one relayed message the client writes itself) and when the player leaves. A restarted Companion counts its run ids from the beginning again, so nothing of an earlier session may reach it. Companion counts a result only from the side its run went to. Leaving a server is published at once, so a rejoin between two checks still asks the new session for its manifest.
+- **Companion connections are numbered by the client**, which owns them. The client stamps each chunk towards the server with the connection's number, the server stamps its answers with the number of the connection they answer, and the client drops an answer for an earlier connection. A restarted Companion counts its run ids from the beginning again, so nothing of an earlier connection may reach it. The server keeps one Companion per player: a message from a newer connection ends the runs of the one before, and so does `COMPANION_LEFT`, the one relayed message the client writes itself when Companion's connection closes.
+- **Server runs end with the server.** When `PLAYING` no longer names the server Companion asked, Companion fails its runs there. Leaving a server is published at once, so a rejoin between two checks is still a change. Companion counts a result only from the side its run went to.
 - **One server operation table** maps each server-bound message to its handler, so the check is made in one place. Layer 4 adds each operation's permission to it.
+
+## Server scripts
+
+Companion compiles a server script against the client's classes, as it compiles a client script. What it needs to know is whether that bytecode links on the server, so the server answers that for each run, from the classes it actually loaded:
+
+- **Access.** When `PLAYING` names a world or a server with TotalDebug, Companion sends `SERVER_SCRIPTS_REQUEST`, and the server answers `SERVER_SCRIPTS`: allowed, or the script policy's reason. Server runs are ready once it allowed them.
+- **The link check.** Before a run starts, the server reads the classes, fields and methods its bytecode references, including those Companion's compiler routes through `ScriptAccessLinker` call sites, and resolves each through its own class loader without initializing anything. Those are the classes as loaded, after Mixins and after the classes and members of the other side were stripped, not the files they came from. A reference that does not resolve refuses the run with its name, such as `Not on the server: com.example.Api.pick(int[], int[])`; another overload does not count.
+- **Client classes are refused.** A server script may not refer to `net.minecraft.client`, `net.neoforged.neoforge.client`, `com.mojang.blaze3d` or TotalDebug's client part, even on the integrated server, where they would resolve because it shares the client's JVM.
+- **Classes only the server has** cannot be compiled against, since Companion indexes the client. That belongs to direct server access (F2), which will reuse the same check.
 
 The same relay serves the integrated server. A singleplayer game talks to its own server through the in-memory connection, exactly as it would to a remote one, so there is one path to test.
 
@@ -55,7 +64,7 @@ The same relay serves the integrated server. A singleplayer game talks to its ow
 
 | Operation | Today | After A2 |
 |---|---|---|
-| Run and stop a script, class manifest, source details | Own payloads | Relay |
+| Run and stop a script, script access | Own payloads | Relay; the server checks each script's references |
 | Select datapacks (`SET_PACKS` data) | Client code, integrated only | Server handler; checks the world it names |
 | Reload data (`RELOAD` data) | Client code, integrated only | Server handler; checks the world it names |
 | The world's datapacks (`PACK_STACK` data half) | Client code, integrated only | Server reports them for its world |
@@ -98,6 +107,8 @@ A stack, each layer at most about 500 lines, each merged before the next opens:
 | 4. Remote servers | The permission policy and configuration; `GameState` answers for a remote server's world; the World page for a server | Next version if the report needs the server's identity | Owner, operator and non-operator cases; a server without TotalDebug |
 
 The #75 rework lands before layer 3 and is moved there with the rest.
+
+Between layers 2 and 3, the class manifest handshake was replaced by the per-run link check described under [Server scripts](#server-scripts), with the numbered Companion connections.
 
 ## Open decisions
 

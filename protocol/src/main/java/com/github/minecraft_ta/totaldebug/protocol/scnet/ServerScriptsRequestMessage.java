@@ -4,8 +4,8 @@ import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 
-/** Companion asks the game's server, through the relay, for a new class manifest session. */
-public final class ManifestRequestMessage extends AbstractMessage {
+/** Companion asks the game's server, through the relay, whether it runs scripts for this player. */
+public final class ServerScriptsRequestMessage extends AbstractMessage {
     @Override
     public void read(ByteBufferInputStream input) {
     }

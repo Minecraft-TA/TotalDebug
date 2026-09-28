@@ -20,7 +20,7 @@ class RelayChunkTest {
     void aMessageLargerThanOnePayloadIsSplitAndPutBackTogether() {
         byte[] body = new byte[RelayChunk.TO_SERVER_BYTES * 2 + 17];
         IntStream.range(0, body.length).forEach(index -> body[index] = (byte) index);
-        List<RelayChunk> chunks = RelayChunk.split((short) 8, body, RelayChunk.TO_SERVER_BYTES);
+        List<RelayChunk> chunks = RelayChunk.split(1, (short) 8, body, RelayChunk.TO_SERVER_BYTES);
         assertEquals(3, chunks.size(), "a script's bytecode is no longer capped at one payload");
 
         RelayAssembler assembler = RelayAssembler.toClient();
@@ -34,7 +34,7 @@ class RelayChunkTest {
 
     @Test
     void anEmptyMessageTravelsAsOneChunk() {
-        List<RelayChunk> chunks = RelayChunk.split((short) 45, new byte[0], RelayChunk.TO_SERVER_BYTES);
+        List<RelayChunk> chunks = RelayChunk.split(1, (short) 45, new byte[0], RelayChunk.TO_SERVER_BYTES);
 
         assertEquals(1, chunks.size());
         assertEquals(0, RelayAssembler.toClient().accept(chunks.getFirst()).orElseThrow().body().length);
@@ -42,7 +42,7 @@ class RelayChunkTest {
 
     @Test
     void aChunkOutOfPlaceDropsItsTransfer() {
-        List<RelayChunk> chunks = RelayChunk.split((short) 8, new byte[RelayChunk.TO_SERVER_BYTES * 3], RelayChunk.TO_SERVER_BYTES);
+        List<RelayChunk> chunks = RelayChunk.split(1, (short) 8, new byte[RelayChunk.TO_SERVER_BYTES * 3], RelayChunk.TO_SERVER_BYTES);
         RelayAssembler assembler = RelayAssembler.toClient();
 
         assembler.accept(chunks.get(0));
@@ -52,14 +52,14 @@ class RelayChunkTest {
 
     @Test
     void aTransferThatDoesNotStartAtItsFirstChunkIsIgnored() {
-        RelayChunk late = new RelayChunk(UUID.randomUUID(), 1, 2, (short) 8, new byte[1]);
+        RelayChunk late = new RelayChunk(UUID.randomUUID(), 1, 1, 2, (short) 8, new byte[1]);
 
         assertTrue(RelayAssembler.toClient().accept(late).isEmpty());
     }
 
     @Test
     void theServerTakesOnlyRequestSizedMessagesFromAClient() {
-        List<RelayChunk> chunks = RelayChunk.split((short) 8, new byte[3 * 1024 * 1024], RelayChunk.TO_SERVER_BYTES);
+        List<RelayChunk> chunks = RelayChunk.split(1, (short) 8, new byte[3 * 1024 * 1024], RelayChunk.TO_SERVER_BYTES);
         RelayAssembler assembler = RelayAssembler.toServer();
 
         assertTrue(chunks.stream().map(assembler::accept).allMatch(Optional::isEmpty), "a client cannot make the server hold megabytes");
@@ -67,8 +67,8 @@ class RelayChunkTest {
 
     @Test
     void transfersInProgressShareOneByteBudget() {
-        List<RelayChunk> first = RelayChunk.split((short) 8, new byte[1_500_000], RelayChunk.TO_SERVER_BYTES);
-        List<RelayChunk> second = RelayChunk.split((short) 8, new byte[1_500_000], RelayChunk.TO_SERVER_BYTES);
+        List<RelayChunk> first = RelayChunk.split(1, (short) 8, new byte[1_500_000], RelayChunk.TO_SERVER_BYTES);
+        List<RelayChunk> second = RelayChunk.split(1, (short) 8, new byte[1_500_000], RelayChunk.TO_SERVER_BYTES);
         RelayAssembler assembler = RelayAssembler.toServer();
 
         first.subList(0, first.size() - 1).forEach(assembler::accept);
@@ -79,13 +79,14 @@ class RelayChunkTest {
 
     @Test
     void aChunkSurvivesTheWire() {
-        RelayChunk chunk = new RelayChunk(UUID.randomUUID(), 1, 3, (short) 9, new byte[]{4, 5, 6});
+        RelayChunk chunk = new RelayChunk(UUID.randomUUID(), 1, 1, 3, (short) 9, new byte[]{4, 5, 6});
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
 
         RelayChunk.STREAM_CODEC.encode(buffer, chunk);
         RelayChunk read = RelayChunk.STREAM_CODEC.decode(buffer);
 
         assertEquals(chunk.transfer(), read.transfer());
+        assertEquals(1, read.companion());
         assertEquals(1, read.index());
         assertEquals(3, read.count());
         assertEquals(9, read.messageId());
@@ -94,8 +95,8 @@ class RelayChunkTest {
 
     @Test
     void aChunkBeyondItsCountIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> new RelayChunk(UUID.randomUUID(), 3, 3, (short) 8, new byte[0]));
+        assertThrows(IllegalArgumentException.class, () -> new RelayChunk(UUID.randomUUID(), 1, 3, 3, (short) 8, new byte[0]));
         assertThrows(IllegalArgumentException.class,
-                () -> new RelayChunk(UUID.randomUUID(), 0, RelayedMessage.MAX_BODY_BYTES, (short) 8, new byte[0]));
+                () -> new RelayChunk(UUID.randomUUID(), 1, 0, RelayedMessage.MAX_BODY_BYTES, (short) 8, new byte[0]));
     }
 }

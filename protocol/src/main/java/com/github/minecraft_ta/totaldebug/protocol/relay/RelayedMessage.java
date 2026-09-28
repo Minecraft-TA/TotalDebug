@@ -19,7 +19,7 @@ public record RelayedMessage(int correlation, String gameSession, short messageI
     public static final int ENVELOPE_BYTES = Integer.BYTES + Integer.BYTES + 3 * MAX_SESSION_LENGTH + Short.BYTES + Integer.BYTES;
     /**
      * A relayed message and its envelope fit one frame of the Companion connection. Every message the server sends is
-     * budgeted for it, such as an execution result; the class manifest is sent in chunks well below it.
+     * budgeted for it; the largest is an execution result.
      */
     public static final int MAX_BODY_BYTES = DefaultMessageProcessor.DEFAULT_MAX_FRAME_SIZE - ENVELOPE_BYTES;
 

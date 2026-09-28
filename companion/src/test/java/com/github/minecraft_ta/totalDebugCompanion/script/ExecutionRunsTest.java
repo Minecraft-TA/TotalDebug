@@ -156,7 +156,7 @@ class ExecutionRunsTest {
         var sent = new LinkedBlockingQueue<RunScriptMessage>();
         try (var session = new CompanionSession("execution-runs-test-token");
              var snapshot = ScriptCompilationServiceTest.fixture(directory);
-             var compiler = new ScriptCompilationService(sent::add, message -> false);
+             var compiler = new ScriptCompilationService(sent::add);
              var runs = new ExecutionRuns(session, new ScriptExecutionService(session, compiler, () -> true))) {
             compiler.bind(snapshot);
             var field = CompanionSession.class.getDeclaredField("connections");
@@ -244,7 +244,7 @@ class ExecutionRunsTest {
         final EditorScriptRunServiceTest.ResultBus bus = new EditorScriptRunServiceTest.ResultBus();
         /** The session's own bus, which unwraps what the server sends through the relay. */
         final IMessageBus sessionBus = session.server().getMessageBus();
-        final ScriptCompilationService compiler = new ScriptCompilationService(message -> false, message -> false);
+        final ScriptCompilationService compiler = new ScriptCompilationService(message -> false);
         final ProjectScope project = new ProjectScope(new Object(), new CompanionProfile("project", directory, directory), InstanceState.inMemory(), ChangeRecord.inMemory());
         final ExecutionRuns runs;
 

@@ -25,7 +25,7 @@ class RuntimeBindingTest {
 
     @Test
     void localBindingDoesNotExposeACompilerOrDebuggerClasspath() throws Exception {
-        try (var compiler = new ScriptCompilationService(message -> false, request -> false);
+        try (var compiler = new ScriptCompilationService(message -> false);
              var insights = new CodeInsightService(() -> null, RuntimeSourceCatalog.empty());
              var runtime = snapshot()) {
             var identity = IndexIdentity.local(Map.of());
@@ -42,7 +42,7 @@ class RuntimeBindingTest {
 
     @Test
     void acceptedRuntimeDetachesConsumersBeforeClosingItsIndexAndCanCloseTwice() throws Exception {
-        try (var compiler = new ScriptCompilationService(message -> false, request -> false);
+        try (var compiler = new ScriptCompilationService(message -> false);
              var insights = new CodeInsightService(() -> null, RuntimeSourceCatalog.empty());
              var snapshot = snapshot()) {
             var bytecode = RuntimeSnapshotBytecodeSource.fromIndexedSources(snapshot.sources(), snapshot.index());
@@ -69,7 +69,7 @@ class RuntimeBindingTest {
 
     @Test
     void rejectedCandidateLeavesIndexDisposalToTheLoader() throws Exception {
-        try (var compiler = new ScriptCompilationService(message -> false, request -> false);
+        try (var compiler = new ScriptCompilationService(message -> false);
              var insights = new CodeInsightService(() -> null, RuntimeSourceCatalog.empty());
              var snapshot = snapshot()) {
             var binding = new RuntimeBinding(snapshot, directory,
@@ -81,7 +81,7 @@ class RuntimeBindingTest {
 
     @Test
     void failedPreparationClosesBytecodeSourceButNotTheLoadersIndex() throws Exception {
-        try (var compiler = new ScriptCompilationService(message -> false, request -> false);
+        try (var compiler = new ScriptCompilationService(message -> false);
              var insights = new CodeInsightService(() -> null, RuntimeSourceCatalog.empty());
              var snapshot = snapshot()) {
             Path invalidHome = Files.writeString(directory.resolve("not-a-directory"), "x");

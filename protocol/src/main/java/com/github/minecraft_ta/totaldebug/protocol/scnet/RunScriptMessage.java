@@ -13,12 +13,12 @@ public final class RunScriptMessage extends AbstractMessage {
     public RunScriptMessage() {
     }
 
-    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, Side side, String executionEnvironment, String serverSessionId) {
-        this(scriptId, bytecode, inventoryId, side, executionEnvironment, serverSessionId, "", "", "");
+    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, Side side, String executionEnvironment) {
+        this(scriptId, bytecode, inventoryId, side, executionEnvironment, "", "", "");
     }
 
-    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, Side side, String executionEnvironment, String serverSessionId, String subject, String subjectSessionId, String subjectExpectedId) {
-        this.payload = new RunScriptPayload(scriptId, bytecode, inventoryId, side, executionEnvironment, serverSessionId, subject, subjectSessionId, subjectExpectedId);
+    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, Side side, String executionEnvironment, String subject, String subjectSessionId, String subjectExpectedId) {
+        this.payload = new RunScriptPayload(scriptId, bytecode, inventoryId, side, executionEnvironment, subject, subjectSessionId, subjectExpectedId);
     }
 
     @Override
@@ -30,8 +30,6 @@ public final class RunScriptMessage extends AbstractMessage {
     public void write(ByteBufferOutputStream output) {
         this.payload.write(output);
     }
-
-    public String serverSessionId() { return this.payload.serverSessionId(); }
 
     public int scriptId() {
         return this.payload.scriptId();

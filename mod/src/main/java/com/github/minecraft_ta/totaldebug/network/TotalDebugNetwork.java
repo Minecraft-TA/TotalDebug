@@ -14,7 +14,7 @@ import java.util.function.Consumer;
  * {@code docs/MOD_SIDES.md}). Every server operation travels through them.
  */
 public final class TotalDebugNetwork {
-    public static final String PROTOCOL_VERSION = "7";
+    public static final String PROTOCOL_VERSION = "8";
 
     private volatile Consumer<RelayChunk> companionReceiver = chunk -> TotalDebug.LOGGER.warn(
             "Discarding a relayed message {} because the client's relay is not ready", chunk.messageId());

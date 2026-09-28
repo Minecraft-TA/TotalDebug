@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BooleanSupplier;
 
 /**
  * The server's end of the relay (see {@code docs/MOD_SIDES.md}): puts together the Companion messages players' clients
@@ -46,7 +45,7 @@ public final class ServerRelay {
                 TotalDebug.LOGGER.warn("Discarding a relayed message {} before the server's operations are ready", message.messageId());
                 return;
             }
-            handler.handle(player, decoded);
+            handler.handle(player, chunk.companion(), decoded);
         });
     }
 
@@ -56,19 +55,15 @@ public final class ServerRelay {
     }
 
     /**
-     * Sends {@code message} to Companion through {@code player}'s client, if that player is still connected. Encodes on
-     * the calling thread and sends on the server thread.
+     * Sends {@code message} to Companion connection {@code companion} through {@code player}'s client, if that player is
+     * still connected; the client drops it once another Companion connected. Encodes on the calling thread and sends on
+     * the server thread.
      */
-    public void send(MinecraftServer server, ServerPlayer player, AbstractMessage message) {
-        send(server, player, message, () -> true);
-    }
-
-    /** As {@link #send(MinecraftServer, ServerPlayer, AbstractMessage)}, dropped unless {@code current} still holds then. */
-    public void send(MinecraftServer server, ServerPlayer player, AbstractMessage message, BooleanSupplier current) {
+    public void send(MinecraftServer server, ServerPlayer player, int companion, AbstractMessage message) {
         RelayedMessage relayed = RelayedMessages.fromServer(message);
-        List<RelayChunk> chunks = RelayChunk.split(relayed.messageId(), relayed.body(), RelayChunk.TO_CLIENT_BYTES);
+        List<RelayChunk> chunks = RelayChunk.split(companion, relayed.messageId(), relayed.body(), RelayChunk.TO_CLIENT_BYTES);
         server.execute(() -> {
-            if (!current.getAsBoolean() || server.getPlayerList().getPlayer(player.getUUID()) != player || !reaches(player)) return;
+            if (server.getPlayerList().getPlayer(player.getUUID()) != player || !reaches(player)) return;
             for (RelayChunk chunk : chunks) player.connection.send(new ToCompanionPayload(chunk));
         });
     }
