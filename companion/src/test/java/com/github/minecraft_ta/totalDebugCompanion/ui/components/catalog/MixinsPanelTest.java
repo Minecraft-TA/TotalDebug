@@ -47,6 +47,18 @@ class MixinsPanelTest {
     }
 
     @Test
+    void changesOnSidesThatNeverMeetAreNotShared() {
+        List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(
+                new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.A", List.of(LEVEL), Mixins.Side.CLIENT, 1000,
+                        List.of(new Mixins.Change("Overwrite", "tick"))),
+                new Mixins.Mixin("speed", "speed.mixins.json", "com.speed.mixin.B", List.of(LEVEL), Mixins.Side.SERVER, 1000,
+                        List.of(new Mixins.Change("Inject", "tick")))));
+        assertFalse(rows.getFirst().shared(), "a client-only and a server-only change never apply together");
+        assertFalse(rows.getFirst().overwritten());
+        assertEquals("net.minecraft.world.level.Level#tick", rows.getFirst().reference());
+    }
+
+    @Test
     void aSelectorNamingItsOwnerChangesOnlyThatTarget() {
         List<MixinsPanel.Row> rows = MixinsPanel.rows(List.of(new Mixins.Mixin("gears", "gears.mixins.json", "com.gears.mixin.Both",
                 List.of(LEVEL, "net.minecraft.server.level.ServerLevel"), Mixins.Side.BOTH, 1000,

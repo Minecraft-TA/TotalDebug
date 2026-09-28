@@ -90,8 +90,8 @@ final class ModTreeItems {
     }
 
     /**
-     * The rows under Modpack: Mods, Content, Configuration, Resources, Key bindings and Mixins once the catalog
-     * describes them, and Changes while Companion has changes in effect.
+     * The rows under Modpack: Mods, Content, Configuration, Resources, Key bindings, and Mixins where a mod declares
+     * some, once the catalog describes them, and Changes while Companion has changes in effect.
      */
     static List<TreeItem> packChildren(Snapshot snapshot) {
         List<TreeItem> children = new ArrayList<>();
@@ -105,7 +105,7 @@ final class ModTreeItems {
         if (snapshot.index() != null && !snapshot.index().catalog().keyBindings().isEmpty()) {
             children.add(new KeyBindings(snapshot.index().catalog().keyBindings().size()));
         }
-        if (snapshot.index() != null) children.add(new Mixins());
+        if (snapshot.index() != null && snapshot.index().declaresMixins()) children.add(new Mixins());
         if (snapshot.logs()) children.add(new Logs());
         if (snapshot.changes() > 0) children.add(new Changes(snapshot.changes()));
         return children;

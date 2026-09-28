@@ -83,6 +83,9 @@ class MixinsTest {
         AnnotationVisitor described = inject.visitArray("target");
         AnnotationVisitor desc = described.visitAnnotation(null, "Lorg/spongepowered/asm/mixin/injection/Desc;");
         desc.visit("value", "tickChunk");
+        AnnotationVisitor arguments = desc.visitArray("args");
+        arguments.visit(null, Type.INT_TYPE);
+        arguments.visitEnd();
         desc.visitEnd();
         described.visitEnd();
         inject.visitEnd();
@@ -91,7 +94,8 @@ class MixinsTest {
 
         Mixins.Mixin read = Mixins.mixin("gears", "gears.mixins.json", "com.gears.mixin.DescMixin", Mixins.Side.BOTH, 1000,
                 writer.toByteArray()).orElseThrow();
-        assertEquals(List.of(new Mixins.Change("Inject", "tickChunk")), read.changes(), "not a mixin that only adds members");
+        assertEquals(List.of(new Mixins.Change("Inject", "tickChunk", "(I)V", "")), read.changes(),
+                "the overload its arguments pick; not a mixin that only adds members");
     }
 
     @Test

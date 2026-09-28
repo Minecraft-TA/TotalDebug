@@ -202,6 +202,27 @@ public final class Mixins {
         return new Read(mixins, problems);
     }
 
+    /**
+     * Whether any mod file of {@code index} names a mixin configuration, reading only each file's
+     * {@code neoforge.mods.toml} and manifest; a file that cannot be read names none. Blocking.
+     */
+    public static boolean declared(CatalogIndex index) {
+        Set<URI> files = new LinkedHashSet<>();
+        for (PackCatalog.Mod mod : index.mods()) files.add(mod.file());
+        for (URI file : files) {
+            try {
+                Optional<ModFiles.Archive> opened = ModFiles.open(file);
+                if (opened.isEmpty()) continue;
+                try (ModFiles.Archive archive = opened.get()) {
+                    if (!configs(archive).isEmpty()) return true;
+                }
+            } catch (IOException | RuntimeException unreadable) {
+                // A file that cannot be read names nothing the page could list either.
+            }
+        }
+        return false;
+    }
+
     /** The mixin configurations a file names, in its {@code neoforge.mods.toml} and its manifest. */
     private static Set<String> configs(ModFiles.Archive archive) throws IOException {
         Set<String> configs = new LinkedHashSet<>();
@@ -273,7 +294,7 @@ public final class Mixins {
                     public AnnotationVisitor visitAnnotation(String annotation, boolean visible) {
                         String kind = KINDS.get(annotation);
                         if (kind == null) return null;
-                        return new SelectorVisitor(kind, methodName, changes);
+                        return new SelectorVisitor(kind, methodName, descriptor, changes);
                     }
                 };
             }
@@ -290,13 +311,16 @@ public final class Mixins {
     private static final class SelectorVisitor extends AnnotationVisitor {
         private final String kind;
         private final String methodName;
+        /** The annotated method's own descriptor, which an overwrite shares with the member it replaces. */
+        private final String methodDescriptor;
         private final List<Change> changes;
         private final List<Change> named = new ArrayList<>();
 
-        SelectorVisitor(String kind, String methodName, List<Change> changes) {
+        SelectorVisitor(String kind, String methodName, String methodDescriptor, List<Change> changes) {
             super(Opcodes.ASM9);
             this.kind = kind;
             this.methodName = methodName;
+            this.methodDescriptor = methodDescriptor;
             this.changes = changes;
         }
 
@@ -324,20 +348,39 @@ public final class Mixins {
             };
         }
 
-        /** A {@code @Desc}: the member's name as its value, and its owner when it names one. */
+        /**
+         * A {@code @Desc}: the member's name as its value, the descriptor its {@code args} and {@code ret} make, and its
+         * owner when it names one.
+         */
         private AnnotationVisitor described() {
             String[] member = {""};
             String[] owner = {""};
+            List<Type> arguments = new ArrayList<>();
+            Type[] returned = {Type.VOID_TYPE};
             return new AnnotationVisitor(Opcodes.ASM9) {
                 @Override
                 public void visit(String name, Object value) {
                     if ("value".equals(name) && value instanceof String text) member[0] = text;
                     if ("owner".equals(name) && value instanceof Type type) owner[0] = type.getClassName();
+                    if ("ret".equals(name) && value instanceof Type type) returned[0] = type;
+                }
+
+                @Override
+                public AnnotationVisitor visitArray(String name) {
+                    if (!"args".equals(name)) return null;
+                    return new AnnotationVisitor(Opcodes.ASM9) {
+                        @Override
+                        public void visit(String ignored, Object value) {
+                            if (value instanceof Type type) arguments.add(type);
+                        }
+                    };
                 }
 
                 @Override
                 public void visitEnd() {
-                    if (!member[0].isEmpty()) SelectorVisitor.this.named.add(new Change("", member[0], "", owner[0]));
+                    if (member[0].isEmpty()) return;
+                    String descriptor = Type.getMethodDescriptor(returned[0], arguments.toArray(Type[]::new));
+                    SelectorVisitor.this.named.add(new Change("", member[0], descriptor, owner[0]));
                 }
             };
         }
@@ -349,7 +392,7 @@ public final class Mixins {
         @Override
         public void visitEnd() {
             switch (this.kind) {
-                case "Overwrite" -> this.changes.add(new Change(this.kind, this.methodName));
+                case "Overwrite" -> this.changes.add(new Change(this.kind, this.methodName, this.methodDescriptor, ""));
                 case "Accessor", "Invoker" -> this.changes.add(this.named.isEmpty() ? new Change(this.kind, accessed(this.kind, this.methodName))
                         : new Change(this.kind, this.named.getFirst().member(), this.named.getFirst().descriptor(), this.named.getFirst().owner()));
                 default -> {

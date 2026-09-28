@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.Mixins;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
@@ -73,13 +74,37 @@ public final class MixinsPanel extends JPanel {
             return mods;
         }
 
+        /** Whether changes of different mods meet here: on one side at least, as a client-only and a server-only never do. */
         boolean shared() {
-            return mods().size() > 1;
+            for (Entry first : this.entries) {
+                for (Entry second : this.entries) {
+                    if (meet(first, second)) return true;
+                }
+            }
+            return false;
         }
 
-        /** Several mods change the member and one of them replaces it whole, which the others' changes may not survive. */
+        /** One mod replaces the member whole where another mod's change meets it, which that change may not survive. */
         boolean overwritten() {
-            return shared() && this.entries.stream().anyMatch(entry -> entry.kind().equals("Overwrite"));
+            for (Entry overwrite : this.entries) {
+                if (!overwrite.kind().equals("Overwrite")) continue;
+                for (Entry other : this.entries) {
+                    if (meet(overwrite, other)) return true;
+                }
+            }
+            return false;
+        }
+
+        private static boolean meet(Entry first, Entry second) {
+            Mixins.Side one = first.mixin().side();
+            Mixins.Side two = second.mixin().side();
+            return !first.mixin().modId().equals(second.mixin().modId())
+                    && (one == Mixins.Side.BOTH || two == Mixins.Side.BOTH || one == two);
+        }
+
+        /** The row as a reference: the target, and the member with its overload where it is one. */
+        String reference() {
+            return this.target + (this.member.isEmpty() ? "" : "#" + this.member + this.descriptor);
         }
 
         String kinds() {
@@ -296,17 +321,17 @@ public final class MixinsPanel extends JPanel {
         JPopupMenu menu = new JPopupMenu();
         if (selected.size() > 1) {
             List<String> names = new ArrayList<>();
-            for (Row row : selected) names.add(row.target() + (row.member().isEmpty() ? "" : "#" + row.member()));
+            for (Row row : selected) names.add(row.reference());
             menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy " + names.size() + " References", String.join("\n", names))));
             return menu;
         }
         Row row = selected.getFirst();
-        menu.add(ContextMenus.action("Open Source", null, "ENTER", () -> openTarget(row)));
+        menu.add(ContextMenus.action("Open Source", Icons.JUMP_TO_SOURCE, "ENTER", () -> openTarget(row)));
         Set<String> opened = new LinkedHashSet<>();
         for (Entry entry : row.entries()) {
             String mixin = entry.mixin().className();
             if (opened.add(mixin)) {
-                menu.add(ContextMenus.action("Open Source of " + simple(mixin), null, null,
+                menu.add(ContextMenus.action("Open Source of " + simple(mixin), Icons.JUMP_TO_SOURCE, null,
                         () -> this.navigator.accept(new NavigationTarget.RuntimeClass(mixin))));
             }
         }
@@ -315,7 +340,7 @@ public final class MixinsPanel extends JPanel {
             menu.add(ContextMenus.action("Open " + modName(mod), null, null, () -> this.navigator.accept(new NavigationTarget.ModPage(mod))));
         }
         menu.addSeparator();
-        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Reference", row.target() + (row.member().isEmpty() ? "" : "#" + row.member()))));
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Reference", row.reference())));
         return menu;
     }
 

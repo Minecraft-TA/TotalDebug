@@ -117,7 +117,10 @@ public final class PackCatalogService {
                         + ", not the announced " + inventoryId);
             }
             RuntimeInventory runtime = Files.isRegularFile(this.paths.inventory()) ? RuntimeInventory.read(this.paths.inventory()) : null;
-            loaded = new Ready(index(catalog, runtime));
+            CatalogIndex index = index(catalog, runtime);
+            // Read here, off the Swing thread, so the Modpack tree knows at once whether it has a Mixins row.
+            index.declaresMixins();
+            loaded = new Ready(index);
         } catch (IOException | RuntimeException failure) {
             loaded = new Failed(failure.getMessage());
         }
