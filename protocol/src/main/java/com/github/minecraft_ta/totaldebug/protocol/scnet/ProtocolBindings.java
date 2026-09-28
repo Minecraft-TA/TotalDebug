@@ -20,7 +20,6 @@ public final class ProtocolBindings {
         processor.registerIncoming(CompanionProtocol.RETRY_RUNTIME_INVENTORY, RetryRuntimeInventoryMessage.class, RetryRuntimeInventoryMessage::new);
         processor.registerOutgoing(CompanionProtocol.DEBUG_TARGET, DebugTargetMessage.class);
         processor.registerOutgoing(CompanionProtocol.SERVER_MANIFEST, ServerManifestMessage.class);
-        processor.registerIncoming(CompanionProtocol.SERVER_SOURCE_REQUEST, ServerSourceRequestMessage.class, ServerSourceRequestMessage::new);
         processor.registerOutgoing(CompanionProtocol.INSPECT_SUBJECT, InspectSubjectMessage.class);
         processor.registerOutgoing(CompanionProtocol.RESOURCE_SNAPSHOT, ResourceSnapshotMessage.class);
         processor.registerOutgoing(CompanionProtocol.PACK_CATALOG, PackCatalogMessage.class);
@@ -31,6 +30,9 @@ public final class ProtocolBindings {
         processor.registerIncoming(CompanionProtocol.SET_PACKS, SetPacksMessage.class, SetPacksMessage::new);
         processor.registerOutgoing(CompanionProtocol.RELOAD_RESULT, ReloadResultMessage.class);
         processor.registerOutgoing(CompanionProtocol.PLAYING, PlayingMessage.class);
+        processor.registerIncoming(CompanionProtocol.TO_SERVER, ToServerMessage.class, ToServerMessage::new);
+        processor.registerOutgoing(CompanionProtocol.FROM_SERVER, FromServerMessage.class);
+        processor.registerOutgoing(CompanionProtocol.RELAY_FAILED, RelayFailedMessage.class);
     }
 
     public static void registerCompanion(IMessageProcessor processor) {
@@ -45,7 +47,6 @@ public final class ProtocolBindings {
         processor.registerOutgoing(CompanionProtocol.RETRY_RUNTIME_INVENTORY, RetryRuntimeInventoryMessage.class);
         processor.registerIncoming(CompanionProtocol.DEBUG_TARGET, DebugTargetMessage.class, DebugTargetMessage::new);
         processor.registerIncoming(CompanionProtocol.SERVER_MANIFEST, ServerManifestMessage.class, ServerManifestMessage::new);
-        processor.registerOutgoing(CompanionProtocol.SERVER_SOURCE_REQUEST, ServerSourceRequestMessage.class);
         processor.registerIncoming(CompanionProtocol.INSPECT_SUBJECT, InspectSubjectMessage.class, InspectSubjectMessage::new);
         processor.registerIncoming(CompanionProtocol.RESOURCE_SNAPSHOT, ResourceSnapshotMessage.class, ResourceSnapshotMessage::new);
         processor.registerIncoming(CompanionProtocol.PACK_CATALOG, PackCatalogMessage.class, PackCatalogMessage::new);
@@ -56,5 +57,8 @@ public final class ProtocolBindings {
         processor.registerOutgoing(CompanionProtocol.SET_PACKS, SetPacksMessage.class);
         processor.registerIncoming(CompanionProtocol.RELOAD_RESULT, ReloadResultMessage.class, ReloadResultMessage::new);
         processor.registerIncoming(CompanionProtocol.PLAYING, PlayingMessage.class, PlayingMessage::new);
+        processor.registerOutgoing(CompanionProtocol.TO_SERVER, ToServerMessage.class);
+        processor.registerIncoming(CompanionProtocol.FROM_SERVER, FromServerMessage.class, FromServerMessage::new);
+        processor.registerIncoming(CompanionProtocol.RELAY_FAILED, RelayFailedMessage.class, RelayFailedMessage::new);
     }
 }

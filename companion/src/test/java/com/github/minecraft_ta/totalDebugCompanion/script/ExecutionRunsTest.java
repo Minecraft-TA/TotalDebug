@@ -69,6 +69,31 @@ class ExecutionRunsTest {
         }
     }
 
+    @Test void aRunTheClientCouldNotCarryToTheServerEndsAndLaterResultsAreIgnored() throws Exception {
+        try (var fixture = new Fixture(true)) {
+            var recorder = new Recorder();
+            int id = fixture.runs.open(recorder);
+
+            fixture.runs.relayFailed(id, "The server does not have TotalDebug");
+            fixture.deliver(id, ExecutionStatus.RUN_COMPLETED);
+
+            assertEquals(1, recorder.events.size());
+            assertTrue(recorder.events.getFirst().startsWith("result " + id + " "), recorder.events.getFirst());
+        }
+    }
+
+    @Test void theEndOfAServerSessionLeavesClientRunsAlone() throws Exception {
+        try (var fixture = new Fixture(true)) {
+            var recorder = new Recorder();
+            int id = fixture.runs.open(recorder);
+
+            fixture.runs.serverSessionEnded();
+            fixture.deliver(id, ExecutionStatus.RUN_COMPLETED);
+
+            assertEquals(List.of("result " + id + " RUN_COMPLETED"), recorder.events);
+        }
+    }
+
     @Test void localFailureEndsTheRunAndLaterResultsAreIgnored() throws Exception {
         try (var fixture = new Fixture(true)) {
             var recorder = new Recorder();

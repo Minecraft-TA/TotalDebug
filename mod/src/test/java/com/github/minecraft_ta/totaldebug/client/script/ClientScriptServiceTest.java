@@ -1,246 +1,55 @@
 package com.github.minecraft_ta.totaldebug.client.script;
 
-import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
-import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
-import java.util.Map;
-import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
-import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
-import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import org.junit.jupiter.api.Test;
+
 import java.util.ArrayList;
 import java.util.List;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/** The client runs only client scripts; server scripts reach the server through the relay. */
 class ClientScriptServiceTest {
     @Test
-    void rejectsServerExecutionLocallyWhenTheCurrentServerHasNoChannels() {
+    void aServerRunSentToTheClientIsRefusedRatherThanRunHere() {
         List<Status> statuses = new ArrayList<>();
-        FakeServerTransport transport = new FakeServerTransport(
-                ServerScriptTransport.Availability.unsupported("unsupported server")
-        );
-        ClientScriptService service = service(statuses, transport);
-
-        service.handleRunRequest(serverRun(7));
-
-        assertTrue(transport.runs.isEmpty());
-        assertEquals(List.of(new Status(
-                7,
-                ExecutionResult.failed("", null, "unsupported server")
-        )), statuses);
-    }
-
-    @Test
-    void routesRunStopAndForwardedStatusesThroughTheServerTransport() {
-        List<Status> statuses = new ArrayList<>();
-        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
-        ClientScriptService service = service(statuses, transport);
-
-        service.handleRunRequest(serverRun(-1));
-        int executionId = transport.runs.getFirst().scriptId();
-        forward(service, new ForwardedExecutionResult(
-                executionId,
-                ExecutionResult.progress(ExecutionStatus.COMPILATION_COMPLETED)
-        ));
-        service.stopScript(-1);
-        forward(service, new ForwardedExecutionResult(
-                executionId,
-                ExecutionResult.failed("partial", null, "Script run cancelled")
-        ));
-        service.stopScript(-1);
-
-        assertEquals(1, transport.runs.size());
-        assertEquals(List.of(new StopServerScriptPayload(executionId)), transport.stops);
-        assertEquals(
-                List.of(
-                        new Status(-1, ExecutionResult.progress(ExecutionStatus.COMPILATION_COMPLETED)),
-                        new Status(-1, ExecutionResult.failed("partial", null, "Script run cancelled"))
-                ),
-                statuses
-        );
-    }
-
-    @Test
-    void forwardsTheTargetOfAServerRun() {
-        List<Status> statuses = new ArrayList<>();
-        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
-        ClientScriptService service = service(statuses, transport);
-
-        service.handleRunRequest(targetedServerRun(5, "game-session"));
-
-        assertEquals("block minecraft:overworld 1 64 -2", transport.runs.getFirst().subject());
-    }
-
-    @Test
-    void rejectsATargetFromAWorldThatWasLeft() {
-        List<Status> statuses = new ArrayList<>();
-        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
-        ClientScriptService service = service(statuses, transport);
-
-        service.handleRunRequest(targetedServerRun(6, "earlier-session"));
-
-        assertTrue(transport.runs.isEmpty());
-        assertEquals(List.of(new Status(6, ExecutionResult.failed("", null,
-                "The world containing this target was left; inspect it again"))), statuses);
-    }
-
-    @Test
-    void ignoresAForwardedStatusForAClientOrUnknownRun() {
-        List<Status> statuses = new ArrayList<>();
-        ClientScriptService service = service(
-                statuses,
-                new FakeServerTransport(ServerScriptTransport.Availability.supported())
-        );
-
-        forward(service, new ForwardedExecutionResult(
-                99,
-                ExecutionResult.completed("forged", null)
-        ));
-
-        assertTrue(statuses.isEmpty());
-    }
-
-    @Test
-    void terminatesRemoteRunsWhenTheClientDisconnects() {
-        List<Status> statuses = new ArrayList<>();
-        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
-        ClientScriptService service = service(statuses, transport);
-
-        service.handleRunRequest(serverRun(7));
-        int executionId = transport.runs.getFirst().scriptId();
-        service.onServerDisconnect();
-        forward(service, new ForwardedExecutionResult(
-                executionId,
-                ExecutionResult.completed("stale", null)
-        ));
-        service.stopScript(7);
-
-        assertEquals(
-                List.of(new Status(
-                        7,
-                        ExecutionResult.failed(
-                                "",
-                                null,
-                                "Disconnected from the server while the script was running"
-                        )
-                )),
-                statuses
-        );
-        assertTrue(transport.stops.isEmpty());
-    }
-
-    @Test
-    void lateCompletionCannotSettleAReusedCompanionIdAfterSessionClose() {
-        List<Status> statuses = new ArrayList<>();
-        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
-        try (ClientScriptService service = service(statuses, transport)) {
-            service.handleRunRequest(serverRun(41));
-            int oldExecution = transport.runs.getLast().scriptId();
-            service.close();
-            service.handleRunRequest(serverRun(41));
-            int newExecution = transport.runs.getLast().scriptId();
-
-            forward(service, new ForwardedExecutionResult(oldExecution, ExecutionResult.completed("old session", null)));
-            assertTrue(statuses.isEmpty(), "Old completion reached the replacement run");
-            service.stopScript(41);
-            assertEquals(new StopServerScriptPayload(newExecution), transport.stops.getLast());
-            forward(service, new ForwardedExecutionResult(newExecution, ExecutionResult.completed("new session", null)));
-            assertEquals(List.of(new Status(41, ExecutionResult.completed("new session", null))), statuses);
+        try (ClientScriptService service = service(statuses)) {
+            service.handleRunRequest(run(5, Side.SERVER, "THREAD"));
         }
+
+        assertEquals(List.of(new Status(5, ExecutionResult.fromStatus(ExecutionStatus.RUN_EXCEPTION,
+                "A server script reaches the server through the relay, not the client"))), statuses);
     }
 
     @Test
-    void delayedDuplicateCannotSettleTheNextRunOfTheSameScript() {
+    void anUnknownEnvironmentIsRefusedBeforeTheScriptRuns() {
         List<Status> statuses = new ArrayList<>();
-        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
-        try (ClientScriptService service = service(statuses, transport)) {
-            service.handleRunRequest(serverRun(7));
-            int first = transport.runs.getLast().scriptId();
-            forward(service, new ForwardedExecutionResult(first, ExecutionResult.completed("first", null)));
-            service.handleRunRequest(serverRun(7));
-            int second = transport.runs.getLast().scriptId();
-            forward(service, new ForwardedExecutionResult(first, ExecutionResult.completed("duplicate", null)));
-            forward(service, new ForwardedExecutionResult(second, ExecutionResult.completed("second", null)));
-            assertEquals(List.of(new Status(7, ExecutionResult.completed("first", null)),
-                    new Status(7, ExecutionResult.completed("second", null))), statuses);
+        try (ClientScriptService service = service(statuses)) {
+            service.handleRunRequest(run(6, Side.CLIENT, "SOMETIME"));
         }
+
+        assertEquals(1, statuses.size());
+        assertEquals(6, statuses.getFirst().scriptId());
+        assertEquals(ExecutionStatus.COMPILATION_FAILED, statuses.getFirst().status().status());
     }
 
-    @Test
-    void aFailedStopRequestKeepsTheRunAvailableForItsActualResult() {
-        List<Status> statuses = new ArrayList<>();
-        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
-        try (ClientScriptService service = service(statuses, transport)) {
-            service.handleRunRequest(serverRun(41));
-            int executionId = transport.runs.getLast().scriptId();
-            transport.stopFailure = new IllegalStateException("fixture");
-            service.stopScript(41);
-            assertEquals(ExecutionStatus.CANCELLATION_PENDING, statuses.getLast().status().status());
-            transport.stopFailure = null;
-            service.stopScript(41);
-            forward(service, new ForwardedExecutionResult(executionId, ExecutionResult.completed("actual result", null)));
-            assertEquals(new Status(41, ExecutionResult.completed("actual result", null)), statuses.getLast());
-        }
+    private static ClientScriptService service(List<Status> statuses) {
+        return new ClientScriptService((scriptId, result) -> statuses.add(new Status(scriptId, result)),
+                new TickTaskScheduler(), () -> "game-session", new KeptStacks());
     }
 
-    private static ClientScriptService service(List<Status> statuses, ServerScriptTransport transport) {
-        return new ClientScriptService(
-                (scriptId, status) -> statuses.add(new Status(scriptId, status)),
-                new TickTaskScheduler(),
-                transport,
-                () -> "game-session",
-                new KeptStacks()
-        );
-    }
-
-    private static void forward(ClientScriptService service, ForwardedExecutionResult forwarded) {
-        forwarded.toPayloads().forEach(service::handleForwardedPayload);
-    }
-
-    private static RunScriptMessage serverRun(int scriptId) {
+    private static RunScriptMessage run(int scriptId, Side side, String environment) {
         return new RunScriptMessage(scriptId, new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2})),
-                "inventory", Side.SERVER, ScriptExecutionEnvironment.THREAD.name(), "server-session");
-    }
-
-    private static RunScriptMessage targetedServerRun(int scriptId, String gameSession) {
-        return new RunScriptMessage(scriptId, new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2})),
-                "inventory", Side.SERVER, ScriptExecutionEnvironment.POST_TICK.name(), "server-session",
-                "block minecraft:overworld 1 64 -2", gameSession, "");
+                "inventory", side, environment, "server-session");
     }
 
     private record Status(int scriptId, ExecutionResult status) {
-    }
-
-    private static final class FakeServerTransport implements ServerScriptTransport {
-        private final Availability availability;
-        private final List<RunServerScriptPayload> runs = new ArrayList<>();
-        private final List<StopServerScriptPayload> stops = new ArrayList<>();
-        private RuntimeException stopFailure;
-
-        private FakeServerTransport(Availability availability) {
-            this.availability = availability;
-        }
-
-        @Override
-        public Availability availability() {
-            return this.availability;
-        }
-
-        @Override
-        public void run(RunServerScriptPayload payload) {
-            this.runs.add(payload);
-        }
-
-        @Override
-        public void stop(StopServerScriptPayload payload) {
-            if (this.stopFailure != null) throw this.stopFailure;
-            this.stops.add(payload);
-        }
     }
 }

@@ -1,15 +1,10 @@
 package com.github.minecraft_ta.totaldebug.client.script;
 
-import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.network.ForwardedCompanionPayload;
-import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
-import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResultAssembler;
-import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
-import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.script.ScriptRunner;
@@ -17,22 +12,22 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.script.ExecutionResultSink;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
-/** Routes authenticated Companion script requests to the client or negotiated game server. */
+/**
+ * Runs Companion's client scripts. Server scripts do not pass through here: Companion addresses them to the server,
+ * and the relay carries them there unread (see {@code docs/MOD_SIDES.md}).
+ */
 public final class ClientScriptService implements AutoCloseable {
-    private record Run(int companionId, int executionId, Side side) { }
+    private record Run(int companionId, int executionId) { }
 
     private final ExecutionResultSink resultSink;
     private final TickTaskScheduler tickTasks;
-    private final ServerScriptTransport serverTransport;
     private final Supplier<String> gameSession;
     private final KeptStacks stacks;
-    private final ForwardedExecutionResultAssembler forwardedResults = new ForwardedExecutionResultAssembler();
     private final Map<Integer, Run> activeRuns = new ConcurrentHashMap<>();
     private final Map<Integer, Run> executions = new ConcurrentHashMap<>();
     private long nextExecutionId;
@@ -47,7 +42,6 @@ public final class ClientScriptService implements AutoCloseable {
         this(
                 Objects.requireNonNull(companionApp, "companionApp")::sendExecutionResult,
                 tickTasks,
-                new ServerScriptTransport.NeoForge(),
                 gameSession,
                 stacks
         );
@@ -56,19 +50,22 @@ public final class ClientScriptService implements AutoCloseable {
     ClientScriptService(
             ExecutionResultSink resultSink,
             TickTaskScheduler tickTasks,
-            ServerScriptTransport serverTransport,
             Supplier<String> gameSession,
             KeptStacks stacks
     ) {
         this.stacks = Objects.requireNonNull(stacks, "stacks");
         this.resultSink = Objects.requireNonNull(resultSink, "resultSink");
         this.tickTasks = Objects.requireNonNull(tickTasks, "tickTasks");
-        this.serverTransport = Objects.requireNonNull(serverTransport, "serverTransport");
         this.gameSession = Objects.requireNonNull(gameSession, "gameSession");
     }
 
     public void handleRunRequest(RunScriptMessage message) {
         Objects.requireNonNull(message, "message");
+        if (message.side() == Side.SERVER) {
+            sendUntrackedResult(message.scriptId(), ExecutionStatus.RUN_EXCEPTION,
+                    "A server script reaches the server through the relay, not the client");
+            return;
+        }
         ScriptExecutionEnvironment environment;
         try {
             environment = ScriptExecutionEnvironment.fromWireName(message.executionEnvironment());
@@ -92,43 +89,7 @@ public final class ClientScriptService implements AutoCloseable {
             }
         }
 
-        if (message.side() == Side.SERVER) {
-            runOnServer(message, environment);
-        } else {
-            runOnClient(message, environment, subject);
-        }
-    }
-
-    private void runOnServer(RunScriptMessage message, ScriptExecutionEnvironment environment) {
-        ServerScriptTransport.Availability availability = this.serverTransport.availability();
-        if (!availability.available()) {
-            sendUntrackedResult(
-                    message.scriptId(),
-                    ExecutionStatus.RUN_EXCEPTION,
-                    availability.unavailableReason()
-            );
-            return;
-        }
-
-        Run run = registerRun(message.scriptId(), Side.SERVER);
-        if (run == null) {
-            return;
-        }
-        RunServerScriptPayload payload;
-        try {
-            payload = new RunServerScriptPayload(run.executionId(), message.bytecode(), environment,
-                    message.serverSessionId(), message.subject(), message.subjectExpectedId());
-        } catch (IllegalArgumentException exception) {
-            acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
-                    exception.getMessage()), Side.SERVER);
-            return;
-        }
-        try {
-            this.serverTransport.run(payload);
-        } catch (RuntimeException exception) {
-            acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
-                    "Unable to send the server script: " + exception.getMessage()), Side.SERVER);
-        }
+        runOnClient(message, environment, subject);
     }
 
     private void runOnClient(RunScriptMessage message, ScriptExecutionEnvironment environment, SubjectRef.Occurrence subject) {
@@ -144,7 +105,7 @@ public final class ClientScriptService implements AutoCloseable {
             );
             return;
         }
-        Run run = registerRun(message.scriptId(), Side.CLIENT);
+        Run run = registerRun(message.scriptId());
         if (run == null) {
             return;
         }
@@ -154,63 +115,13 @@ public final class ClientScriptService implements AutoCloseable {
 
     public synchronized void stopScript(int scriptId) {
         Run run = this.activeRuns.get(scriptId);
-        if (run == null) {
-            return;
-        }
-        if (run.side() == Side.CLIENT) {
-            if (this.runner != null) {
-                this.runner.stopScript(run.executionId());
-            }
-            return;
-        }
-        ServerScriptTransport.Availability availability = this.serverTransport.availability();
-        if (!availability.available()) {
-            acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.CANCELLATION_PENDING, availability.unavailableReason()),
-                    Side.SERVER);
-            return;
-        }
-        try {
-            this.serverTransport.stop(new StopServerScriptPayload(run.executionId()));
-        } catch (RuntimeException exception) {
-            acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.CANCELLATION_PENDING,
-                    "Unable to stop the server script: " + exception.getMessage()), Side.SERVER);
-        }
+        if (run != null && this.runner != null) this.runner.stopScript(run.executionId());
     }
 
+    /** The player left the world: its client scripts stop. */
     public synchronized void onServerDisconnect() {
-        this.forwardedResults.clear();
         if (this.runner != null) {
             this.runner.stopAll();
-        }
-        for (Run run : new ArrayList<>(this.executions.values())) {
-            if (run.side() == Side.SERVER) {
-                acceptResult(run.executionId(), ExecutionResult.failed("", null,
-                        "Disconnected from the server while the script was running"), Side.SERVER);
-            }
-        }
-    }
-
-    public void handleForwardedPayload(ForwardedCompanionPayload payload) {
-        ForwardedExecutionResult.Chunk chunk;
-        try {
-            chunk = ForwardedExecutionResult.decodeChunk(payload);
-        } catch (IllegalArgumentException exception) {
-            TotalDebug.LOGGER.warn("Discarding invalid forwarded companion payload {}", payload.messageId(), exception);
-            return;
-        }
-        Run run = this.executions.get(chunk.scriptId());
-        if (run == null || run.side() != Side.SERVER) {
-            TotalDebug.LOGGER.warn(
-                    "Discarding an execution-result chunk for inactive or client-side script {}",
-                    chunk.scriptId()
-            );
-            return;
-        }
-        try {
-            this.forwardedResults.accept(chunk).ifPresent(result ->
-                    acceptResult(result.scriptId(), result.result(), Side.SERVER));
-        } catch (IllegalArgumentException exception) {
-            TotalDebug.LOGGER.warn("Discarding invalid forwarded execution result", exception);
         }
     }
 
@@ -221,13 +132,13 @@ public final class ClientScriptService implements AutoCloseable {
         this.runner = new ScriptRunner(
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(Side.CLIENT, phase, task),
-                (scriptId, result) -> acceptResult(scriptId, result, Side.CLIENT),
+                this::acceptResult,
                 new ClientScriptTargets(this.stacks)
         );
         return this.runner;
     }
 
-    private synchronized Run registerRun(int scriptId, Side side) {
+    private synchronized Run registerRun(int scriptId) {
         if (this.activeRuns.containsKey(scriptId)) {
             sendUntrackedResult(scriptId, ExecutionStatus.COMPILATION_FAILED,
                     "A script with this id is already running");
@@ -238,27 +149,18 @@ public final class ClientScriptService implements AutoCloseable {
                     "Script execution id space exhausted; restart Minecraft");
             return null;
         }
-        // Companion IDs identify editor/job slots. Transport IDs identify executions and are never reused
-        // during this Minecraft client's lifetime, including across Companion and server reconnections.
-        Run run = new Run(scriptId, (int) this.nextExecutionId++, side);
+        // Companion IDs identify editor/job slots. Execution IDs are never reused during this Minecraft client's
+        // lifetime, including across Companion reconnections.
+        Run run = new Run(scriptId, (int) this.nextExecutionId++);
         this.executions.put(run.executionId(), run);
         this.activeRuns.put(scriptId, run);
         return run;
     }
 
-    private synchronized void acceptResult(
-            int scriptId,
-            ExecutionResult result,
-            Side expectedSide
-    ) {
+    private synchronized void acceptResult(int scriptId, ExecutionResult result) {
         Run run = this.executions.get(scriptId);
-        if (run == null || run.side() != expectedSide) {
-            TotalDebug.LOGGER.warn(
-                    "Discarding stale {} script status {} for script {}",
-                    expectedSide.name().toLowerCase(),
-                    result.status(),
-                    scriptId
-            );
+        if (run == null) {
+            TotalDebug.LOGGER.warn("Discarding stale script status {} for script {}", result.status(), scriptId);
             return;
         }
         boolean observed = this.activeRuns.get(run.companionId()) == run;
@@ -281,22 +183,8 @@ public final class ClientScriptService implements AutoCloseable {
 
     @Override
     public synchronized void close() {
-        this.forwardedResults.clear();
-        var detachedRuns = new ArrayList<>(this.activeRuns.values());
         // Detach observers before cancellation can synchronously deliver a result.
         this.activeRuns.clear();
-        for (Run run : detachedRuns) {
-            if (run.side() != Side.SERVER) {
-                continue;
-            }
-            try {
-                if (this.serverTransport.availability().available()) {
-                    this.serverTransport.stop(new StopServerScriptPayload(run.executionId()));
-                }
-            } catch (RuntimeException exception) {
-                TotalDebug.LOGGER.debug("Unable to stop server script {} while closing", run.executionId(), exception);
-            }
-        }
         if (this.runner != null) {
             this.runner.close();
             this.runner = null;

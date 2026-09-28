@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.world;
 
-import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
+import com.github.minecraft_ta.totaldebug.network.ToServerPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -27,6 +27,6 @@ public final class Playing {
         }
         ServerData data = minecraft.getCurrentServer();
         return new PlayingPayload.Multiplayer(data == null ? "" : data.ip, data != null && data.isRealm(),
-                connection.hasChannel(RunServerScriptPayload.TYPE), Math.clamp(player.getPermissionLevel(), 0, 4));
+                connection.hasChannel(ToServerPayload.TYPE), Math.clamp(player.getPermissionLevel(), 0, 4));
     }
 }

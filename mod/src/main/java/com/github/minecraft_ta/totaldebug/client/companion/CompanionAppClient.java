@@ -29,7 +29,10 @@ import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload
 import com.github.minecraft_ta.totaldebug.protocol.message.KeyBindingResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
@@ -300,43 +303,27 @@ public final class CompanionAppClient implements AutoCloseable {
         this.progressListener = Objects.requireNonNull(listener, "listener");
     }
 
-    private Consumer<ServerSourceRequestMessage> serverSourceRequestHandler = message ->
-            send(new ServerManifestMessage(message.sessionId(), message.requestId(), message.source(),
-                    "Server source request handler is not installed", 0, 0, new byte[0]));
+    private volatile Consumer<RelayedMessage> toServerHandler = message -> sendRelayFailed(message.correlation(),
+            "The game's relay to the server is not ready");
 
-    public void setServerSourceRequestHandler(Consumer<ServerSourceRequestMessage> handler) {
-        this.serverSourceRequestHandler = Objects.requireNonNull(handler);
+    /** Receives the messages Companion addressed to the server; runs on the connection thread. */
+    public void setToServerHandler(Consumer<RelayedMessage> handler) {
+        this.toServerHandler = Objects.requireNonNull(handler, "handler");
     }
 
-    private final Object serverManifestLock = new Object();
-    private final List<ServerManifestMessage> serverManifest = new ArrayList<>();
-
-    public void acceptServerManifest(ServerManifestMessage message) {
-        synchronized (this.serverManifestLock) {
-            if (!message.baseline()) {
-                send(message);
-                return;
-            }
-            if (message.offset() == 0) this.serverManifest.clear();
-            // Replay the bounded current transfer when Companion opens after joining the server.
-            if (this.serverManifest.size() >= ServerManifestMessage.MAX_BYTES / ServerManifestMessage.CHUNK_BYTES + 1) {
-                this.serverManifest.clear();
-                message = ServerManifestMessage.unavailable("Invalid server manifest transfer");
-            }
-            this.serverManifest.add(message);
-            send(message);
-        }
+    /** Hands Companion a message the server sent, unread. */
+    public void sendFromServer(RelayedMessage message) {
+        send(new FromServerMessage(message));
     }
 
-    private void sendServerManifest() {
-        synchronized (this.serverManifestLock) {
-            if (this.serverManifest.isEmpty()) {
-                send(ServerManifestMessage.unavailable(
-                        "No server handshake is available. Join a server running matching TotalDebug."));
-            } else {
-                for (var message : this.serverManifest) send(message);
-            }
-        }
+    /** Tells Companion a message for the server could not be carried, and why. */
+    public void sendRelayFailed(int correlation, String reason) {
+        send(new RelayFailedMessage(correlation, reason));
+    }
+
+    /** Tells Companion the server is gone, so its class manifest session ended. */
+    public void sendServerLeft() {
+        send(ServerManifestMessage.unavailable("Disconnected from the game server"));
     }
 
     public void sendExecutionResult(int scriptId, ExecutionResult result) {
@@ -409,12 +396,12 @@ public final class CompanionAppClient implements AutoCloseable {
             }
             attempt.ready.complete(null);
         });
-        transport.getMessageBus().listenAlways(ServerSourceRequestMessage.class, message -> {
+        transport.getMessageBus().listenAlways(ToServerMessage.class, message -> {
             if (!attempt.authenticated()) {
-                failSession(attempt, "Companion requested server details before authentication", null);
+                failSession(attempt, "Companion sent a message for the server before authentication", null);
                 return;
             }
-            this.serverSourceRequestHandler.accept(message);
+            this.toServerHandler.accept(message.payload());
         });
         transport.getMessageBus().listenAlways(RunScriptMessage.class, message -> {
             if (!attempt.authenticated()) {
@@ -488,7 +475,8 @@ public final class CompanionAppClient implements AutoCloseable {
         attempt.token = null;
         attempt.authenticated.complete(null);
         send(new DebugTargetMessage("minecraft-client", "Minecraft Client", DebugTargetMessage.LOCAL_JVM, ProcessHandle.current().pid()));
-        sendServerManifest();
+        // Companion asks the server for its class manifest once it knows the game plays one.
+        send(ServerManifestMessage.unavailable("Server scripts need a singleplayer world or a server with TotalDebug"));
         ResourceSnapshotMessage snapshot = this.resourceSnapshot;
         if (snapshot != null) send(snapshot);
         this.sessionOpenedHandler.run();

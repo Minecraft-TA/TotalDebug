@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totaldebug.client.catalog.KeyBindingEdits;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogCapture;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogPublisher;
 import com.github.minecraft_ta.totaldebug.client.companion.ChangePublisher;
+import com.github.minecraft_ta.totaldebug.client.companion.ClientRelay;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionRequests;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionProgressActionBar;
@@ -24,8 +25,6 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
-import com.github.minecraft_ta.totaldebug.network.ServerSourceRequestPayload;
 import com.github.minecraft_ta.totaldebug.storage.GameLock;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import java.io.IOException;
@@ -50,6 +49,7 @@ public final class TotalDebugClient {
     private final CodeViewInput codeViewInput;
     private final KeptStacks keptStacks = new KeptStacks();
     private final ClientScriptService scripts;
+    private final ClientRelay relay;
     private final ResourceSnapshots resources;
     private final PackCatalogPublisher catalogs;
     private final PackStackPublisher packStacks;
@@ -70,13 +70,6 @@ public final class TotalDebugClient {
                 TotalDebugConfig.CLIENT.companionDevelopmentJar.get()
         );
         this.companionApp = companionApp;
-        TotalDebug.get().network().setManifestReceiver(payload -> companionApp.acceptServerManifest(payload.message()));
-        companionApp.setServerSourceRequestHandler(request -> Minecraft.getInstance().execute(() -> {
-            var connection = Minecraft.getInstance().getConnection();
-            if (connection != null && connection.hasChannel(ServerSourceRequestPayload.TYPE)) {
-                connection.send(new ServerSourceRequestPayload(request));
-            }
-        }));
         companionApp.setProgressListener(progress -> CompanionProgressActionBar.show(Minecraft.getInstance(), progress));
         this.requests = new CompanionRequests(companionApp);
         this.resources = new ResourceSnapshots(paths.previews(), companionApp::sendResourceSnapshot);
@@ -137,7 +130,10 @@ public final class TotalDebugClient {
         this.codeViewInput = new CodeViewInput(this.codeView::inspectOrFocus, this.keptStacks);
         this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks(), () -> this.gameSessionId,
                 this.keptStacks);
-        TotalDebug.get().network().installForwardedCompanionReceiver(this.scripts::handleForwardedPayload);
+        ClientRelay relay = new ClientRelay(companionApp, () -> this.gameSessionId);
+        this.relay = relay;
+        companionApp.setToServerHandler(message -> Minecraft.getInstance().execute(() -> relay.toServer(message)));
+        TotalDebug.get().network().setCompanionReceiver(relay::fromServer);
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);
         companionApp.setSessionClosedHandler(this.scripts::close);
@@ -219,7 +215,7 @@ public final class TotalDebugClient {
         synchronized (this) {
             this.gameSessionId = null;
         }
-        this.companionApp.acceptServerManifest(ServerManifestMessage.unavailable("Disconnected from the game server"));
+        this.relay.serverLeft();
         this.scripts.onServerDisconnect();
     }
 

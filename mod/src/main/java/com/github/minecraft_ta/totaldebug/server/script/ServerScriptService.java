@@ -1,12 +1,12 @@
 package com.github.minecraft_ta.totaldebug.server.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.server.ServerRelay;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
-import com.github.minecraft_ta.totaldebug.network.ForwardedCompanionPayload;
-import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
-import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
-import com.github.minecraft_ta.totaldebug.network.ServerManifestPayload;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
@@ -57,19 +57,23 @@ public final class ServerScriptService {
     private record ManifestSession(ServerPlayer player, String id) {}
 
     private final TickTaskScheduler tickTasks;
+    private final ServerRelay relay;
     private final Map<UUID, RunnerSession> runners = new ConcurrentHashMap<>();
     private final ExecutorService resultEncoder = createResultEncoder();
 
-    public ServerScriptService(TickTaskScheduler tickTasks) {
+    /** Answers Companion through {@code relay}. */
+    public ServerScriptService(TickTaskScheduler tickTasks, ServerRelay relay) {
         this.tickTasks = Objects.requireNonNull(tickTasks, "tickTasks");
+        this.relay = Objects.requireNonNull(relay, "relay");
     }
 
+    /** Starts a new class manifest session for {@code player}, as Companion asked through the relay. */
     public synchronized void sendManifest(ServerPlayer player) {
-        if (!player.connection.hasChannel(ServerManifestPayload.TYPE)) return;
+        if (!ServerRelay.reaches(player)) return;
         MinecraftServer server = Objects.requireNonNull(player.getServer());
         var session = new ManifestSession(player, UUID.randomUUID().toString());
         this.manifestSessions.put(player.getUUID(), session);
-        player.connection.send(new ServerManifestPayload(ServerManifestMessage.unavailable("Preparing server archive baseline")));
+        this.relay.send(server, player, ServerManifestMessage.unavailable("Preparing server archive baseline"));
         if (this.manifest == null) {
             this.manifest = CompletableFuture.supplyAsync(() -> {
                 try (var phase = RuntimePhase.start("server.baseline")) {
@@ -85,12 +89,12 @@ public final class ServerScriptService {
             if (failure != null) {
                 this.manifestSessions.remove(player.getUUID(), session);
                 TotalDebug.LOGGER.error("Unable to prepare server class manifest", failure);
-                player.connection.send(new ServerManifestPayload(ServerManifestMessage.unavailable(
-                        "Unable to prepare server class manifest; see the server log")));
+                this.relay.send(server, player, ServerManifestMessage.unavailable(
+                        "Unable to prepare server class manifest; see the server log"));
                 return;
             }
             for (var message : ServerManifestMessage.split(session.id(), manifest.catalog().baseline())) {
-                player.connection.send(new ServerManifestPayload(message));
+                this.relay.send(server, player, message);
             }
         }));
     }
@@ -109,21 +113,28 @@ public final class ServerScriptService {
             if (this.manifestSessions.get(player.getUUID()) != session) return;
             if (failure != null) {
                 TotalDebug.LOGGER.error("Unable to prepare requested server source {}", request.source(), failure);
-                player.connection.send(new ServerManifestPayload(new ServerManifestMessage(
+                this.relay.send(server, player, new ServerManifestMessage(
                         session.id(), request.requestId(), request.source(),
-                        "Unable to prepare server source details; see the server log", 0, 0, new byte[0])));
+                        "Unable to prepare server source details; see the server log", 0, 0, new byte[0]));
             } else if (bytes != null) {
                 for (var message : ServerManifestMessage.split(session.id(), request.requestId(), request.source(), bytes)) {
-                    player.connection.send(new ServerManifestPayload(message));
+                    this.relay.send(server, player, message);
                 }
             }
         }));
     }
 
-    public void runScript(ServerPlayer player, RunServerScriptPayload payload) {
+    public void runScript(ServerPlayer player, RunScriptMessage payload) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(payload, "payload");
         MinecraftServer server = Objects.requireNonNull(player.getServer(), "player server");
+        ScriptExecutionEnvironment environment;
+        try {
+            environment = ScriptExecutionEnvironment.fromWireName(payload.executionEnvironment());
+        } catch (IllegalArgumentException exception) {
+            sendCompilationFailure(server, player, payload.scriptId(), exception.getMessage());
+            return;
+        }
         ServerScriptPolicy policy = new ServerScriptPolicy(
                 TotalDebugConfig.SERVER.enableScripts.get(),
                 TotalDebugConfig.SERVER.enableScriptsOnlyForOp.get()
@@ -169,8 +180,7 @@ public final class ServerScriptService {
             );
             return;
         }
-        runner.runScript(payload.scriptId(), payload.bytecode(), payload.environment(), subject,
-                payload.subjectExpectedId());
+        runner.runScript(payload.scriptId(), payload.bytecode(), environment, subject, payload.subjectExpectedId());
     }
 
     public void stopScript(ServerPlayer player, int scriptId) {
@@ -242,51 +252,24 @@ public final class ServerScriptService {
         } catch (RejectedExecutionException exception) {
             TotalDebug.LOGGER.warn("Discarding an execution result for script {} because the encoder is overloaded",
                     scriptId);
-            sendPayloads(
-                    server,
-                    sessionPlayer,
-                    new ForwardedExecutionResult(
-                            scriptId,
-                            result.deliveryFailure("The server result encoder is overloaded")
-                    ).toPayloads()
-            );
+            this.relay.send(server, sessionPlayer,
+                    new ExecutionResultMessage(scriptId, result.deliveryFailure("The server result encoder is overloaded")));
         }
     }
 
-    private static void encodeAndSend(
+    private void encodeAndSend(
             MinecraftServer server,
             ServerPlayer sessionPlayer,
             int scriptId,
             ExecutionResult result
     ) {
-        List<ForwardedCompanionPayload> payloads;
         try {
-            payloads = new ForwardedExecutionResult(scriptId, result).toPayloads();
+            this.relay.send(server, sessionPlayer, new ExecutionResultMessage(scriptId, result));
         } catch (RuntimeException exception) {
             TotalDebug.LOGGER.error("Unable to encode execution result for script {}", scriptId, exception);
-            payloads = new ForwardedExecutionResult(
-                    scriptId,
-                    result.deliveryFailure("Unable to encode the server execution result")
-            ).toPayloads();
+            this.relay.send(server, sessionPlayer, new ExecutionResultMessage(scriptId,
+                    result.deliveryFailure("Unable to encode the server execution result")));
         }
-        sendPayloads(server, sessionPlayer, payloads);
-    }
-
-    private static void sendPayloads(
-            MinecraftServer server,
-            ServerPlayer sessionPlayer,
-            List<ForwardedCompanionPayload> payloads
-    ) {
-        server.execute(() -> {
-            ServerPlayer currentPlayer = server.getPlayerList().getPlayer(sessionPlayer.getUUID());
-            if (currentPlayer != sessionPlayer
-                    || !sessionPlayer.connection.hasChannel(ForwardedCompanionPayload.TYPE)) {
-                return;
-            }
-            for (ForwardedCompanionPayload payload : payloads) {
-                sessionPlayer.connection.send(payload);
-            }
-        });
     }
 
     private static ExecutorService createResultEncoder() {

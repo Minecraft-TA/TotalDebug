@@ -12,14 +12,10 @@ final class ServerScriptLifecycleEvents {
     }
 
     @SubscribeEvent
-    static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) TotalDebug.get().serverScripts().sendManifest(player);
-    }
-
-    @SubscribeEvent
     static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             TotalDebug.get().serverScripts().removePlayer(player);
+            TotalDebug.get().serverRelay().removePlayer(player);
         }
     }
 }
