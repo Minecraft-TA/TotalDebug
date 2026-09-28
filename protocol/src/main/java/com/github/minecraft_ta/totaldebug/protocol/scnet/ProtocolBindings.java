@@ -10,7 +10,6 @@ public final class ProtocolBindings {
 
     public static void registerMod(IMessageProcessor processor) {
         processor.registerIncoming(CompanionProtocol.READY, ReadyMessage.class, ReadyMessage::new);
-        processor.registerBidirectional(CompanionProtocol.OPEN_CLASS, OpenClassMessage.class, OpenClassMessage::new);
         processor.registerIncoming(CompanionProtocol.RUN_SCRIPT, RunScriptMessage.class, RunScriptMessage::new);
         processor.registerOutgoing(CompanionProtocol.EXECUTION_RESULT, ExecutionResultMessage.class);
         processor.registerIncoming(CompanionProtocol.STOP_SCRIPT, StopScriptMessage.class, StopScriptMessage::new);
@@ -36,7 +35,6 @@ public final class ProtocolBindings {
 
     public static void registerCompanion(IMessageProcessor processor) {
         processor.registerOutgoing(CompanionProtocol.READY, ReadyMessage.class);
-        processor.registerBidirectional(CompanionProtocol.OPEN_CLASS, OpenClassMessage.class, OpenClassMessage::new);
         processor.registerOutgoing(CompanionProtocol.RUN_SCRIPT, RunScriptMessage.class);
         processor.registerIncoming(CompanionProtocol.EXECUTION_RESULT, ExecutionResultMessage.class, ExecutionResultMessage::new);
         processor.registerOutgoing(CompanionProtocol.STOP_SCRIPT, StopScriptMessage.class);

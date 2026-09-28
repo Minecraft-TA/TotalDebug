@@ -2,7 +2,7 @@ package com.github.minecraft_ta.totaldebug.client.tick;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
-import com.github.minecraft_ta.totaldebug.tick.TickDomain;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -17,18 +17,18 @@ final class ClientTickTaskEvents {
 
     @SubscribeEvent
     static void onClientTickPre(ClientTickEvent.Pre event) {
-        TotalDebug.get().tickTasks().drain(TickDomain.CLIENT, TickPhase.PRE);
+        TotalDebug.get().tickTasks().drain(Side.CLIENT, TickPhase.PRE);
     }
 
     @SubscribeEvent
     static void onClientTickPost(ClientTickEvent.Post event) {
-        TotalDebug.get().tickTasks().drain(TickDomain.CLIENT, TickPhase.POST);
+        TotalDebug.get().tickTasks().drain(Side.CLIENT, TickPhase.POST);
         TotalDebugClient.current().ifPresent(TotalDebugClient::onClientTick);
     }
 
     @SubscribeEvent
     static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         TotalDebugClient.current().ifPresent(TotalDebugClient::onServerDisconnect);
-        TotalDebug.get().tickTasks().clear(TickDomain.CLIENT);
+        TotalDebug.get().tickTasks().clear(Side.CLIENT);
     }
 }

@@ -16,7 +16,6 @@ import com.github.minecraft_ta.totaldebug.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.script.ExecutionResultSink;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
-import com.github.minecraft_ta.totaldebug.tick.TickDomain;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import java.util.ArrayList;
 import java.util.Map;
@@ -221,7 +220,7 @@ public final class ClientScriptService implements AutoCloseable {
         }
         this.runner = new ScriptRunner(
                 TotalDebug.class.getClassLoader(),
-                (phase, task) -> this.tickTasks.submit(TickDomain.CLIENT, phase, task),
+                (phase, task) -> this.tickTasks.submit(Side.CLIENT, phase, task),
                 (scriptId, result) -> acceptResult(scriptId, result, Side.CLIENT),
                 new ClientScriptTargets(this.stacks)
         );

@@ -10,7 +10,6 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
@@ -53,7 +52,6 @@ public final class CompanionSession implements AutoCloseable {
     }
 
     public interface Listener {
-        default void openClass(OpenClassMessage message) { }
 
         default void inspectSubject(InspectSubjectMessage message) { }
 
@@ -237,7 +235,6 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageBus().listenAlways(ServerManifestMessage.class, this.listener::serverManifest);
         this.server.getMessageBus().listenAlways(PlayingMessage.class, this.listener::playing);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
-        this.server.getMessageBus().listenAlways(OpenClassMessage.class, this.listener::openClass);
         this.server.getMessageBus().listenAlways(InspectSubjectMessage.class, this.listener::inspectSubject);
         this.server.getMessageBus().listenAlways(ResourceSnapshotMessage.class, this.listener::resourceSnapshot);
         this.server.getMessageBus().listenAlways(PackCatalogMessage.class, this.listener::packCatalog);

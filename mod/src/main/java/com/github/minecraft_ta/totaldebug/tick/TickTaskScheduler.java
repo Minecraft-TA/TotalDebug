@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.tick;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 
 import java.util.ArrayDeque;
 import java.util.EnumMap;
@@ -16,7 +17,7 @@ import java.util.Queue;
  * from extending the current tick without bound.</p>
  */
 public final class TickTaskScheduler {
-    private final Map<TickDomain, Map<TickPhase, TaskQueue>> queues = new EnumMap<>(TickDomain.class);
+    private final Map<Side, Map<TickPhase, TaskQueue>> queues = new EnumMap<>(Side.class);
     private final TaskFailureHandler failureHandler;
 
     public TickTaskScheduler() {
@@ -27,7 +28,7 @@ public final class TickTaskScheduler {
     TickTaskScheduler(TaskFailureHandler failureHandler) {
         this.failureHandler = Objects.requireNonNull(failureHandler, "failureHandler");
 
-        for (TickDomain domain : TickDomain.values()) {
+        for (Side domain : Side.values()) {
             Map<TickPhase, TaskQueue> phaseQueues = new EnumMap<>(TickPhase.class);
             for (TickPhase phase : TickPhase.values()) {
                 phaseQueues.put(phase, new TaskQueue());
@@ -36,11 +37,11 @@ public final class TickTaskScheduler {
         }
     }
 
-    public void submit(TickDomain domain, TickPhase phase, Runnable task) {
+    public void submit(Side domain, TickPhase phase, Runnable task) {
         queue(domain, phase).submit(Objects.requireNonNull(task, "task"));
     }
 
-    public int drain(TickDomain domain, TickPhase phase) {
+    public int drain(Side domain, TickPhase phase) {
         Queue<Runnable> snapshot = queue(domain, phase).takeSnapshot();
         int executed = 0;
 
@@ -57,17 +58,17 @@ public final class TickTaskScheduler {
         return executed;
     }
 
-    public int pendingTasks(TickDomain domain, TickPhase phase) {
+    public int pendingTasks(Side domain, TickPhase phase) {
         return queue(domain, phase).size();
     }
 
-    public void clear(TickDomain domain) {
+    public void clear(Side domain) {
         for (TickPhase phase : TickPhase.values()) {
             queue(domain, phase).clear();
         }
     }
 
-    private TaskQueue queue(TickDomain domain, TickPhase phase) {
+    private TaskQueue queue(Side domain, TickPhase phase) {
         Objects.requireNonNull(domain, "domain");
         Objects.requireNonNull(phase, "phase");
         return this.queues.get(domain).get(phase);
@@ -75,7 +76,7 @@ public final class TickTaskScheduler {
 
     @FunctionalInterface
     interface TaskFailureHandler {
-        void onFailure(TickDomain domain, TickPhase phase, Throwable throwable);
+        void onFailure(Side domain, TickPhase phase, Throwable throwable);
     }
 
     private static final class TaskQueue {

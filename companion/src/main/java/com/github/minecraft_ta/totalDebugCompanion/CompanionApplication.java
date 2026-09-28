@@ -30,7 +30,6 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
@@ -44,7 +43,6 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
-import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTargets;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
@@ -158,9 +156,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             });
             restoreProfile();
             session = new CompanionSession(token, this::attachSelectedProfile, new CompanionSession.Listener() {
-                @Override public void openClass(OpenClassMessage message) {
-                    CompanionApplication.this.openClass(message.binaryName(), message.targetType(), message.targetIdentifier());
-                }
                 @Override public void resourceSnapshot(ResourceSnapshotMessage message) {
                     itemIcons.accept(message.archive(), message.layers());
                 }
@@ -1175,11 +1170,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
     CompanionSession session() { return session; }
 
-    public void openClass(String binaryName, int targetType, String targetIdentifier) {
-        openOrQueue(
-                NavigationTargets.fromClassOpen(binaryName, targetType, targetIdentifier),
-                NavigationService.Activation.ACTIVATE_WINDOW
-        );
+    /** Opens {@code target} in the window, or once a project and window exist. */
+    public void open(NavigationTarget target) {
+        openOrQueue(target, NavigationService.Activation.ACTIVATE_WINDOW);
     }
 
     private void openOrQueue(NavigationTarget target, NavigationService.Activation activation) {

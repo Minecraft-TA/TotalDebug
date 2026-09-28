@@ -1,7 +1,6 @@
-package com.github.minecraft_ta.totaldebug.client.decompile;
+package com.github.minecraft_ta.totaldebug.client.companion;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import net.minecraft.ChatFormatting;
@@ -17,7 +16,8 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public final class ClientCodeOpenService {
+/** Asks Companion, from the game, to inspect a subject or come to the front, and tells the player how it went. */
+public final class CompanionRequests {
     private final CompanionAppClient companionApp;
     private final Map<String, CompletableFuture<Void>> inFlightRequests = new HashMap<>();
     private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> Thread.ofPlatform()
@@ -25,28 +25,15 @@ public final class ClientCodeOpenService {
             .name("TotalDebug Companion requests")
             .unstarted(task));
 
-    public ClientCodeOpenService(CompanionAppClient companionApp) {
+    public CompanionRequests(CompanionAppClient companionApp) {
         this.companionApp = Objects.requireNonNull(companionApp, "companionApp");
-    }
-
-    public void openClass(Class<?> targetClass) {
-        openClass(targetClass, SourceTarget.wholeClass());
-    }
-
-    public void openClass(Class<?> targetClass, SourceTarget sourceTarget) {
-        Objects.requireNonNull(targetClass, "targetClass");
-        Objects.requireNonNull(sourceTarget, "sourceTarget");
-        String binaryName = targetClass.getName();
-        request(binaryName, "Opening " + binaryName, "Companion is opening " + binaryName,
-                () -> this.companionApp.openClassAndFocus(binaryName, sourceTarget,
-                        ClientCodeOpenService::releaseGameInput));
     }
 
     public void inspect(InspectSubjectPayload subject) {
         Objects.requireNonNull(subject, "subject");
         request(subject.subject(), "Inspecting " + subject.identity().title(),
                 "Companion is inspecting " + subject.identity().title(),
-                () -> this.companionApp.inspectAndFocus(subject, ClientCodeOpenService::releaseGameInput));
+                () -> this.companionApp.inspectAndFocus(subject, CompanionRequests::releaseGameInput));
     }
 
     private void request(String key, String started, String sent, CompanionRequest action) {
@@ -108,7 +95,7 @@ public final class ClientCodeOpenService {
 
         CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
             try {
-                this.companionApp.focus(ClientCodeOpenService::releaseGameInput);
+                this.companionApp.focus(CompanionRequests::releaseGameInput);
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }

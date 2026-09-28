@@ -11,11 +11,9 @@ import com.github.minecraft_ta.totaldebug.storage.LaunchCache;
 import com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs;
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.client.decompile.SourceTarget;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
@@ -363,17 +361,6 @@ public final class CompanionAppClient implements AutoCloseable {
         send(snapshot);
     }
 
-    public synchronized void openClassAndFocus(
-            String binaryName,
-            SourceTarget sourceTarget,
-            Runnable beforeTransfer
-    ) throws IOException {
-        Objects.requireNonNull(binaryName, "binaryName");
-        Objects.requireNonNull(beforeTransfer, "beforeTransfer");
-        Objects.requireNonNull(sourceTarget, "sourceTarget");
-        ensureConnectedAndReady();
-        transferForeground(beforeTransfer, () -> enqueueOpenClass(binaryName, sourceTarget));
-    }
 
     public synchronized void inspectAndFocus(InspectSubjectPayload subject, Runnable beforeTransfer)
             throws IOException {
@@ -392,14 +379,6 @@ public final class CompanionAppClient implements AutoCloseable {
         );
     }
 
-    private void enqueueOpenClass(String binaryName, SourceTarget sourceTarget) {
-        CompanionSourceTargetCodec.WireTarget wireTarget = CompanionSourceTargetCodec.encode(sourceTarget);
-        send(new OpenClassMessage(
-                binaryName,
-                wireTarget.javaElementType(),
-                wireTarget.identifier()
-        ));
-    }
 
     private void transferForeground(Runnable beforeTransfer, Runnable sendRequest) throws IOException {
         var current = connection;

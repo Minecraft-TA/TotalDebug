@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.tick;
 
+import com.github.minecraft_ta.totaldebug.protocol.Side;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -15,14 +16,14 @@ class TickTaskSchedulerTest {
         TickTaskScheduler scheduler = schedulerIgnoringFailures();
         List<String> executed = new ArrayList<>();
 
-        scheduler.submit(TickDomain.CLIENT, TickPhase.PRE, () -> executed.add("client-pre"));
-        scheduler.submit(TickDomain.CLIENT, TickPhase.POST, () -> executed.add("client-post"));
-        scheduler.submit(TickDomain.SERVER, TickPhase.PRE, () -> executed.add("server-pre"));
+        scheduler.submit(Side.CLIENT, TickPhase.PRE, () -> executed.add("client-pre"));
+        scheduler.submit(Side.CLIENT, TickPhase.POST, () -> executed.add("client-post"));
+        scheduler.submit(Side.SERVER, TickPhase.PRE, () -> executed.add("server-pre"));
 
-        assertEquals(1, scheduler.drain(TickDomain.CLIENT, TickPhase.PRE));
+        assertEquals(1, scheduler.drain(Side.CLIENT, TickPhase.PRE));
         assertEquals(List.of("client-pre"), executed);
-        assertEquals(1, scheduler.pendingTasks(TickDomain.CLIENT, TickPhase.POST));
-        assertEquals(1, scheduler.pendingTasks(TickDomain.SERVER, TickPhase.PRE));
+        assertEquals(1, scheduler.pendingTasks(Side.CLIENT, TickPhase.POST));
+        assertEquals(1, scheduler.pendingTasks(Side.SERVER, TickPhase.PRE));
     }
 
     @Test
@@ -30,16 +31,16 @@ class TickTaskSchedulerTest {
         TickTaskScheduler scheduler = schedulerIgnoringFailures();
         List<String> executed = new ArrayList<>();
 
-        scheduler.submit(TickDomain.SERVER, TickPhase.PRE, () -> {
+        scheduler.submit(Side.SERVER, TickPhase.PRE, () -> {
             executed.add("first");
-            scheduler.submit(TickDomain.SERVER, TickPhase.PRE, () -> executed.add("deferred"));
+            scheduler.submit(Side.SERVER, TickPhase.PRE, () -> executed.add("deferred"));
         });
 
-        assertEquals(1, scheduler.drain(TickDomain.SERVER, TickPhase.PRE));
+        assertEquals(1, scheduler.drain(Side.SERVER, TickPhase.PRE));
         assertEquals(List.of("first"), executed);
-        assertEquals(1, scheduler.pendingTasks(TickDomain.SERVER, TickPhase.PRE));
+        assertEquals(1, scheduler.pendingTasks(Side.SERVER, TickPhase.PRE));
 
-        assertEquals(1, scheduler.drain(TickDomain.SERVER, TickPhase.PRE));
+        assertEquals(1, scheduler.drain(Side.SERVER, TickPhase.PRE));
         assertEquals(List.of("first", "deferred"), executed);
     }
 
@@ -50,12 +51,12 @@ class TickTaskSchedulerTest {
         AtomicInteger executions = new AtomicInteger();
         RuntimeException failure = new RuntimeException("expected");
 
-        scheduler.submit(TickDomain.CLIENT, TickPhase.POST, () -> {
+        scheduler.submit(Side.CLIENT, TickPhase.POST, () -> {
             throw failure;
         });
-        scheduler.submit(TickDomain.CLIENT, TickPhase.POST, executions::incrementAndGet);
+        scheduler.submit(Side.CLIENT, TickPhase.POST, executions::incrementAndGet);
 
-        assertEquals(2, scheduler.drain(TickDomain.CLIENT, TickPhase.POST));
+        assertEquals(2, scheduler.drain(Side.CLIENT, TickPhase.POST));
         assertEquals(1, executions.get());
         assertEquals(1, failures.size());
         assertSame(failure, failures.getFirst());
@@ -64,13 +65,13 @@ class TickTaskSchedulerTest {
     @Test
     void clearsOneDomainWithoutDiscardingTheOther() {
         TickTaskScheduler scheduler = schedulerIgnoringFailures();
-        scheduler.submit(TickDomain.CLIENT, TickPhase.PRE, () -> { });
-        scheduler.submit(TickDomain.SERVER, TickPhase.PRE, () -> { });
+        scheduler.submit(Side.CLIENT, TickPhase.PRE, () -> { });
+        scheduler.submit(Side.SERVER, TickPhase.PRE, () -> { });
 
-        scheduler.clear(TickDomain.CLIENT);
+        scheduler.clear(Side.CLIENT);
 
-        assertEquals(0, scheduler.pendingTasks(TickDomain.CLIENT, TickPhase.PRE));
-        assertEquals(1, scheduler.pendingTasks(TickDomain.SERVER, TickPhase.PRE));
+        assertEquals(0, scheduler.pendingTasks(Side.CLIENT, TickPhase.PRE));
+        assertEquals(1, scheduler.pendingTasks(Side.SERVER, TickPhase.PRE));
     }
 
     private static TickTaskScheduler schedulerIgnoringFailures() {
