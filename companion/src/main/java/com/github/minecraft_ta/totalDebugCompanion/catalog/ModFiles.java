@@ -125,6 +125,18 @@ public final class ModFiles {
         }
     }
 
+    /**
+     * Deletes a temporary copy once read. What was read from it stands if another process still holds it: it is deleted
+     * when Companion exits instead.
+     */
+    private static void delete(Path copy) {
+        try {
+            Files.deleteIfExists(copy);
+        } catch (IOException held) {
+            copy.toFile().deleteOnExit();
+        }
+    }
+
     /** The JAR {@code file}, read at this Java version's entries; {@code copy}, if not null, is deleted on close. */
     private static Archive jar(Path file, Path copy) throws IOException {
         JarFile archive = new JarFile(file.toFile(), false, ZipFile.OPEN_READ, Runtime.version());
@@ -143,7 +155,7 @@ public final class ModFiles {
                 try {
                     archive.close();
                 } finally {
-                    if (copy != null) Files.deleteIfExists(copy);
+                    if (copy != null) delete(copy);
                 }
             }
         };

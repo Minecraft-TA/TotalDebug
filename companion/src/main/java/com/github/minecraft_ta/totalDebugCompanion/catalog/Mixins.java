@@ -203,8 +203,11 @@ public final class Mixins {
                         String className = pkg.isEmpty() ? name.getAsString() : pkg + "." + name.getAsString();
                         try {
                             Optional<byte[]> bytes = archive.read(className.replace('.', '/') + ".class", MAXIMUM_CLASS_BYTES);
-                            // A listed class the file does not hold is one the configuration names for another version.
-                            if (bytes.isEmpty()) continue;
+                            // Mixin reports a listed class the file does not hold, and so does the page.
+                            if (bytes.isEmpty()) {
+                                problems.add(name(file) + ": " + className + " is listed in " + config + " but missing");
+                                continue;
+                            }
                             mixin(owner, config, className, side, priority, bytes.get(),
                                     references.getOrDefault(className.replace('.', '/'), Map.of())).ifPresent(mixins::add);
                         } catch (IOException | RuntimeException malformed) {
@@ -476,9 +479,14 @@ public final class Mixins {
         }
 
         /** The member an accessor or invoker names in its annotation, or else by its own name. */
+        /**
+         * The member an accessor or invoker names in its annotation, or else by its own name; either passes through the
+         * reference map first, as Mixin's {@code TargetSelector.parseName} reads both.
+         */
         private String accessedName() {
-            return !this.named.isEmpty() && this.named.getFirst().selector() instanceof MixinSelector.Method method && !method.name().isEmpty()
-                    ? method.name() : accessed(this.kind, this.methodName);
+            String inferred = accessed(this.kind, this.methodName);
+            Selected named = this.named.isEmpty() ? selected(inferred) : this.named.getFirst();
+            return named.selector() instanceof MixinSelector.Method method && !method.name().isEmpty() ? method.name() : inferred;
         }
 
         /** The type of the field an accessor gets, as its return type, or sets, as its argument. */

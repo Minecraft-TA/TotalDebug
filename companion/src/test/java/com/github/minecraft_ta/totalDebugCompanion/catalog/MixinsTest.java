@@ -37,9 +37,10 @@ class MixinsTest {
         entries.put("gears.mixins.json", "{\"package\":\"com.gears.mixin\",\"refmap\":\"gears.refmap.json\",\"mixins\":[\"LevelMixin\",\"Missing\",\"Broken\",\"Huge\"]}"
                 .getBytes(StandardCharsets.UTF_8));
         entries.put("gears.refmap.json", ("{\"mappings\":{\"com/gears/mixin/LevelMixin\":{\"tick\":"
-                + "\"Lnet/minecraft/world/level/Level;tick(Z)V\"}}}").getBytes(StandardCharsets.UTF_8));
+                + "\"Lnet/minecraft/world/level/Level;tick(Z)V\"},\"com/gears/mixin/ScreenAccessor\":{\"width\":\"f_96543_\"}}}")
+                .getBytes(StandardCharsets.UTF_8));
         entries.put("META-INF/versions/21/gears.client.mixins.json",
-                "{\"package\":\"com.gears.mixin\",\"mixinPriority\":1300,\"client\":[\"ScreenAccessor\"]}".getBytes(StandardCharsets.UTF_8));
+                "{\"package\":\"com.gears.mixin\",\"refmap\":\"gears.refmap.json\",\"mixinPriority\":1300,\"client\":[\"ScreenAccessor\"]}".getBytes(StandardCharsets.UTF_8));
         entries.put("gears.client.mixins.json", "{\"package\":\"com.gears.mixin\",\"mixinPriority\":1200,\"client\":[\"ScreenAccessor\"]}"
                 .getBytes(StandardCharsets.UTF_8));
         entries.put("com/gears/mixin/LevelMixin.class", MixinFixtures.mixinClass("com/gears/mixin/LevelMixin", LEVEL, 900,
@@ -58,10 +59,11 @@ class MixinsTest {
 
         Mixins.Read read = Mixins.read(jar.toUri(), List.of("gears"));
         List<Mixins.Mixin> mixins = read.mixins();
-        assertEquals(2, mixins.size(), "a listed class the file does not hold is left out, and one that cannot be read");
-        assertEquals(2, read.problems().size());
-        assertTrue(read.problems().getFirst().startsWith("gears.jar: com.gears.mixin.Broken could not be read"), read.problems().getFirst());
-        assertTrue(read.problems().get(1).contains("com/gears/mixin/Huge.class is larger than 4 MiB"), read.problems().get(1));
+        assertEquals(2, mixins.size(), "a listed class the file does not hold, and ones that cannot be read, are named instead");
+        assertEquals(List.of("gears.jar: com.gears.mixin.Missing is listed in gears.mixins.json but missing"), read.problems().subList(0, 1));
+        assertEquals(3, read.problems().size());
+        assertTrue(read.problems().get(1).startsWith("gears.jar: com.gears.mixin.Broken could not be read"), read.problems().get(1));
+        assertTrue(read.problems().get(2).contains("com/gears/mixin/Huge.class is larger than 4 MiB"), read.problems().get(2));
         Mixins.Mixin level = mixins.getFirst();
         assertEquals("gears", level.modId());
         assertEquals("gears.mixins.json", level.config(), "a literal string after a commented table header");
@@ -75,9 +77,9 @@ class MixinsTest {
         Mixins.Mixin accessor = mixins.get(1);
         assertEquals(Mixins.Side.CLIENT, accessor.side());
         assertEquals(1300, accessor.priority(), "without its own priority, the configuration's, as Java 21 reads a multi-release file");
-        assertEquals(List.of(new Mixins.Change("Accessor", new MixinSelector.Field("width", "I")),
+        assertEquals(List.of(new Mixins.Change("Accessor", new MixinSelector.Field("f_96543_", "I")),
                 new Mixins.Change("Invoker", new MixinSelector.Method("<init>", "(Ljava/lang/String;)V"))), accessor.changes(),
-                "named after the methods getWidth, a field, and newScreen, the constructor it calls");
+                "named after the methods getWidth, a field the reference map maps, and newScreen, the constructor it calls");
     }
 
     @Test
