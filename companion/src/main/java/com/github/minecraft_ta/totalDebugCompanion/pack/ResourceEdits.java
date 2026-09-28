@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.Worlds;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
@@ -270,7 +271,15 @@ public final class ResourceEdits {
     /** The copy of a resource in {@code pack}, a managed pack, or empty when it does not hold it. Blocking. */
     public Optional<byte[]> managed(Path pack, String path) throws IOException {
         Path file = pack.resolve(path);
-        return Files.isRegularFile(file) ? Optional.of(Files.readAllBytes(file)) : Optional.empty();
+        if (!Files.isRegularFile(file)) return Optional.empty();
+        // As a tab opens a file: a copy larger than Companion reads is refused before it is read.
+        long limit = path.endsWith(".png") ? ResourceLoader.MAXIMUM_PNG_BYTES : ResourceLoader.MAXIMUM_TEXT_BYTES;
+        long size = Files.size(file);
+        if (size > limit) {
+            throw new IOException("The copy in the " + PackFolders.label(pack) + " is " + size / (1024 * 1024)
+                    + " MiB, more than the " + limit / (1024 * 1024) + " MiB Companion opens");
+        }
+        return Optional.of(Files.readAllBytes(file));
     }
 
     /**
@@ -295,10 +304,39 @@ public final class ResourceEdits {
             if (managed(pack)) return Optional.empty();
             return assets || !newToTheWorld(pack) ? Optional.of(notEnabled(pack)) : Optional.empty();
         }
+        return supplierAbove(packs, position, path)
+                .map(above -> above + " is above the " + PackFolders.label(pack) + " and supplies this file too, so the game shows its copy");
+    }
+
+    /** The title of the highest pack above {@code position} of {@code packs} that supplies {@code path} too, or empty. */
+    private static Optional<String> supplierAbove(List<PackStackPayload.Pack> packs, int position, String path) {
         for (int index = packs.size() - 1; index > position; index--) {
             PackStackPayload.Pack above = packs.get(index);
-            if (!above.source().isEmpty() && contains(Path.of(above.source()), path)) {
-                return Optional.of(above.title() + " is above the " + PackFolders.label(pack) + " and supplies this file too, so the game shows its copy");
+            if (!above.source().isEmpty() && contains(Path.of(above.source()), path)) return Optional.of(above.title());
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Why a file written beside a resource, such as a texture's animation, is not the one the game uses: a pack above
+     * {@code pack} that supplies it too. Empty when none does, or the game has not named its packs. Blocking.
+     */
+    private Optional<String> besideUnused(List<String> beside, Path pack) {
+        PackStackPayload current = this.stack;
+        if (current == null) return Optional.empty();
+        String id = "file/" + pack.getFileName();
+        for (String path : beside) {
+            List<PackStackPayload.Pack> packs = path.startsWith("assets/") ? current.resourcePacks() : current.dataPacks();
+            int position = -1;
+            for (int index = 0; index < packs.size(); index++) {
+                if (packs.get(index).id().equals(id)) position = index;
+            }
+            if (position < 0) continue;
+            String name = path.substring(path.lastIndexOf('/') + 1);
+            Optional<String> above = supplierAbove(packs, position, path);
+            if (above.isPresent()) {
+                return Optional.of(above.get() + " is above the " + PackFolders.label(pack) + " and supplies " + name
+                        + " too, so the game uses its copy");
             }
         }
         return Optional.empty();
@@ -367,6 +405,25 @@ public final class ResourceEdits {
      * pack where it has no copy yet, such as the animation of a texture; each is a change of its own.
      */
     public CompletableFuture<Saved> save(String path, Path into, byte[] content, Map<String, byte[]> alongside) {
+        return save(path, into, content, alongside, null);
+    }
+
+    /**
+     * A copy in the pack other than the one a save expected to replace, such as one another tab or program wrote since;
+     * its message names the file.
+     */
+    public static final class ChangedSince extends IOException {
+        ChangedSince(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * Saves as {@link #save(String, Path, byte[], Map)} does, but only over the copy whose hash is {@code expected}, empty
+     * for none; another copy fails the save with {@link ChangedSince}. A null {@code expected} replaces whatever the pack
+     * holds.
+     */
+    public CompletableFuture<Saved> save(String path, Path into, byte[] content, Map<String, byte[]> alongside, String expected) {
         Objects.requireNonNull(content, "content");
         Objects.requireNonNull(alongside, "alongside");
         // The files written beside it, which the reload watches too: they may change what the game makes of the resource.
@@ -380,9 +437,15 @@ public final class ResourceEdits {
                     throw new IOException("The " + PackFolders.label(pack) + " is gone or has no pack.mcmeta, so the game does not load it");
                 }
                 Path file = pack.resolve(path);
+                // Checked before anything is written, so a refused save leaves the pack as it was.
+                byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+                if (expected != null && !expected.equals(ResourceOriginals.hash(previous))) {
+                    throw new ChangedSince(path.substring(path.lastIndexOf('/') + 1) + " changed in the "
+                            + PackFolders.label(pack) + " since this tab read it");
+                }
                 // Only a copy the save makes gets them: a pack's own copy without them, such as a static texture, stays so.
                 // Written first: should one fail, the resource itself is left as it was, and the save fails whole.
-                for (Map.Entry<String, byte[]> companion : Files.exists(file) ? Map.<String, byte[]>of().entrySet() : alongside.entrySet()) {
+                for (Map.Entry<String, byte[]> companion : previous != null ? Map.<String, byte[]>of().entrySet() : alongside.entrySet()) {
                     Path companionFile = pack.resolve(companion.getKey());
                     // The pack's own copy, even a different one, stays.
                     if (Files.exists(companionFile)) continue;
@@ -392,7 +455,6 @@ public final class ResourceEdits {
                     this.record.changed(beside, ResourceOriginals.hash(null), ResourceOriginals.hash(companion.getValue()));
                     added.add(companion.getKey());
                 }
-                byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
                 ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
                 if (this.record.change(target) == null) this.originals.keep(previous);
                 AtomicFiles.replace(file, staged -> Files.write(staged, content));
@@ -404,7 +466,7 @@ public final class ResourceEdits {
         })
                 // A pack of the player's that is not enabled or lies below another keeps its copy unused, reloaded or not.
                 .thenApply(saved -> new Saved(saved.effect(), saved.pack(), saved.problems(), saved.reloadFailure(),
-                        unusedBecause(path, saved.pack()).orElse(""))));
+                        unusedBecause(path, saved.pack()).or(() -> besideUnused(added, saved.pack())).orElse(""))));
     }
 
     /**
@@ -434,7 +496,12 @@ public final class ResourceEdits {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }));
+        })).thenApply(saved -> {
+            // The file is put back either way, so the change leaves the record; a pack the game skips does not use it.
+            Path pack = saved.pack();
+            return managed(pack) || PackFolders.isPack(pack) ? saved : new Saved(saved.effect(), pack, saved.problems(),
+                    saved.reloadFailure(), "The " + PackFolders.label(pack) + " is gone or has no readable pack.mcmeta, so the game does not load it");
+        });
     }
 
     /**

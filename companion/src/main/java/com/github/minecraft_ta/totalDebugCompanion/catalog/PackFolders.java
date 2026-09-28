@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -33,14 +35,20 @@ public final class PackFolders {
 
     /**
      * Whether the game takes {@code entry} as a pack: a folder or a file ending in {@code .zip}, as its
-     * {@code PackDetector} finds them, with a {@code pack.mcmeta} at its root, which it reads before listing the pack.
+     * {@code PackDetector} finds them, with a {@code pack.mcmeta} at its root whose {@code pack} section has a
+     * {@code pack_format} number and a {@code description}; the game leaves out a pack whose metadata it cannot read.
      */
     public static boolean isPack(Path entry) {
-        if (Files.isDirectory(entry)) return Files.isRegularFile(entry.resolve("pack.mcmeta"));
-        if (!Files.isRegularFile(entry) || !entry.getFileName().toString().endsWith(".zip")) return false;
-        try (ZipFile zip = new ZipFile(entry.toFile())) {
-            return zip.getEntry("pack.mcmeta") != null;
-        } catch (IOException unreadable) {
+        if (!Files.isDirectory(entry) && !(Files.isRegularFile(entry) && entry.getFileName().toString().endsWith(".zip"))) {
+            return false;
+        }
+        try {
+            byte[] bytes = read(entry, "pack.mcmeta");
+            if (bytes == null) return false;
+            JsonElement root = JsonParser.parseReader(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8));
+            if (!root.isJsonObject() || !(root.getAsJsonObject().get("pack") instanceof JsonObject section)) return false;
+            return section.get("pack_format") instanceof JsonPrimitive format && format.isNumber() && section.has("description");
+        } catch (IOException | RuntimeException unreadable) {
             return false;
         }
     }

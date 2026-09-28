@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
+import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureAnimation;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
@@ -32,6 +33,7 @@ import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.List;
@@ -45,7 +47,14 @@ import java.util.function.Consumer;
  * under it, Shift+click draws a line from the last pixel drawn. Ctrl+Z undoes a stroke, Ctrl+Shift+Z or Ctrl+Y redoes
  * it.
  */
-final class TextureEditor extends PackResourceEditor<BufferedImage> {
+final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
+    /**
+     * A copy of the texture: its pixels, and the animation its {@code .mcmeta} declares, or null, with why that file could
+     * not be used, or empty. Only the pixels are edited and compared.
+     */
+    record Texture(BufferedImage pixels, TextureAnimation animation, String animationProblem) {
+    }
+
     /** How many of the texture's colors the palette offers, the most used in the whole sheet first. */
     private static final int PALETTE_SIZE = 16;
     /** The most pixels a texture has that is edited; a larger one, far above what textures use, is shown only. */
@@ -54,7 +63,7 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
      * The content when the pack holds no copy and the opened file cannot supply one. It differs from every image, even a
      * transparent one: whatever is shown then is unsaved.
      */
-    private static final BufferedImage NONE = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+    private static final Texture NONE = new Texture(new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB), null, "");
 
     private enum Tool {
         PENCIL, ERASER, FILL, PICKER
@@ -81,22 +90,28 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     private Point last;
     /** The texture's animation file as it was read beside the opened texture, or null without one. */
     private final byte[] metadata;
-    /** The content last loaded or saved, which the shown pixels are compared with; null for none. */
-    private BufferedImage saved;
+    /** The content last loaded or saved, which the shown pixels are compared with. */
+    private Texture saved;
+    /** The animation the shown copy plays, with why its file could not be used, or empty. */
+    private TextureAnimation animation;
+    private String animationProblem;
 
     /** {@code metadata} receives the status line: size, zoom and the pixel under the mouse. */
     TextureEditor(String path, String origin, Path pack, LoadedResource.Image content, ResourceEdits edits,
                   Consumer<String> metadata) {
         // Gray textures are read as the game reads them, once, so every copy compares alike.
-        this(path, origin, pack, content, TexturePixels.copy(content.value()), edits, metadata);
+        this(path, origin, pack, content, new Texture(TexturePixels.copy(content.value()), content.animation(),
+                content.animationProblem()), edits, metadata);
     }
 
-    private TextureEditor(String path, String origin, Path pack, LoadedResource.Image content, BufferedImage opened,
+    private TextureEditor(String path, String origin, Path pack, LoadedResource.Image content, Texture opened,
                           ResourceEdits edits, Consumer<String> metadata) {
         super(path, origin, pack, opened, edits);
         this.metadata = content.metadata();
-        this.pixels = new TexturePixels(opened);
+        this.pixels = new TexturePixels(opened.pixels());
         this.saved = opened;
+        this.animation = opened.animation();
+        this.animationProblem = opened.animationProblem();
         this.view = new ImageViewPanel(new LoadedResource.Image(this.pixels.sheet(), content.byteCount(), content.animation(),
                 content.animationProblem()), metadata);
         this.view.addTools(tool(this.pencil, Tool.PENCIL, "Pencil", "B"), tool(this.eraser, Tool.ERASER, "Eraser", "E"),
@@ -351,24 +366,30 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     }
 
     @Override
-    protected BufferedImage shown() {
-        return this.pixels.sheet();
+    protected Texture shown() {
+        return new Texture(this.pixels.sheet(), this.animation, this.animationProblem);
     }
 
     @Override
-    protected boolean same(BufferedImage first, BufferedImage second) {
+    protected boolean same(Texture first, Texture second) {
         if (first == NONE || second == NONE) return first == second;
-        return TexturePixels.same(first, second);
+        return TexturePixels.same(first.pixels(), second.pixels());
     }
 
     @Override
-    protected void load(BufferedImage content) {
+    protected void load(Texture content) {
         this.saved = content;
+        // Another copy plays its own animation, or none; with no copy left the shown one stays.
+        if (content != NONE && content.animation() != this.animation) {
+            this.animation = content.animation();
+            this.animationProblem = content.animationProblem();
+            this.view.setAnimation(this.animation, this.animationProblem);
+        }
         // The same pixels keep what can be undone.
-        if (same(this.pixels.sheet(), content)) return;
+        if (same(shown(), content)) return;
         // With no copy left, Discard leaves transparent pixels, as text is left empty.
         this.pixels.replace(content == NONE ? new BufferedImage(this.pixels.sheet().getWidth(), this.pixels.sheet().getHeight(),
-                BufferedImage.TYPE_INT_ARGB) : content);
+                BufferedImage.TYPE_INT_ARGB) : content.pixels());
         this.last = null;
         this.view.setSheet(this.pixels.sheet());
         if (!this.colorChosen) takeMostUsedColor();
@@ -376,18 +397,39 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     }
 
     @Override
-    protected void markSaved(BufferedImage content) {
+    protected void markSaved(Texture content) {
         this.saved = content;
     }
 
     @Override
     protected boolean modified() {
-        return !same(this.pixels.sheet(), this.saved);
+        return !same(shown(), this.saved);
     }
 
-    /** The pack's copy, refused unreadable or too large to edit before it is decoded. */
     @Override
-    protected BufferedImage decode(byte[] bytes) throws IOException {
+    protected Texture decode(byte[] bytes) throws IOException {
+        return new Texture(pixels(bytes), null, "");
+    }
+
+    /**
+     * {@code pack}'s copy with the animation it plays: its own {@code .mcmeta}, as the game reads a texture's animation
+     * from the pack that supplies the texture, or none without one.
+     */
+    @Override
+    protected Texture decode(byte[] bytes, Path pack) throws IOException {
+        BufferedImage image = pixels(bytes);
+        Path file = pack.resolve(path() + ".mcmeta");
+        if (!Files.isRegularFile(file)) return new Texture(image, null, "");
+        try {
+            TextureAnimation animation = TextureAnimation.read(Files.readAllBytes(file), image.getWidth(), image.getHeight()).orElse(null);
+            return new Texture(image, animation, "");
+        } catch (RuntimeException invalid) {
+            return new Texture(image, null, "Invalid animation metadata: " + invalid.getMessage());
+        }
+    }
+
+    /** The pixels of a pack's copy, refused unreadable or too large to edit before it is decoded. */
+    private static BufferedImage pixels(byte[] bytes) throws IOException {
         try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
             Iterator<ImageReader> readers = input == null ? null : ImageIO.getImageReaders(input);
             if (readers == null || !readers.hasNext()) throw new IOException("The copy in the pack is not a PNG image");
@@ -407,17 +449,17 @@ final class TextureEditor extends PackResourceEditor<BufferedImage> {
     }
 
     @Override
-    protected byte[] encode(BufferedImage content) throws IOException {
-        return TexturePixels.png(content);
+    protected byte[] encode(Texture content) throws IOException {
+        return TexturePixels.png(content.pixels());
     }
 
     @Override
-    protected BufferedImage copy(BufferedImage content) {
-        return TexturePixels.copy(content);
+    protected Texture copy(Texture content) {
+        return new Texture(TexturePixels.copy(content.pixels()), content.animation(), content.animationProblem());
     }
 
     @Override
-    protected BufferedImage none() {
+    protected Texture none() {
         return NONE;
     }
 

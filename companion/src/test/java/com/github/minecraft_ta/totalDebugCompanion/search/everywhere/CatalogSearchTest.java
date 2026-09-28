@@ -104,7 +104,7 @@ class CatalogSearchTest {
     @Test
     void packsAreFoundByNameAndOpenTheirPage() throws Exception {
         Path faithful = Files.createDirectories(this.directory.resolve("resourcepacks/Faithful"));
-        Files.writeString(faithful.resolve("pack.mcmeta"), "{}");
+        Files.writeString(faithful.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         Path world = this.directory.resolve("saves/World");
         LevelDatFixture.write(world, LevelDatFixture.world("World"));
         Path tweaks = LevelDatFixture.datapack(world, "Tweaks");
@@ -120,7 +120,7 @@ class CatalogSearchTest {
                 "the player's packs belong to no module");
 
         Path added = Files.createDirectories(this.directory.resolve("resourcepacks/Added"));
-        Files.writeString(added.resolve("pack.mcmeta"), "{}");
+        Files.writeString(added.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         assertEquals(added, assertInstanceOf(PackResult.class, search.search(null, catalog, "added", Category.ALL, 20, null, null)
                 .getFirst()).file(), "a pack added after the last search is found");
     }

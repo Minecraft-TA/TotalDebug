@@ -177,7 +177,7 @@ class PackResourcesTest {
 
     private static Path pack(Path folder, String... paths) throws IOException {
         Files.createDirectories(folder);
-        Files.writeString(folder.resolve("pack.mcmeta"), "{}");
+        Files.writeString(folder.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         for (String path : paths) {
             Path file = folder.resolve(path);
             Files.createDirectories(file.getParent());

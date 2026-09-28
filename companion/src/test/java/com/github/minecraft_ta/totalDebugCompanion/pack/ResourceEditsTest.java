@@ -275,6 +275,70 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aCopyTooLargeToOpenIsRefusedBeforeItIsRead() throws Exception {
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        Path pack = edits.pack(LANG);
+        Path file = Files.createDirectories(pack.resolve(LANG).getParent()).resolve("en_us.json");
+        try (var output = Files.newOutputStream(file)) {
+            output.write(new byte[16 * 1024 * 1024 + 1]);
+        }
+        IOException refused = assertThrows(IOException.class, () -> edits.managed(pack, LANG));
+        assertTrue(refused.getMessage().contains("more than the 16 MiB Companion opens"), refused.getMessage());
+    }
+
+    @Test
+    void aSaveOverACopyWrittenSinceIsRefusedAndWritesNothing() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        edits.packStack(STACK);
+        String texture = "assets/testmod/textures/block/gear.png";
+        Path pack = edits.save(texture, null, bytes("first")).get(5, TimeUnit.SECONDS).pack();
+        String seen = ResourceOriginals.hash(bytes("first"));
+        // Another tab saves in between.
+        edits.save(texture, null, bytes("other tab")).get(5, TimeUnit.SECONDS);
+
+        ExecutionException refused = assertThrows(ExecutionException.class, () -> edits.save(texture, null, bytes("this tab"),
+                Map.of(texture + ".mcmeta", bytes("{}")), seen).get(5, TimeUnit.SECONDS));
+        assertTrue(refused.getCause() instanceof ResourceEdits.ChangedSince, refused.getCause().toString());
+        assertEquals("other tab", Files.readString(pack.resolve(texture)));
+        assertFalse(Files.exists(pack.resolve(texture + ".mcmeta")), "nothing beside it is written either");
+
+        edits.save(texture, null, bytes("this tab"), Map.of(), ResourceOriginals.hash(bytes("other tab"))).get(5, TimeUnit.SECONDS);
+        assertEquals("this tab", Files.readString(pack.resolve(texture)), "a save over the copy it read goes through");
+    }
+
+    @Test
+    void aRevertIntoAPackTheGameSkipsSaysSo() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
+        edits.save(LANG, mine, bytes("{}")).get(5, TimeUnit.SECONDS);
+        Files.delete(mine.resolve("pack.mcmeta"));
+
+        ResourceEdits.Saved reverted = edits.revert(record.changes().getFirst()).get(5, TimeUnit.SECONDS);
+        assertFalse(Files.exists(mine.resolve(LANG)), "the file is put back all the same, so the change can end");
+        assertEquals("The MyPack resource pack is gone or has no readable pack.mcmeta, so the game does not load it", reverted.unused());
+    }
+
+    @Test
+    void anAnimationWrittenBesideATextureThatAPackAboveSuppliesIsNamed() throws Exception {
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        String texture = "assets/testmod/textures/block/gear.png";
+        Path top = Files.createDirectories(this.directory.resolve("resourcepacks/Top"));
+        Files.createDirectories(top.resolve(texture).getParent());
+        Files.writeString(top.resolve(texture + ".mcmeta"), "{\"animation\":{}}");
+        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack("vanilla", "Default", ""),
+                new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""),
+                new PackStackPayload.Pack("file/Top", "Top", top.toString())), List.of()));
+
+        ResourceEdits.Saved saved = edits.save(texture, null, bytes("png"), Map.of(texture + ".mcmeta", bytes("{}")))
+                .get(5, TimeUnit.SECONDS);
+        assertEquals("Top is above the TotalDebug resource pack and supplies gear.png.mcmeta too, so the game uses its copy",
+                saved.unused(), "the game reads the animation from the highest pack at or above the texture's");
+    }
+
+    @Test
     void aTexturesAnimationIsWrittenBesideItWhereThePackHasNone() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
@@ -375,7 +439,7 @@ class ResourceEditsTest {
     @Test
     void withoutAGameADisabledPackOfTheirsIsNamedFromTheFilesThatEnableIt() throws Exception {
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
-        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
         assertEquals("The MyPack resource pack is not enabled, so the game does not use this file",
@@ -445,7 +509,7 @@ class ResourceEditsTest {
     @Test
     void aSaveIntoADisabledPackOfTheirsSaysTheGameDoesNotUseIt() throws Exception {
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
-        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
         ResourceEdits.Saved saved = edits(ChangeRecord.inMemory()).save(LANG, mine, bytes("{}")).get(5, TimeUnit.SECONDS);
 
@@ -460,7 +524,7 @@ class ResourceEditsTest {
     @Test
     void aFileOnTheSideAPackIsNotReadForIsNotSavedInThatPack() throws Exception {
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
-        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         Path world = Files.createDirectories(this.directory.resolve("saves/World"));
         Path datapack = LevelDatFixture.datapack(world, "Tweaks");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
@@ -494,7 +558,7 @@ class ResourceEditsTest {
     @Test
     void theWorkingPackTakesFilesOfModsUntilItIsGone() throws Exception {
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
-        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         Files.writeString(this.directory.resolve("resourcepacks/Faithful.zip"), "");
         InstanceState state = InstanceState.inMemory();
         ResourceEdits edits = edits(ChangeRecord.inMemory(), state);

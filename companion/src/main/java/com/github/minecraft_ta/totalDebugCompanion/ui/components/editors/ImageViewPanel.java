@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureAnimation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.WrapLayout;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
@@ -51,10 +52,12 @@ public final class ImageViewPanel extends JPanel {
     private BufferedImage image;
     /** The size of the file shown, or -1 once the image shown is no longer that file, such as another copy. */
     private int byteCount;
-    private final String animationProblem;
+    private String animationProblem;
     /** Played frames whose index lies inside the sheet, in playing order. */
-    private final List<TextureAnimation.Frame> frames;
-    private final TextureAnimation animation;
+    private List<TextureAnimation.Frame> frames;
+    private TextureAnimation animation;
+    /** The play, frame and whole-sheet controls, shown while the texture is animated. */
+    private final JPanel animationControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
     private final ImageCanvas canvas;
     private final JScrollPane scrollPane;
     private final Consumer<String> metadata;
@@ -89,9 +92,7 @@ public final class ImageViewPanel extends JPanel {
         this.byteCount = content.byteCount();
         this.animationProblem = content.animationProblem();
         this.animation = content.animation();
-        this.frames = this.animation == null ? List.of() : this.animation.frames().stream()
-                .filter(frame -> this.animation.contains(frame.index()))
-                .toList();
+        this.frames = frames(this.animation);
         this.canvas = new ImageCanvas(isAnimated() ? frameImage(0) : this.image);
         this.scrollPane = new JScrollPane(this.canvas);
         this.scrollPane.setBorder(BorderFactory.createEmptyBorder());
@@ -121,8 +122,14 @@ public final class ImageViewPanel extends JPanel {
         SwingUtilities.invokeLater(this::fitImage);
     }
 
+    /** The frames of {@code animation} whose index lies inside the sheet, in playing order; none without one. */
+    private static List<TextureAnimation.Frame> frames(TextureAnimation animation) {
+        return animation == null ? List.of() : animation.frames().stream().filter(frame -> animation.contains(frame.index())).toList();
+    }
+
     private JComponent createToolbar() {
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
+        // Rows wrap in a narrow tab rather than cutting the last controls off.
+        JPanel toolbar = new JPanel(new WrapLayout(FlowLayout.LEFT, 2, 2));
         this.toolbar = toolbar;
         toolbar.setBorder(DynamicMatteBorder.rule(0, 0, 1, 0));
         toolbar.add(button(this.zoomOut, "Zoom Out", () -> zoomAtCenter(nextScale(this.canvas.scale(), -1))));
@@ -134,27 +141,53 @@ public final class ImageViewPanel extends JPanel {
         }));
         toolbar.add(button(new FlatIconButton(Icons.ACTUAL_ZOOM, false), "Actual Size", () -> zoomAtCenter(1)));
         toolbar.add(button(this.pixelGrid, "Pixel Grid from 400%", this.canvas::repaint));
-        if (isAnimated()) {
-            toolbar.add(Box.createHorizontalStrut(10));
-            toolbar.add(button(this.play, "Pause Animation", () -> setPlaying(this.play.isSelected())));
-            this.frameSlider.setModel(new DefaultBoundedRangeModel(0, 0, 0, this.frames.size() - 1));
-            this.frameSlider.setPreferredSize(new Dimension(
-                    Math.min(240, 40 + this.frames.size() * 8), this.frameSlider.getPreferredSize().height));
-            this.frameSlider.getAccessibleContext().setAccessibleName("Animation frame");
-            this.frameSlider.addChangeListener(event -> {
-                if (this.frameSlider.getValue() != this.framePosition) {
-                    if (this.frameSlider.getValueIsAdjusting()) setPlaying(false);
-                    showFrame(this.frameSlider.getValue());
-                }
-            });
-            toolbar.add(this.frameSlider);
-            this.frameLabel.setForeground(ThemeColors.secondaryText());
-            toolbar.add(this.frameLabel);
-            toolbar.add(Box.createHorizontalStrut(6));
-            toolbar.add(button(this.wholeSheet, "Show Whole Texture Sheet", this::updateSheetMode));
-            updateFrameLabel();
-        }
+        this.animationControls.setOpaque(false);
+        this.animationControls.add(Box.createHorizontalStrut(8));
+        this.animationControls.add(button(this.play, "Pause Animation", () -> setPlaying(this.play.isSelected())));
+        this.frameSlider.getAccessibleContext().setAccessibleName("Animation frame");
+        this.frameSlider.addChangeListener(event -> {
+            if (isAnimated() && this.frameSlider.getValue() != this.framePosition) {
+                if (this.frameSlider.getValueIsAdjusting()) setPlaying(false);
+                showFrame(this.frameSlider.getValue());
+            }
+        });
+        this.animationControls.add(this.frameSlider);
+        this.frameLabel.setForeground(ThemeColors.secondaryText());
+        this.animationControls.add(this.frameLabel);
+        this.animationControls.add(Box.createHorizontalStrut(6));
+        this.animationControls.add(button(this.wholeSheet, "Show Whole Texture Sheet", this::updateSheetMode));
+        toolbar.add(this.animationControls);
+        showAnimationControls();
         return toolbar;
+    }
+
+    /** Fits the frame controls to the frames, and shows them while there are frames to play. */
+    private void showAnimationControls() {
+        this.animationControls.setVisible(isAnimated());
+        if (!isAnimated()) return;
+        this.frameSlider.setModel(new DefaultBoundedRangeModel(0, 0, 0, this.frames.size() - 1));
+        this.frameSlider.setPreferredSize(new Dimension(
+                Math.min(240, 40 + this.frames.size() * 8), this.frameSlider.getPreferredSize().height));
+        updateFrameLabel();
+    }
+
+    /**
+     * Plays the frames of {@code animation}, such as the animation another pack's copy of the texture has, from its first;
+     * null shows the sheet as one image. {@code problem} says why an animation file could not be used, or is empty.
+     */
+    void setAnimation(TextureAnimation animation, String problem) {
+        this.animation = animation;
+        this.animationProblem = problem;
+        this.frames = frames(animation);
+        this.framePosition = 0;
+        this.frameTicks = 0;
+        this.wholeSheet.setSelected(false);
+        showAnimationControls();
+        this.canvas.setImage(shownImage());
+        setPlaying(isAnimated());
+        if (this.fitMode) fitImage();
+        this.toolbar.revalidate();
+        updateStatus();
     }
 
     private JButton button(JButton button, String tooltip, Runnable action) {

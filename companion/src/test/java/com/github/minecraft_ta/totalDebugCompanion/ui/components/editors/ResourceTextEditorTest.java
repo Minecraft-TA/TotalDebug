@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
@@ -85,7 +86,7 @@ class ResourceTextEditorTest {
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
-        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         Path managed = edits.pack(LANG);
         String inJar = "{\"a\":\"jar\"}";
         String edited = "{\"a\":\"edited\"}";
@@ -126,7 +127,7 @@ class ResourceTextEditorTest {
         PackStackPayload.Pack managed = new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "");
         edits.packStack(new PackStackPayload(34, 48, List.of(managed), List.of()));
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
-        Files.writeString(mine.resolve("pack.mcmeta"), "{}");
+        Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         edits.setWorkingPack(LANG, mine);
         String inJar = "{\"a\":\"jar\"}";
 
@@ -141,6 +142,59 @@ class ResourceTextEditorTest {
             awaitOnSwing(() -> editor[0].noticeText().isEmpty());
         } finally {
             SwingUtilities.invokeAndWait(editor[0]::dispose);
+        }
+    }
+
+    @Test
+    void aSaveOverTextAnotherTabSavedSinceAsksFirst() throws Exception {
+        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+                InstanceState.inMemory());
+        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
+                List.of()));
+        String inJar = "{\"a\":\"jar\"}";
+        ResourceTextEditor[] tabs = new ResourceTextEditor[2];
+        SwingUtilities.invokeAndWait(() -> {
+            for (int tab = 0; tab < 2; tab++) {
+                tabs[tab] = new ResourceTextEditor(LANG, "testmod.jar", null,
+                        new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits);
+            }
+        });
+        try {
+            awaitOnSwing(() -> tabs[0].targetBox().getItemCount() > 0 && tabs[1].targetBox().getItemCount() > 0);
+            List<String> asked = new CopyOnWriteArrayList<>();
+            SwingUtilities.invokeAndWait(() -> {
+                tabs[1].textPanel().editorPane.setText("{\"a\":\"second\"}");
+                tabs[1].askToReplace = changed -> {
+                    asked.add(changed.getMessage());
+                    return false;
+                };
+                tabs[0].textPanel().editorPane.setText("{\"a\":\"first\"}");
+                tabs[0].save();
+            });
+            Path file = edits.pack(LANG).resolve(LANG);
+            awaitOnSwing(() -> Files.isRegularFile(file) && tabs[1].noticeText().contains("changed in the pack"));
+            SwingUtilities.invokeAndWait(tabs[1]::save);
+            awaitOnSwing(() -> !asked.isEmpty());
+            assertEquals("{\"a\":\"first\"}", Files.readString(file), "the other tab's save stays until overwriting is chosen");
+            assertTrue(asked.getFirst().startsWith("en_us.json changed in the TotalDebug resource pack"), asked.getFirst());
+
+            SwingUtilities.invokeAndWait(() -> {
+                tabs[1].askToReplace = changed -> true;
+                tabs[1].save();
+            });
+            awaitOnSwing(() -> {
+                try {
+                    return Files.readString(file).equals("{\"a\":\"second\"}");
+                } catch (Exception unreadable) {
+                    return false;
+                }
+            });
+        } finally {
+            SwingUtilities.invokeAndWait(() -> {
+                tabs[0].dispose();
+                tabs[1].dispose();
+            });
         }
     }
 

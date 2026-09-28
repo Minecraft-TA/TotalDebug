@@ -335,6 +335,8 @@ public final class ChangesPanel extends JPanel {
                     failed.add(name + ": " + (cause.getCause() == null ? cause.getMessage() : cause.getCause().getMessage()));
                 } else if (!request.join().reloadFailure().isEmpty()) {
                     failed.add(name + ": " + request.join().reloadFailure());
+                } else if (!request.join().unused().isEmpty()) {
+                    failed.add(name + ": " + request.join().unused());
                 }
             }
             return failed.isEmpty() ? "" : "Not reverted or not reloaded: " + String.join("; ", failed);
