@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.protocol.execution;
 
+import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessage;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -14,9 +15,10 @@ import java.util.Objects;
 /** JSON wire codec and byte-budget adapter for the canonical execution result. */
 public final class ExecutionResultCodec {
     private static final int DIRECT_MESSAGE_OVERHEAD_BYTES = Integer.BYTES * 2;
+    /** A result fits one frame both sent directly and carried from the server in the relay's envelope. */
     public static final int MAX_WIRE_BYTES = Math.min(
             DefaultMessageProcessor.DEFAULT_MAX_STRING_LENGTH,
-            DefaultMessageProcessor.DEFAULT_MAX_FRAME_SIZE - DIRECT_MESSAGE_OVERHEAD_BYTES
+            RelayedMessage.MAX_BODY_BYTES - DIRECT_MESSAGE_OVERHEAD_BYTES
     );
     private static final int SEARCH_STEPS = 12;
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();

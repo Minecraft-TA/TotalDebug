@@ -1,15 +1,20 @@
 package com.github.minecraft_ta.totaldebug.protocol.relay;
 
+import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResultCodec;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ManifestRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import org.junit.jupiter.api.Test;
@@ -21,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RelayedMessagesTest {
     @Test
@@ -56,11 +62,26 @@ class RelayedMessagesTest {
     }
 
     @Test
-    void aManifestRequestHasNoBody() {
+    void aManifestRequestAndCompanionLeavingHaveNoBody() {
         RelayedMessage relayed = RelayedMessages.toServer(new ManifestRequestMessage(), 0, "");
+        RelayedMessage left = RelayedMessages.toServer(new CompanionLeftMessage(), 0, "");
 
         assertEquals(0, relayed.body().length);
         assertInstanceOf(ManifestRequestMessage.class, RelayedMessages.decodeToServer(relayed));
+        assertInstanceOf(CompanionLeftMessage.class, RelayedMessages.decodeToServer(left));
+    }
+
+    @Test
+    void theLargestBodyWithTheLongestSessionFitsOneFrame() {
+        RelayedMessage largest = new RelayedMessage(Integer.MAX_VALUE, "\u20ac".repeat(RelayedMessage.MAX_SESSION_LENGTH),
+                CompanionProtocol.EXECUTION_RESULT, new byte[RelayedMessage.MAX_BODY_BYTES]);
+        ByteBufferOutputStream output = new ByteBufferOutputStream();
+
+        new FromServerMessage(largest).write(output);
+
+        assertTrue(output.getBuffer().position() <= DefaultMessageProcessor.DEFAULT_MAX_FRAME_SIZE);
+        assertTrue(ExecutionResultCodec.MAX_WIRE_BYTES + 2 * Integer.BYTES <= RelayedMessage.MAX_BODY_BYTES,
+                "a server's largest result fits the relay's body");
     }
 
     @Test

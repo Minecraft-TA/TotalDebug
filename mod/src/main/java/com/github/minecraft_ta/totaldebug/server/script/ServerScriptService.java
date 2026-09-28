@@ -35,7 +35,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 /** Owns isolated server-side script runners for the players that requested them. */
@@ -70,9 +69,10 @@ public final class ServerScriptService {
     }
 
     /**
-     * Starts a new class manifest session for {@code player}, as Companion asked through the relay. The runs of the
-     * session before end with it: Companion ends them on the new baseline, and a Companion started since counts its run
-     * ids from the beginning again. Server thread.
+     * Starts a new class manifest session for {@code player}, as Companion asked through the relay. A run belongs to the
+     * session that took its request, and everything sent about it is dropped once that session ended: the runs of the
+     * session before end here, since a Companion started since counts its run ids from the beginning again. Server
+     * thread.
      */
     public synchronized void sendManifest(ServerPlayer player) {
         if (!ServerRelay.reaches(player)) return;
@@ -135,11 +135,13 @@ public final class ServerScriptService {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(payload, "payload");
         MinecraftServer server = Objects.requireNonNull(player.getServer(), "player server");
+        ManifestSession manifestSession = this.manifestSessions.get(player.getUUID());
+        BooleanSupplier current = () -> this.manifestSessions.get(player.getUUID()) == manifestSession;
         ScriptExecutionEnvironment environment;
         try {
             environment = ScriptExecutionEnvironment.fromWireName(payload.executionEnvironment());
         } catch (IllegalArgumentException exception) {
-            sendCompilationFailure(server, player, payload.scriptId(), exception.getMessage());
+            sendCompilationFailure(server, player, payload.scriptId(), exception.getMessage(), current);
             return;
         }
         ServerScriptPolicy policy = new ServerScriptPolicy(
@@ -151,15 +153,14 @@ public final class ServerScriptService {
         );
         if (!decision.allowed()) {
             sendCompilationFailure(server, player, payload.scriptId(),
-                    decision.rejectionReason());
+                    decision.rejectionReason(), current);
             return;
         }
 
-        ManifestSession manifestSession = this.manifestSessions.get(player.getUUID());
         if (manifestSession == null || manifestSession.player() != player
                 || !manifestSession.id().equals(payload.serverSessionId())) {
             sendCompilationFailure(server, player, payload.scriptId(),
-                    "The server session changed. Wait for the current handshake and compile again.");
+                    "The server session changed. Wait for the current handshake and compile again.", current);
             return;
         }
 
@@ -169,21 +170,22 @@ public final class ServerScriptService {
                 subject = SubjectRef.parseOccurrence(payload.subject());
             } catch (IllegalArgumentException exception) {
                 sendCompilationFailure(server, player, payload.scriptId(),
-                        "Invalid script target: " + exception.getMessage());
+                        "Invalid script target: " + exception.getMessage(), current);
                 return;
             }
         }
 
         ScriptRunner runner;
         try {
-            runner = runnerFor(server, player);
+            runner = runnerFor(server, player, manifestSession, current);
         } catch (RuntimeException exception) {
             TotalDebug.LOGGER.error("Unable to prepare the server live-script runner", exception);
             sendCompilationFailure(
                     server,
                     player,
                     payload.scriptId(),
-                    "Unable to prepare the server live-script runner: " + exception.getMessage()
+                    "Unable to prepare the server live-script runner: " + exception.getMessage(),
+                    current
             );
             return;
         }
@@ -198,7 +200,8 @@ public final class ServerScriptService {
         }
     }
 
-    public void removePlayer(ServerPlayer player) {
+    /** {@code player} left, or their Companion did: their manifest session ends, with the runs in it. Server thread. */
+    public void endSession(ServerPlayer player) {
         Objects.requireNonNull(player, "player");
         this.manifestSessions.computeIfPresent(player.getUUID(), (id, manifest) ->
                 manifest.player() == player ? null : manifest);
@@ -223,27 +226,25 @@ public final class ServerScriptService {
         this.runners.clear();
     }
 
-    private synchronized ScriptRunner runnerFor(MinecraftServer server, ServerPlayer player) {
+    /** The runner of {@code manifestSession}; its results go out only while that session is current. */
+    private synchronized ScriptRunner runnerFor(MinecraftServer server, ServerPlayer player, ManifestSession manifestSession,
+                                                BooleanSupplier current) {
         UUID playerId = player.getUUID();
         RunnerSession existing = this.runners.get(playerId);
-        if (existing != null && existing.player() == player) {
+        if (existing != null && existing.player() == player && existing.manifestSession() == manifestSession) {
             return existing.runner();
         }
         if (existing != null && this.runners.remove(playerId, existing)) {
             existing.runner().close();
         }
 
-        // A runner's results go out only while it is the player's runner: a closed one still reports its stopped runs.
-        AtomicReference<RunnerSession> self = new AtomicReference<>();
-        BooleanSupplier current = () -> this.runners.get(playerId) == self.get();
         ScriptRunner created = new ScriptRunner(
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(Side.SERVER, phase, task),
                 (scriptId, result) -> sendResult(server, player, scriptId, result, current),
                 new ServerScriptTargets(server)
         );
-        self.set(new RunnerSession(player, created));
-        this.runners.put(playerId, self.get());
+        this.runners.put(playerId, new RunnerSession(player, manifestSession, created));
         return created;
     }
 
@@ -251,10 +252,11 @@ public final class ServerScriptService {
             MinecraftServer server,
             ServerPlayer sessionPlayer,
             int scriptId,
-            String message
+            String message,
+            BooleanSupplier current
     ) {
         sendResult(server, sessionPlayer, scriptId, ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED, message),
-                () -> true);
+                current);
     }
 
     private void sendResult(
@@ -306,6 +308,6 @@ public final class ServerScriptService {
         );
     }
 
-    private record RunnerSession(ServerPlayer player, ScriptRunner runner) {
+    private record RunnerSession(ServerPlayer player, ManifestSession manifestSession, ScriptRunner runner) {
     }
 }

@@ -14,7 +14,7 @@ final class ServerScriptLifecycleEvents {
     @SubscribeEvent
     static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            TotalDebug.get().serverScripts().removePlayer(player);
+            TotalDebug.get().serverScripts().endSession(player);
             TotalDebug.get().serverRelay().removePlayer(player);
         }
     }

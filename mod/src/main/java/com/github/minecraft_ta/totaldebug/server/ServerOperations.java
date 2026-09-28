@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.server;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ManifestRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
@@ -26,7 +27,8 @@ public final class ServerOperations {
                 ManifestRequestMessage.class, (player, message) -> scripts.sendManifest(player),
                 ServerSourceRequestMessage.class, (player, message) -> scripts.requestSource(player, (ServerSourceRequestMessage) message),
                 RunScriptMessage.class, (player, message) -> scripts.runScript(player, (RunScriptMessage) message),
-                StopScriptMessage.class, (player, message) -> scripts.stopScript(player, ((StopScriptMessage) message).scriptId()));
+                StopScriptMessage.class, (player, message) -> scripts.stopScript(player, ((StopScriptMessage) message).scriptId()),
+                CompanionLeftMessage.class, (player, message) -> scripts.endSession(player));
     }
 
     /** Runs {@code message}'s operation for {@code player}. Server thread. */

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.protocol.relay;
 
+import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 
@@ -13,9 +14,14 @@ import java.util.Objects;
  * {@code docs/MOD_SIDES.md}.
  */
 public record RelayedMessage(int correlation, String gameSession, short messageId, byte[] body) {
-    /** Above the largest message the server exchanges, its class manifest, split at 32 MiB. */
-    public static final int MAX_BODY_BYTES = 33 * 1024 * 1024;
     public static final int MAX_SESSION_LENGTH = 64;
+    /** Correlation, game session as UTF-8 with its length, message id and body length. */
+    public static final int ENVELOPE_BYTES = Integer.BYTES + Integer.BYTES + 3 * MAX_SESSION_LENGTH + Short.BYTES + Integer.BYTES;
+    /**
+     * A relayed message and its envelope fit one frame of the Companion connection. Every message the server sends is
+     * budgeted for it, such as an execution result; the class manifest is sent in chunks well below it.
+     */
+    public static final int MAX_BODY_BYTES = DefaultMessageProcessor.DEFAULT_MAX_FRAME_SIZE - ENVELOPE_BYTES;
 
     public RelayedMessage {
         Objects.requireNonNull(gameSession, "gameSession");

@@ -66,6 +66,18 @@ class RelayChunkTest {
     }
 
     @Test
+    void transfersInProgressShareOneByteBudget() {
+        List<RelayChunk> first = RelayChunk.split((short) 8, new byte[1_500_000], RelayChunk.TO_SERVER_BYTES);
+        List<RelayChunk> second = RelayChunk.split((short) 8, new byte[1_500_000], RelayChunk.TO_SERVER_BYTES);
+        RelayAssembler assembler = RelayAssembler.toServer();
+
+        first.subList(0, first.size() - 1).forEach(assembler::accept);
+        assertTrue(second.stream().map(assembler::accept).allMatch(Optional::isEmpty),
+                "a second transfer cannot hold what the first already holds");
+        assertEquals(1_500_000, assembler.accept(first.getLast()).orElseThrow().body().length);
+    }
+
+    @Test
     void aChunkSurvivesTheWire() {
         RelayChunk chunk = new RelayChunk(UUID.randomUUID(), 1, 3, (short) 9, new byte[]{4, 5, 6});
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());

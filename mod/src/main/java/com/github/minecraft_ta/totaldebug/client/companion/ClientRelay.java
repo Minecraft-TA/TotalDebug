@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totaldebug.network.RelayAssembler;
 import com.github.minecraft_ta.totaldebug.network.RelayChunk;
 import com.github.minecraft_ta.totaldebug.network.ToServerPayload;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessage;
+import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -14,7 +16,7 @@ import java.util.function.Supplier;
 /**
  * The game client's end of the relay (see {@code docs/MOD_SIDES.md}): carries Companion's messages for the server there
  * and the server's back, without reading them. It checks only the envelope: the game session a message is valid in, and
- * whether the server has TotalDebug.
+ * whether the server has TotalDebug. The one message it writes itself tells the server that Companion left.
  */
 public final class ClientRelay {
     private final CompanionAppClient companionApp;
@@ -42,6 +44,20 @@ public final class ClientRelay {
             this.companionApp.sendRelayFailed(message.correlation(), "The server does not have TotalDebug");
             return;
         }
+        send(message);
+    }
+
+    /**
+     * Companion's connection closed: the server ends the manifest session Companion asked it for, and the runs in it,
+     * rather than keep them running for no one. Client thread.
+     */
+    public void companionLeft() {
+        ClientPacketListener connection = Minecraft.getInstance().getConnection();
+        if (connection == null || !connection.hasChannel(ToServerPayload.TYPE)) return;
+        send(RelayedMessages.toServer(new CompanionLeftMessage(), 0, ""));
+    }
+
+    private static void send(RelayedMessage message) {
         for (RelayChunk chunk : RelayChunk.split(message.messageId(), message.body(), RelayChunk.TO_SERVER_BYTES)) {
             PacketDistributor.sendToServer(new ToServerPayload(chunk));
         }

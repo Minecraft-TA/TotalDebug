@@ -136,7 +136,10 @@ public final class TotalDebugClient {
         TotalDebug.get().network().setCompanionReceiver(relay::fromServer);
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);
-        companionApp.setSessionClosedHandler(this.scripts::close);
+        companionApp.setSessionClosedHandler(() -> {
+            this.scripts.close();
+            Minecraft.getInstance().execute(relay::companionLeft);
+        });
         companionApp.startDiscovery(() -> TotalDebugConfig.CLIENT.useCompanionApp.get());
     }
 

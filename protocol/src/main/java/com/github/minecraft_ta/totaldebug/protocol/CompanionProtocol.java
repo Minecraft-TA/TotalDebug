@@ -33,6 +33,7 @@ public final class CompanionProtocol {
     public static final short FROM_SERVER = 43;
     public static final short RELAY_FAILED = 44;
     public static final short MANIFEST_REQUEST = 45;
+    public static final short COMPANION_LEFT = 46;
 
     private CompanionProtocol() {
     }

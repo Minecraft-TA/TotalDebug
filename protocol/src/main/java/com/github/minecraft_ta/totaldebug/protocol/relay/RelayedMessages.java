@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol.relay;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ManifestRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
@@ -27,7 +28,8 @@ public final class RelayedMessages {
             CompanionProtocol.RUN_SCRIPT, new Kind(RunScriptMessage.class, RunScriptMessage::new),
             CompanionProtocol.STOP_SCRIPT, new Kind(StopScriptMessage.class, StopScriptMessage::new),
             CompanionProtocol.SERVER_SOURCE_REQUEST, new Kind(ServerSourceRequestMessage.class, ServerSourceRequestMessage::new),
-            CompanionProtocol.MANIFEST_REQUEST, new Kind(ManifestRequestMessage.class, ManifestRequestMessage::new));
+            CompanionProtocol.MANIFEST_REQUEST, new Kind(ManifestRequestMessage.class, ManifestRequestMessage::new),
+            CompanionProtocol.COMPANION_LEFT, new Kind(CompanionLeftMessage.class, CompanionLeftMessage::new));
     private static final Map<Short, Kind> FROM_SERVER = Map.of(
             CompanionProtocol.EXECUTION_RESULT, new Kind(ExecutionResultMessage.class, ExecutionResultMessage::new),
             CompanionProtocol.SERVER_MANIFEST, new Kind(ServerManifestMessage.class, ServerManifestMessage::new));
