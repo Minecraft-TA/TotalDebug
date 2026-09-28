@@ -502,7 +502,7 @@ class ResourceEditsTest {
 
         Throwable failure = assertThrows(ExecutionException.class, () -> save.get(5, TimeUnit.SECONDS));
         while (failure.getCause() != null) failure = failure.getCause();
-        assertEquals("The MyPack resource pack is gone or has no pack.mcmeta, so the game does not load it", failure.getMessage());
+        assertEquals("The MyPack resource pack is gone or has no readable pack.mcmeta, so the game does not load it", failure.getMessage());
         assertFalse(Files.exists(mine.resolve(LANG)));
     }
 

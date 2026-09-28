@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -276,7 +277,7 @@ public final class ResourceEdits {
         long limit = path.endsWith(".png") ? ResourceLoader.MAXIMUM_PNG_BYTES : ResourceLoader.MAXIMUM_TEXT_BYTES;
         long size = Files.size(file);
         if (size > limit) {
-            throw new IOException("The copy in the " + PackFolders.label(pack) + " is " + size / (1024 * 1024)
+            throw new IOException("The copy in the " + PackFolders.label(pack) + " is " + String.format(Locale.ROOT, "%.1f", size / (1024d * 1024))
                     + " MiB, more than the " + limit / (1024 * 1024) + " MiB Companion opens");
         }
         return Optional.of(Files.readAllBytes(file));
@@ -293,11 +294,7 @@ public final class ResourceEdits {
         // The game names the open world's datapacks only; another world's and a closed game's are read from their files.
         if (current == null || !assets && !Worlds.isOpen(pack.getParent().getParent())) return disabledOnDisk(path, pack);
         List<PackStackPayload.Pack> packs = assets ? current.resourcePacks() : current.dataPacks();
-        String id = "file/" + pack.getFileName();
-        int position = -1;
-        for (int index = 0; index < packs.size(); index++) {
-            if (packs.get(index).id().equals(id)) position = index;
-        }
+        int position = position(packs, pack);
         if (position < 0) {
             // The managed pack is enabled by the reload after a save, and so is a datapack the world does not know yet, as
             // /reload does. One its level.dat lists, but the open world does not use, was disabled since.
@@ -306,6 +303,16 @@ public final class ResourceEdits {
         }
         return supplierAbove(packs, position, path)
                 .map(above -> above + " is above the " + PackFolders.label(pack) + " and supplies this file too, so the game shows its copy");
+    }
+
+    /** Where a folder pack lies in the game's stack, by the id the game gives it, or -1 where it is not enabled. */
+    private static int position(List<PackStackPayload.Pack> packs, Path pack) {
+        String id = "file/" + pack.getFileName();
+        int position = -1;
+        for (int index = 0; index < packs.size(); index++) {
+            if (packs.get(index).id().equals(id)) position = index;
+        }
+        return position;
     }
 
     /** The title of the highest pack above {@code position} of {@code packs} that supplies {@code path} too, or empty. */
@@ -324,13 +331,9 @@ public final class ResourceEdits {
     private Optional<String> besideUnused(List<String> beside, Path pack) {
         PackStackPayload current = this.stack;
         if (current == null) return Optional.empty();
-        String id = "file/" + pack.getFileName();
         for (String path : beside) {
             List<PackStackPayload.Pack> packs = path.startsWith("assets/") ? current.resourcePacks() : current.dataPacks();
-            int position = -1;
-            for (int index = 0; index < packs.size(); index++) {
-                if (packs.get(index).id().equals(id)) position = index;
-            }
+            int position = position(packs, pack);
             if (position < 0) continue;
             String name = path.substring(path.lastIndexOf('/') + 1);
             Optional<String> above = supplierAbove(packs, position, path);
@@ -434,7 +437,7 @@ public final class ResourceEdits {
                 if (managed(pack)) preparePack(pack, path.startsWith("assets/"));
                 // A pack of the player's may have been removed since the tab chose it; the game would not load it.
                 else if (!PackFolders.isPack(pack)) {
-                    throw new IOException("The " + PackFolders.label(pack) + " is gone or has no pack.mcmeta, so the game does not load it");
+                    throw new IOException("The " + PackFolders.label(pack) + " is gone or has no readable pack.mcmeta, so the game does not load it");
                 }
                 Path file = pack.resolve(path);
                 // Checked before anything is written, so a refused save leaves the pack as it was.

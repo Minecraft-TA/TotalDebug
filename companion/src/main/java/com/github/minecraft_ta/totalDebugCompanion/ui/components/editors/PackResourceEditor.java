@@ -110,6 +110,10 @@ abstract class PackResourceEditor<V> extends JPanel {
      * read: a save replaces only that copy, and asks before replacing another one written since, such as by another tab.
      */
     private String baseline;
+    /** The pack the baseline belongs to; moving to another pack starts from that pack's copy. */
+    private Path baselinePack;
+    /** The hash of {@code packContent}, the copy Discard goes back to, which becomes the baseline then. */
+    private String packHash;
     /** Asks whether to save over a copy written since this tab read the pack's; tests answer it themselves. */
     Predicate<ResourceEdits.ChangedSince> askToReplace = this::replaceChangedCopy;
     private boolean disposed;
@@ -353,9 +357,15 @@ abstract class PackResourceEditor<V> extends JPanel {
             boolean unsaved = modified();
             if (!unsaved && (this.managed || this.opened == null)) load(this.packContent);
             else markSaved(this.packContent);
-            // Unsaved changes keep the copy they were made to as the one a save replaces, so replacing another asks.
-            boolean changedSince = unsaved && this.baseline != null && !this.baseline.equals(found.hash());
-            if (!unsaved || this.baseline == null) this.baseline = found.hash();
+            // Unsaved changes keep the copy they were made to as the one a save replaces, so replacing another asks. A tab
+            // moved to another pack, such as a newly chosen working pack, carries its changes over to that pack's copy.
+            boolean samePack = found.pack().equals(this.baselinePack);
+            boolean changedSince = unsaved && samePack && this.baseline != null && !this.baseline.equals(found.hash());
+            if (!unsaved || this.baseline == null || !samePack) {
+                this.baseline = found.hash();
+                this.baselinePack = found.pack();
+            }
+            this.packHash = found.hash();
             showState("");
             // Why the game did not use the copy ends when it does now, such as after the player enabled the pack.
             boolean replaceable = this.notice.getText().isEmpty() || this.notice.getText().equals(this.readNotice);
@@ -430,12 +440,13 @@ abstract class PackResourceEditor<V> extends JPanel {
         Path into = this.opened != null ? this.opened : this.pack;
         Map<String, byte[]> alongside = alongside();
         String expected = this.baseline;
-        byte[][] written = new byte[1][];
-        // Encoding a large texture takes a while, so it runs with the rest of the save.
+        String[] written = new String[1];
+        // Encoding a large texture takes a while, so it runs with the rest of the save, and so does its hash.
         CompletableFuture.supplyAsync(() -> {
             try {
-                written[0] = encode(edited);
-                return written[0];
+                byte[] bytes = encode(edited);
+                written[0] = ResourceOriginals.hash(bytes);
+                return bytes;
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
@@ -447,16 +458,19 @@ abstract class PackResourceEditor<V> extends JPanel {
                     if (failure != null) {
                         showState("");
                         changed();
-                        followLater();
+                        // Asked before following a change that came during the save, which would hold the overwrite back.
                         if (cause(failure) instanceof ResourceEdits.ChangedSince changedSince && this.askToReplace.test(changedSince)) {
                             this.baseline = null;
                             save();
                             return;
                         }
+                        followLater();
                         showNotice("Not saved: " + message(failure), ThemeColors::error);
                         return;
                     }
-                    this.baseline = ResourceOriginals.hash(written[0]);
+                    this.baseline = written[0];
+                    this.baselinePack = saved.pack();
+                    this.packHash = written[0];
                     boolean keepEdits = !same(shown(), edited);
                     showPack(saved.pack());
                     this.packContent = edited;
@@ -500,6 +514,7 @@ abstract class PackResourceEditor<V> extends JPanel {
     /** Drops the unsaved changes, back to the pack's content. */
     void discard() {
         load(this.packContent);
+        this.baseline = this.packHash;
         showNotice("", ThemeColors::secondaryText);
         changed();
     }

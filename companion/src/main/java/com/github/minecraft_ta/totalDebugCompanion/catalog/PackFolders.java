@@ -42,14 +42,20 @@ public final class PackFolders {
         if (!Files.isDirectory(entry) && !(Files.isRegularFile(entry) && entry.getFileName().toString().endsWith(".zip"))) {
             return false;
         }
+        return section(entry).filter(section -> section.get("pack_format") instanceof JsonPrimitive format && format.isNumber()
+                && section.has("description")).isPresent();
+    }
+
+    /** The {@code pack} section of a pack's {@code pack.mcmeta}, or empty without one it can read. */
+    private static Optional<JsonObject> section(Path pack) {
         try {
-            byte[] bytes = read(entry, "pack.mcmeta");
-            if (bytes == null) return false;
+            byte[] bytes = read(pack, "pack.mcmeta");
+            if (bytes == null) return Optional.empty();
             JsonElement root = JsonParser.parseReader(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8));
-            if (!root.isJsonObject() || !(root.getAsJsonObject().get("pack") instanceof JsonObject section)) return false;
-            return section.get("pack_format") instanceof JsonPrimitive format && format.isNumber() && section.has("description");
+            return root.isJsonObject() && root.getAsJsonObject().get("pack") instanceof JsonObject section
+                    ? Optional.of(section) : Optional.empty();
         } catch (IOException | RuntimeException unreadable) {
-            return false;
+            return Optional.empty();
         }
     }
 
@@ -72,18 +78,8 @@ public final class PackFolders {
 
     /** What the pack's {@code pack.mcmeta} says, or empty when it has none or it cannot be read. */
     public static Optional<Meta> meta(Path pack) {
-        try {
-            byte[] bytes = read(pack, "pack.mcmeta");
-            if (bytes == null) return Optional.empty();
-            JsonElement root = JsonParser.parseReader(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8));
-            if (!root.isJsonObject() || !root.getAsJsonObject().has("pack")) return Optional.empty();
-            var section = root.getAsJsonObject().getAsJsonObject("pack");
-            int format = section.has("pack_format") && section.get("pack_format").isJsonPrimitive()
-                    && section.get("pack_format").getAsJsonPrimitive().isNumber() ? section.get("pack_format").getAsInt() : 0;
-            return Optional.of(new Meta(section.has("description") ? plain(section.get("description")) : "", format));
-        } catch (IOException | RuntimeException unreadable) {
-            return Optional.empty();
-        }
+        return section(pack).map(section -> new Meta(section.has("description") ? plain(section.get("description")) : "",
+                section.get("pack_format") instanceof JsonPrimitive format && format.isNumber() ? format.getAsInt() : 0));
     }
 
     /** The bytes of {@code name} at the root of a folder or zip pack, at most a mebibyte, or null when it has none. */

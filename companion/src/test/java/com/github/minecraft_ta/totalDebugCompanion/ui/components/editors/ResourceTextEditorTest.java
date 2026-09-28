@@ -198,6 +198,39 @@ class ResourceTextEditorTest {
         }
     }
 
+    @Test
+    void changesCarriedToAnotherPackAreSavedThereWithoutAsking() throws Exception {
+        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+                InstanceState.inMemory());
+        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
+                List.of()));
+        edits.save(LANG, "{}".getBytes(StandardCharsets.UTF_8)).get(5, TimeUnit.SECONDS);
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
+        String inJar = "{\"a\":\"jar\"}";
+        ResourceTextEditor[] editor = new ResourceTextEditor[1];
+        SwingUtilities.invokeAndWait(() -> editor[0] = new ResourceTextEditor(LANG, "testmod.jar", null,
+                new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits));
+        try {
+            awaitOnSwing(() -> editor[0].targetBox().getItemCount() == 2);
+            List<String> asked = new CopyOnWriteArrayList<>();
+            SwingUtilities.invokeAndWait(() -> {
+                editor[0].askToReplace = changed -> asked.add(changed.getMessage());
+                editor[0].textPanel().editorPane.setText("{\"a\":\"carried\"}");
+                editor[0].targetBox().setSelectedItem(mine);
+            });
+            awaitOnSwing(() -> {
+                editor[0].save();
+                return Files.isRegularFile(mine.resolve(LANG));
+            });
+            assertEquals("{\"a\":\"carried\"}", Files.readString(mine.resolve(LANG)));
+            assertEquals(List.of(), asked, "the other pack's copy is the one the carried changes replace");
+        } finally {
+            SwingUtilities.invokeAndWait(editor[0]::dispose);
+        }
+    }
+
     private static void awaitOnSwing(BooleanSupplier condition) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         boolean[] met = new boolean[1];

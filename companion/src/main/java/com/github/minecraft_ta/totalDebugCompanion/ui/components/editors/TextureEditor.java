@@ -38,6 +38,7 @@ import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -380,7 +381,7 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
     protected void load(Texture content) {
         this.saved = content;
         // Another copy plays its own animation, or none; with no copy left the shown one stays.
-        if (content != NONE && content.animation() != this.animation) {
+        if (content != NONE && !Objects.equals(content.animation(), this.animation)) {
             this.animation = content.animation();
             this.animationProblem = content.animationProblem();
             this.view.setAnimation(this.animation, this.animationProblem);
@@ -421,9 +422,14 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
         Path file = pack.resolve(path() + ".mcmeta");
         if (!Files.isRegularFile(file)) return new Texture(image, null, "");
         try {
+            // As when a texture opens: a file larger than an animation needs is not read.
+            if (Files.size(file) > 1024 * 1024) return new Texture(image, null, "The animation file is larger than 1 MiB");
             TextureAnimation animation = TextureAnimation.read(Files.readAllBytes(file), image.getWidth(), image.getHeight()).orElse(null);
+            if (animation != null && animation.frames().stream().noneMatch(frame -> animation.contains(frame.index()))) {
+                return new Texture(image, null, "Animation frames lie outside the texture");
+            }
             return new Texture(image, animation, "");
-        } catch (RuntimeException invalid) {
+        } catch (IOException | RuntimeException invalid) {
             return new Texture(image, null, "Invalid animation metadata: " + invalid.getMessage());
         }
     }
