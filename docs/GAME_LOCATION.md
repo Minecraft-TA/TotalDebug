@@ -92,7 +92,7 @@ Where something runs, a script or a code-mode job, is `Side`: `CLIENT` or `SERVE
 
 The model already names what these need; each is its own item.
 
-- **Server changes on a remote server (A2):** the multiplayer state carries whether the server has TotalDebug and the player's permission level. Live server-owned changes go through the relay to that server and need permission level 2, as `/gamerule` does. Until then a remote server's own world is refused with that requirement.
+- **Server changes on a remote server (A2, designed in [MOD_SIDES.md](MOD_SIDES.md)):** the multiplayer state carries whether the server has TotalDebug and the player's permission level. Live server-owned changes go through the relay to that server and need permission level 2, as `/gamerule` does. Until then a remote server's own world is refused with that requirement.
 - **Direct server access (F2):** a dedicated server connects to Companion itself. Its game is then a server process, not a client: the game-owned rows are refused ("this instance has no client"), and its worlds are live through that connection.
 - **Server instances:** a project for a dedicated server's directory keeps its world at `level-name` from `server.properties` instead of `saves/`, and has no `options.txt`. The state is the same; where worlds are found is a property of the instance.
 - **The status bar** can name what the game plays, such as the singleplayer world or the server's address, from the same state.
