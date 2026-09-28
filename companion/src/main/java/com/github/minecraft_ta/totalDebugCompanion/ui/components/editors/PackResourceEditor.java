@@ -630,6 +630,11 @@ abstract class PackResourceEditor<V> extends JPanel {
         return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
     }
 
+    /** The pack the tab shows and saves into now, or null before it is known. */
+    protected final Path currentPack() {
+        return this.opened != null ? this.opened : this.pack;
+    }
+
     protected final boolean disposed() {
         return this.disposed;
     }

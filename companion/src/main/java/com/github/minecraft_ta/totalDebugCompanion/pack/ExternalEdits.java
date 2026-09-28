@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
-import javax.imageio.ImageIO;
+import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
+
 import java.awt.Desktop;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.ProcessBuilder.Redirect;
 import java.nio.file.ClosedWatchServiceException;
@@ -13,6 +13,7 @@ import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -35,6 +36,9 @@ import java.util.function.BiConsumer;
 public final class ExternalEdits implements AutoCloseable {
     /** How long a file stays unchanged before it is taken: programs write in several steps, such as a copy then a rename. */
     private static final long SETTLE_MILLIS = 300;
+    private static final byte[] PNG_SIGNATURE = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    /** The empty {@code IEND} chunk every PNG ends with: its length, type and checksum. */
+    private static final byte[] PNG_END = {0, 0, 0, 0, 'I', 'E', 'N', 'D', (byte) 0xAE, 0x42, 0x60, (byte) 0x82};
 
     private final ResourceEdits edits;
     /** The files followed, by absolute file. */
@@ -69,8 +73,15 @@ public final class ExternalEdits implements AutoCloseable {
      * when null or blank, and follows the file from then on. Blocking, as starting a program can be.
      */
     public void open(String path, Path pack, String program) throws IOException {
+        boolean followedBefore = follows(path, pack);
         Path file = follow(path, pack);
-        launch(program, file);
+        try {
+            launch(program, file);
+        } catch (IOException | RuntimeException failed) {
+            // Nothing was opened, so nothing else's saves are taken: only a file followed before stays followed.
+            if (!followedBefore) this.followed.remove(file);
+            throw failed;
+        }
     }
 
     /**
@@ -82,14 +93,14 @@ public final class ExternalEdits implements AutoCloseable {
         if (!Files.isRegularFile(file)) throw new IOException(file + " does not exist");
         synchronized (this) {
             if (this.closed) throw new IOException("The project is closing");
-            if (this.followed.containsKey(file)) return file;
             if (this.watcher == null) start();
+            // A folder deleted and made again since lost its watch, which is registered anew.
             Path folder = file.getParent();
             if (!this.folders.containsKey(folder)) {
                 this.folders.put(folder, folder.register(this.watcher, StandardWatchEventKinds.ENTRY_CREATE,
                         StandardWatchEventKinds.ENTRY_MODIFY));
             }
-            this.followed.put(file, new Followed(path, pack, Files.readAllBytes(file)));
+            if (!this.followed.containsKey(file)) this.followed.put(file, new Followed(path, pack, Files.readAllBytes(file)));
         }
         return file;
     }
@@ -173,14 +184,15 @@ public final class ExternalEdits implements AutoCloseable {
         });
     }
 
-    /** Whether {@code content} is whole: a texture decodes; anything else is taken as it is. */
-    private static boolean readable(String path, byte[] content) {
+    /**
+     * Whether {@code content} is whole: a texture starts with the PNG signature and ends with its closing chunk, and is no
+     * larger than a texture Companion reads; anything else is taken as it is. Nothing is decoded, however large the image.
+     */
+    static boolean readable(String path, byte[] content) {
         if (!path.toLowerCase(Locale.ROOT).endsWith(".png")) return true;
-        try {
-            return ImageIO.read(new ByteArrayInputStream(content)) != null;
-        } catch (IOException | RuntimeException partial) {
-            return false;
-        }
+        if (content.length > ResourceLoader.MAXIMUM_PNG_BYTES || content.length < PNG_SIGNATURE.length + PNG_END.length) return false;
+        return Arrays.equals(content, 0, PNG_SIGNATURE.length, PNG_SIGNATURE, 0, PNG_SIGNATURE.length)
+                && Arrays.equals(content, content.length - PNG_END.length, content.length, PNG_END, 0, PNG_END.length);
     }
 
     /** Opens {@code file} in {@code program}, or in the system's app for it when null or blank. */

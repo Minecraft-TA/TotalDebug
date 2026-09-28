@@ -513,7 +513,8 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
                     this.stopExternal.run();
                     this.externalPack = pack;
                     this.stopExternal = edits().external().addListener(path(), pack, (saved, problem) -> SwingUtilities.invokeLater(() -> {
-                        if (disposed()) return;
+                        // A tab moved to another pack since shows that pack's state, not what became of this one's file.
+                        if (disposed() || !pack.equals(currentPack())) return;
                         if (problem != null) {
                             showNotice("Not taken from the image editor: " + message(problem), ThemeColors::error);
                         } else if (!saved.reloadFailure().isEmpty() || !saved.problems().isEmpty() || !saved.unused().isEmpty()) {

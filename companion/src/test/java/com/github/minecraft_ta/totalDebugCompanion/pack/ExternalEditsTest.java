@@ -10,9 +10,11 @@ import org.junit.jupiter.api.io.TempDir;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -23,6 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExternalEditsTest {
     private static final String LANG = "assets/testmod/lang/en_us.json";
@@ -108,6 +112,26 @@ class ExternalEditsTest {
             assertEquals(ResourceEdits.Saved.class, result.getClass(), String.valueOf(result));
             assertEquals(ResourceOriginals.hash(drawn), record.change(new ChangeRecord.Resource(TEXTURE, pack)).current());
             assertArrayEquals(drawn, Files.readAllBytes(pack.resolve(TEXTURE)));
+        } finally {
+            edits.close();
+        }
+    }
+
+    @Test
+    void aTextureIsWholeOnceItEndsWithItsClosingChunk() throws Exception {
+        byte[] whole = png(0xFF112233);
+        assertTrue(ExternalEdits.readable(TEXTURE, whole));
+        assertFalse(ExternalEdits.readable(TEXTURE, Arrays.copyOf(whole, whole.length - 4)), "cut off before its end");
+        assertTrue(ExternalEdits.readable(LANG, bytes("{")), "other files are taken as they are");
+    }
+
+    @Test
+    void aProgramThatDoesNotStartLeavesTheFileUnfollowed() throws Exception {
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        Path pack = edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS).pack();
+        try {
+            assertThrows(IOException.class, () -> edits.external().open(LANG, pack, this.directory.resolve("missing.exe").toString()));
+            assertFalse(edits.external().follows(LANG, pack), "nothing opened it, so its saves are not the program's");
         } finally {
             edits.close();
         }
