@@ -28,6 +28,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationServi
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.GameRulesMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
@@ -218,6 +219,12 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 public void packStack(PackStackMessage message) {
                     ProjectScope scope = current;
                     if (scope != null) scope.resources().packStack(message.payload());
+                }
+
+                @Override
+                public void gameRules(GameRulesMessage message) {
+                    ProjectScope scope = current;
+                    if (scope != null) scope.resources().gameRules(message.payload());
                 }
 
                 @Override

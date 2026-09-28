@@ -1,8 +1,10 @@
 package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.GameRulesPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.SetGameRulePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.ByteBuffer;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -50,6 +53,19 @@ class ResourceProtocolCodecTest {
         SetPacksMessage read = new SetPacksMessage();
         read.read(new ByteBufferInputStream(written(new SetPacksMessage(request))));
         assertEquals(request, read.payload());
+    }
+
+    @Test
+    void gameRulesAndARuleChangeSurviveTheWire() {
+        GameRulesPayload rules = new GameRulesPayload(Map.of("keepInventory", "true", "randomTickSpeed", "3"));
+        GameRulesMessage readRules = new GameRulesMessage();
+        readRules.read(new ByteBufferInputStream(written(new GameRulesMessage(rules))));
+        assertEquals(rules, readRules.payload());
+
+        SetGameRulePayload request = new SetGameRulePayload(5, "keepInventory", "false");
+        SetGameRuleMessage readRequest = new SetGameRuleMessage();
+        readRequest.read(new ByteBufferInputStream(written(new SetGameRuleMessage(request))));
+        assertEquals(request, readRequest.payload());
     }
 
     private static ByteBuffer written(AbstractMessage message) {

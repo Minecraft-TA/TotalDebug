@@ -22,6 +22,8 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.GameRulesMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.SetGameRuleMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
@@ -130,6 +132,8 @@ public final class CompanionAppClient implements AutoCloseable {
             new ReloadResultPayload(message.payload().requestId(), 0, List.of(), "The game is not ready to reload resources yet")));
     private volatile Consumer<SetPacksMessage> packsHandler = message -> send(new ReloadResultMessage(
             new ReloadResultPayload(message.payload().requestId(), 0, List.of(), "The game is not ready to change its packs yet")));
+    private volatile Consumer<SetGameRuleMessage> gameRuleHandler = message -> send(new ReloadResultMessage(
+            new ReloadResultPayload(message.payload().requestId(), 0, List.of(), "The game is not ready to set game rules yet")));
     private volatile RuntimeInventoryPublisher.PublishedInventory publishedInventory;
     private volatile Consumer<CompanionStartupProgress> progressListener = progress -> { };
     private volatile boolean closing;
@@ -283,6 +287,15 @@ public final class CompanionAppClient implements AutoCloseable {
     /** Receives Companion's requests to enable and order packs; runs on the connection thread. */
     public void setPacksHandler(Consumer<SetPacksMessage> handler) {
         this.packsHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    /** Receives Companion's requests to set a game rule; runs on the connection thread. */
+    public void setGameRuleHandler(Consumer<SetGameRuleMessage> handler) {
+        this.gameRuleHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    public void sendGameRules(GameRulesMessage message) {
+        send(message);
     }
 
     public void sendReloadResult(ReloadResultMessage message) {
@@ -465,6 +478,13 @@ public final class CompanionAppClient implements AutoCloseable {
                 return;
             }
             this.packsHandler.accept(message);
+        });
+        transport.getMessageBus().listenAlways(SetGameRuleMessage.class, message -> {
+            if (!attempt.authenticated()) {
+                failSession(attempt, "Companion sent a game rule before authentication", null);
+                return;
+            }
+            this.gameRuleHandler.accept(message);
         });
         transport.getMessageBus().listenAlways(StopScriptMessage.class, message -> {
             if (!attempt.authenticated()) {

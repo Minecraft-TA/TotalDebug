@@ -1,6 +1,6 @@
 # Resource editing
 
-Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`); textures drawn pixel by pixel, saved the same way and put in place in the running game without a full reload; resource packs and the current world's datapacks enabled and ordered, in the connected game or in `options.txt` and `level.dat` (`SET_PACKS`, protocol 29); the change record holds all of them and reverts them. Not yet: forced values.
+Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`); textures drawn pixel by pixel, saved the same way and put in place in the running game without a full reload; resource packs and the current world's datapacks enabled and ordered, in the connected game or in `options.txt` and `level.dat` (`SET_PACKS`, protocol 29); the current world's game rules, set in the connected game or in `level.dat` (`GAME_RULES`, `SET_GAME_RULE`, protocol 30); the change record holds all of them and reverts them. Not yet: forced values.
 
 ## Goal
 
@@ -102,6 +102,20 @@ The game's own rules for a selection hold in every mode, so Companion never writ
 
 A selection is a target of its own, `PackSelection`: the side (resource packs, or datapacks with their world's folder). Its values are the enabled ids, lowest first, as a JSON array.
 
+## Game rules
+
+Decided on 2026-09-28: the World page's Game rules tab sets the current world's rules, although they are world state rather than the pack's content: a pack maker tries a world with them, and Changes keeps what they replaced. A value is edited in place, or a true or false rule turned over with Space, and set at once; a game rule needs no reload.
+
+| World | Game connected | Game running, not connected | Game closed |
+|---|---|---|---|
+| Open in the game | Set by running `/gamerule` in the world, which checks the value as the command does; the game saves it into `level.dat` | Refused: the open world's server writes `level.dat` | Not possible |
+| Not open | Written into its `level.dat` | Written into its `level.dat` | Written into its `level.dat` |
+
+- **Values:** a rule keeps its kind: `true` or `false`, or a whole number that fits an int; a value the game would refuse is not sent or written, and the row says why. A rule the world does not have is refused.
+- **Shown values:** while the connected game has the world open, the tab shows the rules it names (`GAME_RULES`, sent when they change), since `level.dat` catches up only when the game saves.
+- **Writing `level.dat`:** as for datapacks; the last one stays as `level.dat_old`, the backup the game keeps too.
+- **Recorded as:** a target of its own, `GameRule`: the world's folder and the rule's name, with the values as the game writes them. Revert sets the original value by the same rules, and leaves a rule changed since outside Companion alone.
+
 ## Protocol
 
 | Message | Direction | Content |
@@ -110,9 +124,11 @@ A selection is a target of its own, `PackSelection`: the side (resource packs, o
 | `RELOAD` | Companion to game | Request id, what to reload (language, textures, resources, data), the managed pack and the edited paths |
 | `RELOAD_RESULT` | Game to Companion | Request id, duration, problems naming edited paths, or the error |
 | `SET_PACKS` | Companion to game | Request id, the side, and the enabled pack ids, lowest first; answered with `RELOAD_RESULT` once the reload the selection needs is done |
+| `GAME_RULES` | Game to Companion | The game rules of the world the game has open, by name; sent when they change and after every handshake |
+| `SET_GAME_RULE` | Companion to game | Request id, a rule and its value, run as `/gamerule`; answered with `RELOAD_RESULT`, whose error is what the command reported |
 
 - These are kernel services every extension needs, so they are native messages rather than scripts run through the evaluator.
-- One protocol version bump for the step: 27; textures shown the quick way: 28; pack order: 29, which also lists the packs that are not enabled in `PACK_STACK`, with whether each is required, fixed, compatible and the features it requests, and names the managed pack per side in `RELOAD`.
+- One protocol version bump for the step: 27; textures shown the quick way: 28; pack order: 29, which also lists the packs that are not enabled in `PACK_STACK`, with whether each is required, fixed, compatible and the features it requests, and names the managed pack per side in `RELOAD`; game rules: 30.
 
 ## Change record
 
@@ -191,7 +207,7 @@ Wording follows [UI_GUIDE.md](UI_GUIDE.md).
 - **External editor:** Open in External Editor, in the texture tab's toolbar, opens the texture in the image editor chosen under Settings, Resources, or the system's app for images while none is. It first saves the texture into its pack where that pack does not hold what the tab shows, such as a mod's texture no pack has a copy of. Companion then follows the file until the project closes: each save the program makes, once the file has not changed for 300 ms and decodes as an image, is recorded as a change, which Changes reverts to what the file held before the program changed it, and is put in place in the game as a save in Companion is. The tab reads the new pixels, and shows what the game made of each save. Companion's own saves and reverts of the file are told from the program's by the hash of what Companion last wrote.
 - **Two tabs of one file:** a save replaces only the copy the tab last read or saved. When another tab or program wrote the file since, the tab says so, and saving asks before overwriting that copy.
 - **Packs the game skips:** a folder or zip counts as a pack when its `pack.mcmeta` has a `pack` section with a `pack_format` number and a `description`, as the game requires; one without is not listed or offered under Save into. A revert into a pack that lost its `pack.mcmeta` puts the file back and says the game does not load the pack.
-- **Changes page:** a Resources tab for resources in the managed packs, and a Packs tab for pack selections, beside Configuration and Key bindings. Revert, or Delete, reverts the selected rows; reverting a file Companion added deletes it, and Delete asks first. Revert All reports every failure in one status.
+- **Changes page:** a Resources tab for resources in the managed packs, a Packs tab for pack selections and a Game rules tab, beside Configuration and Key bindings. Revert, or Delete, reverts the selected rows; reverting a file Companion added deletes it, and Delete asks first. Revert All reports every failure in one status.
 - **Modpack tree:** the Resources row lists every resource as the game uses it ([MODPACK.md](MODPACK.md#resources)); its Packs tab lists the resource packs, and the World root the current world's datapacks, each enabled and ordered as [Pack order](#pack-order) describes: a check box per row, drag or Alt+Shift+Up and Down to reorder, then Apply or Discard.
 
 ## Order

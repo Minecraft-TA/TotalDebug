@@ -31,7 +31,7 @@ public final class ChangeRecord implements AutoCloseable {
     private static final int FORMAT = 1;
 
     /** Something Companion writes to. */
-    public sealed interface Target permits Setting, KeyBinding, Resource, PackSelection {
+    public sealed interface Target permits Setting, KeyBinding, Resource, PackSelection, GameRule {
     }
 
     /** A setting of a configuration file; {@code file} is where it was written, such as one world's server file. */
@@ -89,6 +89,14 @@ public final class ChangeRecord implements AutoCloseable {
         public PackSelection {
             Objects.requireNonNull(side, "side");
             location = location.toAbsolutePath().normalize();
+        }
+    }
+
+    /** A game rule of the world whose folder is {@code world}, by its name such as {@code keepInventory}. */
+    public record GameRule(Path world, String name) implements Target {
+        public GameRule {
+            world = world.toAbsolutePath().normalize();
+            Objects.requireNonNull(name, "name");
         }
     }
 
@@ -171,6 +179,15 @@ public final class ChangeRecord implements AutoCloseable {
                         }
                         yield new PackSelection(SetPacksPayload.Side.valueOf(JsonFiles.string(entry, "side")), location);
                     }
+                    case "gameRule" -> {
+                        Path world = inInstance(game, JsonFiles.string(entry, "world"));
+                        if (world == null) {
+                            System.err.println("Leaving out a game rule of " + JsonFiles.string(entry, "world")
+                                    + ": it is not a world of this instance");
+                            yield null;
+                        }
+                        yield new GameRule(world, JsonFiles.string(entry, "name"));
+                    }
                     default -> throw new IllegalArgumentException("Unknown change kind " + JsonFiles.string(entry, "kind"));
                 };
                 if (target == null) continue;
@@ -200,6 +217,7 @@ public final class ChangeRecord implements AutoCloseable {
             case Setting setting -> setting.file();
             case Resource resource -> resource.location();
             case PackSelection selection -> selection.location();
+            case GameRule rule -> rule.world();
             case KeyBinding ignored -> null;
         };
         if (this.gameDirectory != null && file != null && !file.startsWith(this.gameDirectory)) {
@@ -303,6 +321,11 @@ public final class ChangeRecord implements AutoCloseable {
                     entry.addProperty("kind", "packSelection");
                     entry.addProperty("side", selection.side().name());
                     entry.addProperty("location", stored(selection.location()));
+                }
+                case GameRule rule -> {
+                    entry.addProperty("kind", "gameRule");
+                    entry.addProperty("world", stored(rule.world()));
+                    entry.addProperty("name", rule.name());
                 }
             }
             entry.addProperty("original", change.original());

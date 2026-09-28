@@ -66,6 +66,7 @@ enum UiRenderScenario {
     WORLD_RULES("world-rules", "The current world's game rules"),
     WORLD_DATAPACKS("world-datapacks", "The current world's datapacks, enabled, disabled and new"),
     WORLD_NO_MATCH("world-no-match", "The current world's game rules with a filter nothing matches"),
+    WORLD_RULE_REFUSED("world-rule-refused", "A game rule set to a value its kind does not take, and why it was not set"),
     WORLD_UNREADABLE("world-unreadable", "The World page when the current world's level.dat cannot be read"),
     WORLD_NONE("world-none", "The World page before any world was played"),
     PACK_PAGE("pack-page", "A datapack of the world's folder with its files"),

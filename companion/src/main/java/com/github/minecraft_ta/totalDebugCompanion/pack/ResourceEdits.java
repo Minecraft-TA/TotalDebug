@@ -9,11 +9,14 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
+import com.github.minecraft_ta.totaldebug.protocol.message.GameRulesPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.SetGameRulePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.SetGameRuleMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.tth05.scnet.message.AbstractMessage;
@@ -105,6 +108,8 @@ public final class ResourceEdits {
     private final Map<Integer, CompletableFuture<ReloadResultPayload>> waiting = new ConcurrentHashMap<>();
     private volatile Predicate<AbstractMessage> game;
     private volatile PackStackPayload stack;
+    /** The game rules of the world the connected game has open, or null while no game is connected. */
+    private volatile GameRulesPayload gameRules;
     /** Run whenever the game names its packs again, such as after another world opened. */
     private final List<Runnable> stackListeners = new CopyOnWriteArrayList<>();
     /** Run after a save or revert has written its file and the game used it, or failed to. */
@@ -156,6 +161,7 @@ public final class ResourceEdits {
     public void gameDisconnected() {
         this.game = null;
         this.stack = null;
+        this.gameRules = null;
         this.stackListeners.forEach(Runnable::run);
         for (CompletableFuture<ReloadResultPayload> request : this.waiting.values()) {
             request.completeExceptionally(new IOException("The game disconnected before it finished reloading"));
@@ -167,6 +173,33 @@ public final class ResourceEdits {
     public void packStack(PackStackPayload stack) {
         this.stack = stack;
         this.stackListeners.forEach(Runnable::run);
+    }
+
+    /** Takes the game rules of the world the game has open; the stack listeners hear of it, as the world's state changed. */
+    public void gameRules(GameRulesPayload rules) {
+        this.gameRules = rules;
+        this.stackListeners.forEach(Runnable::run);
+    }
+
+    /** The game rules the running game named last, empty without an open world, or null while no game is connected. */
+    public GameRulesPayload gameRules() {
+        return this.gameRules;
+    }
+
+    /**
+     * Asks the connected game to set the game rule {@code name} of the world it has open to {@code value}, as
+     * {@code /gamerule} does; completes with its answer, or fails without a game.
+     */
+    public CompletableFuture<ReloadResultPayload> setGameRule(String name, String value) {
+        Predicate<AbstractMessage> send = this.game;
+        int id = this.requests.incrementAndGet();
+        CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
+        this.waiting.put(id, result);
+        if (send == null || !send.test(new SetGameRuleMessage(new SetGameRulePayload(id, name, value)))) {
+            this.waiting.remove(id);
+            return CompletableFuture.failedFuture(new IOException("The game is not connected"));
+        }
+        return result.orTimeout(RELOAD_MINUTES, TimeUnit.MINUTES).whenComplete((ignored, failure) -> this.waiting.remove(id));
     }
 
     /** The packs the running game named last, or null while no game is connected. */

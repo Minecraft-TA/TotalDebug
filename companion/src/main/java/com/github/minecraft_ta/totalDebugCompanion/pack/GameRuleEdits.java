@@ -1,0 +1,160 @@
+package com.github.minecraft_ta.totalDebugCompanion.pack;
+
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDat;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.Worlds;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totaldebug.protocol.message.GameRulesPayload;
+import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
+
+/**
+ * Sets a world's game rules: in the world the connected game has open, as {@code /gamerule} does, or in the
+ * {@code level.dat} of a world no game has open, keeping the last one as {@code level.dat_old} as the game does. Each
+ * change is recorded as a {@link ChangeRecord.GameRule} and can be reverted.
+ */
+public final class GameRuleEdits {
+    private static final Pattern NUMBER = Pattern.compile("-?\\d+");
+
+    /** Where a rule was written, and when the game uses it. */
+    public record Applied(ConfigChanges.Effect effect) {
+    }
+
+    private final ChangeRecord record;
+    private final ResourceEdits edits;
+    private final Executor writes;
+
+    /** {@code edits} talks to the connected game; {@code writes} is the project's write queue. */
+    public GameRuleEdits(ChangeRecord record, ResourceEdits edits, Executor writes) {
+        this.record = Objects.requireNonNull(record, "record");
+        this.edits = Objects.requireNonNull(edits, "edits");
+        this.writes = Objects.requireNonNull(writes, "writes");
+    }
+
+    /** Sets {@code name} of {@code world} to {@code value} and records the change. */
+    public CompletableFuture<Applied> set(Path world, String name, String value) {
+        return apply(new ChangeRecord.GameRule(world, name), value, null);
+    }
+
+    /**
+     * Sets the rule back to what it was before Companion first changed it. A rule changed since outside Companion, such
+     * as with {@code /gamerule}, is left alone, unless it is the original again, which ends the change.
+     */
+    public CompletableFuture<Applied> revert(ChangeRecord.Change change) {
+        if (!(change.target() instanceof ChangeRecord.GameRule target)) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("Not a game rule"));
+        }
+        return apply(target, change.original(), change);
+    }
+
+    /** Whether the rule still has the value Companion last set for {@code change}. Blocking. */
+    public boolean holds(ChangeRecord.Change change) {
+        if (!(change.target() instanceof ChangeRecord.GameRule target)) return true;
+        try {
+            return change.current().equals(current(target));
+        } catch (IOException unreadable) {
+            return true;
+        }
+    }
+
+    private CompletableFuture<Applied> apply(ChangeRecord.GameRule target, String value, ChangeRecord.Change reverting) {
+        boolean live;
+        try {
+            live = live(target.world());
+        } catch (IOException refused) {
+            return CompletableFuture.failedFuture(refused);
+        }
+        CompletableFuture<String> before = write(() -> {
+            try {
+                String previous = current(target);
+                if (previous == null) throw new IOException("The world " + target.world().getFileName() + " has no game rule " + target.name());
+                String problem = problem(previous, value);
+                if (problem != null) throw new IOException(problem);
+                if (reverting != null && !previous.equals(reverting.current()) && !previous.equals(value)) {
+                    throw new IOException(target.name() + " was changed outside Companion since, and reverting would replace that");
+                }
+                if (!live) {
+                    writeLevel(target, value);
+                    this.record.changed(target, previous, value);
+                }
+                return previous;
+            } catch (IOException exception) {
+                throw new CompletionException(exception);
+            }
+        });
+        if (!live) return before.thenApply(ignored -> new Applied(ConfigChanges.Effect.WORLD_OPENS));
+        return before.thenCompose(previous -> this.edits.setGameRule(target.name(), value).thenApply(result -> {
+            if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
+            this.record.changed(target, previous, value);
+            return new Applied(ConfigChanges.Effect.NOW);
+        }));
+    }
+
+    /**
+     * Whether the connected game sets the rule; fails for a world open in a game Companion is not connected to, whose
+     * server would write its {@code level.dat} over.
+     */
+    private boolean live(Path world) throws IOException {
+        if (!Worlds.isOpen(world)) return false;
+        GameRulesPayload rules = this.edits.gameRules();
+        if (rules != null && !rules.rules().isEmpty()) return true;
+        throw new IOException("The world " + world.getFileName()
+                + " is open in a game that is not connected to Companion; connect it, or close the world, to change its game rules");
+    }
+
+    /** The rule's value: as the connected game names it while it has the world open, or as level.dat saved it; null for none. */
+    String current(ChangeRecord.GameRule target) throws IOException {
+        GameRulesPayload rules = this.edits.gameRules();
+        if (Worlds.isOpen(target.world()) && rules != null && !rules.rules().isEmpty()) return rules.rules().get(target.name());
+        NbtData.CompoundTag gameRules = gameRules(LevelDat.read(LevelDat.file(target.world())).tag());
+        return gameRules != null && gameRules.entries().get(target.name()) instanceof NbtData.StringTag text ? text.value() : null;
+    }
+
+    /** Why {@code value} does not fit a rule whose value is {@code previous}, as the game's command would refuse it, or null. */
+    public static String problem(String previous, String value) {
+        boolean flag = previous.equals("true") || previous.equals("false");
+        if (flag && !value.equals("true") && !value.equals("false")) return "Enter true or false";
+        if (NUMBER.matcher(previous).matches()) {
+            if (!NUMBER.matcher(value).matches()) return "Enter a whole number";
+            try {
+                Integer.parseInt(value);
+            } catch (NumberFormatException tooLarge) {
+                return "Enter a whole number between " + Integer.MIN_VALUE + " and " + Integer.MAX_VALUE;
+            }
+        }
+        if (value.isBlank() || value.contains("\n")) return "Enter a value";
+        return null;
+    }
+
+    private static void writeLevel(ChangeRecord.GameRule target, String value) throws IOException {
+        LevelDat.Root root = LevelDat.read(LevelDat.file(target.world()));
+        if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
+            throw new IOException("The level.dat of " + target.world().getFileName() + " holds no world data");
+        }
+        NbtData.CompoundTag rules = gameRules(root.tag());
+        NbtData.CompoundTag written = LevelDat.with(rules, target.name(), new NbtData.StringTag(value));
+        LevelDat.write(target.world(), new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "GameRules", written))));
+    }
+
+    private static NbtData.CompoundTag gameRules(NbtData.CompoundTag root) {
+        return root.entries().get("Data") instanceof NbtData.CompoundTag data
+                && data.entries().get("GameRules") instanceof NbtData.CompoundTag rules ? rules : null;
+    }
+
+    private <T> CompletableFuture<T> write(Supplier<T> write) {
+        try {
+            return CompletableFuture.supplyAsync(write, this.writes);
+        } catch (RejectedExecutionException closed) {
+            return CompletableFuture.failedFuture(new IOException("The project is closing; the change was not written"));
+        }
+    }
+}

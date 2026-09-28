@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.pack.GameRuleEdits;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
@@ -7,16 +8,21 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
+import javax.swing.AbstractAction;
+import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
+import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -24,10 +30,21 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.regex.Pattern;
 
-/** The world's game rules with their saved values, filtered by rule or value. */
+/**
+ * The world's game rules with their values, filtered by rule or value. With a {@link Setter}, a value is edited in place
+ * (Enter, F2 or a double-click; Space turns a true or false rule over) and set at once, as {@code /gamerule} does; a
+ * refused value says why under the bar.
+ */
 final class GameRulesPanel extends JPanel {
+    /** Sets a rule; completes once it is set, or fails saying why. */
+    interface Setter {
+        CompletableFuture<?> set(String name, String value);
+    }
+
     private static final Pattern NUMBER = Pattern.compile("-?\\d+");
 
     /** A rule with its value and what kind of literal the value is, which the game's commands take as such. */
@@ -55,6 +72,9 @@ final class GameRulesPanel extends JPanel {
         }
     };
     private final BrowserBody body;
+    private Setter setter;
+    /** Rules being set now, whose rows wait for the answer. */
+    private final Set<String> setting = new HashSet<>();
 
     GameRulesPanel() {
         super(new BorderLayout());
@@ -67,14 +87,69 @@ final class GameRulesPanel extends JPanel {
         this.table.getColumnModel().getColumn(1).setPreferredWidth(400);
         this.body = new BrowserBody("Filter by rule or value", BrowserBody.scroll(this.table), this.table, this::applyFilter);
         add(this.body, BorderLayout.CENTER);
+        this.table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("SPACE"), "toggleRule");
+        this.table.getActionMap().put("toggleRule", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                List<Rule> selected = selectedRules();
+                if (selected.size() == 1 && selected.getFirst().kind() == ConfigSettingsTable.ValueKind.BOOLEAN) toggle(selected.getFirst());
+            }
+        });
     }
 
-    /** Shows the rules, keeping the selected ones selected. */
+    /** Lets the values be edited, set by {@code setter}. */
+    void setSetter(Setter setter) {
+        this.setter = setter;
+    }
+
+    /** Sets a true or false rule to the other value. */
+    private void toggle(Rule rule) {
+        set(rule, rule.value().equals("true") ? "false" : "true");
+    }
+
+    /** Sets {@code rule} to {@code value}, shown at once and put back when the game refuses it. */
+    private void set(Rule rule, String value) {
+        if (this.setter == null || this.setting.contains(rule.name()) || value.equals(rule.value())) return;
+        String problem = GameRuleEdits.problem(rule.value(), value);
+        if (problem != null) {
+            this.body.showNotice("Not set: " + rule.name() + ": " + problem);
+            return;
+        }
+        this.body.showNotice("");
+        this.setting.add(rule.name());
+        replace(rule.name(), value);
+        this.setter.set(rule.name(), value).whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
+            this.setting.remove(rule.name());
+            if (failure != null) {
+                Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
+                replace(rule.name(), rule.value());
+                this.body.showNotice("Not set: " + rule.name() + ": " + cause.getMessage());
+            }
+        }));
+    }
+
+    /** Shows {@code value} as {@code name}'s value, keeping the selection. */
+    private void replace(String name, String value) {
+        List<Rule> all = new ArrayList<>();
+        for (Rule rule : this.model.all) all.add(rule.name().equals(name) ? Rule.of(name, value) : rule);
+        this.model.all = List.copyOf(all);
+        int[] selected = this.table.getSelectedRows();
+        applyFilter();
+        for (int row : selected) {
+            if (row < this.model.shown.size()) this.table.addRowSelectionInterval(row, row);
+        }
+    }
+
+    /** Shows the rules, keeping the selected ones selected; a rule being set keeps the value it is being set to. */
     void setRules(Map<String, String> rules) {
+        if (this.table.isEditing()) this.table.getCellEditor().cancelCellEditing();
         Set<String> selected = new HashSet<>();
         for (Rule rule : selectedRules()) selected.add(rule.name());
         List<Rule> all = new ArrayList<>();
-        rules.forEach((name, value) -> all.add(Rule.of(name, value)));
+        rules.forEach((name, value) -> {
+            Rule shown = this.model.all.stream().filter(rule -> rule.name().equals(name)).findFirst().orElse(null);
+            all.add(this.setting.contains(name) && shown != null ? shown : Rule.of(name, value));
+        });
         this.model.all = List.copyOf(all);
         applyFilter();
         for (int row = 0; row < this.model.shown.size(); row++) {
@@ -110,6 +185,10 @@ final class GameRulesPanel extends JPanel {
         JPopupMenu menu = new JPopupMenu();
         if (selected.size() == 1) {
             Rule rule = selected.getFirst();
+            if (this.setter != null && rule.kind() == ConfigSettingsTable.ValueKind.BOOLEAN) {
+                menu.add(ContextMenus.action("Set to " + (rule.value().equals("true") ? "false" : "true"), null, "SPACE", () -> toggle(rule)));
+                menu.addSeparator();
+            }
             menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Name", rule.name())));
             menu.add(ContextMenus.copyAction("Copy Value", rule.value()));
             menu.add(ContextMenus.copyAction("Copy Command", command(rule)));
@@ -131,6 +210,19 @@ final class GameRulesPanel extends JPanel {
         return "/gamerule " + rule.name() + " " + rule.value();
     }
 
+    /** Starts editing or sets the value of the rule at {@code row} as typed, for tests. */
+    void edit(int row, String value) {
+        this.model.setValueAt(value, row, 1);
+    }
+
+    List<String> shownValues() {
+        return this.model.shown.stream().map(rule -> rule.name() + "=" + rule.value()).toList();
+    }
+
+    String notice() {
+        return this.body.noticeText();
+    }
+
     int rowCount() {
         return this.model.getRowCount();
     }
@@ -139,7 +231,7 @@ final class GameRulesPanel extends JPanel {
         return this.body.filter();
     }
 
-    private static final class RulesModel extends AbstractTableModel {
+    private final class RulesModel extends AbstractTableModel {
         private List<Rule> all = List.of();
         private List<Rule> shown = List.of();
 
@@ -162,6 +254,22 @@ final class GameRulesPanel extends JPanel {
         public Object getValueAt(int row, int column) {
             Rule rule = this.shown.get(row);
             return column == 0 ? rule.name() : rule.literal();
+        }
+
+        @Override
+        public boolean isCellEditable(int row, int column) {
+            return column == 1 && GameRulesPanel.this.setter != null && !GameRulesPanel.this.setting.contains(this.shown.get(row).name());
+        }
+
+        @Override
+        public void setValueAt(Object value, int row, int column) {
+            // An edit starts from the literal, so a string rule's quotes are taken off again.
+            String text = String.valueOf(value).strip();
+            Rule rule = this.shown.get(row);
+            if (rule.kind() == ConfigSettingsTable.ValueKind.STRING && text.length() >= 2 && text.startsWith("\"") && text.endsWith("\"")) {
+                text = text.substring(1, text.length() - 1);
+            }
+            set(rule, text);
         }
     }
 

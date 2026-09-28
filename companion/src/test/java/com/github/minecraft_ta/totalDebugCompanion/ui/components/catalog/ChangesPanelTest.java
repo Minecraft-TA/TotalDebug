@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
+import com.github.minecraft_ta.totalDebugCompanion.pack.GameRuleEdits;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -46,7 +47,8 @@ class ChangesPanelTest {
                 Runnable::run, () -> false, InstanceState.inMemory());
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(this.directory, record),
                 new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false, Runnable::run), edits,
-                new PackSelections(this.directory, record, edits, () -> false, Runnable::run), target -> { }));
+                new PackSelections(this.directory, record, edits, () -> false, Runnable::run),
+                new GameRuleEdits(record, edits, Runnable::run), target -> { }));
         ConfigSettingsTable table = panel[0].settingsTable();
         try {
             awaitOnSwing(() -> table.getRowCount() == 3);

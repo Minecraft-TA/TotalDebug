@@ -12,12 +12,14 @@ import com.github.minecraft_ta.totaldebug.client.inspection.ResourceSnapshots;
 import com.github.minecraft_ta.totaldebug.client.input.Selection;
 import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.client.resource.PackStackPublisher;
+import com.github.minecraft_ta.totaldebug.client.world.GameRuleControl;
 import com.github.minecraft_ta.totaldebug.client.resource.ResourceReloads;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.GameRulesMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
@@ -49,6 +51,7 @@ public final class TotalDebugClient {
     private final ResourceSnapshots resources;
     private final PackCatalogPublisher catalogs;
     private final PackStackPublisher packStacks;
+    private final GameRuleControl gameRules;
     private final AtomicReference<PackCatalogCapture> catalogCapture = new AtomicReference<>();
     private volatile boolean snapshotRequested;
     private volatile String gameSessionId;
@@ -89,7 +92,11 @@ public final class TotalDebugClient {
                 companionApp::sendPackCatalog
         );
         this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
-        companionApp.setSessionOpenedHandler(this.packStacks::republish);
+        this.gameRules = new GameRuleControl(rules -> companionApp.sendGameRules(new GameRulesMessage(rules)));
+        companionApp.setSessionOpenedHandler(() -> {
+            this.packStacks.republish();
+            this.gameRules.republish();
+        });
         companionApp.setPackCatalogHandler((inventoryId, modules) -> {
             // Icons are drawn from the resource snapshot, which must follow the current packs even when the
             // saved catalog is reused.
@@ -99,6 +106,8 @@ public final class TotalDebugClient {
         companionApp.setKeyBindingHandler(message -> Minecraft.getInstance().execute(() ->
                 companionApp.sendKeyBindingResult(new KeyBindingResultMessage(KeyBindingEdits.apply(message.payload())))));
         companionApp.setReloadHandler(message -> Minecraft.getInstance().execute(() -> ResourceReloads.reload(message.payload(),
+                result -> companionApp.sendReloadResult(new ReloadResultMessage(result)))));
+        companionApp.setGameRuleHandler(message -> Minecraft.getInstance().execute(() -> GameRuleControl.set(message.payload(),
                 result -> companionApp.sendReloadResult(new ReloadResultMessage(result)))));
         companionApp.setPacksHandler(message -> Minecraft.getInstance().execute(() -> ResourceReloads.select(message.payload(),
                 result -> companionApp.sendReloadResult(new ReloadResultMessage(result)))));
@@ -189,6 +198,7 @@ public final class TotalDebugClient {
             return;
         }
         this.packStacks.tick();
+        this.gameRules.tick();
         ResourceReloads.tick();
         PackCatalogCapture capture = this.catalogCapture.get();
         if (capture != null) {
