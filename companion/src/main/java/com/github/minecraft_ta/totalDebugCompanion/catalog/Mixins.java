@@ -265,7 +265,8 @@ public final class Mixins {
 
     /**
      * The member a target selector names, without its owner or descriptor: {@code tick}, {@code tick()V} and
-     * {@code Lnet/minecraft/world/level/Level;tick()V} are all {@code tick}.
+     * {@code Lnet/minecraft/world/level/Level;tick()V} are all {@code tick}. A wildcard such as {@code *} or
+     * {@code get*} stays as written, since it names several members.
      */
     static String member(String selector) {
         String member = selector.strip();
@@ -275,7 +276,7 @@ public final class Mixins {
         if (descriptor >= 0) member = member.substring(0, descriptor);
         int colon = member.indexOf(':');
         if (colon >= 0) member = member.substring(0, colon);
-        return member.replace("*", "").strip();
+        return member.strip();
     }
 
     /** The member an accessor or invoker without a name reaches: {@code getSpeed} reaches {@code speed}. */

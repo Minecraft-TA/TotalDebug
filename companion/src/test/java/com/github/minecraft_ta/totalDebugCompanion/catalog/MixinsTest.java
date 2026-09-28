@@ -59,6 +59,7 @@ class MixinsTest {
         assertEquals("tick", Mixins.member("tick()V"));
         assertEquals("tick", Mixins.member("Lnet/minecraft/world/level/Level;tick()V"));
         assertEquals("<init>", Mixins.member("<init>(Ljava/lang/String;)V"));
+        assertEquals("get*", Mixins.member("get*"), "a wildcard names several members, not the class");
     }
 
     private Path jar(String name, Map<String, byte[]> entries) throws IOException {
