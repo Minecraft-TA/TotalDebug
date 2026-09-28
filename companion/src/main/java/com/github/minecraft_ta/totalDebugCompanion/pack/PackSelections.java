@@ -186,18 +186,19 @@ public final class PackSelections {
      * disabled, so the game does not enable it again as a new one.
      */
     private static void writeLevel(Path world, List<String> enabled) throws IOException {
-        LevelDat.Root root = LevelDat.read(LevelDat.file(world));
-        if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
-            throw new IOException("The level.dat of " + world.getFileName() + " holds no world data");
-        }
-        NbtData.CompoundTag packs = dataPacks(root.tag());
-        Set<String> disabled = new LinkedHashSet<>(strings(packs, "Enabled"));
-        disabled.addAll(strings(packs, "Disabled"));
-        disabled.addAll(PackFolders.list(world.resolve("datapacks")).keySet());
-        enabled.forEach(disabled::remove);
-        NbtData.CompoundTag written = LevelDat.with(LevelDat.with(packs == null ? new NbtData.CompoundTag(Map.of()) : packs,
-                "Enabled", list(enabled)), "Disabled", list(List.copyOf(disabled)));
-        LevelDat.write(world, new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written))));
+        LevelDat.update(world, root -> {
+            if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
+                throw new IOException("The level.dat of " + world.getFileName() + " holds no world data");
+            }
+            NbtData.CompoundTag packs = dataPacks(root.tag());
+            Set<String> disabled = new LinkedHashSet<>(strings(packs, "Enabled"));
+            disabled.addAll(strings(packs, "Disabled"));
+            disabled.addAll(PackFolders.list(world.resolve("datapacks")).keySet());
+            enabled.forEach(disabled::remove);
+            NbtData.CompoundTag written = LevelDat.with(LevelDat.with(packs == null ? new NbtData.CompoundTag(Map.of()) : packs,
+                    "Enabled", list(enabled)), "Disabled", list(List.copyOf(disabled)));
+            return new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written)));
+        });
     }
 
     private static NbtData.CompoundTag dataPacks(NbtData.CompoundTag root) {

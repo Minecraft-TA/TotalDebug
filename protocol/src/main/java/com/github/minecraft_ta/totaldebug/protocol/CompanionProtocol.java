@@ -27,8 +27,7 @@ public final class CompanionProtocol {
     public static final short RELOAD = 36;
     public static final short RELOAD_RESULT = 37;
     public static final short SET_PACKS = 38;
-    // 39 and 40 belong to game-rule messages.
-    public static final short PLAYING = 41;
+    public static final short PLAYING = 39;
 
     private CompanionProtocol() {
     }
