@@ -20,6 +20,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -56,8 +57,8 @@ public final class ImageViewPanel extends JPanel {
     /** Played frames whose index lies inside the sheet, in playing order. */
     private List<TextureAnimation.Frame> frames;
     private TextureAnimation animation;
-    /** The play, frame and whole-sheet controls, shown while the texture is animated. */
-    private final JPanel animationControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+    /** The play, frame and whole-sheet controls, shown while the texture is animated; each wraps on its own. */
+    private final List<Component> animationControls = new ArrayList<>();
     private final ImageCanvas canvas;
     private final JScrollPane scrollPane;
     private final Consumer<String> metadata;
@@ -141,7 +142,6 @@ public final class ImageViewPanel extends JPanel {
         }));
         toolbar.add(button(new FlatIconButton(Icons.ACTUAL_ZOOM, false), "Actual Size", () -> zoomAtCenter(1)));
         toolbar.add(button(this.pixelGrid, "Pixel Grid from 400%", this.canvas::repaint));
-        this.animationControls.setOpaque(false);
         this.animationControls.add(Box.createHorizontalStrut(8));
         this.animationControls.add(button(this.play, "Pause Animation", () -> setPlaying(this.play.isSelected())));
         this.frameSlider.getAccessibleContext().setAccessibleName("Animation frame");
@@ -156,14 +156,14 @@ public final class ImageViewPanel extends JPanel {
         this.animationControls.add(this.frameLabel);
         this.animationControls.add(Box.createHorizontalStrut(6));
         this.animationControls.add(button(this.wholeSheet, "Show Whole Texture Sheet", this::updateSheetMode));
-        toolbar.add(this.animationControls);
+        this.animationControls.forEach(toolbar::add);
         showAnimationControls();
         return toolbar;
     }
 
     /** Fits the frame controls to the frames, and shows them while there are frames to play. */
     private void showAnimationControls() {
-        this.animationControls.setVisible(isAnimated());
+        this.animationControls.forEach(control -> control.setVisible(isAnimated()));
         if (!isAnimated()) return;
         this.frameSlider.setModel(new DefaultBoundedRangeModel(0, 0, 0, this.frames.size() - 1));
         this.frameSlider.setPreferredSize(new Dimension(

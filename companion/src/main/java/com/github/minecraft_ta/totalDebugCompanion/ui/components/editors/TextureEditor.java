@@ -379,13 +379,7 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
     @Override
     protected void load(Texture content) {
         this.saved = content;
-        // Another copy plays its own animation, or none; with no copy left the shown one stays.
-        if (content != NONE && !(Objects.equals(content.animation(), this.animation)
-                && content.animationProblem().equals(this.animationProblem))) {
-            this.animation = content.animation();
-            this.animationProblem = content.animationProblem();
-            this.view.setAnimation(this.animation, this.animationProblem);
-        }
+        showAnimation(content);
         // The same pixels keep what can be undone.
         if (same(shown(), content)) return;
         // With no copy left, Discard leaves transparent pixels, as text is left empty.
@@ -400,6 +394,17 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
     @Override
     protected void markSaved(Texture content) {
         this.saved = content;
+        // Unsaved pixels stay, and play as the game plays the copy read now.
+        showAnimation(content);
+    }
+
+    /** Plays the animation of {@code content}'s copy, or none; with no copy left the shown one stays. */
+    private void showAnimation(Texture content) {
+        if (content == NONE || Objects.equals(content.animation(), this.animation)
+                && content.animationProblem().equals(this.animationProblem)) return;
+        this.animation = content.animation();
+        this.animationProblem = content.animationProblem();
+        this.view.setAnimation(this.animation, this.animationProblem);
     }
 
     @Override

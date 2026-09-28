@@ -69,7 +69,8 @@ public final class LinkLabel extends JLabel {
     @Override
     public void updateUI() {
         super.updateUI();
-        style(this, true, false);
+        // A focused link keeps its underline, its only sign of focus.
+        style(this, true, isFocusOwner());
     }
 
     /** Applies the link appearance to any label; unlinked labels keep the regular font. */

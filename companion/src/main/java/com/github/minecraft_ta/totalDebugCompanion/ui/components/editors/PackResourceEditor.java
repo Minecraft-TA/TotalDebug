@@ -358,9 +358,10 @@ abstract class PackResourceEditor<V> extends JPanel {
             this.managed = found.managed() != null;
             this.packContent = this.managed ? found.managed() : this.opened != null ? none() : this.openedContent;
             // A deleted file keeps its content on screen, as unsaved content a Save would write again.
-            boolean unsaved = modified();
-            if (!unsaved && (this.managed || this.opened == null)) load(this.packContent);
+            if (!modified() && (this.managed || this.opened == null)) load(this.packContent);
             else markSaved(this.packContent);
+            // Changes that match the copy read now, such as another tab's save of the same text, are unsaved no more.
+            boolean unsaved = modified();
             // Unsaved changes keep the copy they were made to as the one a save replaces, so replacing another asks. A tab
             // moved to another pack, such as a newly chosen working pack, carries its changes over to that pack's copy.
             boolean samePack = found.pack().equals(this.baselinePack);

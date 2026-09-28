@@ -199,6 +199,53 @@ class ResourceTextEditorTest {
     }
 
     @Test
+    void aTabWhoseChangesAnotherTabSavedSavesItsNextChangeWithoutAsking() throws Exception {
+        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,
+                InstanceState.inMemory());
+        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
+                List.of()));
+        String inJar = "{\"a\":\"jar\"}";
+        ResourceTextEditor[] tabs = new ResourceTextEditor[2];
+        SwingUtilities.invokeAndWait(() -> {
+            for (int tab = 0; tab < 2; tab++) {
+                tabs[tab] = new ResourceTextEditor(LANG, "testmod.jar", null,
+                        new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits);
+            }
+        });
+        try {
+            awaitOnSwing(() -> tabs[0].targetBox().getItemCount() > 0 && tabs[1].targetBox().getItemCount() > 0);
+            List<String> asked = new CopyOnWriteArrayList<>();
+            SwingUtilities.invokeAndWait(() -> {
+                tabs[1].askToReplace = changed -> asked.add(changed.getMessage());
+                tabs[1].textPanel().editorPane.setText("{\"a\":\"same\"}");
+                tabs[0].textPanel().editorPane.setText("{\"a\":\"same\"}");
+                tabs[0].save();
+            });
+            Path file = edits.pack(LANG).resolve(LANG);
+            // The other tab's save matches this tab's text, which is then unsaved no more.
+            awaitOnSwing(() -> Files.isRegularFile(file) && !tabs[1].textPanel().modified());
+            SwingUtilities.invokeAndWait(() -> {
+                tabs[1].textPanel().editorPane.setText("{\"a\":\"next\"}");
+                tabs[1].save();
+            });
+            awaitOnSwing(() -> {
+                try {
+                    return Files.readString(file).equals("{\"a\":\"next\"}");
+                } catch (Exception unreadable) {
+                    return false;
+                }
+            });
+            assertTrue(asked.isEmpty(), "the tab had read the copy it replaced: " + asked);
+        } finally {
+            SwingUtilities.invokeAndWait(() -> {
+                tabs[0].dispose();
+                tabs[1].dispose();
+            });
+        }
+    }
+
+    @Test
     void changesCarriedToAnotherPackAreSavedThereWithoutAsking() throws Exception {
         ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> false,

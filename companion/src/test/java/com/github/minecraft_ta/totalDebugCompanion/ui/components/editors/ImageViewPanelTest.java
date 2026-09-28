@@ -29,7 +29,7 @@ class ImageViewPanelTest {
                 JButton actual = (JButton) toolbar.getComponent(3);
                 List<JButton> buttons = Arrays.stream(toolbar.getComponents()).filter(JButton.class::isInstance)
                         .map(JButton.class::cast).toList();
-                assertEquals(5, buttons.size());
+                assertEquals(7, buttons.size(), "with the play and whole-sheet buttons, hidden for a still image");
                 assertEquals(5, Arrays.stream(toolbar.getComponents()).filter(Component::isVisible).count(),
                         "a still image shows no animation controls");
                 for (JButton button : buttons) {
@@ -149,8 +149,8 @@ class ImageViewPanelTest {
                 frames.setValue(1);
                 JLabel label = findComponent(toolbar, JLabel.class);
                 assertEquals("Frame 2 / 2", label.getText());
-                Container controls = (Container) toolbar.getComponent(toolbar.getComponentCount() - 1);
-                JButton whole = (JButton) controls.getComponent(controls.getComponentCount() - 1);
+                // The controls sit in the toolbar itself, so a narrow tab wraps them one by one.
+                JButton whole = (JButton) toolbar.getComponent(toolbar.getComponentCount() - 1);
                 whole.doClick(0);
                 assertTrue(statuses.getLast().startsWith("16 x 48    PNG"), statuses.getLast());
                 assertFalse(frames.isEnabled());
