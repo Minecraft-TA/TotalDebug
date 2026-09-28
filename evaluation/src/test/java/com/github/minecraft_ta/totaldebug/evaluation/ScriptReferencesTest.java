@@ -85,8 +85,11 @@ class ScriptReferencesTest {
             method.visitInsn(Opcodes.POP);
             method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/String", "length", "()I", false);
             method.visitInsn(Opcodes.POP);
+            method.visitInsn(Opcodes.ACONST_NULL);
+            method.visitInsn(Opcodes.ICONST_1);
             method.visitInvokeDynamicInsn("valueOf", "(Ljava/lang/Integer;I)Ljava/lang/Integer;", linker,
                     "java.lang.Integer", "valueOf", "(I)Ljava/lang/Integer;", ScriptAccessLinker.INVOKE_VIRTUAL);
+            method.visitInsn(Opcodes.POP);
             method.visitInsn(Opcodes.ICONST_0);
             method.visitInvokeDynamicInsn("MAX_VALUE", "(I)V", linker,
                     "java.lang.Integer", "MAX_VALUE", "I", ScriptAccessLinker.PUT_STATIC);
@@ -155,6 +158,110 @@ class ScriptReferencesTest {
                 ScriptReferences.read(Map.of("probe.Trimmed", list.toByteArray(), "probe.Loader", loader.toByteArray()))
                         .unresolved(ScriptReferencesTest.class.getClassLoader()),
                 "the protected super call and the accessible superclass constructor link");
+    }
+
+    @Test
+    void whatTheJvmChecksWhenLinkingAnInstructionIsCheckedToo() {
+        Handle linker = new Handle(Opcodes.H_INVOKESTATIC, Type.getInternalName(ScriptAccessLinker.class), "bootstrap",
+                "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;"
+                        + "Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/invoke/CallSite;", false);
+        Map<String, byte[]> script = Map.of("probe.Instructions", type("probe/Instructions", method -> {
+            // A package-private class named only by a cast.
+            method.visitInsn(Opcodes.ACONST_NULL);
+            method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/AbstractStringBuilder");
+            method.visitInsn(Opcodes.POP);
+            // An abstract class allocated, directly and through the linker.
+            method.visitTypeInsn(Opcodes.NEW, "java/lang/Number");
+            method.visitInsn(Opcodes.DUP);
+            method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Number", "<init>", "()V", false);
+            method.visitInsn(Opcodes.POP);
+            method.visitInvokeDynamicInsn("newInstance", "()Ljava/lang/Number;", linker,
+                    "java.lang.Number", "<init>", "()V", ScriptAccessLinker.NEW_INSTANCE);
+            method.visitInsn(Opcodes.POP);
+            // An interface method called as if its owner were a class.
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/List", "of", "()Ljava/util/List;", true);
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/List", "size", "()I", false);
+            method.visitInsn(Opcodes.POP);
+        }));
+
+        assertEquals(List.of("java.lang.AbstractStringBuilder (not accessible)",
+                        "new java.lang.Number() (abstract on the server)",
+                        "java.util.List.size() (an interface on the server)"),
+                ScriptReferences.read(script).unresolved(ScriptReferencesTest.class.getClassLoader()),
+                "the linker's allocation is named once with the plain one, as the same member");
+    }
+
+    @Test
+    void theJvmVerifiesTheScriptsCodeAgainstTheClassesItHas() {
+        Map<String, byte[]> script = Map.of("probe.Mistyped", type("probe/Mistyped", method -> {
+            method.visitTypeInsn(Opcodes.NEW, "java/lang/Thread");
+            method.visitInsn(Opcodes.DUP);
+            // A String where the constructor takes a ThreadGroup: only verification sees it. The verifier treats an
+            // interface type as Object, so it is a class here.
+            method.visitLdcInsn("not a group");
+            method.visitLdcInsn("name");
+            method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Thread", "<init>", "(Ljava/lang/ThreadGroup;Ljava/lang/String;)V", false);
+            method.visitInsn(Opcodes.POP);
+        }));
+
+        List<String> unresolved = ScriptReferences.read(script).unresolved(ScriptReferencesTest.class.getClassLoader());
+
+        assertEquals(1, unresolved.size(), unresolved.toString());
+        assertTrue(unresolved.getFirst().startsWith("probe.Mistyped (VerifyError: "), unresolved.getFirst());
+    }
+
+    @Test
+    void aScriptClassNamedLikeTheProbeIsStillChecked() {
+        Map<String, byte[]> script = Map.of("TotalDebug$LinkProbe", type("TotalDebug$LinkProbe", method -> {
+            method.visitTypeInsn(Opcodes.NEW, "com/example/Missing");
+            method.visitInsn(Opcodes.POP);
+        }));
+
+        assertEquals(List.of("com.example.Missing"),
+                ScriptReferences.read(script).unresolved(ScriptReferencesTest.class.getClassLoader()));
+    }
+
+    @Test
+    void aMemberNamedThroughTheScriptsOwnClassIsResolvedWhereItIsInherited() {
+        ClassWriter list = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        list.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "probe/Inherits", null, "java/util/ArrayList", null);
+        MethodVisitor calls = list.visitMethod(Opcodes.ACC_PUBLIC, "calls", "()V", null, null);
+        calls.visitCode();
+        calls.visitVarInsn(Opcodes.ALOAD, 0);
+        calls.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "probe/Inherits", "size", "()I", false);
+        calls.visitInsn(Opcodes.POP);
+        calls.visitVarInsn(Opcodes.ALOAD, 0);
+        calls.visitInsn(Opcodes.ACONST_NULL);
+        // javac names the script class for an inherited member, as for ScriptProgram's logln.
+        calls.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "probe/Inherits", "logln", "(Ljava/lang/Object;)V", false);
+        calls.visitInsn(Opcodes.RETURN);
+        calls.visitMaxs(0, 0);
+        calls.visitEnd();
+        list.visitEnd();
+
+        assertEquals(List.of("probe.Inherits.logln(Object)"),
+                ScriptReferences.read(Map.of("probe.Inherits", list.toByteArray()))
+                        .unresolved(ScriptReferencesTest.class.getClassLoader()));
+    }
+
+    @Test
+    void aProtectedStaticMethodNamedThroughASiblingSubclassLinksAsTheJvmAllows() {
+        ClassWriter action = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        action.visit(Opcodes.V21, Opcodes.ACC_PUBLIC | Opcodes.ACC_ABSTRACT, "probe/Action", null,
+                "java/util/concurrent/RecursiveAction", null);
+        MethodVisitor peek = action.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "peek", "()V", null, null);
+        peek.visitCode();
+        // Declared by ForkJoinTask, which Action extends; named through RecursiveTask, which it does not.
+        peek.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/concurrent/RecursiveTask", "peekNextLocalTask",
+                "()Ljava/util/concurrent/ForkJoinTask;", false);
+        peek.visitInsn(Opcodes.POP);
+        peek.visitInsn(Opcodes.RETURN);
+        peek.visitMaxs(0, 0);
+        peek.visitEnd();
+        action.visitEnd();
+
+        assertEquals(List.of(), ScriptReferences.read(Map.of("probe.Action", action.toByteArray()))
+                .unresolved(ScriptReferencesTest.class.getClassLoader()));
     }
 
     @Test
