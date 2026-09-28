@@ -27,6 +27,15 @@ public final class ChangePublisher<T> {
         this.ticks = CHECK_TICKS;
     }
 
+    /** Publishes {@code value} now, for a change the next check could miss. Client thread only. */
+    public void publish(T value) {
+        synchronized (this) {
+            if (value.equals(this.published)) return;
+            this.published = value;
+        }
+        this.publish.accept(value);
+    }
+
     /** Client thread only. */
     public void tick() {
         synchronized (this) {

@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * Allocates script run ids and routes every execution result to the observer that opened the run.
@@ -33,12 +33,12 @@ public final class ExecutionRuns implements AutoCloseable {
     }
 
     /** Connection tags change only through per-key map operations, so disconnect checks cannot interleave with them. */
-    private record Run(Observer observer, long connection) { }
+    private record Run(Observer observer, long connection, Side side) { }
 
     private final CompanionSession session;
     private final ScriptExecutionService scripts;
     private final Map<Integer, Run> runs = new ConcurrentHashMap<>();
-    private final Consumer<ExecutionResultMessage> listener = message -> result(message.scriptId(), message.result());
+    private final BiConsumer<Side, ExecutionResultMessage> listener = (from, message) -> result(from, message.scriptId(), message.result());
     private int lastId;
     private boolean closed;
 
@@ -54,7 +54,7 @@ public final class ExecutionRuns implements AutoCloseable {
         if (this.closed) throw new IllegalStateException("Script execution is closed");
         if (this.lastId == Integer.MAX_VALUE) throw new IllegalStateException("Script run identifiers exhausted");
         int id = ++this.lastId;
-        this.runs.put(id, new Run(observer, this.session.connection()));
+        this.runs.put(id, new Run(observer, this.session.connection(), Side.CLIENT));
         return id;
     }
 
@@ -73,7 +73,7 @@ public final class ExecutionRuns implements AutoCloseable {
         try {
             // Disconnect cleanup uses this same gate. A run cannot end between registration and compiler admission.
             return project.admit(() -> {
-                Run run = this.runs.computeIfPresent(id, (key, opened) -> new Run(opened.observer(), this.session.connection()));
+                Run run = this.runs.computeIfPresent(id, (key, opened) -> new Run(opened.observer(), this.session.connection(), side));
                 if (run == null) return false;
                 boolean sent = false;
                 try {
@@ -90,7 +90,32 @@ public final class ExecutionRuns implements AutoCloseable {
     }
 
     public boolean stop(int id) {
-        return this.scripts.stop(id);
+        Run run = this.runs.get(id);
+        return this.scripts.stop(id, run == null ? Side.CLIENT : run.side());
+    }
+
+    /**
+     * The server's class manifest session ended, because the game left the server or it started a new one: the runs on
+     * the server can no longer report back.
+     */
+    public void serverSessionEnded() {
+        for (int id : List.copyOf(this.runs.keySet())) {
+            Run[] ended = new Run[1];
+            this.runs.computeIfPresent(id, (key, run) -> {
+                if (run.side() != Side.SERVER) return run;
+                ended[0] = run;
+                return null;
+            });
+            if (ended[0] != null) {
+                ended[0].observer().result(id, ExecutionResult.failed("", null, "Disconnected from the server while the script was running"));
+            }
+        }
+    }
+
+    /** The game client could not carry run {@code id} to the server. */
+    public void relayFailed(int id, String reason) {
+        Run run = this.runs.remove(id);
+        if (run != null) run.observer().result(id, ExecutionResult.failed("", null, reason));
     }
 
     public ScriptCompilationService.Readiness readiness(Side side) {
@@ -119,9 +144,15 @@ public final class ExecutionRuns implements AutoCloseable {
         disconnected(Long.MAX_VALUE, expected);
     }
 
-    private void result(int id, ExecutionResult result) {
-        Run run = result.status().terminal() ? this.runs.remove(id) : this.runs.get(id);
-        if (run != null) run.observer().result(id, result);
+    /** A result counts only from the side the run went to, so a stale one from the other side cannot end it. */
+    private void result(Side from, int id, ExecutionResult result) {
+        Run[] matched = new Run[1];
+        this.runs.computeIfPresent(id, (key, run) -> {
+            if (run.side() != from) return run;
+            matched[0] = run;
+            return result.status().terminal() ? null : run;
+        });
+        if (matched[0] != null) matched[0].observer().result(id, result);
     }
 
     private void failed(int id, ScriptCompilationService.Failure failure) {

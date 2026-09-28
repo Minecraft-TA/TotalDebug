@@ -45,7 +45,7 @@ class CompanionSessionRejectionTest {
         try (CompanionSession session = new CompanionSession(token);
              Client client = configuredClient(null)) {
             session.addExecutionResultListener(
-                    message -> delivered.incrementAndGet());
+                    (from, message) -> delivered.incrementAndGet());
             client.getMessageProcessor().registerMessage(CompanionProtocol.EXECUTION_RESULT, TestExecutionResult.class);
             session.bindAndPublish(configuration);
             CompletableFuture<TestServerHello> rejection = connect(client,

@@ -51,5 +51,9 @@ public final class ScriptExecutionService {
                 : new ScriptCompilationService.Readiness(false, "Minecraft is not connected", compilation.changed());
     }
 
-    public boolean stop(int id) { return compiler.cancel(id) || session.send(new StopScriptMessage(id)); }
+    /** Stops run {@code id} where it runs: still compiling, in the client, or on the server through the relay. */
+    public boolean stop(int id, Side side) {
+        if (compiler.cancel(id)) return true;
+        return side == Side.SERVER ? session.sendToServer(new StopScriptMessage(id), id, "") : session.send(new StopScriptMessage(id));
+    }
 }

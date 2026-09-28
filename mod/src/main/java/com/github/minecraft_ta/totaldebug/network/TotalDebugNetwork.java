@@ -9,59 +9,30 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+/**
+ * The mod's two NeoForge payloads, which carry the relay between the game client and the server (see
+ * {@code docs/MOD_SIDES.md}). Every server operation travels through them.
+ */
 public final class TotalDebugNetwork {
-    public static final String PROTOCOL_VERSION = "6";
+    public static final String PROTOCOL_VERSION = "7";
 
-    private final ForwardedCompanionPayloadSink forwardedCompanionPayloads = new ForwardedCompanionPayloadSink();
+    private volatile Consumer<RelayChunk> companionReceiver = chunk -> TotalDebug.LOGGER.warn(
+            "Discarding a relayed message {} because the client's relay is not ready", chunk.messageId());
 
     public TotalDebugNetwork(IEventBus modEventBus) {
         Objects.requireNonNull(modEventBus, "modEventBus").addListener(this::registerPayloads);
     }
 
-    public AutoCloseable installForwardedCompanionReceiver(Consumer<ForwardedCompanionPayload> receiver) {
-        return this.forwardedCompanionPayloads.install(receiver);
-    }
-
-    private Consumer<ServerManifestPayload> manifestReceiver = payload -> {};
-
-    public void setManifestReceiver(Consumer<ServerManifestPayload> receiver) {
-        this.manifestReceiver = Objects.requireNonNull(receiver);
+    /** Hands the pieces the server sends for Companion to the client's end of the relay. */
+    public void setCompanionReceiver(Consumer<RelayChunk> receiver) {
+        this.companionReceiver = Objects.requireNonNull(receiver, "receiver");
     }
 
     private void registerPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar(PROTOCOL_VERSION).optional();
-        registrar.playToServer(ServerSourceRequestPayload.TYPE, ServerSourceRequestPayload.STREAM_CODEC,
-                (payload, context) -> TotalDebug.get().serverScripts().requestSource(
-                        (ServerPlayer) context.player(), payload.message()));
-        registrar.playToClient(ServerManifestPayload.TYPE, ServerManifestPayload.STREAM_CODEC,
-                (payload, context) -> this.manifestReceiver.accept(payload));
-        registrar.playToClient(
-                ForwardedCompanionPayload.TYPE,
-                ForwardedCompanionPayload.STREAM_CODEC,
-                (payload, context) -> {
-                    if (!this.forwardedCompanionPayloads.deliver(payload)) {
-                        TotalDebug.LOGGER.warn(
-                                "Discarding forwarded companion message {} because the companion receiver is not active",
-                                payload.messageId()
-                        );
-                    }
-                }
-        );
-        registrar.playToServer(
-                RunServerScriptPayload.TYPE,
-                RunServerScriptPayload.STREAM_CODEC,
-                (payload, context) -> TotalDebug.get().serverScripts().runScript(
-                        (ServerPlayer) context.player(),
-                        payload
-                )
-        );
-        registrar.playToServer(
-                StopServerScriptPayload.TYPE,
-                StopServerScriptPayload.STREAM_CODEC,
-                (payload, context) -> TotalDebug.get().serverScripts().stopScript(
-                        (ServerPlayer) context.player(),
-                        payload.scriptId()
-                )
-        );
+        registrar.playToServer(ToServerPayload.TYPE, ToServerPayload.STREAM_CODEC,
+                (payload, context) -> TotalDebug.get().serverRelay().receive((ServerPlayer) context.player(), payload.chunk()));
+        registrar.playToClient(ToCompanionPayload.TYPE, ToCompanionPayload.STREAM_CODEC,
+                (payload, context) -> this.companionReceiver.accept(payload.chunk()));
     }
 }

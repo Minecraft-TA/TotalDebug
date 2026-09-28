@@ -9,6 +9,8 @@ import com.github.minecraft_ta.totaldebug.network.TotalDebugNetwork;
 import com.github.minecraft_ta.totaldebug.runtime.PreparedRuntimeSources;
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceMaterializer;
+import com.github.minecraft_ta.totaldebug.server.ServerOperations;
+import com.github.minecraft_ta.totaldebug.server.ServerRelay;
 import com.github.minecraft_ta.totaldebug.server.script.ServerScriptService;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import io.github.classgraph.ClassGraph;
@@ -33,6 +35,7 @@ public final class TotalDebug {
     private final String version;
     private final TickTaskScheduler tickTaskScheduler;
     private final TotalDebugNetwork network;
+    private final ServerRelay serverRelay;
     private final ServerScriptService serverScripts;
     private List<RuntimeSourceInventory.Source> runtimeSourceInputs;
 
@@ -48,7 +51,9 @@ public final class TotalDebug {
                 .getVersion()
                 .toString();
         this.tickTaskScheduler = new TickTaskScheduler();
-        this.serverScripts = new ServerScriptService(this.tickTaskScheduler);
+        this.serverRelay = new ServerRelay();
+        this.serverScripts = new ServerScriptService(this.tickTaskScheduler, this.serverRelay);
+        this.serverRelay.handle(new ServerOperations(this.serverScripts));
         this.network = new TotalDebugNetwork(Objects.requireNonNull(modEventBus, "modEventBus"));
         TotalDebugConfig.register(modContainer);
 
@@ -72,6 +77,11 @@ public final class TotalDebug {
 
     public TotalDebugNetwork network() {
         return this.network;
+    }
+
+    /** The server's end of the relay, through which Companion reaches it. */
+    public ServerRelay serverRelay() {
+        return this.serverRelay;
     }
 
     public ServerScriptService serverScripts() {

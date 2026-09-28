@@ -26,18 +26,28 @@ Each script operation also has its own payload type, so every new server feature
 
 ## The relay
 
-One pair of NeoForge payloads replaces the per-feature ones:
+Companion addresses the server explicitly, and the game client carries the message without opening it:
 
-| Payload | Direction | Carries |
-|---|---|---|
-| `ToServer` | client → server | A Companion protocol message addressed to the server, as its protocol id and encoded body, split into chunks |
-| `ToCompanion` | server → client | A Companion protocol message from the server, the same way |
+```text
+Companion ──TO_SERVER{ message }──► client ──ToServer chunks──► server
+server ──ToCompanion chunks──► client ──FROM_SERVER{ message }──► Companion
+```
 
-- **The client relays; it does not interpret.** Companion marks a message as addressed to the server by its protocol id: the protocol lists which messages belong to the server, as it lists each message's direction today. The client forwards those unread and hands back what the server sends. A new server feature therefore needs a Companion message and a server handler, no NeoForge code.
-- **Chunks** keep each payload below Minecraft's limits: about 32 KiB towards the server and 1 MiB towards the client. A transfer id, index and count put a message back together; an incomplete transfer is dropped when its player leaves. Script bytecode then has no special 30,000-byte cap.
-- **The sender is the player** whose client relayed the message. The server answers only that player's client, and forgets a player's transfers and sessions when they leave, as `ServerScriptService` already does.
-- **Availability** is known before a request is sent: the server's TotalDebug channel is what `PLAYING` reports as `totalDebug`. Without it, server-owned changes are refused with "the server does not have TotalDebug".
-- **One server operation table** maps each server-bound message to its handler and to the permission it needs, so the check is made in one place.
+| Part | Carries |
+|---|---|
+| `TO_SERVER` (Companion → client) | A Companion protocol message for the server as its protocol id and encoded body, with a **correlation** (Companion's id for the request, such as a script run, or 0) and a **game session** (the joined world the message is only valid in, or empty) |
+| `ToServer` (client → server, NeoForge) | That message's id and body, split into chunks |
+| `ToCompanion` (server → client, NeoForge) | A Companion protocol message from the server, the same way |
+| `FROM_SERVER` (client → Companion) | The server's message, which Companion unwraps and hands to the same listeners as a message from the game |
+| `RELAY_FAILED` (client → Companion) | The correlation of a message the client could not deliver, and why |
+
+- **The client relays; it does not interpret.** It checks only the envelope: the game session must be the joined world's (a script aimed at an inspected block is refused once that world was left), and the server must have TotalDebug. Otherwise it answers `RELAY_FAILED`, and Companion fails the request with that correlation. A new server feature needs a Companion message and a server handler, no NeoForge code and nothing in the client.
+- **The server speaks the Companion protocol.** It decodes and encodes the same message classes Companion does; `RelayedMessages` lists which travel to and from the server.
+- **Chunks** keep each payload below Minecraft's limits: about 32 KiB towards the server and 1 MiB towards the client. A transfer id, index and count put a message back together; an incomplete transfer is dropped when its player leaves. The transfers in progress on one connection share one byte budget, 2 MiB on the server for each player. A relayed message and its envelope fit one frame of the Companion connection, and the server's results are budgeted for it. Script bytecode then has no special 30,000-byte cap.
+- **The sender is the player** whose client relayed the message. The server answers only that player's client, and forgets a player's transfers and sessions when they leave.
+- **The server handshake is asked for.** When `PLAYING` says the game plays a world or a server with TotalDebug, Companion sends `MANIFEST_REQUEST` through the relay and the server answers with its class manifest session. The manifest serves only server scripts, so a player the script policy refuses gets the reason instead of a session. The server no longer pushes it on join, and the client no longer keeps a copy for a Companion that connects later.
+- **A server run ends with its server session.** When the client reports the server gone, or a new manifest session starts, Companion fails its runs on the server; the client keeps no bookkeeping for them. A run belongs to the manifest session that took its request, and the server drops everything about it once that session ended: when Companion asks for a new one, when Companion's connection closes (`COMPANION_LEFT`, the one relayed message the client writes itself) and when the player leaves. A restarted Companion counts its run ids from the beginning again, so nothing of an earlier session may reach it. Companion counts a result only from the side its run went to. Leaving a server is published at once, so a rejoin between two checks still asks the new session for its manifest.
+- **One server operation table** maps each server-bound message to its handler, so the check is made in one place. Layer 4 adds each operation's permission to it.
 
 The same relay serves the integrated server. A singleplayer game talks to its own server through the in-memory connection, exactly as it would to a remote one, so there is one path to test.
 
@@ -83,7 +93,7 @@ A stack, each layer at most about 500 lines, each merged before the next opens:
 | Layer | Content | Protocol | Tests |
 |---|---|---|---|
 | 1. Parts | The rule and its test; the client's mod entry; no behaviour change | None | `ModPartsTest`; the existing suites unchanged |
-| 2. Relay | `ToServer`/`ToCompanion` with chunks; scripts, manifest and source requests move onto it; their payloads go | None (Companion messages unchanged) | Chunking, player attribution, leave cleanup, a large script beyond 30,000 bytes |
+| 2. Relay | `TO_SERVER`/`FROM_SERVER`/`RELAY_FAILED` and the `ToServer`/`ToCompanion` chunks; scripts, the manifest handshake and source requests move onto it; their payloads go | Next version: the envelope messages, `MANIFEST_REQUEST` and `COMPANION_LEFT` | Chunking, player attribution, leave cleanup, a large script beyond 30,000 bytes |
 | 3. World operations | Datapack selection, data reload, datapack report and game rules move to the server part, for the integrated server | Next version: server-reported datapacks | Singleplayer behaviour unchanged; no client class calls `getSingleplayerServer()` |
 | 4. Remote servers | The permission policy and configuration; `GameState` answers for a remote server's world; the World page for a server | Next version if the report needs the server's identity | Owner, operator and non-operator cases; a server without TotalDebug |
 

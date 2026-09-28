@@ -7,6 +7,11 @@ import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ManifestRequestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope.PendingNavigation;
@@ -92,9 +97,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private final CodeInsightService codeInsightService = new CodeInsightService(
             () -> { throw new IllegalStateException("Runtime class index is not ready"); }, RuntimeSourceCatalog.empty());
     private final RuntimeIndexService runtimeIndexService;
-    private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::send, this::send);
+    private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::sendRun, this::sendToServer);
     private final ItemIconService itemIcons = new ItemIconService();
     private volatile CompanionMcpServer mcpServer;
+    /** What the server's class manifest was last asked of on this connection, or null. */
+    private volatile String manifestRequestedFor;
     // Job tracking must survive HTTP shutdown so project retirement can still cancel submitted code.
     private volatile CodeModeJobService mcpJobs;
     private final DebuggerSessionController debuggerController;
@@ -186,6 +193,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                         if (executionRuns != null) executionRuns.disconnected(connection,
                                 closed || reconnect != null || current == null || current.phase() == ProjectScope.Phase.RETIRED);
                         scriptCompiler.runtimeDisconnected();
+                        manifestRequestedFor = null;
                         if (current != null) current.location().disconnected();
                         if (reconnect != null)
                             updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
@@ -216,6 +224,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 public void playing(PlayingMessage message) {
                     ProjectScope scope = current;
                     if (scope != null) scope.location().playing(message.payload());
+                    requestServerManifest(message.payload());
                 }
 
                 @Override
@@ -240,7 +249,14 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 }
 
                 @Override
+                public void relayFailed(RelayFailedMessage message) {
+                    if (executionRuns != null) executionRuns.relayFailed(message.correlation(), message.reason());
+                }
+
+                @Override
                 public void serverManifest(ServerManifestMessage message) {
+                    // A new session, or the server gone: the runs on the server can no longer report back.
+                    if (message.baseline() && message.offset() == 0 && executionRuns != null) executionRuns.serverSessionEnded();
                     scriptCompiler.acceptServerManifest(message);
                 }
 
@@ -591,6 +607,10 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 long established = connected.connection();
                 // Sends only on this connection, never to a game that connected after it.
                 current.location().connected(message -> connected.send(established, message));
+                // What the game told before the connection was taken as established names the server to ask.
+                this.manifestRequestedFor = null;
+                PlayingPayload playing = current.location().playing();
+                if (playing != null) requestServerManifest(playing);
             }
             if (reconnect != null && reconnect.project == current) {
                 var completed = reconnect;
@@ -1166,6 +1186,38 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (switching && !(message instanceof StopScriptMessage)) return false;
         CompanionSession current = session;
         return current != null && current.send(message);
+    }
+
+    /** A server run goes to the server through the relay, bound to the world its target was inspected in. */
+    private boolean sendRun(RunScriptMessage message) {
+        if (message.side() != Side.SERVER) return send(message);
+        if (switching) return false;
+        CompanionSession current = session;
+        return current != null && current.sendToServer(message, message.scriptId(), message.subjectSessionId());
+    }
+
+    private boolean sendToServer(AbstractMessage message) {
+        if (switching) return false;
+        CompanionSession current = session;
+        return current != null && current.sendToServer(message, 0, "");
+    }
+
+    /**
+     * Asks the server for its class manifest once the game plays a world or a server with TotalDebug, and again only when
+     * it plays another: a new manifest session ends the runs of the one before.
+     */
+    private void requestServerManifest(PlayingPayload playing) {
+        String target = switch (playing) {
+            case PlayingPayload.Singleplayer singleplayer -> "world " + singleplayer.world();
+            case PlayingPayload.Multiplayer multiplayer when multiplayer.totalDebug() -> "server " + multiplayer.address();
+            default -> null;
+        };
+        if (target == null) {
+            this.manifestRequestedFor = null;
+            return;
+        }
+        if (target.equals(this.manifestRequestedFor)) return;
+        if (sendToServer(new ManifestRequestMessage())) this.manifestRequestedFor = target;
     }
 
     CompanionSession session() { return session; }

@@ -1,12 +1,12 @@
 package com.github.minecraft_ta.totaldebug.server.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.server.ServerRelay;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
-import com.github.minecraft_ta.totaldebug.network.ForwardedCompanionPayload;
-import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
-import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
-import com.github.minecraft_ta.totaldebug.network.ServerManifestPayload;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
@@ -35,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 /** Owns isolated server-side script runners for the players that requested them. */
 public final class ServerScriptService {
@@ -57,19 +58,38 @@ public final class ServerScriptService {
     private record ManifestSession(ServerPlayer player, String id) {}
 
     private final TickTaskScheduler tickTasks;
+    private final ServerRelay relay;
     private final Map<UUID, RunnerSession> runners = new ConcurrentHashMap<>();
     private final ExecutorService resultEncoder = createResultEncoder();
 
-    public ServerScriptService(TickTaskScheduler tickTasks) {
+    /** Answers Companion through {@code relay}. */
+    public ServerScriptService(TickTaskScheduler tickTasks, ServerRelay relay) {
         this.tickTasks = Objects.requireNonNull(tickTasks, "tickTasks");
+        this.relay = Objects.requireNonNull(relay, "relay");
     }
 
+    /**
+     * Starts a new class manifest session for {@code player}, as Companion asked through the relay. A run belongs to the
+     * session that took its request, and everything sent about it is dropped once that session ended: the runs of the
+     * session before end here, since a Companion started since counts its run ids from the beginning again. Server
+     * thread.
+     *
+     * <p>The manifest serves only server scripts, so a player who may not run them gets no session: a request is a few
+     * bytes and its answer up to 32 MiB, which only a player who could run code on the server anyway may ask for.
+     */
     public synchronized void sendManifest(ServerPlayer player) {
-        if (!player.connection.hasChannel(ServerManifestPayload.TYPE)) return;
+        if (!ServerRelay.reaches(player)) return;
         MinecraftServer server = Objects.requireNonNull(player.getServer());
+        ServerScriptPolicy.Decision decision = policyDecision(server, player);
+        if (!decision.allowed()) {
+            endSession(player);
+            this.relay.send(server, player, ServerManifestMessage.unavailable(decision.rejectionReason()));
+            return;
+        }
+        closeRunner(player);
         var session = new ManifestSession(player, UUID.randomUUID().toString());
         this.manifestSessions.put(player.getUUID(), session);
-        player.connection.send(new ServerManifestPayload(ServerManifestMessage.unavailable("Preparing server archive baseline")));
+        this.relay.send(server, player, ServerManifestMessage.unavailable("Preparing server archive baseline"));
         if (this.manifest == null) {
             this.manifest = CompletableFuture.supplyAsync(() -> {
                 try (var phase = RuntimePhase.start("server.baseline")) {
@@ -85,12 +105,12 @@ public final class ServerScriptService {
             if (failure != null) {
                 this.manifestSessions.remove(player.getUUID(), session);
                 TotalDebug.LOGGER.error("Unable to prepare server class manifest", failure);
-                player.connection.send(new ServerManifestPayload(ServerManifestMessage.unavailable(
-                        "Unable to prepare server class manifest; see the server log")));
+                this.relay.send(server, player, ServerManifestMessage.unavailable(
+                        "Unable to prepare server class manifest; see the server log"));
                 return;
             }
             for (var message : ServerManifestMessage.split(session.id(), manifest.catalog().baseline())) {
-                player.connection.send(new ServerManifestPayload(message));
+                this.relay.send(server, player, message);
             }
         }));
     }
@@ -109,39 +129,41 @@ public final class ServerScriptService {
             if (this.manifestSessions.get(player.getUUID()) != session) return;
             if (failure != null) {
                 TotalDebug.LOGGER.error("Unable to prepare requested server source {}", request.source(), failure);
-                player.connection.send(new ServerManifestPayload(new ServerManifestMessage(
+                this.relay.send(server, player, new ServerManifestMessage(
                         session.id(), request.requestId(), request.source(),
-                        "Unable to prepare server source details; see the server log", 0, 0, new byte[0])));
+                        "Unable to prepare server source details; see the server log", 0, 0, new byte[0]));
             } else if (bytes != null) {
                 for (var message : ServerManifestMessage.split(session.id(), request.requestId(), request.source(), bytes)) {
-                    player.connection.send(new ServerManifestPayload(message));
+                    this.relay.send(server, player, message);
                 }
             }
         }));
     }
 
-    public void runScript(ServerPlayer player, RunServerScriptPayload payload) {
+    public void runScript(ServerPlayer player, RunScriptMessage payload) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(payload, "payload");
         MinecraftServer server = Objects.requireNonNull(player.getServer(), "player server");
-        ServerScriptPolicy policy = new ServerScriptPolicy(
-                TotalDebugConfig.SERVER.enableScripts.get(),
-                TotalDebugConfig.SERVER.enableScriptsOnlyForOp.get()
-        );
-        ServerScriptPolicy.Decision decision = policy.evaluate(
-                player.hasPermissions(server.getOperatorUserPermissionLevel())
-        );
+        ManifestSession manifestSession = this.manifestSessions.get(player.getUUID());
+        BooleanSupplier current = () -> this.manifestSessions.get(player.getUUID()) == manifestSession;
+        ScriptExecutionEnvironment environment;
+        try {
+            environment = ScriptExecutionEnvironment.fromWireName(payload.executionEnvironment());
+        } catch (IllegalArgumentException exception) {
+            sendCompilationFailure(server, player, payload.scriptId(), exception.getMessage(), current);
+            return;
+        }
+        ServerScriptPolicy.Decision decision = policyDecision(server, player);
         if (!decision.allowed()) {
             sendCompilationFailure(server, player, payload.scriptId(),
-                    decision.rejectionReason());
+                    decision.rejectionReason(), current);
             return;
         }
 
-        ManifestSession manifestSession = this.manifestSessions.get(player.getUUID());
         if (manifestSession == null || manifestSession.player() != player
                 || !manifestSession.id().equals(payload.serverSessionId())) {
             sendCompilationFailure(server, player, payload.scriptId(),
-                    "The server session changed. Wait for the current handshake and compile again.");
+                    "The server session changed. Wait for the current handshake and compile again.", current);
             return;
         }
 
@@ -151,26 +173,34 @@ public final class ServerScriptService {
                 subject = SubjectRef.parseOccurrence(payload.subject());
             } catch (IllegalArgumentException exception) {
                 sendCompilationFailure(server, player, payload.scriptId(),
-                        "Invalid script target: " + exception.getMessage());
+                        "Invalid script target: " + exception.getMessage(), current);
                 return;
             }
         }
 
         ScriptRunner runner;
         try {
-            runner = runnerFor(server, player);
+            runner = runnerFor(server, player, manifestSession, current);
         } catch (RuntimeException exception) {
             TotalDebug.LOGGER.error("Unable to prepare the server live-script runner", exception);
             sendCompilationFailure(
                     server,
                     player,
                     payload.scriptId(),
-                    "Unable to prepare the server live-script runner: " + exception.getMessage()
+                    "Unable to prepare the server live-script runner: " + exception.getMessage(),
+                    current
             );
             return;
         }
-        runner.runScript(payload.scriptId(), payload.bytecode(), payload.environment(), subject,
-                payload.subjectExpectedId());
+        runner.runScript(payload.scriptId(), payload.bytecode(), environment, subject, payload.subjectExpectedId());
+    }
+
+    private static ServerScriptPolicy.Decision policyDecision(MinecraftServer server, ServerPlayer player) {
+        ServerScriptPolicy policy = new ServerScriptPolicy(
+                TotalDebugConfig.SERVER.enableScripts.get(),
+                TotalDebugConfig.SERVER.enableScriptsOnlyForOp.get()
+        );
+        return policy.evaluate(player.hasPermissions(server.getOperatorUserPermissionLevel()));
     }
 
     public void stopScript(ServerPlayer player, int scriptId) {
@@ -181,10 +211,15 @@ public final class ServerScriptService {
         }
     }
 
-    public void removePlayer(ServerPlayer player) {
+    /** {@code player} left, or their Companion did: their manifest session ends, with the runs in it. Server thread. */
+    public void endSession(ServerPlayer player) {
         Objects.requireNonNull(player, "player");
         this.manifestSessions.computeIfPresent(player.getUUID(), (id, manifest) ->
                 manifest.player() == player ? null : manifest);
+        closeRunner(player);
+    }
+
+    private void closeRunner(ServerPlayer player) {
         RunnerSession session = this.runners.get(player.getUUID());
         if (session != null
                 && session.player() == player
@@ -202,10 +237,12 @@ public final class ServerScriptService {
         this.runners.clear();
     }
 
-    private synchronized ScriptRunner runnerFor(MinecraftServer server, ServerPlayer player) {
+    /** The runner of {@code manifestSession}; its results go out only while that session is current. */
+    private synchronized ScriptRunner runnerFor(MinecraftServer server, ServerPlayer player, ManifestSession manifestSession,
+                                                BooleanSupplier current) {
         UUID playerId = player.getUUID();
         RunnerSession existing = this.runners.get(playerId);
-        if (existing != null && existing.player() == player) {
+        if (existing != null && existing.player() == player && existing.manifestSession() == manifestSession) {
             return existing.runner();
         }
         if (existing != null && this.runners.remove(playerId, existing)) {
@@ -215,10 +252,10 @@ public final class ServerScriptService {
         ScriptRunner created = new ScriptRunner(
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(Side.SERVER, phase, task),
-                (scriptId, result) -> sendResult(server, player, scriptId, result),
+                (scriptId, result) -> sendResult(server, player, scriptId, result, current),
                 new ServerScriptTargets(server)
         );
-        this.runners.put(playerId, new RunnerSession(player, created));
+        this.runners.put(playerId, new RunnerSession(player, manifestSession, created));
         return created;
     }
 
@@ -226,67 +263,44 @@ public final class ServerScriptService {
             MinecraftServer server,
             ServerPlayer sessionPlayer,
             int scriptId,
-            String message
+            String message,
+            BooleanSupplier current
     ) {
-        sendResult(server, sessionPlayer, scriptId, ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED, message));
+        sendResult(server, sessionPlayer, scriptId, ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED, message),
+                current);
     }
 
     private void sendResult(
             MinecraftServer server,
             ServerPlayer sessionPlayer,
             int scriptId,
-            ExecutionResult result
+            ExecutionResult result,
+            BooleanSupplier current
     ) {
         try {
-            this.resultEncoder.execute(() -> encodeAndSend(server, sessionPlayer, scriptId, result));
+            this.resultEncoder.execute(() -> encodeAndSend(server, sessionPlayer, scriptId, result, current));
         } catch (RejectedExecutionException exception) {
             TotalDebug.LOGGER.warn("Discarding an execution result for script {} because the encoder is overloaded",
                     scriptId);
-            sendPayloads(
-                    server,
-                    sessionPlayer,
-                    new ForwardedExecutionResult(
-                            scriptId,
-                            result.deliveryFailure("The server result encoder is overloaded")
-                    ).toPayloads()
-            );
+            this.relay.send(server, sessionPlayer,
+                    new ExecutionResultMessage(scriptId, result.deliveryFailure("The server result encoder is overloaded")), current);
         }
     }
 
-    private static void encodeAndSend(
+    private void encodeAndSend(
             MinecraftServer server,
             ServerPlayer sessionPlayer,
             int scriptId,
-            ExecutionResult result
+            ExecutionResult result,
+            BooleanSupplier current
     ) {
-        List<ForwardedCompanionPayload> payloads;
         try {
-            payloads = new ForwardedExecutionResult(scriptId, result).toPayloads();
+            this.relay.send(server, sessionPlayer, new ExecutionResultMessage(scriptId, result), current);
         } catch (RuntimeException exception) {
             TotalDebug.LOGGER.error("Unable to encode execution result for script {}", scriptId, exception);
-            payloads = new ForwardedExecutionResult(
-                    scriptId,
-                    result.deliveryFailure("Unable to encode the server execution result")
-            ).toPayloads();
+            this.relay.send(server, sessionPlayer, new ExecutionResultMessage(scriptId,
+                    result.deliveryFailure("Unable to encode the server execution result")), current);
         }
-        sendPayloads(server, sessionPlayer, payloads);
-    }
-
-    private static void sendPayloads(
-            MinecraftServer server,
-            ServerPlayer sessionPlayer,
-            List<ForwardedCompanionPayload> payloads
-    ) {
-        server.execute(() -> {
-            ServerPlayer currentPlayer = server.getPlayerList().getPlayer(sessionPlayer.getUUID());
-            if (currentPlayer != sessionPlayer
-                    || !sessionPlayer.connection.hasChannel(ForwardedCompanionPayload.TYPE)) {
-                return;
-            }
-            for (ForwardedCompanionPayload payload : payloads) {
-                sessionPlayer.connection.send(payload);
-            }
-        });
     }
 
     private static ExecutorService createResultEncoder() {
@@ -305,6 +319,6 @@ public final class ServerScriptService {
         );
     }
 
-    private record RunnerSession(ServerPlayer player, ScriptRunner runner) {
+    private record RunnerSession(ServerPlayer player, ManifestSession manifestSession, ScriptRunner runner) {
     }
 }

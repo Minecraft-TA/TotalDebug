@@ -1,9 +1,14 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
+import com.github.minecraft_ta.totaldebug.protocol.Side;
+import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
@@ -29,6 +34,8 @@ import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.List;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
@@ -38,6 +45,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class CompanionSession implements AutoCloseable {
+    private final List<BiConsumer<Side, ExecutionResultMessage>> serverResultListeners = new CopyOnWriteArrayList<>();
     private enum State {
         WAITING_FOR_HELLO,
         AUTHENTICATING,
@@ -83,6 +91,8 @@ public final class CompanionSession implements AutoCloseable {
         }
 
         default void serverManifest(ServerManifestMessage message) {}
+        /** The game client could not carry a message to the server; {@code correlation} is the message's. */
+        default void relayFailed(RelayFailedMessage message) {}
         default void playing(PlayingMessage message) {}
 
         default void debugTarget(DebugTargetMessage message) {
@@ -140,12 +150,16 @@ public final class CompanionSession implements AutoCloseable {
         descriptor = next;
     }
 
-    public void addExecutionResultListener(Consumer<ExecutionResultMessage> listener) {
-        this.server.getMessageBus().listenAlways(ExecutionResultMessage.class, listener, listener);
+    /** Receives script results with the side that sent them: the game client, or the server through the relay. */
+    public void addExecutionResultListener(BiConsumer<Side, ExecutionResultMessage> listener) {
+        this.server.getMessageBus().listenAlways(ExecutionResultMessage.class, listener,
+                message -> listener.accept(Side.CLIENT, message));
+        this.serverResultListeners.add(listener);
     }
 
-    public void removeExecutionResultListener(Consumer<ExecutionResultMessage> listener) {
+    public void removeExecutionResultListener(BiConsumer<Side, ExecutionResultMessage> listener) {
         this.server.getMessageBus().unregister(ExecutionResultMessage.class, listener);
+        this.serverResultListeners.remove(listener);
     }
 
     public void setProjectSelectionHandler(AttachmentHandler handler) {
@@ -198,6 +212,15 @@ public final class CompanionSession implements AutoCloseable {
         }
     }
 
+    /**
+     * Sends {@code message} to the game's server through the game client, which carries it unread (see
+     * {@code docs/MOD_SIDES.md}). {@code correlation} is the request's id, such as a script run, which a failure to
+     * deliver names; {@code gameSession} is the joined world the message is only valid in, or empty.
+     */
+    public boolean sendToServer(AbstractMessage message, int correlation, String gameSession) {
+        return send(new ToServerMessage(RelayedMessages.toServer(message, correlation, gameSession)));
+    }
+
     public boolean send(AbstractMessage message) {
         if (!isConnected()) {
             return false;
@@ -233,6 +256,23 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageBus().listenAlways(ClientHelloMessage.class, this::handleHello);
         this.server.getMessageBus().listenAlways(RuntimeInventoryMessage.class, this.listener::runtimeInventory);
         this.server.getMessageBus().listenAlways(ServerManifestMessage.class, this.listener::serverManifest);
+        this.server.getMessageBus().listenAlways(RelayFailedMessage.class, this.listener::relayFailed);
+        // The server's messages arrive through the game client and reach the same listeners as the game's own.
+        this.server.getMessageBus().listenAlways(FromServerMessage.class, message -> {
+            AbstractMessage unwrapped;
+            try {
+                unwrapped = RelayedMessages.decodeFromServer(message.payload());
+            } catch (RuntimeException invalid) {
+                System.getLogger(CompanionSession.class.getName()).log(System.Logger.Level.WARNING,
+                        "Discarding a message from the server that could not be read", invalid);
+                return;
+            }
+            if (unwrapped instanceof ExecutionResultMessage result) {
+                for (var resultListener : this.serverResultListeners) resultListener.accept(Side.SERVER, result);
+            } else {
+                this.server.getMessageBus().post(unwrapped);
+            }
+        });
         this.server.getMessageBus().listenAlways(PlayingMessage.class, this.listener::playing);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
         this.server.getMessageBus().listenAlways(InspectSubjectMessage.class, this.listener::inspectSubject);
