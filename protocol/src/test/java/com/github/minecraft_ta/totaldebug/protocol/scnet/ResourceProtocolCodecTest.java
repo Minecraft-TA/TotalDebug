@@ -57,7 +57,7 @@ class ResourceProtocolCodecTest {
 
     @Test
     void gameRulesAndARuleChangeSurviveTheWire() {
-        GameRulesPayload rules = new GameRulesPayload(Map.of("keepInventory", "true", "randomTickSpeed", "3"));
+        GameRulesPayload rules = new GameRulesPayload("New World", Map.of("keepInventory", "true", "randomTickSpeed", "3"));
         GameRulesMessage readRules = new GameRulesMessage();
         readRules.read(new ByteBufferInputStream(written(new GameRulesMessage(rules))));
         assertEquals(rules, readRules.payload());

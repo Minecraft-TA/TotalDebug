@@ -101,7 +101,10 @@ class GameRuleEditsTest {
              FileLock ignored = channel.lock()) {
             assertRefused("is open in a game that is not connected", () -> rules.set(world, "keepInventory", "false"));
 
-            edits.gameRules(new GameRulesPayload(Map.of("keepInventory", "true", "randomTickSpeed", "3")));
+            // Another world's rules do not count for this one.
+            edits.gameRules(new GameRulesPayload("Other", Map.of("keepInventory", "true", "randomTickSpeed", "3")));
+            assertRefused("is open in a game that is not connected", () -> rules.set(world, "keepInventory", "false"));
+            edits.gameRules(new GameRulesPayload("Test", Map.of("keepInventory", "true", "randomTickSpeed", "3")));
             CompletableFuture<GameRuleEdits.Applied> applied = rules.set(world, "randomTickSpeed", "10");
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
             while (sent.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10);

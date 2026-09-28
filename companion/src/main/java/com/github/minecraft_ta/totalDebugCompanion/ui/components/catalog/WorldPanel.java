@@ -168,7 +168,8 @@ public final class WorldPanel extends JPanel {
         if (world.isEmpty()) return new Loaded(null, Map.of(), List.of(), null, "No world has been played in this instance yet.");
         try {
             CurrentWorld.Saved saved = CurrentWorld.read(world.get());
-            Map<String, String> liveRules = saved.open() && rules != null && !rules.rules().isEmpty() ? rules.rules() : saved.gameRules();
+            Map<String, String> liveRules = saved.open() && rules != null && rules.of(saved.directory().getFileName().toString())
+                    ? rules.rules() : saved.gameRules();
             return new Loaded(saved, liveRules, PackResources.worldDatapacks(stack, saved), icon(world.get().resolve("icon.png")), "");
         } catch (IOException | RuntimeException unreadable) {
             return new Loaded(null, Map.of(), List.of(), null, "The world " + world.get().getFileName() + " could not be read: "

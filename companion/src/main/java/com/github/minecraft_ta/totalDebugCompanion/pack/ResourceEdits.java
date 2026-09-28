@@ -65,7 +65,7 @@ import java.util.zip.ZipFile;
 public final class ResourceEdits {
     public static final String PACK_NAME = "TotalDebug";
     public static final String PACK_ID = "file/" + PACK_NAME;
-    private static final long RELOAD_MINUTES = 10;
+    static final long RELOAD_MINUTES = 10;
 
     /**
      * What a write did: when the game uses it, the pack folder it went to, and the problems
@@ -191,7 +191,7 @@ public final class ResourceEdits {
         if (rules == null || !rules.rules().containsKey(name)) return;
         Map<String, String> updated = new HashMap<>(rules.rules());
         updated.put(name, value);
-        gameRules(new GameRulesPayload(updated));
+        gameRules(new GameRulesPayload(rules.world(), updated));
     }
 
     /** The game rules the running game named last, empty without an open world, or null while no game is connected. */
@@ -201,7 +201,8 @@ public final class ResourceEdits {
 
     /**
      * Asks the connected game to set the game rule {@code name} of the world in the folder {@code world} to {@code value},
-     * as {@code /gamerule} does, provided it still is {@code expected}; completes with its answer, or fails without a game.
+     * as {@code /gamerule} does, provided it still is {@code expected}; completes with its answer, however late, or fails
+     * without a game or when it disconnects. The caller times its own wait.
      */
     public CompletableFuture<ReloadResultPayload> setGameRule(String world, String name, String expected, String value) {
         Predicate<AbstractMessage> send = this.game;
@@ -212,7 +213,7 @@ public final class ResourceEdits {
             this.waiting.remove(id);
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));
         }
-        return result.orTimeout(RELOAD_MINUTES, TimeUnit.MINUTES).whenComplete((ignored, failure) -> this.waiting.remove(id));
+        return result.whenComplete((ignored, failure) -> this.waiting.remove(id));
     }
 
     /** The packs the running game named last, or null while no game is connected. */

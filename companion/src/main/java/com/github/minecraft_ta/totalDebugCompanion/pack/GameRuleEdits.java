@@ -14,6 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
@@ -101,14 +102,16 @@ public final class GameRuleEdits {
         return before.thenCompose(read -> {
             if (!read.live()) return CompletableFuture.completedFuture(new Applied(ConfigChanges.Effect.WORLD_OPENS));
             // The game sets it only while the world and the rule's value are still those read here.
-            return this.edits.setGameRule(target.world().getFileName().toString(), target.name(), read.previous(), read.written())
-                    .thenApply(result -> {
-                        if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
-                        // The game names its rules again only on its next check; the next set reads the value set now.
-                        this.edits.gameRuleSet(target.name(), read.written());
-                        this.record.changed(target, read.previous(), read.written());
-                        return new Applied(ConfigChanges.Effect.NOW);
-                    });
+            // Recorded whenever the game answers, even after the caller stopped waiting, so a rule the game set keeps its revert.
+            CompletableFuture<Applied> recorded = this.edits.setGameRule(target.world().getFileName().toString(), target.name(),
+                    read.previous(), read.written()).thenApply(result -> {
+                if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
+                // The game names its rules again only on its next check; the next set reads the value set now.
+                this.edits.gameRuleSet(target.name(), read.written());
+                this.record.changed(target, read.previous(), read.written());
+                return new Applied(ConfigChanges.Effect.NOW);
+            });
+            return recorded.copy().orTimeout(ResourceEdits.RELOAD_MINUTES, TimeUnit.MINUTES);
         });
     }
 
@@ -119,7 +122,7 @@ public final class GameRuleEdits {
     private boolean live(Path world) throws IOException {
         if (!Worlds.isOpen(world)) return false;
         GameRulesPayload rules = this.edits.gameRules();
-        if (rules != null && !rules.rules().isEmpty()) return true;
+        if (rules != null && rules.of(world.getFileName().toString())) return true;
         throw new IOException("The world " + world.getFileName()
                 + " is open in a game that is not connected to Companion; connect it, or close the world, to change its game rules");
     }
@@ -127,7 +130,10 @@ public final class GameRuleEdits {
     /** The rule's value: as the connected game names it while it has the world open, or as level.dat saved it; null for none. */
     String current(ChangeRecord.GameRule target) throws IOException {
         GameRulesPayload rules = this.edits.gameRules();
-        if (Worlds.isOpen(target.world()) && rules != null && !rules.rules().isEmpty()) return rules.rules().get(target.name());
+        // The connected game's rules count only for the world it names, not another one open in another game.
+        if (Worlds.isOpen(target.world()) && rules != null && rules.of(target.world().getFileName().toString())) {
+            return rules.rules().get(target.name());
+        }
         NbtData.CompoundTag gameRules = gameRules(LevelDat.read(LevelDat.file(target.world())).tag());
         return gameRules != null && gameRules.entries().get(target.name()) instanceof NbtData.StringTag text ? text.value() : null;
     }

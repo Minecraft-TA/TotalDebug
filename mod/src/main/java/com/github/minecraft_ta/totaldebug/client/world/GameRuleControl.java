@@ -47,12 +47,19 @@ public final class GameRuleControl {
             if (++this.ticks < CHECK_TICKS) return;
             this.ticks = 0;
         }
-        GameRulesPayload current = new GameRulesPayload(rules(Minecraft.getInstance().getSingleplayerServer()));
+        IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
+        GameRulesPayload current = new GameRulesPayload(server == null ? "" : world(server), rules(server));
         synchronized (this) {
             if (current.equals(this.published)) return;
             this.published = current;
         }
         this.publish.accept(current);
+    }
+
+    /** The folder name of {@code server}'s world, which Companion names the world by. */
+    private static String world(IntegratedServer server) {
+        Path folder = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().getFileName();
+        return folder == null ? "" : folder.toString();
     }
 
     /** The rules of {@code server}'s world by name, as {@code /gamerule} prints them; none without a server. */
@@ -88,8 +95,8 @@ public final class GameRuleControl {
         }
         server.execute(() -> {
             // The world and the value the request was made for, checked where the command runs, so nothing changes between.
-            Path folder = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().getFileName();
-            if (folder == null || !folder.toString().equals(request.world())) {
+            String folder = world(server);
+            if (!folder.equals(request.world())) {
                 answer.accept(new ReloadResultPayload(request.requestId(), 0, List.of(), "The game has " + folder + " open, not " + request.world()));
                 return;
             }
