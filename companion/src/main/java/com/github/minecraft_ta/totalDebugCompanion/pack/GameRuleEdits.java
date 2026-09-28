@@ -56,25 +56,31 @@ public final class GameRuleEdits {
         return apply(target, change.original(), change);
     }
 
-    /** Whether the rule still has the value Companion last set for {@code change}. Blocking. */
+    /**
+     * Whether the rule still has the value Companion last set for {@code change}. A rule set back to its original outside
+     * Companion ends the change. Blocking.
+     */
     public boolean holds(ChangeRecord.Change change) {
         if (!(change.target() instanceof ChangeRecord.GameRule target)) return true;
         try {
-            return change.current().equals(current(target));
+            String current = current(target);
+            if (current == null) return true;
+            this.record.observed(target, current, String::equals);
+            return change.current().equals(current);
         } catch (IOException unreadable) {
             return true;
         }
     }
 
+    /** What a set reads before it writes: the rule's value, the value to write, and whether the connected game sets it. */
+    private record Read(String previous, String written, boolean live) {
+    }
+
     private CompletableFuture<Applied> apply(ChangeRecord.GameRule target, String value, ChangeRecord.Change reverting) {
-        boolean live;
-        try {
-            live = live(target.world());
-        } catch (IOException refused) {
-            return CompletableFuture.failedFuture(refused);
-        }
-        CompletableFuture<String[]> before = write(() -> {
+        // Whether the world is open is read with the rest, in the write queue, never on the Swing thread.
+        CompletableFuture<Read> before = write(() -> {
             try {
+                boolean live = live(target.world());
                 String previous = current(target);
                 if (previous == null) throw new IOException("The world " + target.world().getFileName() + " has no game rule " + target.name());
                 String problem = problem(previous, value);
@@ -87,19 +93,23 @@ public final class GameRuleEdits {
                     writeLevel(target, written);
                     this.record.changed(target, previous, written);
                 }
-                return new String[]{previous, written};
+                return new Read(previous, written, live);
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
         });
-        if (!live) return before.thenApply(ignored -> new Applied(ConfigChanges.Effect.WORLD_OPENS));
-        // The game sets it only while the world and the rule's value are still those read here.
-        return before.thenCompose(values -> this.edits.setGameRule(target.world().getFileName().toString(), target.name(),
-                values[0], values[1]).thenApply(result -> {
-            if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
-            this.record.changed(target, values[0], values[1]);
-            return new Applied(ConfigChanges.Effect.NOW);
-        }));
+        return before.thenCompose(read -> {
+            if (!read.live()) return CompletableFuture.completedFuture(new Applied(ConfigChanges.Effect.WORLD_OPENS));
+            // The game sets it only while the world and the rule's value are still those read here.
+            return this.edits.setGameRule(target.world().getFileName().toString(), target.name(), read.previous(), read.written())
+                    .thenApply(result -> {
+                        if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
+                        // The game names its rules again only on its next check; the next set reads the value set now.
+                        this.edits.gameRuleSet(target.name(), read.written());
+                        this.record.changed(target, read.previous(), read.written());
+                        return new Applied(ConfigChanges.Effect.NOW);
+                    });
+        });
     }
 
     /**

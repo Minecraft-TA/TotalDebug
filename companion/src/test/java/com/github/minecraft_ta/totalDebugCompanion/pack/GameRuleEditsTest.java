@@ -55,6 +55,19 @@ class GameRuleEditsTest {
     }
 
     @Test
+    void aRuleSetBackToItsOriginalOutsideCompanionEndsTheChange() throws Exception {
+        Path world = world();
+        ChangeRecord record = ChangeRecord.inMemory();
+        GameRuleEdits rules = new GameRuleEdits(record, edits(record), Runnable::run);
+        rules.set(world, "keepInventory", "false").get(5, TimeUnit.SECONDS);
+        ChangeRecord other = ChangeRecord.inMemory();
+        new GameRuleEdits(other, edits(other), Runnable::run).set(world, "keepInventory", "true").get(5, TimeUnit.SECONDS);
+
+        assertFalse(rules.holds(record.changes().getFirst()));
+        assertEquals(0, record.size(), "nothing of Companion's is in effect any more");
+    }
+
+    @Test
     void aValueTheGameWouldRefuseIsNotWritten() throws Exception {
         Path world = world();
         ChangeRecord record = ChangeRecord.inMemory();
@@ -97,6 +110,7 @@ class GameRuleEditsTest {
             edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 1, List.of(), ""));
             assertEquals(ConfigChanges.Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
             assertEquals("3", record.changes().getFirst().original(), "the value the running game had");
+            assertEquals("10", edits.gameRules().rules().get("randomTickSpeed"), "the next set reads the value set now");
         }
         assertEquals("3", CurrentWorld.read(world).gameRules().get("randomTickSpeed"), "the game saves level.dat itself");
     }

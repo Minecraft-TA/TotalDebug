@@ -31,6 +31,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -179,6 +180,18 @@ public final class ResourceEdits {
     public void gameRules(GameRulesPayload rules) {
         this.gameRules = rules;
         this.stackListeners.forEach(Runnable::run);
+    }
+
+    /**
+     * Takes {@code value} as the rule's value once the game set it, until the game names its rules again; nothing while
+     * the game named none.
+     */
+    public void gameRuleSet(String name, String value) {
+        GameRulesPayload rules = this.gameRules;
+        if (rules == null || !rules.rules().containsKey(name)) return;
+        Map<String, String> updated = new HashMap<>(rules.rules());
+        updated.put(name, value);
+        gameRules(new GameRulesPayload(updated));
     }
 
     /** The game rules the running game named last, empty without an open world, or null while no game is connected. */

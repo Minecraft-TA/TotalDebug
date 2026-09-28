@@ -30,6 +30,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.EventObject;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -80,6 +81,8 @@ final class GameRulesPanel extends JPanel {
     private Setter setter;
     /** Rules being set now, whose rows wait for the answer. */
     private final Set<String> setting = new HashSet<>();
+    /** The value the game named last for a rule being set, which a refused set shows instead of the one before. */
+    private final Map<String, String> named = new HashMap<>();
 
     GameRulesPanel() {
         super(new BorderLayout());
@@ -140,9 +143,11 @@ final class GameRulesPanel extends JPanel {
         replace(rule.name(), value);
         this.setter.set(rule.name(), value).whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
             this.setting.remove(rule.name());
+            String latest = this.named.remove(rule.name());
             if (failure != null) {
                 Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
-                replace(rule.name(), rule.value());
+                // The value the game named meanwhile, such as one a command set, or the one before.
+                replace(rule.name(), latest != null ? latest : rule.value());
                 this.body.showNotice("Not set: " + rule.name() + ": " + cause.getMessage());
             }
         }));
@@ -169,7 +174,9 @@ final class GameRulesPanel extends JPanel {
         List<Rule> all = new ArrayList<>();
         rules.forEach((name, value) -> {
             Rule shown = this.model.all.stream().filter(rule -> rule.name().equals(name)).findFirst().orElse(null);
-            all.add(this.setting.contains(name) && shown != null ? shown : Rule.of(name, value));
+            boolean waiting = this.setting.contains(name) && shown != null;
+            if (waiting) this.named.put(name, value);
+            all.add(waiting ? shown : Rule.of(name, value));
         });
         this.model.all = List.copyOf(all);
         applyFilter();
