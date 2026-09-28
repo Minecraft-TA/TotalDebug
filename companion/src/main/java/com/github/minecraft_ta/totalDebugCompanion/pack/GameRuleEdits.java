@@ -59,14 +59,15 @@ public final class GameRuleEdits {
 
     /**
      * Whether the rule still has the value Companion last set for {@code change}. A rule set back to its original outside
-     * Companion ends the change. Blocking.
+     * Companion ends the change, but only as a closed world's level.dat says: the game's rules may be a moment old, and
+     * a change ended from them would lose its revert. Blocking.
      */
     public boolean holds(ChangeRecord.Change change) {
         if (!(change.target() instanceof ChangeRecord.GameRule target)) return true;
         try {
             String current = current(target);
             if (current == null) return true;
-            this.record.observed(target, current, String::equals);
+            if (!Worlds.isOpen(target.world())) this.record.observed(target, current, String::equals);
             return change.current().equals(current);
         } catch (IOException unreadable) {
             return true;

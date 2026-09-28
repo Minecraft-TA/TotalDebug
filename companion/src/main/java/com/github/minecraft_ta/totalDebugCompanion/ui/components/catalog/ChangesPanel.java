@@ -225,7 +225,9 @@ public final class ChangesPanel extends JPanel {
         TypeToFilter.install(this.ruleTable, this.filter);
         this.loader = new PageLoader<>(this::prepareLoad, this::show,
                 failure -> setStatus("Could not read the changed files: " + failure.getMessage()))
-                .whenShown(this).follow(this.record::addListener);
+                .whenShown(this).follow(this.record::addListener)
+                // The game's rules and packs tell whether a change still holds, so they are read again when those change.
+                .follow(resourceEdits::addStackListener);
         load();
     }
 

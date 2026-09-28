@@ -41,14 +41,22 @@ public final class GameRuleControl {
         this.ticks = CHECK_TICKS;
     }
 
-    /** Client thread only. */
+    /** Client thread only; the rules are read on the server thread and published from there. */
     public void tick() {
         synchronized (this) {
             if (++this.ticks < CHECK_TICKS) return;
             this.ticks = 0;
         }
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
-        GameRulesPayload current = new GameRulesPayload(server == null ? "" : world(server), rules(server));
+        if (server == null) {
+            publish(new GameRulesPayload("", Map.of()));
+            return;
+        }
+        // Read where the server changes them, so the rules are all of one moment.
+        server.execute(() -> publish(new GameRulesPayload(world(server), rules(server))));
+    }
+
+    private void publish(GameRulesPayload current) {
         synchronized (this) {
             if (current.equals(this.published)) return;
             this.published = current;
