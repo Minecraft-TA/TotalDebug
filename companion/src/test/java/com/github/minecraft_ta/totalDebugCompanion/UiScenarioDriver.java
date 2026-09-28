@@ -614,6 +614,20 @@ final class UiScenarioDriver {
             }
             case RESOURCE_PACKS -> context.once("resource-packs", () ->
                     navigate(new NavigationTarget.PackResources(ResourcesTab.PACKS, "")));
+            case PACK_ORDER -> {
+                context.once("pack-order", () -> navigate(new NavigationTarget.PackResources(ResourcesTab.PACKS, "")));
+                JTable packs = findComponents(mainWindow, JTable.class).stream().filter(table -> table.isShowing()
+                        && table.getColumnCount() > 1 && "Pack".equals(table.getColumnName(1)) && table.getRowCount() > 1)
+                        .findFirst().orElse(null);
+                if (packs == null) break;
+                context.once("pack-order-toggle", () -> {
+                    // The last row is a pack of the folder the game does not use; enabling it puts it at the top.
+                    packs.setRowSelectionInterval(packs.getRowCount() - 1, packs.getRowCount() - 1);
+                    packs.getActionMap().get("togglePacks").actionPerformed(
+                            new ActionEvent(packs, ActionEvent.ACTION_PERFORMED, "togglePacks"));
+                    context.completedActions.add("pack-order-toggle");
+                });
+            }
             case WORLD_NONE -> context.once("world-none", () -> {
                 Path saves = mainWindow.editorContext().project().profile().workspaceDirectory().resolve("saves");
                 try {
@@ -683,7 +697,10 @@ final class UiScenarioDriver {
         var editor = mainWindow.getEditorTabs().getSelectedEditor();
         if (editor == null || !title.equals(editor.getTitle())) return false;
         for (JTable table : findComponents(mainWindow, JTable.class)) {
-            if (table.isShowing() && table.getColumnCount() > 0 && column.equals(table.getColumnName(0)) && table.getRowCount() > 0) {
+            // A pack list starts with the check boxes, whose column has no name.
+            boolean named = table.getColumnCount() > 0 && column.equals(table.getColumnName(0))
+                    || table.getColumnCount() > 1 && table.getColumnName(0).isEmpty() && column.equals(table.getColumnName(1));
+            if (table.isShowing() && named && table.getRowCount() > 0) {
                 return true;
             }
         }
@@ -720,6 +737,8 @@ final class UiScenarioDriver {
                         && browser.isShowing() && browser.rowCount() > 0;
             }
             case RESOURCE_PACKS -> showsTable("Resources", "Pack");
+            case PACK_ORDER -> context.completedActions.contains("pack-order-toggle")
+                    && findComponents(mainWindow, JButton.class).stream().anyMatch(button -> button.isShowing() && "Apply".equals(button.getText()));
             case SAVE_INTO -> findComponents(mainWindow, JComboBox.class).stream().anyMatch(box -> box.isShowing() && box.getItemCount() > 1);
             case TEXTURE_EDITOR -> context.completedActions.contains("texture-stroke")
                     && findComponents(mainWindow, JButton.class).stream().noneMatch(button -> button.isShowing() && "Save".equals(button.getText()));

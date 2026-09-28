@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -54,6 +55,25 @@ class NbtDataTest {
                 }""", NbtData.prettySnbt(tag));
         assertEquals("compound", tag.typeName());
         assertInstanceOf(NbtData.ShortTag.class, ((NbtData.CompoundTag) tag).entries().get("BurnTime"));
+    }
+
+    @Test
+    void writesWhatItReads() {
+        NbtData.Tag tag = new NbtData.CompoundTag(Map.of(
+                "Data", new NbtData.CompoundTag(Map.of(
+                        "LevelName", new NbtData.StringTag("Welt é"),
+                        "DataPacks", new NbtData.CompoundTag(Map.of(
+                                "Enabled", new NbtData.ListTag(List.of(new NbtData.StringTag("vanilla"))),
+                                "Disabled", new NbtData.ListTag(List.of()))),
+                        "seed", new NbtData.LongTag(-4L),
+                        "spawn", new NbtData.IntArrayTag(List.of(1, 2, 3)),
+                        "flags", new NbtData.ByteArrayTag(List.of((byte) 7)),
+                        "sections", new NbtData.LongArrayTag(List.of(9L)),
+                        "angle", new NbtData.FloatTag(1.5f),
+                        "scale", new NbtData.DoubleTag(0.25),
+                        "height", new NbtData.ShortTag((short) 320),
+                        "hardcore", new NbtData.ByteTag((byte) 1)))));
+        assertEquals(tag, NbtData.read(NbtData.write(tag)));
     }
 
     @Test

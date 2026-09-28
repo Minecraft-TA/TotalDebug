@@ -16,12 +16,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Every resource of the pack joined as the game uses it: for each pack path, the copy of the highest pack that supplies
@@ -134,28 +136,67 @@ public final class PackResources {
      */
     public static List<ListedPack> resourcePacks(PackStackPayload stack, Path workspace) throws IOException {
         Map<String, Path> files = PackFolders.list(workspace.resolve("resourcepacks"));
-        // The ids of the enabled packs, lowest first, with the titles the running game gives them.
-        LinkedHashMap<String, String> enabled = new LinkedHashMap<>();
+        // The enabled packs, lowest first, with the titles the running game gives them and what it allows for each.
+        LinkedHashMap<String, PackStackPayload.Pack> enabled = new LinkedHashMap<>();
+        List<ListedPack> packs = new ArrayList<>();
         if (stack == null) {
             // The game drops a pack of the folder that is gone when it starts, and adds the required ones as assets() does.
             List<String> ids = enabledInOptions(workspace.resolve("options.txt"));
-            if (!ids.contains(VANILLA)) enabled.put(VANILLA, "");
+            if (!ids.contains(VANILLA)) enabled.put(VANILLA, required(VANILLA));
             for (String id : ids) {
-                if (!id.startsWith("file/") || files.containsKey(id)) enabled.put(id, "");
+                if (id.equals(VANILLA) || id.equals(MOD_RESOURCES)) enabled.put(id, required(id));
+                else if (!id.startsWith("file/") || files.containsKey(id)) enabled.put(id, new PackStackPayload.Pack(id, "", ""));
             }
-            if (!ids.contains(MOD_RESOURCES)) enabled.put(MOD_RESOURCES, "");
+            if (!ids.contains(MOD_RESOURCES)) enabled.put(MOD_RESOURCES, required(MOD_RESOURCES));
         } else {
             for (PackStackPayload.Pack pack : stack.resourcePacks()) {
-                if (pack.id().startsWith("mod/")) enabled.putIfAbsent(MOD_RESOURCES, "");
-                else enabled.putIfAbsent(pack.id(), pack.title());
+                // The mods whose resources are not shown on their own are parts of the mods' pack, listed as that one pack.
+                if (!pack.is(PackStackPayload.HIDDEN)) enabled.putIfAbsent(pack.id(), pack);
             }
         }
-        List<ListedPack> packs = new ArrayList<>();
-        for (String id : enabled.sequencedKeySet().reversed()) {
-            packs.add(new ListedPack(id, ListedPack.State.ENABLED, files.remove(id), enabled.get(id)));
+        for (PackStackPayload.Pack pack : enabled.sequencedValues().reversed()) {
+            packs.add(new ListedPack(pack.id(), ListedPack.State.ENABLED, files.remove(pack.id()), pack.title(), rules(pack)));
+        }
+        if (stack != null) {
+            for (PackStackPayload.Pack pack : stack.otherResourcePacks()) {
+                packs.add(new ListedPack(pack.id(), ListedPack.State.DISABLED, files.remove(pack.id()), pack.title(), rules(pack)));
+            }
         }
         files.forEach((id, file) -> packs.add(new ListedPack(id, ListedPack.State.DISABLED, file)));
         return packs;
+    }
+
+    /**
+     * The current world's datapacks as the game's pack screen lists them. While the connected game has the world open,
+     * as that game names them; otherwise as its {@code level.dat} saved them.
+     */
+    public static List<ListedPack> worldDatapacks(PackStackPayload stack, CurrentWorld.Saved saved) throws IOException {
+        if (stack == null || !saved.open() || stack.dataPacks().isEmpty()) return saved.datapacks();
+        Map<String, Path> files = PackFolders.list(saved.directory().resolve("datapacks"));
+        List<ListedPack> packs = new ArrayList<>();
+        for (PackStackPayload.Pack pack : stack.dataPacks().reversed()) {
+            if (pack.is(PackStackPayload.HIDDEN)) continue;
+            packs.add(new ListedPack(pack.id(), ListedPack.State.ENABLED, files.remove(pack.id()), pack.title(), rules(pack)));
+        }
+        for (PackStackPayload.Pack pack : stack.otherDataPacks()) {
+            packs.add(new ListedPack(pack.id(), ListedPack.State.DISABLED, files.remove(pack.id()), pack.title(), rules(pack)));
+        }
+        files.forEach((id, file) -> packs.add(new ListedPack(id, ListedPack.State.DISABLED, file)));
+        return packs;
+    }
+
+    private static PackStackPayload.Pack required(String id) {
+        return new PackStackPayload.Pack(id, "", "", PackStackPayload.REQUIRED);
+    }
+
+    /** What the game allows for a pack it named. */
+    private static Set<ListedPack.Rule> rules(PackStackPayload.Pack pack) {
+        Set<ListedPack.Rule> rules = EnumSet.noneOf(ListedPack.Rule.class);
+        if (pack.is(PackStackPayload.REQUIRED)) rules.add(ListedPack.Rule.REQUIRED);
+        if (pack.is(PackStackPayload.FIXED)) rules.add(ListedPack.Rule.FIXED);
+        if (pack.is(PackStackPayload.INCOMPATIBLE)) rules.add(ListedPack.Rule.INCOMPATIBLE);
+        if (pack.is(PackStackPayload.MISSING_FEATURES)) rules.add(ListedPack.Rule.MISSING_FEATURES);
+        return rules;
     }
 
     /** Joins {@code assets} and {@code data}, each lowest first, into the copies the game uses. Blocking. */

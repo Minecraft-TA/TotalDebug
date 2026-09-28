@@ -18,6 +18,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PackResourcesTest {
     private static final String TEXTURE = "assets/testmod/textures/item/widget.png";
@@ -102,16 +103,23 @@ class PackResourcesTest {
                 PackResources.resourcePacks(null, this.directory).stream().map(ListedPack::id).toList(),
                 "enabled ones with the highest first, then those in resourcepacks/ that are not");
 
-        PackStackPayload stack = new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""),
-                new PackStackPayload.Pack("mod/testmod", "Test Mod", ""), new PackStackPayload.Pack("mod/other,more", "Other", ""),
-                new PackStackPayload.Pack("file/Unused", "Unused", "")), List.of());
+        PackStackPayload stack = new PackStackPayload(34, 48, List.of(
+                new PackStackPayload.Pack("vanilla", "Minecraft", "", PackStackPayload.REQUIRED),
+                new PackStackPayload.Pack("mod_resources", "Mod Resources", "", PackStackPayload.REQUIRED),
+                new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN),
+                new PackStackPayload.Pack("mod/other,more", "Other", "", PackStackPayload.HIDDEN),
+                new PackStackPayload.Pack("file/Unused", "Unused", "")), List.of(),
+                List.of(new PackStackPayload.Pack("programmer_art", "Programmer Art", "", PackStackPayload.INCOMPATIBLE)), List.of());
         List<ListedPack> running = PackResources.resourcePacks(stack, this.directory);
-        assertEquals(List.of("file/Unused", "mod_resources", "vanilla", "file/Faithful"), running.stream().map(ListedPack::id).toList(),
-                "the game names a pack for each mod file, which its pack screen shows as one");
+        assertEquals(List.of("file/Unused", "mod_resources", "vanilla", "programmer_art", "file/Faithful"),
+                running.stream().map(ListedPack::id).toList(),
+                "the game's parts of the mods' pack are that one pack, and the packs it could enable follow");
         assertEquals(ListedPack.State.DISABLED, running.getLast().state());
         assertEquals(this.directory.resolve("resourcepacks/Unused"), running.getFirst().file());
-        assertEquals(List.of("Unused", "", "Minecraft", ""), running.stream().map(ListedPack::title).toList(),
-                "the running game's titles are kept, except for the mods it shows as one");
+        assertEquals(List.of("Unused", "Mod Resources", "Minecraft", "Programmer Art", ""),
+                running.stream().map(ListedPack::title).toList(), "the running game's titles are kept");
+        assertTrue(running.get(1).is(ListedPack.Rule.REQUIRED));
+        assertTrue(running.get(3).is(ListedPack.Rule.INCOMPATIBLE));
     }
 
     @Test

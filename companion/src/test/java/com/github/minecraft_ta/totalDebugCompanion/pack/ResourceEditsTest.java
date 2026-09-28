@@ -226,7 +226,8 @@ class ResourceEditsTest {
         Thread.sleep(200);
         assertEquals(1, sent.size(), "the second and third wait for the first reload");
         assertEquals(Set.of(ReloadPayload.Kind.LANGUAGE), sent.getFirst().kinds());
-        assertEquals(ResourceEdits.PACK_ID, sent.getFirst().managedPack());
+        assertEquals(ResourceEdits.PACK_ID, sent.getFirst().managedResourcePack());
+        assertEquals("", sent.getFirst().managedDataPack(), "no data edit asks for the managed datapack");
 
         edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
         assertEquals(ConfigChanges.Effect.NOW, first.get(5, TimeUnit.SECONDS).effect());
@@ -610,7 +611,8 @@ class ResourceEditsTest {
         });
         CompletableFuture<ResourceEdits.Saved> saved = edits.save(LANG, bytes("{}"));
         awaitSent(sent, 1);
-        assertEquals("", sent.getFirst().managedPack(), "the game reloads without enabling or moving any pack");
+        assertEquals("", sent.getFirst().managedResourcePack(), "the game reloads without enabling or moving any pack");
+        assertEquals("", sent.getFirst().managedDataPack());
         edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
         assertEquals(mine, saved.get(5, TimeUnit.SECONDS).pack());
         assertTrue(Files.isRegularFile(mine.resolve(LANG)));

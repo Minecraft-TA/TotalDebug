@@ -70,6 +70,7 @@ enum UiRenderScenario {
     WORLD_NONE("world-none", "The World page before any world was played"),
     PACK_PAGE("pack-page", "A datapack of the world's folder with its files"),
     RESOURCE_PACKS("resource-packs", "The resource packs on the Resources page, one enabled above the mods and one not"),
+    PACK_ORDER("pack-order", "The resource packs with a pack enabled at the top, waiting for Apply"),
     SAVE_INTO("save-into", "A mod's model open for editing with the pack it is saved into"),
     TEXTURE_EDITOR("texture-editor", "A resource pack's texture with the pencil chosen and a stroke drawn and saved"),
     INSPECTION("inspection", "A block read from the game with storage that differs by face");

@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 28;
+    public static final int VERSION = 29;
 
     public static final short READY = 1;
     public static final short OPEN_CLASS = 2;
@@ -26,6 +26,7 @@ public final class CompanionProtocol {
     public static final short PACK_STACK = 35;
     public static final short RELOAD = 36;
     public static final short RELOAD_RESULT = 37;
+    public static final short SET_PACKS = 38;
 
     private CompanionProtocol() {
     }

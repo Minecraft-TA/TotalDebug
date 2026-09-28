@@ -11,7 +11,9 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.ResourcesTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackResources;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
+import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 
 import javax.swing.JTabbedPane;
 import javax.swing.JPanel;
@@ -39,7 +41,7 @@ public final class PackResourcesPanel extends JPanel {
     /** The kind of resource shown, such as {@code assets/textures}; empty for all. */
     private String category = "";
 
-    public PackResourcesPanel(PackCatalogService catalog, ResourceEdits edits, Path workspace,
+    public PackResourcesPanel(PackCatalogService catalog, ResourceEdits edits, PackSelections selections, Path workspace,
                               Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
@@ -47,6 +49,8 @@ public final class PackResourcesPanel extends JPanel {
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.browser = new ResourceBrowser(navigator, category -> this.category = category);
         this.packs = new PacksPanel(PacksPanel.Side.RESOURCES, navigator);
+        this.packs.setApplier(enabled -> selections.set(SetPacksPayload.Side.RESOURCES, null, enabled),
+                "Enables the checked resource packs in this order: in the connected game, which reloads its resources, otherwise in options.txt");
         this.tabs.addTab(ResourcesTab.FILES.title(), Icons.FOLDER, this.browser);
         this.tabs.addTab(ResourcesTab.PACKS.title(), Icons.RESOURCES_ROOT, this.packs);
         TypeToFilter.forwardTyping(this.tabs, () -> this.tabs.getSelectedComponent() == this.packs
@@ -73,7 +77,7 @@ public final class PackResourcesPanel extends JPanel {
             TabTitles.setUncounted(this.tabs, 1, ResourcesTab.PACKS.title());
             this.packs.showFailure("The resource packs could not be listed: " + failure.getMessage());
         })
-                .whenShown(this.packs).follow(edits::addStackListener).follow(catalog::addListener);
+                .whenShown(this.packs).follow(edits::addStackListener).follow(catalog::addListener).follow(edits.record()::addListener);
         load();
     }
 

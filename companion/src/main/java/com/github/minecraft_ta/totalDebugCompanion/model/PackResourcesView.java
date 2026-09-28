@@ -13,7 +13,7 @@ public final class PackResourcesView implements IEditorPanel {
     private final PackResourcesPanel panel;
 
     public PackResourcesView(EditorContext context) {
-        this.panel = new PackResourcesPanel(context.project().catalog(), context.project().resources(),
+        this.panel = new PackResourcesPanel(context.project().catalog(), context.project().resources(), context.project().packSelections(),
                 context.project().profile().workspaceDirectory(), context.navigation()::navigate);
     }
 

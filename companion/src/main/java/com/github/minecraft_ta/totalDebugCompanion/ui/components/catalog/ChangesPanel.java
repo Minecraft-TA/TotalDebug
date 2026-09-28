@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -24,6 +25,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextFie
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import javax.swing.AbstractAction;
@@ -94,15 +96,23 @@ public final class ChangesPanel extends JPanel {
         }
     }
 
+    /**
+     * A changed pack selection: which packs, the enabled ones now with the highest first, and whether they are still
+     * what Companion enabled.
+     */
+    private record PackChange(ChangeRecord.Change change, String name, String enabled, boolean held) {
+    }
+
     private record Loaded(List<ConfigSettingsTable.Row> rows, Map<String, ConfigWriter.Target> targets,
                           Map<String, ChangeRecord.Change> changes, Map<String, Section> sections, List<KeyChange> keys,
-                          KeyBindings bindings, List<ResourceChange> resources, List<String> problems) {
+                          KeyBindings bindings, List<ResourceChange> resources, List<PackChange> packs, List<String> problems) {
     }
 
     private final PackCatalogService catalog;
     private final ChangeRecord record;
     private final KeyBindingControl keyControl;
     private final ResourceEdits resourceEdits;
+    private final PackSelections packSelections;
     private final Consumer<NavigationTarget> navigator;
     private final ConfigWriter writer;
     private final PageLoader<Loaded> loader;
@@ -117,6 +127,9 @@ public final class ChangesPanel extends JPanel {
     private final ResourceChangesModel resourceModel = new ResourceChangesModel();
     private final JTable resourceTable = new JTable(this.resourceModel);
     private final JScrollPane resourcesScroll = new JScrollPane(this.resourceTable);
+    private final PackChangesModel packModel = new PackChangesModel();
+    private final JTable packTable = new JTable(this.packModel);
+    private final JScrollPane packsScroll = new JScrollPane(this.packTable);
     private final JTabbedPane tabs = new JTabbedPane();
     private final JLabel message = new JLabel();
     private final JPanel cards = new JPanel(new CardLayout());
@@ -125,17 +138,19 @@ public final class ChangesPanel extends JPanel {
     private Map<String, Section> sections = Map.of();
     private List<KeyChange> keys = List.of();
     private List<ResourceChange> resources = List.of();
+    private List<PackChange> packs = List.of();
     private KeyBindings bindings;
     private String problem = "";
     private String status = "";
 
     public ChangesPanel(PackCatalogService catalog, ConfigChanges configChanges, KeyBindingControl keyControl,
-                        ResourceEdits resourceEdits, Consumer<NavigationTarget> navigator) {
+                        ResourceEdits resourceEdits, PackSelections packSelections, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         this.record = configChanges.record();
         this.keyControl = Objects.requireNonNull(keyControl, "keyControl");
         this.resourceEdits = Objects.requireNonNull(resourceEdits, "resourceEdits");
+        this.packSelections = Objects.requireNonNull(packSelections, "packSelections");
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.writer = new ConfigWriter(configChanges, this::setStatus, this::load);
 
@@ -162,8 +177,10 @@ public final class ChangesPanel extends JPanel {
         this.settingsScroll.setBorder(BorderFactory.createEmptyBorder());
         this.keysScroll.setBorder(BorderFactory.createEmptyBorder());
         this.resourcesScroll.setBorder(BorderFactory.createEmptyBorder());
+        this.packsScroll.setBorder(BorderFactory.createEmptyBorder());
         configureKeyTable();
         configureResourceTable();
+        configurePackTable();
         this.cards.add(this.tabs, TABS_CARD);
         this.message.setVerticalAlignment(JLabel.TOP);
         this.message.setBorder(UiMetrics.messagePadding());
@@ -191,6 +208,7 @@ public final class ChangesPanel extends JPanel {
         TypeToFilter.install(this.table, this.filter);
         TypeToFilter.install(this.keyTable, this.filter);
         TypeToFilter.install(this.resourceTable, this.filter);
+        TypeToFilter.install(this.packTable, this.filter);
         this.loader = new PageLoader<>(this::prepareLoad, this::show,
                 failure -> setStatus("Could not read the changed files: " + failure.getMessage()))
                 .whenShown(this).follow(this.record::addListener);
@@ -282,6 +300,66 @@ public final class ChangesPanel extends JPanel {
                 }
             }
         });
+    }
+
+    private void configurePackTable() {
+        this.packTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        Tables.configure(this.packTable);
+        this.packTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean selected, boolean focused,
+                                                           int row, int column) {
+                super.getTableCellRendererComponent(table, value, selected, false, row, column);
+                PackChange change = ChangesPanel.this.packModel.shown.get(row);
+                setBorder(UiMetrics.cellPadding());
+                setForeground(selected ? table.getSelectionForeground()
+                        : column == 0 ? ThemeColors.text() : ThemeColors.secondaryText());
+                Tooltip tooltip = Tooltip.of(change.name()).fact("Enabled", change.enabled())
+                        .fact("Before", highestFirst(PackSelections.parse(change.change().original())))
+                        .fact("Changed", ago(change.change().lastChanged()));
+                if (!change.held()) tooltip.text("Changed outside Companion since");
+                setToolTipText(tooltip.html());
+                return this;
+            }
+        });
+        ContextMenus.installTable(this.packTable, row -> {
+            if (row < 0) return null;
+            List<PackChange> selected = new ArrayList<>();
+            for (int viewRow : this.packTable.getSelectedRows()) selected.add(this.packModel.shown.get(viewRow));
+            JPopupMenu menu = new JPopupMenu();
+            menu.add(ContextMenus.action(selected.size() > 1 ? "Revert " + selected.size() : "Revert", null, "DELETE",
+                    () -> report(revertPacks(selected))));
+            return menu;
+        });
+        revertOnDelete(this.packTable, () -> {
+            List<PackChange> selected = new ArrayList<>();
+            for (int viewRow : this.packTable.getSelectedRows()) selected.add(this.packModel.shown.get(viewRow));
+            if (!selected.isEmpty()) report(revertPacks(selected));
+        });
+    }
+
+    /** Enables what each selection held before Companion changed it, one after another; completes with what failed. */
+    private CompletableFuture<String> revertPacks(List<PackChange> reverted) {
+        List<String> failed = new ArrayList<>();
+        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+        for (PackChange change : reverted) {
+            chain = chain.thenCompose(ignored -> this.packSelections.revert(change.change()).handle((applied, failure) -> {
+                if (failure != null) {
+                    Throwable cause = failure.getCause() == null ? failure : failure.getCause();
+                    synchronized (failed) {
+                        failed.add(change.name() + ": " + cause.getMessage());
+                    }
+                }
+                return null;
+            }));
+        }
+        return chain.thenApply(ignored -> failed.isEmpty() ? "" : "Not reverted: " + String.join("; ", failed));
+    }
+
+    /** Pack ids, lowest first, as the pack screen lists them: the highest first. */
+    private static String highestFirst(List<String> ids) {
+        List<String> shown = ids.reversed().stream().filter(id -> !id.startsWith("mod/")).toList();
+        return shown.isEmpty() ? "None" : String.join(", ", shown);
     }
 
     /** Reverts the selected rows of {@code table} with Delete, the removal key the menus name beside Revert. */
@@ -380,11 +458,13 @@ public final class ChangesPanel extends JPanel {
         Map<String, List<ChangeRecord.Change>> byMod = new HashMap<>();
         List<ChangeRecord.Change> keyChanges = new ArrayList<>();
         List<ChangeRecord.Change> resourceChanges = new ArrayList<>();
+        List<ChangeRecord.Change> packChanges = new ArrayList<>();
         for (ChangeRecord.Change change : recorded) {
             switch (change.target()) {
                 case ChangeRecord.Setting setting -> byMod.computeIfAbsent(setting.modId(), ignored -> new ArrayList<>()).add(change);
                 case ChangeRecord.KeyBinding ignored -> keyChanges.add(change);
                 case ChangeRecord.Resource ignored -> resourceChanges.add(change);
+                case ChangeRecord.PackSelection ignored -> packChanges.add(change);
             }
         }
         List<String> mods = new ArrayList<>(byMod.keySet());
@@ -465,7 +545,15 @@ public final class ChangesPanel extends JPanel {
             resources.add(new ResourceChange(change, name, packName(target.location()), held));
         }
         resources.sort(Comparator.comparing(ResourceChange::name));
-        return new Loaded(rows, targets, changes, sections, keys, bindings, resources, problems);
+        List<PackChange> packs = new ArrayList<>();
+        for (ChangeRecord.Change change : packChanges) {
+            ChangeRecord.PackSelection target = (ChangeRecord.PackSelection) change.target();
+            String name = target.side() == SetPacksPayload.Side.RESOURCES ? "Resource packs"
+                    : "Datapacks of " + target.location().getFileName();
+            packs.add(new PackChange(change, name, highestFirst(PackSelections.parse(change.current())),
+                    this.packSelections.holds(change)));
+        }
+        return new Loaded(rows, targets, changes, sections, keys, bindings, resources, packs, problems);
     }
 
     /** The pack a change was saved into, such as {@code MyPack datapack of World}. */
@@ -519,13 +607,16 @@ public final class ChangesPanel extends JPanel {
         this.sections = loaded.sections();
         this.keys = loaded.keys();
         this.resources = loaded.resources();
+        this.packs = loaded.packs();
         this.bindings = loaded.bindings();
         this.problem = String.join("; ", loaded.problems());
         showNotice();
         this.table.show(loaded.rows(), true, true);
         this.keyModel.setChanges(loaded.keys());
         this.resourceModel.setChanges(loaded.resources());
-        this.revertAll.setEnabled(!loaded.changes().isEmpty() || !loaded.keys().isEmpty() || !loaded.resources().isEmpty());
+        this.packModel.setChanges(loaded.packs());
+        this.revertAll.setEnabled(!loaded.changes().isEmpty() || !loaded.keys().isEmpty() || !loaded.resources().isEmpty()
+                || !loaded.packs().isEmpty());
         this.tabs.removeAll();
         if (!loaded.changes().isEmpty()) {
             this.tabs.addTab("Configuration", SubjectIcons.tab(ModTab.CONFIGURATION), this.settingsScroll);
@@ -538,6 +629,10 @@ public final class ChangesPanel extends JPanel {
         if (!loaded.resources().isEmpty()) {
             this.tabs.addTab("Resources", SubjectIcons.tab(ModTab.RESOURCES), this.resourcesScroll);
             TabTitles.setCounted(this.tabs, this.tabs.getTabCount() - 1, "Resources", loaded.resources().size());
+        }
+        if (!loaded.packs().isEmpty()) {
+            this.tabs.addTab("Packs", Icons.RESOURCES_ROOT, this.packsScroll);
+            TabTitles.setCounted(this.tabs, this.tabs.getTabCount() - 1, "Packs", loaded.packs().size());
         }
         applyFilter();
     }
@@ -560,7 +655,7 @@ public final class ChangesPanel extends JPanel {
 
     /** Writes every original value back, after asking. */
     private void revertAll() {
-        int total = this.changes.size() + this.keys.size() + this.resources.size();
+        int total = this.changes.size() + this.keys.size() + this.resources.size() + this.packs.size();
         if (total == 0) return;
         int answer = JOptionPane.showConfirmDialog(this,
                 "Put back the original value of " + total + (total == 1 ? " change?" : " changes?"),
@@ -577,7 +672,8 @@ public final class ChangesPanel extends JPanel {
             List<String> failed = writes.stream().map(CompletableFuture::join).filter(failure -> !failure.isEmpty()).toList();
             return failed.isEmpty() ? "" : "Not reverted: " + String.join("; ", failed);
         });
-        List<CompletableFuture<String>> reverts = List.of(revert(this.keys), revertResources(this.resources), settings);
+        List<CompletableFuture<String>> reverts = List.of(revert(this.keys), revertResources(this.resources),
+                revertPacks(this.packs), settings);
         // One status once every kind is done, so a later success never hides an earlier failure.
         report(CompletableFuture.allOf(reverts.toArray(CompletableFuture[]::new)).thenApply(ignored -> String.join("; ",
                 reverts.stream().map(CompletableFuture::join).filter(failure -> !failure.isEmpty()).toList())));
@@ -635,6 +731,7 @@ public final class ChangesPanel extends JPanel {
         this.table.filter(query, false);
         this.keyModel.filter(query.strip().toLowerCase(Locale.ROOT));
         this.resourceModel.filter(query.strip().toLowerCase(Locale.ROOT));
+        this.packModel.filter(query.strip().toLowerCase(Locale.ROOT));
         boolean empty = this.tabs.getTabCount() == 0;
         this.message.setText(!query.isBlank() ? "No change matches the filter." : "Companion has not changed anything in this pack.");
         ((CardLayout) this.cards.getLayout()).show(this.cards, empty ? MESSAGE_CARD : TABS_CARD);
@@ -647,6 +744,54 @@ public final class ChangesPanel extends JPanel {
 
     public void dispose() {
         this.loader.dispose();
+    }
+
+    private final class PackChangesModel extends AbstractTableModel {
+        private List<PackChange> all = List.of();
+        private List<PackChange> shown = List.of();
+        private String query = "";
+
+        void setChanges(List<PackChange> changes) {
+            this.all = List.copyOf(changes);
+            filter(this.query);
+        }
+
+        void filter(String query) {
+            this.query = query;
+            this.shown = this.all.stream().filter(change -> query.isEmpty()
+                    || change.name().toLowerCase(Locale.ROOT).contains(query)
+                    || change.enabled().toLowerCase(Locale.ROOT).contains(query)).toList();
+            fireTableDataChanged();
+        }
+
+        @Override
+        public int getRowCount() {
+            return this.shown.size();
+        }
+
+        @Override
+        public int getColumnCount() {
+            return 3;
+        }
+
+        @Override
+        public String getColumnName(int column) {
+            return switch (column) {
+                case 0 -> "Packs";
+                case 1 -> "Enabled";
+                default -> "Changed";
+            };
+        }
+
+        @Override
+        public Object getValueAt(int row, int column) {
+            PackChange change = this.shown.get(row);
+            return switch (column) {
+                case 0 -> change.name();
+                case 1 -> change.enabled();
+                default -> ago(change.change().lastChanged());
+            };
+        }
     }
 
     private final class ResourceChangesModel extends AbstractTableModel {

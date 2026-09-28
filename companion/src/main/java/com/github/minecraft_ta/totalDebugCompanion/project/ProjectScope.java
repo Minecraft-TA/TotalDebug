@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationState;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
@@ -61,6 +62,9 @@ public final class ProjectScope implements AutoCloseable {
     public WorldReadings world() { return world; }
     /** Writes edited resources into the packs Companion manages and reloads them in the running game. */
     public ResourceEdits resources() { return resources; }
+    private final PackSelections packSelections;
+    /** Enables and orders the resource packs and the worlds' datapacks. */
+    public PackSelections packSelections() { return packSelections; }
     private final List<PendingNavigation> pending = new ArrayList<>();
     private volatile Phase phase = Phase.ACTIVE;
     private volatile RuntimeBinding runtime;
@@ -80,6 +84,8 @@ public final class ProjectScope implements AutoCloseable {
                 () -> GameLock.held(gameLock), this.configChanges.writes());
         this.resources = new ResourceEdits(profile.workspaceDirectory(), changes, new ResourceOriginals(paths().originals()),
                 this.configChanges.writes(), () -> GameLock.held(gameLock), state);
+        this.packSelections = new PackSelections(profile.workspaceDirectory(), changes, this.resources,
+                () -> GameLock.held(gameLock), this.configChanges.writes());
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {

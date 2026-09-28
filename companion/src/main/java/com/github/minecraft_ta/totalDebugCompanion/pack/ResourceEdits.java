@@ -12,7 +12,9 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.google.gson.JsonArray;
@@ -85,8 +87,12 @@ public final class ResourceEdits {
         final Set<ReloadPayload.Kind> kinds = EnumSet.noneOf(ReloadPayload.Kind.class);
         final Set<String> watched = new LinkedHashSet<>();
         final CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
-        /** Whether a save in the batch went into the managed pack, which the game then enables on top. */
-        boolean managed;
+        /**
+         * Whether a save in the batch went into the managed pack of the resource packs, or of the datapacks, which the
+         * game then enables on top of that stack only.
+         */
+        boolean managedAssets;
+        boolean managedData;
     }
 
     private final Path workspace;
@@ -761,12 +767,29 @@ public final class ResourceEdits {
         });
     }
 
+    /**
+     * Asks the connected game to enable exactly {@code enabled}, lowest first, among the resource packs or the open
+     * world's datapacks, and reload what that needs; completes with its answer, or fails without a game.
+     */
+    public CompletableFuture<ReloadResultPayload> select(SetPacksPayload.Side side, List<String> enabled) {
+        Predicate<AbstractMessage> send = this.game;
+        int id = this.requests.incrementAndGet();
+        CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
+        this.waiting.put(id, result);
+        if (send == null || !send.test(new SetPacksMessage(new SetPacksPayload(id, side, enabled)))) {
+            this.waiting.remove(id);
+            return CompletableFuture.failedFuture(new IOException("The game is not connected"));
+        }
+        return result.orTimeout(RELOAD_MINUTES, TimeUnit.MINUTES).whenComplete((ignored, failure) -> this.waiting.remove(id));
+    }
+
     /** Asks the game to reload {@code kind}, merged into the next reload while one runs. */
     private synchronized CompletableFuture<ReloadResultPayload> reload(ReloadPayload.Kind kind, String path, boolean managed) {
         if (this.next == null) this.next = new Batch();
         this.next.kinds.add(kind);
         this.next.watched.add(path);
-        this.next.managed |= managed;
+        if (path.startsWith("assets/")) this.next.managedAssets |= managed;
+        else this.next.managedData |= managed;
         CompletableFuture<ReloadResultPayload> result = this.next.result;
         // A write still queued joins this reload rather than taking another after it.
         if (this.running == null && this.writing == 0) sendNext();
@@ -788,7 +811,8 @@ public final class ResourceEdits {
         this.waiting.put(id, batch.result);
         List<String> watched = new ArrayList<>(batch.watched);
         if (watched.size() > ReloadPayload.MAX_WATCHED) watched = watched.subList(0, ReloadPayload.MAX_WATCHED);
-        if (send == null || !send.test(new ReloadMessage(new ReloadPayload(id, batch.kinds, batch.managed ? PACK_ID : "", watched)))) {
+        if (send == null || !send.test(new ReloadMessage(new ReloadPayload(id, batch.kinds, batch.managedAssets ? PACK_ID : "",
+                batch.managedData ? PACK_ID : "", watched)))) {
             this.waiting.remove(id);
             batch.result.completeExceptionally(new IOException("The game is not connected"));
         }

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.storage;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import com.google.gson.JsonArray;
@@ -30,7 +31,7 @@ public final class ChangeRecord implements AutoCloseable {
     private static final int FORMAT = 1;
 
     /** Something Companion writes to. */
-    public sealed interface Target permits Setting, KeyBinding, Resource {
+    public sealed interface Target permits Setting, KeyBinding, Resource, PackSelection {
     }
 
     /** A setting of a configuration file; {@code file} is where it was written, such as one world's server file. */
@@ -76,6 +77,18 @@ public final class ChangeRecord implements AutoCloseable {
                 if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) return false;
             }
             return true;
+        }
+    }
+
+    /**
+     * Which packs the game enables, and in what order: the resource packs, whose {@code location} is the instance's
+     * {@code options.txt}, or a world's datapacks, whose {@code location} is the world's folder. Its values are the
+     * enabled pack ids, lowest first, as a JSON array.
+     */
+    public record PackSelection(SetPacksPayload.Side side, Path location) implements Target {
+        public PackSelection {
+            Objects.requireNonNull(side, "side");
+            location = location.toAbsolutePath().normalize();
         }
     }
 
@@ -149,6 +162,15 @@ public final class ChangeRecord implements AutoCloseable {
                         }
                         yield new Resource(JsonFiles.string(entry, "path"), location);
                     }
+                    case "packSelection" -> {
+                        Path location = inInstance(game, JsonFiles.string(entry, "location"));
+                        if (location == null) {
+                            System.err.println("Leaving out a pack selection of " + JsonFiles.string(entry, "location")
+                                    + ": it is not a file of this instance");
+                            yield null;
+                        }
+                        yield new PackSelection(SetPacksPayload.Side.valueOf(JsonFiles.string(entry, "side")), location);
+                    }
                     default -> throw new IllegalArgumentException("Unknown change kind " + JsonFiles.string(entry, "kind"));
                 };
                 if (target == null) continue;
@@ -177,6 +199,7 @@ public final class ChangeRecord implements AutoCloseable {
         Path file = switch (target) {
             case Setting setting -> setting.file();
             case Resource resource -> resource.location();
+            case PackSelection selection -> selection.location();
             case KeyBinding ignored -> null;
         };
         if (this.gameDirectory != null && file != null && !file.startsWith(this.gameDirectory)) {
@@ -275,6 +298,11 @@ public final class ChangeRecord implements AutoCloseable {
                     entry.addProperty("kind", "resource");
                     entry.addProperty("path", resource.path());
                     entry.addProperty("location", stored(resource.location()));
+                }
+                case PackSelection selection -> {
+                    entry.addProperty("kind", "packSelection");
+                    entry.addProperty("side", selection.side().name());
+                    entry.addProperty("location", stored(selection.location()));
                 }
             }
             entry.addProperty("original", change.original());
