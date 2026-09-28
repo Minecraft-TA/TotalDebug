@@ -73,10 +73,19 @@ public final class ServerScriptService {
      * session that took its request, and everything sent about it is dropped once that session ended: the runs of the
      * session before end here, since a Companion started since counts its run ids from the beginning again. Server
      * thread.
+     *
+     * <p>The manifest serves only server scripts, so a player who may not run them gets no session: a request is a few
+     * bytes and its answer up to 32 MiB, which only a player who could run code on the server anyway may ask for.
      */
     public synchronized void sendManifest(ServerPlayer player) {
         if (!ServerRelay.reaches(player)) return;
         MinecraftServer server = Objects.requireNonNull(player.getServer());
+        ServerScriptPolicy.Decision decision = policyDecision(server, player);
+        if (!decision.allowed()) {
+            endSession(player);
+            this.relay.send(server, player, ServerManifestMessage.unavailable(decision.rejectionReason()));
+            return;
+        }
         closeRunner(player);
         var session = new ManifestSession(player, UUID.randomUUID().toString());
         this.manifestSessions.put(player.getUUID(), session);
@@ -144,13 +153,7 @@ public final class ServerScriptService {
             sendCompilationFailure(server, player, payload.scriptId(), exception.getMessage(), current);
             return;
         }
-        ServerScriptPolicy policy = new ServerScriptPolicy(
-                TotalDebugConfig.SERVER.enableScripts.get(),
-                TotalDebugConfig.SERVER.enableScriptsOnlyForOp.get()
-        );
-        ServerScriptPolicy.Decision decision = policy.evaluate(
-                player.hasPermissions(server.getOperatorUserPermissionLevel())
-        );
+        ServerScriptPolicy.Decision decision = policyDecision(server, player);
         if (!decision.allowed()) {
             sendCompilationFailure(server, player, payload.scriptId(),
                     decision.rejectionReason(), current);
@@ -190,6 +193,14 @@ public final class ServerScriptService {
             return;
         }
         runner.runScript(payload.scriptId(), payload.bytecode(), environment, subject, payload.subjectExpectedId());
+    }
+
+    private static ServerScriptPolicy.Decision policyDecision(MinecraftServer server, ServerPlayer player) {
+        ServerScriptPolicy policy = new ServerScriptPolicy(
+                TotalDebugConfig.SERVER.enableScripts.get(),
+                TotalDebugConfig.SERVER.enableScriptsOnlyForOp.get()
+        );
+        return policy.evaluate(player.hasPermissions(server.getOperatorUserPermissionLevel()));
     }
 
     public void stopScript(ServerPlayer player, int scriptId) {
