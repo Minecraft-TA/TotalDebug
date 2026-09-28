@@ -131,11 +131,10 @@ public abstract class AbstractTextViewPanel extends JPanel {
             if (this.searchManager.getMatchCount() == 0) {
                 return;
             }
-            SwingUtilities.invokeLater(() -> UIUtils.positionViewportOnRange(
-                    this.editorScrollPane,
-                    this.searchManager.getFocusedRangeStart(),
-                    this.searchManager.getFocusedRangeEnd()
-            ));
+            // The range as it is now: the search may be closed before the view moves.
+            int start = this.searchManager.getFocusedRangeStart();
+            int end = this.searchManager.getFocusedRangeEnd();
+            SwingUtilities.invokeLater(() -> UIUtils.positionViewportOnRange(this.editorScrollPane, start, end));
         });
     }
 

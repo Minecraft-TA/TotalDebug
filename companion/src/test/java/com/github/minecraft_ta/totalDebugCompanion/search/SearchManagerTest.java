@@ -88,16 +88,30 @@ class SearchManagerTest {
     @Test
     void aFileOfOneLongLinePaintsItsMatchesQuickly() throws Exception {
         // As Mekanism's language file: 250 KB on one line, the letter e in it tens of thousands of times.
+        paintsQuickly(minified(250_000));
+    }
+
+    @Test
+    void aFileOfSeveralLongLinesPaintsItsMatchesQuickly() throws Exception {
+        // Only the start of each line is in view; the matches far to its right are not placed.
+        String line = minified(60_000);
+        paintsQuickly(String.join("\n", line, line, line, line, line));
+    }
+
+    private static String minified(int length) {
         StringBuilder text = new StringBuilder("{");
-        for (int entry = 0; text.length() < 250_000; entry++) {
+        for (int entry = 0; text.length() < length; entry++) {
             text.append("\"item.mekanism.entry_").append(entry).append("\":\"Mekanism entry number ").append(entry).append("\",");
         }
-        text.append("\"end\":\"end\"}");
+        return text.append("\"end\":\"end\"}").toString();
+    }
+
+    private static void paintsQuickly(String text) throws Exception {
         RTextScrollPane[] scroll = new RTextScrollPane[1];
         SearchManager[] search = new SearchManager[1];
         JFrame[] frame = new JFrame[1];
         SwingUtilities.invokeAndWait(() -> {
-            RSyntaxTextArea area = new RSyntaxTextArea(text.toString());
+            RSyntaxTextArea area = new RSyntaxTextArea(text);
             area.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JSON);
             scroll[0] = new RTextScrollPane(area);
             frame[0] = new JFrame();

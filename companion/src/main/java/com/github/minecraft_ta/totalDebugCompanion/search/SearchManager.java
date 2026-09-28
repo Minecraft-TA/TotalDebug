@@ -217,7 +217,11 @@ public class SearchManager {
                 // The text stops the pattern, even a slow one, as soon as a newer search starts.
                 Matcher matcher = pattern.matcher(new Stoppable(text, () -> search != this.searches));
                 while (matcher.find()) {
-                    if (matcher.start() == matcher.end()) continue;
+                    if (matcher.start() == matcher.end()) {
+                        // An empty match reads no text, so the search looks for a newer one here too.
+                        if (search != this.searches) return;
+                        continue;
+                    }
                     if (count == foundStarts.length) {
                         foundStarts = Arrays.copyOf(foundStarts, count * 2);
                         foundEnds = Arrays.copyOf(foundEnds, count * 2);
@@ -346,8 +350,18 @@ public class SearchManager {
             } catch (BadLocationException unreachable) {
                 // The end of the text always has a place.
             }
-            int first = component.viewToModel2D(new Point(clip.x, clip.y));
-            int last = component.viewToModel2D(new Point(clip.x + clip.width, bottom));
+            // Row by row, so on several long lines the matches left or right of the area are skipped too.
+            int rowHeight = Math.max(1, textPane.getLineHeight());
+            for (int y = clip.y; y <= bottom; y += rowHeight) {
+                int first = component.viewToModel2D(new Point(clip.x, y));
+                int last = component.viewToModel2D(new Point(clip.x + clip.width, y));
+                paintMatches(graphics, component, clip, first, last, length, match, focused);
+            }
+        }
+
+        /** Paints the matches between two offsets of one row. */
+        private void paintMatches(Graphics graphics, JTextComponent component, Rectangle clip, int first, int last, int length,
+                                  Color match, Color focused) {
             for (int index = firstEndingAfter(first); index < starts.length && starts[index] <= last; index++) {
                 if (ends[index] > length) break;
                 graphics.setColor(index == focusedMatchIndex ? focused : match);
