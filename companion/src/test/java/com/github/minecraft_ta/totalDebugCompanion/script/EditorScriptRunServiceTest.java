@@ -229,7 +229,7 @@ class EditorScriptRunServiceTest {
         final CompanionSession session = new CompanionSession("editor-run-test-token");
         final ResultBus bus = new ResultBus();
         final LinkedBlockingQueue<RunScriptMessage> sent = new LinkedBlockingQueue<>();
-        final ScriptCompilationService compiler = new ScriptCompilationService(sent::add, message -> false);
+        final ScriptCompilationService compiler = new ScriptCompilationService(sent::add);
         final ProjectScope project = new ProjectScope(new Object(), new CompanionProfile("project", directory, directory), InstanceState.inMemory(), ChangeRecord.inMemory());
         final ExecutionRuns executions;
         final EditorScriptRunService runs;

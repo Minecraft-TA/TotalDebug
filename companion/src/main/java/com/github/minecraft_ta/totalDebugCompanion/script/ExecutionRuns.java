@@ -95,8 +95,8 @@ public final class ExecutionRuns implements AutoCloseable {
     }
 
     /**
-     * The server's class manifest session ended, because the game left the server or it started a new one: the runs on
-     * the server can no longer report back.
+     * The game no longer plays the server Companion asked about, because it left it or plays another: the runs on that
+     * server can no longer report back.
      */
     public void serverSessionEnded() {
         for (int id : List.copyOf(this.runs.keySet())) {

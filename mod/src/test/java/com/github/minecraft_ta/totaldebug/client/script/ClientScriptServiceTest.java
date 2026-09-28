@@ -47,7 +47,7 @@ class ClientScriptServiceTest {
 
     private static RunScriptMessage run(int scriptId, Side side, String environment) {
         return new RunScriptMessage(scriptId, new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2})),
-                "inventory", side, environment, "server-session");
+                "inventory", side, environment);
     }
 
     private record Status(int scriptId, ExecutionResult status) {

@@ -26,31 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Timeout(10)
 class ProtocolBindingsTest {
     @Test
-    void companionReceivesAChunkedManifestThroughItsRegisteredTransport() throws Exception {
-        try (Server server = endpoint(ProtocolBindings::registerCompanion)) {
-            var received = new CompletableFuture<byte[]>();
-            var assembler = new ServerManifestMessage.Assembler();
-            server.getMessageBus().listenAlways(ServerManifestMessage.class, message -> {
-                byte[] result = assembler.accept(message);
-                if (result != null) received.complete(result);
-            });
-            byte[] bytes = new byte[ServerManifestMessage.CHUNK_BYTES + 19];
-            try (SocketChannel socket = SocketChannel.open(server.getLocalAddress())) {
-                for (var message : ServerManifestMessage.split("session", bytes)) {
-                    var output = new ByteBufferOutputStream();
-                    message.write(output);
-                    var buffer = output.getBuffer().duplicate();
-                    buffer.flip();
-                    byte[] encoded = new byte[buffer.remaining()];
-                    buffer.get(encoded);
-                    write(socket, CompanionProtocol.SERVER_MANIFEST, encoded);
-                }
-                assertArrayEquals(bytes, received.get(5, TimeUnit.SECONDS));
-            }
-        }
-    }
-
-    @Test
     void aMessageForTheServerTravelsFromCompanionToTheModInItsEnvelope() throws Exception {
         try (Server server = endpoint(ProtocolBindings::registerCompanion); Client client = new Client()) {
             ProtocolBindings.registerMod(client.getMessageProcessor());
@@ -65,11 +40,9 @@ class ProtocolBindingsTest {
             assertTrue(client.connect(server.getLocalAddress()));
             connected.get(5, TimeUnit.SECONDS);
             server.getMessageProcessor().enqueueMessage(new ToServerMessage(
-                    RelayedMessages.toServer(new ServerSourceRequestMessage("session", "request", 7), 0, "")));
-            var request = (ServerSourceRequestMessage) RelayedMessages.decodeToServer(received.get(5, TimeUnit.SECONDS).payload());
-            assertEquals("session", request.sessionId());
-            assertEquals("request", request.requestId());
-            assertEquals(7, request.source());
+                    RelayedMessages.toServer(new StopScriptMessage(7), 7, "")));
+            var request = (StopScriptMessage) RelayedMessages.decodeToServer(received.get(5, TimeUnit.SECONDS).payload());
+            assertEquals(7, request.scriptId());
         }
     }
 

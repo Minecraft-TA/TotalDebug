@@ -28,7 +28,6 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.KeyBindingResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
@@ -71,11 +70,13 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.ObjIntConsumer;
 
 public final class CompanionAppClient implements AutoCloseable {
 
@@ -104,12 +105,15 @@ public final class CompanionAppClient implements AutoCloseable {
         final AtomicBoolean finished = new AtomicBoolean();
         volatile String token;
         volatile boolean rejected;
+        /** Numbers the authenticated connections of this game; 0 until this one authenticated. */
+        volatile int number;
 
         Connection(CompanionSessionDescriptor descriptor, String token) { this.descriptor = descriptor; this.token = token; }
         boolean authenticated() { return authenticated.isDone() && !authenticated.isCompletedExceptionally(); }
     }
     private final Object connectionLock = new Object();
     private volatile Connection connection;
+    private final AtomicInteger connections = new AtomicInteger();
     private volatile ResourceSnapshotMessage resourceSnapshot;
     private volatile CompanionDiscovery discovery;
     private volatile BooleanSupplier companionEnabled = () -> true;
@@ -122,7 +126,7 @@ public final class CompanionAppClient implements AutoCloseable {
             "Ignoring companion stop-script request {} because no handler is installed",
             scriptId
     );
-    private volatile Runnable sessionClosedHandler = () -> { };
+    private volatile IntConsumer sessionClosedHandler = number -> { };
     private volatile Runnable sessionOpenedHandler = () -> { };
     private volatile BiConsumer<String, Map<String, String>> packCatalogHandler = (inventoryId, modules) -> { };
     private volatile Consumer<SetKeyBindingMessage> keyBindingHandler = message -> send(new KeyBindingResultMessage(
@@ -250,7 +254,8 @@ public final class CompanionAppClient implements AutoCloseable {
         this.stopScriptHandler = Objects.requireNonNull(handler, "handler");
     }
 
-    public void setSessionClosedHandler(Runnable handler) {
+    /** Runs once for each connection that ended, with its number, or 0 when it never authenticated. */
+    public void setSessionClosedHandler(IntConsumer handler) {
         this.sessionClosedHandler = Objects.requireNonNull(handler, "handler");
     }
 
@@ -303,27 +308,28 @@ public final class CompanionAppClient implements AutoCloseable {
         this.progressListener = Objects.requireNonNull(listener, "listener");
     }
 
-    private volatile Consumer<RelayedMessage> toServerHandler = message -> sendRelayFailed(message.correlation(),
-            "The game's relay to the server is not ready");
+    private volatile ObjIntConsumer<RelayedMessage> toServerHandler = (message, companion) -> sendRelayFailed(
+            companion, message.correlation(), "The game's relay to the server is not ready");
 
-    /** Receives the messages Companion addressed to the server; runs on the connection thread. */
-    public void setToServerHandler(Consumer<RelayedMessage> handler) {
+    /** Receives the messages Companion addressed to the server with its connection's number; runs on the connection thread. */
+    public void setToServerHandler(ObjIntConsumer<RelayedMessage> handler) {
         this.toServerHandler = Objects.requireNonNull(handler, "handler");
     }
 
-    /** Hands Companion a message the server sent, unread. */
-    public void sendFromServer(RelayedMessage message) {
-        send(new FromServerMessage(message));
+    /** Hands Companion connection {@code companion} a message the server sent it, unread. */
+    public void sendFromServer(int companion, RelayedMessage message) {
+        send(companion, new FromServerMessage(message));
     }
 
-    /** Tells Companion a message for the server could not be carried, and why. */
-    public void sendRelayFailed(int correlation, String reason) {
-        send(new RelayFailedMessage(correlation, reason));
+    /** Tells Companion connection {@code companion} a message it sent for the server could not be carried, and why. */
+    public void sendRelayFailed(int companion, int correlation, String reason) {
+        send(companion, new RelayFailedMessage(correlation, reason));
     }
 
-    /** Tells Companion the server is gone, so its class manifest session ended. */
-    public void sendServerLeft() {
-        send(ServerManifestMessage.unavailable("Disconnected from the game server"));
+    /** The number of the authenticated Companion connection, or 0 when none is. */
+    public int companionConnection() {
+        Connection current = this.connection;
+        return current != null && current.authenticated() && !current.finished.get() ? current.number : 0;
     }
 
     public void sendExecutionResult(int scriptId, ExecutionResult result) {
@@ -401,7 +407,7 @@ public final class CompanionAppClient implements AutoCloseable {
                 failSession(attempt, "Companion sent a message for the server before authentication", null);
                 return;
             }
-            this.toServerHandler.accept(message.payload());
+            this.toServerHandler.accept(message.payload(), attempt.number);
         });
         transport.getMessageBus().listenAlways(RunScriptMessage.class, message -> {
             if (!attempt.authenticated()) {
@@ -473,10 +479,9 @@ public final class CompanionAppClient implements AutoCloseable {
             return;
         }
         attempt.token = null;
+        attempt.number = this.connections.incrementAndGet();
         attempt.authenticated.complete(null);
         send(new DebugTargetMessage("minecraft-client", "Minecraft Client", DebugTargetMessage.LOCAL_JVM, ProcessHandle.current().pid()));
-        // Companion asks the server for its class manifest once it knows the game plays one.
-        send(ServerManifestMessage.unavailable("Server scripts need a singleplayer world or a server with TotalDebug"));
         ResourceSnapshotMessage snapshot = this.resourceSnapshot;
         if (snapshot != null) send(snapshot);
         this.sessionOpenedHandler.run();
@@ -490,7 +495,22 @@ public final class CompanionAppClient implements AutoCloseable {
 
     private void send(AbstractMessage message) {
         var current = connection;
-        if (current == null || !current.authenticated() || !current.client.isConnected() || closing) return;
+        if (current == null) return;
+        send(current, message);
+    }
+
+    /**
+     * Sends {@code message} only to Companion connection {@code companion}: a restarted Companion counts its request ids
+     * from the beginning again, so an answer meant for an earlier connection must not reach it.
+     */
+    private void send(int companion, AbstractMessage message) {
+        var current = connection;
+        if (current == null || current.number != companion) return;
+        send(current, message);
+    }
+
+    private void send(Connection current, AbstractMessage message) {
+        if (!current.authenticated() || !current.client.isConnected() || closing) return;
         try { current.client.getMessageProcessor().enqueueMessage(message); }
         catch (RejectedExecutionException rejected) { TotalDebug.LOGGER.debug("Companion disconnected before message delivery", rejected); }
     }
@@ -791,13 +811,13 @@ public final class CompanionAppClient implements AutoCloseable {
         synchronized (attempt) {
             attempt.authenticated.completeExceptionally(failure);
             attempt.ready.completeExceptionally(failure);
-            if (attempt.finished.compareAndSet(false, true)) notifySessionClosed();
+            if (attempt.finished.compareAndSet(false, true)) notifySessionClosed(attempt.number);
         }
     }
 
-    private void notifySessionClosed() {
+    private void notifySessionClosed(int number) {
         try {
-            this.sessionClosedHandler.run();
+            this.sessionClosedHandler.accept(number);
         } catch (RuntimeException exception) {
             TotalDebug.LOGGER.warn("The Companion session-close handler failed", exception);
         }

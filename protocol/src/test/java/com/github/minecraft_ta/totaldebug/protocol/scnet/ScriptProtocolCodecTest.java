@@ -35,11 +35,10 @@ class ScriptProtocolCodecTest {
         assertEquals("X", message.bytecode().primaryClass());
         assertArrayEquals(new byte[]{1, 2, 3}, message.bytecode().classes().get("X"));
         assertEquals("inventory", message.inventoryId());
-        assertEquals("s", message.serverSessionId());
         assertEquals(Side.SERVER, message.side());
         assertEquals("POST_TICK", message.executionEnvironment());
         assertEquals("", message.subject());
-        assertEquals("", message.subjectSessionId());
+        assertEquals("", message.world());
         assertEquals("", message.subjectExpectedId());
     }
 
@@ -51,7 +50,6 @@ class ScriptProtocolCodecTest {
                 "inventory",
                 Side.CLIENT,
                 ScriptExecutionEnvironment.POST_TICK.name(),
-                "",
                 "block minecraft:overworld 1 64 -2",
                 "game-session",
                 "minecraft:furnace"
@@ -63,7 +61,7 @@ class ScriptProtocolCodecTest {
         read.read(new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output))));
 
         assertEquals("block minecraft:overworld 1 64 -2", read.subject());
-        assertEquals("game-session", read.subjectSessionId());
+        assertEquals("game-session", read.world());
         assertEquals("minecraft:furnace", read.subjectExpectedId());
     }
 
@@ -75,7 +73,6 @@ class ScriptProtocolCodecTest {
                 "inventory",
                 Side.CLIENT,
                 ScriptExecutionEnvironment.POST_TICK.name(),
-                "",
                 "entity 00000000-0000-0000-0000-000000000001",
                 "",
                 ""
@@ -86,7 +83,6 @@ class ScriptProtocolCodecTest {
                 "inventory",
                 Side.CLIENT,
                 ScriptExecutionEnvironment.POST_TICK.name(),
-                "",
                 "",
                 "",
                 "minecraft:furnace"
@@ -155,7 +151,7 @@ class ScriptProtocolCodecTest {
                 new ScriptBytecode("X", Map.of("X", new byte[]{1, 2, 3})),
                 "inventory",
                 Side.SERVER,
-                ScriptExecutionEnvironment.POST_TICK.name(), "s"
+                ScriptExecutionEnvironment.POST_TICK.name()
         );
         ByteBufferOutputStream output = new ByteBufferOutputStream();
 

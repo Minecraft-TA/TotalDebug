@@ -26,7 +26,7 @@ public final class ClientScriptService implements AutoCloseable {
 
     private final ExecutionResultSink resultSink;
     private final TickTaskScheduler tickTasks;
-    private final Supplier<String> gameSession;
+    private final Supplier<String> world;
     private final KeptStacks stacks;
     private final Map<Integer, Run> activeRuns = new ConcurrentHashMap<>();
     private final Map<Integer, Run> executions = new ConcurrentHashMap<>();
@@ -36,13 +36,13 @@ public final class ClientScriptService implements AutoCloseable {
     public ClientScriptService(
             CompanionAppClient companionApp,
             TickTaskScheduler tickTasks,
-            Supplier<String> gameSession,
+            Supplier<String> world,
             KeptStacks stacks
     ) {
         this(
                 Objects.requireNonNull(companionApp, "companionApp")::sendExecutionResult,
                 tickTasks,
-                gameSession,
+                world,
                 stacks
         );
     }
@@ -50,13 +50,13 @@ public final class ClientScriptService implements AutoCloseable {
     ClientScriptService(
             ExecutionResultSink resultSink,
             TickTaskScheduler tickTasks,
-            Supplier<String> gameSession,
+            Supplier<String> world,
             KeptStacks stacks
     ) {
         this.stacks = Objects.requireNonNull(stacks, "stacks");
         this.resultSink = Objects.requireNonNull(resultSink, "resultSink");
         this.tickTasks = Objects.requireNonNull(tickTasks, "tickTasks");
-        this.gameSession = Objects.requireNonNull(gameSession, "gameSession");
+        this.world = Objects.requireNonNull(world, "world");
     }
 
     public void handleRunRequest(RunScriptMessage message) {
@@ -75,7 +75,7 @@ public final class ClientScriptService implements AutoCloseable {
         }
         SubjectRef.Occurrence subject = null;
         if (!message.subject().isEmpty()) {
-            if (!message.subjectSessionId().equals(this.gameSession.get())) {
+            if (!message.world().equals(this.world.get())) {
                 sendUntrackedResult(message.scriptId(), ExecutionStatus.RUN_EXCEPTION,
                         "The world containing this target was left; inspect it again");
                 return;

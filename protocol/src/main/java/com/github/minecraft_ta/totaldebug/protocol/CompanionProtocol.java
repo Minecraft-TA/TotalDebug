@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 32;
+    public static final int VERSION = 33;
 
     public static final short READY = 1;
     // 2 was the game opening a class, which the /decompile command used.
@@ -16,8 +16,8 @@ public final class CompanionProtocol {
     public static final short DEBUG_TARGET = 25;
 
     // 26 and 27 belong to programmable-object messages.
-    public static final short SERVER_MANIFEST = 28;
-    public static final short SERVER_SOURCE_REQUEST = 29;
+    public static final short SERVER_SCRIPTS = 28;
+    // 29 was a request for a server source's class fingerprints.
     public static final short INSPECT_SUBJECT = 30;
     public static final short RESOURCE_SNAPSHOT = 31;
     public static final short PACK_CATALOG = 32;
@@ -32,7 +32,7 @@ public final class CompanionProtocol {
     public static final short TO_SERVER = 42;
     public static final short FROM_SERVER = 43;
     public static final short RELAY_FAILED = 44;
-    public static final short MANIFEST_REQUEST = 45;
+    public static final short SERVER_SCRIPTS_REQUEST = 45;
     public static final short COMPANION_LEFT = 46;
 
     private CompanionProtocol() {

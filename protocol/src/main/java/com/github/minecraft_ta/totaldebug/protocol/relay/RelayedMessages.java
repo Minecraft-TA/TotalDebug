@@ -3,10 +3,9 @@ package com.github.minecraft_ta.totaldebug.protocol.relay;
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ManifestRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
@@ -27,19 +26,18 @@ public final class RelayedMessages {
     private static final Map<Short, Kind> TO_SERVER = Map.of(
             CompanionProtocol.RUN_SCRIPT, new Kind(RunScriptMessage.class, RunScriptMessage::new),
             CompanionProtocol.STOP_SCRIPT, new Kind(StopScriptMessage.class, StopScriptMessage::new),
-            CompanionProtocol.SERVER_SOURCE_REQUEST, new Kind(ServerSourceRequestMessage.class, ServerSourceRequestMessage::new),
-            CompanionProtocol.MANIFEST_REQUEST, new Kind(ManifestRequestMessage.class, ManifestRequestMessage::new),
+            CompanionProtocol.SERVER_SCRIPTS_REQUEST, new Kind(ServerScriptsRequestMessage.class, ServerScriptsRequestMessage::new),
             CompanionProtocol.COMPANION_LEFT, new Kind(CompanionLeftMessage.class, CompanionLeftMessage::new));
     private static final Map<Short, Kind> FROM_SERVER = Map.of(
             CompanionProtocol.EXECUTION_RESULT, new Kind(ExecutionResultMessage.class, ExecutionResultMessage::new),
-            CompanionProtocol.SERVER_MANIFEST, new Kind(ServerManifestMessage.class, ServerManifestMessage::new));
+            CompanionProtocol.SERVER_SCRIPTS, new Kind(ServerScriptsMessage.class, ServerScriptsMessage::new));
 
     private RelayedMessages() {
     }
 
-    /** {@code message}, for the server, with the request's correlation and the game session it is valid in. */
-    public static RelayedMessage toServer(AbstractMessage message, int correlation, String gameSession) {
-        return new RelayedMessage(correlation, gameSession, id(TO_SERVER, message), encode(message));
+    /** {@code message}, for the server, with the request's correlation and the world it is valid in. */
+    public static RelayedMessage toServer(AbstractMessage message, int correlation, String world) {
+        return new RelayedMessage(correlation, world, id(TO_SERVER, message), encode(message));
     }
 
     /** {@code message}, from the server, for Companion. */

@@ -24,7 +24,7 @@ class ScriptExecutionServiceTest {
     void connectedWithoutRuntimeReportsCompilationReadinessThroughTheFailureHandler() throws Exception {
         var project = new ProjectScope(new Object(), new CompanionProfile("test", directory, directory), InstanceState.inMemory(), ChangeRecord.inMemory());
         try (var session = new CompanionSession("test-token-1234567890abcdef");
-             var compiler = new ScriptCompilationService(message -> fail("Must not send local code"), message -> false)) {
+             var compiler = new ScriptCompilationService(message -> fail("Must not send local code"))) {
             var scripts = new ScriptExecutionService(session, compiler, () -> true);
             var result = new AtomicReference<ExecutionResult>();
             assertFalse(scripts.isReady());

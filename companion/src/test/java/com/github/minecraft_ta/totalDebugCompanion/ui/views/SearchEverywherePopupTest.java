@@ -59,7 +59,7 @@ class SearchEverywherePopupTest {
         }
         var sources = List.of(librarySource(0, directory));
         try (var index = ClassIndex.fromSources(inputs);
-             var compiler = new ScriptCompilationService(ignored -> false, ignored -> false);
+             var compiler = new ScriptCompilationService(ignored -> false);
              var insights = new CodeInsightService(() -> null, RuntimeSourceCatalog.empty());
              var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close());
              var binding = new RuntimeBinding(new RuntimeIndexService.ReadySnapshot("fixture", "fixture",

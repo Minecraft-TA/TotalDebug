@@ -34,7 +34,6 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Owns the client-only runtime assembled after Minecraft has reached client setup. */
@@ -56,7 +55,8 @@ public final class TotalDebugClient {
     private final ChangePublisher<PlayingPayload> playing;
     private final AtomicReference<PackCatalogCapture> catalogCapture = new AtomicReference<>();
     private volatile boolean snapshotRequested;
-    private volatile String gameSessionId;
+    /** The world the game last told Companion it plays, which every world-bound request must name. */
+    private volatile String world = "";
 
     private TotalDebugClient(Path gameDirectory) {
         Path totalDebugDirectory = gameDirectory
@@ -88,6 +88,7 @@ public final class TotalDebugClient {
         );
         this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
         this.playing = new ChangePublisher<>(Playing::capture, playing -> {
+            this.world = playing.identity();
             companionApp.sendPlaying(new PlayingMessage(playing));
             // Companion drops the packs of what the game played before; they are named again for what it plays now.
             this.packStacks.republish();
@@ -111,8 +112,10 @@ public final class TotalDebugClient {
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(Selection subject) {
+                // The subject names the world Companion was told of, so it is told now if that changed.
+                TotalDebugClient.this.playing.publish(Playing.capture());
                 TotalDebugClient.this.requests.inspect(new InspectSubjectPayload(
-                        gameSession(),
+                        TotalDebugClient.this.world,
                         subject.subject().format(),
                         subject.identity(),
                         subject.icon().map(ItemIcons.Icon::model).orElse(""),
@@ -128,17 +131,17 @@ public final class TotalDebugClient {
             }
         });
         this.codeViewInput = new CodeViewInput(this.codeView::inspectOrFocus, this.keptStacks);
-        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks(), () -> this.gameSessionId,
+        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks(), () -> this.world,
                 this.keptStacks);
-        ClientRelay relay = new ClientRelay(companionApp, () -> this.gameSessionId);
+        ClientRelay relay = new ClientRelay(companionApp, () -> this.world);
         this.relay = relay;
-        companionApp.setToServerHandler(message -> Minecraft.getInstance().execute(() -> relay.toServer(message)));
+        companionApp.setToServerHandler((message, companion) -> Minecraft.getInstance().execute(() -> relay.toServer(companion, message)));
         TotalDebug.get().network().setCompanionReceiver(relay::fromServer);
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);
-        companionApp.setSessionClosedHandler(() -> {
+        companionApp.setSessionClosedHandler(companion -> {
             this.scripts.close();
-            Minecraft.getInstance().execute(relay::companionLeft);
+            if (companion != 0) Minecraft.getInstance().execute(() -> relay.companionLeft(companion));
         });
         companionApp.startDiscovery(() -> TotalDebugConfig.CLIENT.useCompanionApp.get());
     }
@@ -215,21 +218,10 @@ public final class TotalDebugClient {
     }
 
     public void onServerDisconnect() {
-        synchronized (this) {
-            this.gameSessionId = null;
-        }
         this.relay.serverLeft();
-        // A rejoin of the same server between two checks would otherwise look unchanged, and Companion would not ask
-        // the new server session for its manifest.
+        // A rejoin of the same server between two checks would otherwise look unchanged to Companion, which ends its
+        // runs there and asks the server again when what the game plays changes.
         this.playing.publish(new PlayingPayload.Menu());
         this.scripts.onServerDisconnect();
-    }
-
-    /** Identifies the world joined since the last logout, so a run against a left world is rejected. */
-    private synchronized String gameSession() {
-        if (this.gameSessionId == null) {
-            this.gameSessionId = UUID.randomUUID().toString();
-        }
-        return this.gameSessionId;
     }
 }

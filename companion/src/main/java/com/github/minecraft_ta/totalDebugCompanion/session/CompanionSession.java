@@ -24,7 +24,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.Server;
 import com.github.tth05.scnet.message.AbstractMessage;
@@ -90,7 +90,8 @@ public final class CompanionSession implements AutoCloseable {
         default void runtimeInventory(RuntimeInventoryMessage message) {
         }
 
-        default void serverManifest(ServerManifestMessage message) {}
+        /** The game's server answered whether it runs this player's scripts. */
+        default void serverScripts(ServerScriptsMessage message) {}
         /** The game client could not carry a message to the server; {@code correlation} is the message's. */
         default void relayFailed(RelayFailedMessage message) {}
         default void playing(PlayingMessage message) {}
@@ -215,10 +216,10 @@ public final class CompanionSession implements AutoCloseable {
     /**
      * Sends {@code message} to the game's server through the game client, which carries it unread (see
      * {@code docs/MOD_SIDES.md}). {@code correlation} is the request's id, such as a script run, which a failure to
-     * deliver names; {@code gameSession} is the joined world the message is only valid in, or empty.
+     * deliver names; {@code world} is the world the message is only valid in, as {@code PLAYING} names it, or empty.
      */
-    public boolean sendToServer(AbstractMessage message, int correlation, String gameSession) {
-        return send(new ToServerMessage(RelayedMessages.toServer(message, correlation, gameSession)));
+    public boolean sendToServer(AbstractMessage message, int correlation, String world) {
+        return send(new ToServerMessage(RelayedMessages.toServer(message, correlation, world)));
     }
 
     public boolean send(AbstractMessage message) {
@@ -255,7 +256,7 @@ public final class CompanionSession implements AutoCloseable {
     private void registerHandlers() {
         this.server.getMessageBus().listenAlways(ClientHelloMessage.class, this::handleHello);
         this.server.getMessageBus().listenAlways(RuntimeInventoryMessage.class, this.listener::runtimeInventory);
-        this.server.getMessageBus().listenAlways(ServerManifestMessage.class, this.listener::serverManifest);
+        this.server.getMessageBus().listenAlways(ServerScriptsMessage.class, this.listener::serverScripts);
         this.server.getMessageBus().listenAlways(RelayFailedMessage.class, this.listener::relayFailed);
         // The server's messages arrive through the game client and reach the same listeners as the game's own.
         this.server.getMessageBus().listenAlways(FromServerMessage.class, message -> {

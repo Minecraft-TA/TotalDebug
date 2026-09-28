@@ -9,7 +9,8 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvi
 import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ManifestRequestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
@@ -33,7 +34,7 @@ class RelayedMessagesTest {
     void aServerRunTravelsInItsEnvelopeAndIsReadBackByTheServer() {
         byte[] large = new byte[40_000];
         RunScriptMessage run = new RunScriptMessage(7, new ScriptBytecode("Probe", Map.of("Probe", large)), "inventory",
-                Side.SERVER, ScriptExecutionEnvironment.POST_TICK.name(), "server-session",
+                Side.SERVER, ScriptExecutionEnvironment.POST_TICK.name(),
                 "block minecraft:overworld 1 64 -2", "game-session", "minecraft:furnace");
 
         RelayedMessage relayed = RelayedMessages.toServer(run, 7, "game-session");
@@ -42,7 +43,7 @@ class RelayedMessagesTest {
         read.read(new ByteBufferInputStream(written(envelope)));
 
         assertEquals(7, read.payload().correlation());
-        assertEquals("game-session", read.payload().gameSession());
+        assertEquals("game-session", read.payload().world());
         RunScriptMessage decoded = assertInstanceOf(RunScriptMessage.class, RelayedMessages.decodeToServer(read.payload()));
         assertEquals(7, decoded.scriptId());
         assertEquals(Side.SERVER, decoded.side());
@@ -62,18 +63,29 @@ class RelayedMessagesTest {
     }
 
     @Test
-    void aManifestRequestAndCompanionLeavingHaveNoBody() {
-        RelayedMessage relayed = RelayedMessages.toServer(new ManifestRequestMessage(), 0, "");
+    void theServersRefusalOfScriptsIsReadBackByCompanion() {
+        ServerScriptsMessage decoded = assertInstanceOf(ServerScriptsMessage.class, RelayedMessages.decodeFromServer(
+                RelayedMessages.fromServer(new ServerScriptsMessage(-3, "Server-side scripts are disabled by the server configuration"))));
+
+        assertEquals("Server-side scripts are disabled by the server configuration", decoded.refusal());
+        assertEquals(-3, decoded.request(), "the answer names the question it answers");
+        assertTrue(RelayedMessages.decodeFromServer(RelayedMessages.fromServer(ServerScriptsMessage.allowed(-4))) instanceof ServerScriptsMessage allowed
+                && allowed.isAllowed());
+    }
+
+    @Test
+    void anAccessRequestCarriesItsIdAndCompanionLeavingNothing() {
+        RelayedMessage relayed = RelayedMessages.toServer(new ServerScriptsRequestMessage(-3), -3, "");
         RelayedMessage left = RelayedMessages.toServer(new CompanionLeftMessage(), 0, "");
 
-        assertEquals(0, relayed.body().length);
-        assertInstanceOf(ManifestRequestMessage.class, RelayedMessages.decodeToServer(relayed));
+        assertEquals(-3, assertInstanceOf(ServerScriptsRequestMessage.class, RelayedMessages.decodeToServer(relayed)).request());
+        assertEquals(0, left.body().length);
         assertInstanceOf(CompanionLeftMessage.class, RelayedMessages.decodeToServer(left));
     }
 
     @Test
     void theLargestBodyWithTheLongestSessionFitsOneFrame() {
-        RelayedMessage largest = new RelayedMessage(Integer.MAX_VALUE, "\u20ac".repeat(RelayedMessage.MAX_SESSION_LENGTH),
+        RelayedMessage largest = new RelayedMessage(Integer.MAX_VALUE, "\u20ac".repeat(RelayedMessage.MAX_WORLD_LENGTH),
                 CompanionProtocol.EXECUTION_RESULT, new byte[RelayedMessage.MAX_BODY_BYTES]);
         ByteBufferOutputStream output = new ByteBufferOutputStream();
 
@@ -88,14 +100,14 @@ class RelayedMessagesTest {
     void onlyTheServersMessagesTravelEachWay() {
         assertThrows(IllegalArgumentException.class,
                 () -> RelayedMessages.toServer(new PlayingMessage(new PlayingPayload.Menu()), 0, ""), "the game's own message");
-        RelayedMessage toServer = RelayedMessages.toServer(new ManifestRequestMessage(), 0, "");
+        RelayedMessage toServer = RelayedMessages.toServer(new ServerScriptsRequestMessage(-3), 0, "");
         assertThrows(IllegalArgumentException.class, () -> RelayedMessages.decodeFromServer(toServer),
                 "a request is not an answer");
     }
 
     @Test
     void bytesAfterAMessagesEndAreRefused() {
-        RelayedMessage padded = new RelayedMessage(0, "", RelayedMessages.toServer(new ManifestRequestMessage(), 0, "").messageId(),
+        RelayedMessage padded = new RelayedMessage(0, "", RelayedMessages.toServer(new CompanionLeftMessage(), 0, "").messageId(),
                 new byte[]{1});
 
         assertThrows(IllegalArgumentException.class, () -> RelayedMessages.decodeToServer(padded));

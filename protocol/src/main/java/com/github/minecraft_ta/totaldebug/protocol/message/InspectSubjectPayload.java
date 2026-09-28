@@ -9,13 +9,14 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Protocol-20 payload. The client's description of a subject selected with the inspect key. {@code gameSessionId}
- * identifies the joined world, so a later run can be rejected once that world is left. {@code identity} is what the
+ * Protocol-20 payload. The client's description of a subject selected with the inspect key. {@code world}
+ * is the world it was selected in, as {@link PlayingPayload#identity()} names it, so a later run is rejected once the
+ * game plays another. {@code identity} is what the
  * client saw at selection; reads report the current identity. {@code iconModel} is the item model shown for the
  * subject, or empty, and {@code iconTints} maps its tint indexes to ARGB colors.
  */
 public record InspectSubjectPayload(
-        String gameSessionId,
+        String world,
         String subject,
         SubjectIdentity identity,
         String iconModel,
@@ -24,7 +25,7 @@ public record InspectSubjectPayload(
     public static final int MAX_TINTS = 32;
 
     public InspectSubjectPayload {
-        Objects.requireNonNull(gameSessionId, "gameSessionId");
+        Objects.requireNonNull(world, "world");
         SubjectRef.parseOccurrence(subject);
         Objects.requireNonNull(identity, "identity");
         iconModel = Objects.requireNonNullElse(iconModel, "");
@@ -35,7 +36,7 @@ public record InspectSubjectPayload(
     }
 
     public static InspectSubjectPayload read(ByteBufferInputStream input) {
-        String gameSessionId = input.readString();
+        String world = input.readString();
         String subject = input.readString();
         SubjectIdentity identity = SubjectIdentity.read(input);
         String iconModel = input.readString();
@@ -47,11 +48,11 @@ public record InspectSubjectPayload(
         for (int index = 0; index < tintCount; index++) {
             tints.put(input.readInt(), input.readInt());
         }
-        return new InspectSubjectPayload(gameSessionId, subject, identity, iconModel, tints);
+        return new InspectSubjectPayload(world, subject, identity, iconModel, tints);
     }
 
     public void write(ByteBufferOutputStream output) {
-        output.writeString(this.gameSessionId);
+        output.writeString(this.world);
         output.writeString(this.subject);
         this.identity.write(output);
         output.writeString(this.iconModel);

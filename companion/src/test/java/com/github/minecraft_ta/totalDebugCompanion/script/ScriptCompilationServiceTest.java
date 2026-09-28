@@ -4,10 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService.R
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryCompilationException;
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.evaluation.ScriptClassLoader;
-import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
+import com.github.minecraft_ta.totaldebug.evaluation.ScriptReferences;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -106,7 +104,7 @@ class ScriptCompilationServiceTest {
              var compiler = new ScriptCompilationService(message -> {
                  assertNotEquals("AWT-EventQueue-0", Thread.currentThread().getName());
                  return this.sent.add(message);
-             }, this.requests::add)) {
+             })) {
             compiler.bind(snapshot);
             compiler.submit(7, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
             RunScriptMessage message = this.sent.poll(10, TimeUnit.SECONDS);
@@ -132,7 +130,7 @@ class ScriptCompilationServiceTest {
     @Test
     void readinessSaysWhyARunCannotStartAndSignalsTheNextChange() throws Exception {
         try (ReadySnapshot snapshot = fixture();
-             var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
+             var compiler = new ScriptCompilationService(this.sent::add)) {
             ScriptCompilationService.Readiness unbound = compiler.readiness(Side.CLIENT);
             assertFalse(unbound.ready());
             assertEquals("The runtime class index is not ready for compilation", unbound.detail());
@@ -144,7 +142,13 @@ class ScriptCompilationServiceTest {
             assertTrue(compiler.readiness(Side.CLIENT).ready(), "client runs need only the index");
             ScriptCompilationService.Readiness server = compiler.readiness(Side.SERVER);
             assertFalse(server.ready());
-            assertEquals("Waiting for the client index and server handshake comparison", server.detail());
+            assertEquals(ScriptCompilationService.NO_SERVER, server.detail());
+
+            compiler.serverAccess("world test", "");
+
+            assertTrue(server.changed().isDone(), "the server's answer is a change");
+            assertTrue(compiler.readiness(Side.SERVER).ready());
+            server = compiler.readiness(Side.SERVER);
 
             compiler.runtimeDisconnected();
 
@@ -156,7 +160,7 @@ class ScriptCompilationServiceTest {
     @Test
     void sendsTheSubjectARunIsBoundTo() throws Exception {
         try (ReadySnapshot snapshot = fixture();
-             var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
+             var compiler = new ScriptCompilationService(this.sent::add)) {
             compiler.bind(snapshot);
             compiler.submit(8, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.POST_TICK,
                     new ScriptSubject(SubjectRef.parseOccurrence("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session",
@@ -166,7 +170,7 @@ class ScriptCompilationServiceTest {
 
             assertNotNull(message, () -> this.failures.toString());
             assertEquals("entity 0f8fad5b-d9cb-469f-a165-70867728950e", message.subject());
-            assertEquals("game-session", message.subjectSessionId());
+            assertEquals("game-session", message.world());
             assertEquals("minecraft:pig", message.subjectExpectedId());
         }
     }
@@ -174,7 +178,7 @@ class ScriptCompilationServiceTest {
     @Test
     void reusesBytecodeForIdenticalSourceUntilTheRuntimeChanges() throws Exception {
         try (ReadySnapshot snapshot = fixture();
-             var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
+             var compiler = new ScriptCompilationService(this.sent::add)) {
             compiler.bind(snapshot);
             compiler.submit(9, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
             RunScriptMessage first = this.sent.poll(10, TimeUnit.SECONDS);
@@ -209,12 +213,13 @@ class ScriptCompilationServiceTest {
             assertEquals(ExecutionStatus.COMPILATION_FAILED, failure.status());
             assertTrue(failure.error().text().contains("missing"));
             assertTrue(this.sent.isEmpty());
-            installServer(compiler, snapshot, "server-session");
+            compiler.serverAccess("world test", "");
             compiler.submit(1, "import fixture.ScriptProgram; public class Good extends ScriptProgram { public Object run() { return 42; } }",
                     Side.SERVER, ScriptExecutionEnvironment.THREAD, recovered -> this.failures.add(recovered.result()));
             RunScriptMessage message = this.sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(message);
             assertEquals(Side.SERVER, message.side());
+            assertEquals("world test", message.world(), "a server run without a target is meant for the server that allowed it");
             assertEquals(List.of("Good"), List.copyOf(message.bytecode().classes().keySet()));
         }
     }
@@ -323,7 +328,7 @@ class ScriptCompilationServiceTest {
     void indexedCompilerDoesNotLeakCompanionsClasspathAndMatchesStandardCompiler() throws Exception {
         try (ReadySnapshot snapshot = fixture();
              var indexed = new InMemoryJavaCompiler(standard ->
-                     new IndexedJavaFileManager(standard, snapshot.index(), snapshot.sources(), () -> null));
+                     new IndexedJavaFileManager(standard, snapshot.index(), snapshot.sources()));
              var standard = new InMemoryJavaCompiler()) {
             String classpath = String.join(System.getProperty("path.separator"),
                     snapshot.sources().stream().map(source -> source.path().toString()).toList());
@@ -338,23 +343,7 @@ class ScriptCompilationServiceTest {
     }
 
     @Test
-    void serverCompileChecksTheOverloadDependencyAndClientStillWorks() throws Exception {
-        try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
-            compiler.bind(snapshot);
-            installServer(compiler, new ServerManifest.Catalog(List.of(snapshot.sources().get(0).path(),
-                    snapshot.sources().get(2).path())), "server-session");
-            compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            var failure = this.failures.poll(10, TimeUnit.SECONDS);
-            assertNotNull(failure);
-            assertTrue(failure.error().text().contains("fixture.QuadView"), failure.error().text());
-            assertTrue(this.sent.isEmpty());
-            compiler.submit(2, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            assertNotNull(this.sent.poll(10, TimeUnit.SECONDS), () -> this.failures.toString());
-        }
-    }
-
-    @Test
-    void serverUsesItsOwnMethodBodyAfterCompanionCompilesAgainstLocalDeclarations() throws Exception {
+    void theServerRunsItsOwnMethodBodiesAndNamesTheDeclarationsItLacks() throws Exception {
         try (ReadySnapshot snapshot = fixture(); var compiler = service(); var javac = new InMemoryJavaCompiler()) {
             Path serverApi = jar("server-api.jar", javac.compile("""
                     package fixture;
@@ -365,166 +354,79 @@ class ScriptCompilationServiceTest {
                         public static int pick(int[] first, QuadView second) { return 8; }
                     }
                     """, "fixture.Api", snapshot.sources().get(1).path().toString()));
+            Path lacking = jar("lacking-api.jar", javac.compile("""
+                    package fixture;
+                    class Base<T> { public T value(T value) { return value; } }
+                    public class Api extends Base<String> {
+                        private static int secret = 21;
+                        public static int pick(int[] first, QuadView second) { return 8; }
+                    }
+                    """, "fixture.Api", snapshot.sources().get(1).path().toString()));
             var paths = List.of(serverApi, snapshot.sources().get(1).path(), snapshot.sources().get(2).path());
             compiler.bind(snapshot);
-            installServer(compiler, new ServerManifest.Catalog(paths), "server-session");
+            compiler.serverAccess("world test", "");
             compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
             RunScriptMessage compiled = this.sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(compiled, () -> this.failures.toString());
-            assertEquals("server-session", compiled.serverSessionId());
-            try (var loader = new URLClassLoader(paths.stream().map(path -> {
-                try { return path.toUri().toURL(); }
-                catch (Exception exception) { throw new AssertionError(exception); }
-            }).toArray(URL[]::new), getClass().getClassLoader())) {
+            ScriptReferences references = ScriptReferences.read(compiled.bytecode().classes());
+            try (var loader = loader(paths)) {
+                assertEquals(List.of(), references.unresolved(loader), "the same declarations link");
                 Class<?> type = new ScriptClassLoader(loader, compiled.bytecode().classes()).loadClass("Probe");
                 assertEquals("Result[text=ok9921]", type.getMethod("run").invoke(type.getConstructor().newInstance()).toString());
+            }
+            try (var loader = loader(List.of(lacking, snapshot.sources().get(1).path(), snapshot.sources().get(2).path()))) {
+                assertEquals(List.of("fixture.Api.pick(int[], int[])"), references.unresolved(loader),
+                        "the overload the script calls, although the server has another");
             }
         }
     }
 
     @Test
-    void serverDeclarationMismatchNamesTheClassAndDoesNotSendBytecode() throws Exception {
-        try (ReadySnapshot snapshot = fixture(); var compiler = service(); var javac = new InMemoryJavaCompiler()) {
-            Path changed = jar("changed.jar", javac.compile("package fixture; public class Api {}", "fixture.Api", ""));
-            compiler.bind(snapshot);
-            installServer(compiler, new ServerManifest.Catalog(List.of(changed, snapshot.sources().get(1).path(),
-                    snapshot.sources().get(2).path())), "server-session");
-            compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            var failure = this.failures.poll(10, TimeUnit.SECONDS);
-            assertNotNull(failure);
-            assertTrue(failure.error().text().contains("class fixture.Api is absent or its declarations differ"), failure.error().text());
-            assertTrue(this.sent.isEmpty());
-        }
-    }
-
-    @Test
-    void disconnectInvalidatesAQueuedServerCompilation() throws Exception {
+    void aServerCompilationQueuedBeforeTheServerChangedIsNotSent() throws Exception {
         try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
             compiler.bind(snapshot);
-            installServer(compiler, snapshot, "old-session");
+            compiler.serverAccess("world test", "");
             var release = new CountDownLatch(1);
             var held = holdCacheLock(release);
             try {
                 compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-                compiler.acceptServerManifest(ServerManifestMessage.unavailable("Disconnected"));
+                compiler.serverAccess("", "Waiting for the server");
             } finally { release.countDown(); }
             held.get(10, TimeUnit.SECONDS);
             assertNotNull(this.failures.poll(10, TimeUnit.SECONDS));
             assertTrue(this.sent.isEmpty());
-            installServer(compiler, snapshot, "new-session");
+            compiler.serverAccess("world test", "");
             compiler.submit(2, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            assertEquals("new-session", this.sent.poll(10, TimeUnit.SECONDS).serverSessionId());
+            assertEquals(2, this.sent.poll(10, TimeUnit.SECONDS).scriptId());
         }
     }
 
     @Test
-    void serverCompilationRequiresACompletedHandshake() throws Exception {
+    void aServerRunNeedsTheServersPermissionAndNamesItsRefusal() throws Exception {
         try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
             compiler.bind(snapshot);
             compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            assertTrue(this.failures.poll(10, TimeUnit.SECONDS).error().text().contains("handshake"));
+            assertEquals(ScriptCompilationService.NO_SERVER, this.failures.poll(10, TimeUnit.SECONDS).error().text());
+            compiler.serverAccess("", "Server-side scripts are disabled by the server configuration");
+            compiler.submit(2, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
+            assertEquals("Server-side scripts are disabled by the server configuration",
+                    this.failures.poll(10, TimeUnit.SECONDS).error().text());
             assertTrue(this.sent.isEmpty());
         }
     }
 
-    @Test
-    void baselineArrivingBeforeIndexBindingStillCompletes() throws Exception {
-        try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
-            var catalog = new ServerManifest.Catalog(snapshot.sources().stream().map(source -> source.path()).toList());
-            byte[] bytes = catalog.baseline();
-            int middle = bytes.length / 2;
-            compiler.acceptServerManifest(new ServerManifestMessage("session", "", 0, bytes.length,
-                    Arrays.copyOfRange(bytes, 0, middle)));
-            compiler.suspendRuntime();
-            compiler.bind(snapshot);
-            compiler.acceptServerManifest(new ServerManifestMessage("session", "", middle, bytes.length,
-                    Arrays.copyOfRange(bytes, middle, bytes.length)));
-            finishHandshake(compiler, catalog);
-            compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            assertNotNull(this.sent.poll(10, TimeUnit.SECONDS), () -> this.failures.toString());
-            assertTrue(this.requests.isEmpty());
-        }
+    private URLClassLoader loader(List<Path> paths) {
+        return new URLClassLoader(paths.stream().map(path -> {
+            try { return path.toUri().toURL(); }
+            catch (Exception exception) { throw new AssertionError(exception); }
+        }).toArray(URL[]::new), getClass().getClassLoader());
     }
 
-    @Test
-    void pendingDetailsBlockServerOnlyAndOldRepliesCannotCompleteAReopenedComparison() throws Exception {
-        try (ReadySnapshot snapshot = fixture(); var compiler = service(); var javac = new InMemoryJavaCompiler()) {
-            Path changed = jar("changed.jar", javac.compile("package fixture; public class Api {}", "fixture.Api", ""));
-            var catalog = new ServerManifest.Catalog(List.of(changed, snapshot.sources().get(1).path(), snapshot.sources().get(2).path()));
-            compiler.bind(snapshot);
-            for (var message : ServerManifestMessage.split("session", catalog.baseline())) compiler.acceptServerManifest(message);
-            compiler.compile("public class Barrier {}", "Barrier").get(10, TimeUnit.SECONDS);
-            var old = this.requests.remove();
-            compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            assertTrue(this.failures.poll(10, TimeUnit.SECONDS).error().text().contains("Comparing server source"));
-            compiler.submit(2, SOURCE, Side.CLIENT, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            assertNotNull(this.sent.poll(10, TimeUnit.SECONDS));
-
-            // The same server session is replayed when Companion reconnects; request identity must still change.
-            compiler.runtimeDisconnected();
-            for (var message : ServerManifestMessage.split("session", catalog.baseline())) compiler.acceptServerManifest(message);
-            compiler.compile("public class Barrier {}", "Barrier").get(10, TimeUnit.SECONDS);
-            var current = this.requests.remove();
-            assertNotEquals(old.requestId(), current.requestId());
-            for (var message : ServerManifestMessage.split(old.sessionId(), old.requestId(), old.source(), catalog.details(old.source()))) {
-                compiler.acceptServerManifest(message);
-            }
-            compiler.compile("public class Barrier {}", "Barrier").get(10, TimeUnit.SECONDS);
-            compiler.submit(3, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            assertTrue(this.failures.poll(10, TimeUnit.SECONDS).error().text().contains("Comparing server source"));
-            this.requests.add(current);
-            finishHandshake(compiler, catalog);
-            compiler.submit(4, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            assertTrue(this.failures.poll(10, TimeUnit.SECONDS).error().text().contains("class fixture.Api"));
-            assertTrue(this.sent.isEmpty());
-        }
-    }
-
-    @Test
-    void rebindDiscardsCompletedResultAndRecomparesTheRetainedBaseline() throws Exception {
-        try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
-            compiler.bind(snapshot);
-            installServer(compiler, snapshot, "session");
-            var release = new CountDownLatch(1);
-            var held = holdCacheLock(release);
-            try {
-                compiler.bind(snapshot);
-                compiler.submit(1, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-                assertTrue(this.failures.poll(5, TimeUnit.SECONDS).error().text().contains("handshake"));
-            } finally { release.countDown(); }
-            held.get(10, TimeUnit.SECONDS);
-            compiler.compile("public class Barrier {}", "Barrier").get(10, TimeUnit.SECONDS);
-            compiler.submit(2, SOURCE, Side.SERVER, ScriptExecutionEnvironment.THREAD, outcome -> this.failures.add(outcome.result()));
-            assertNotNull(this.sent.poll(10, TimeUnit.SECONDS), () -> this.failures.toString());
-        }
-    }
-
-    private void installServer(ScriptCompilationService compiler, ReadySnapshot snapshot, String session) throws Exception {
-        installServer(compiler, new ServerManifest.Catalog(snapshot.sources().stream().map(source -> source.path()).toList()), session);
-    }
-
-    private void installServer(ScriptCompilationService compiler, ServerManifest.Catalog manifest, String session) throws Exception {
-        for (var message : ServerManifestMessage.split(session, manifest.baseline())) compiler.acceptServerManifest(message);
-        finishHandshake(compiler, manifest);
-    }
-
-    private void finishHandshake(ScriptCompilationService compiler, ServerManifest.Catalog manifest) throws Exception {
-        for (;;) {
-            // Drain queued comparison work without sleeping or reaching into service internals.
-            compiler.compile("public class Barrier {}", "Barrier").get(10, TimeUnit.SECONDS);
-            var request = this.requests.poll();
-            if (request == null) return;
-            for (var message : ServerManifestMessage.split(request.sessionId(), request.requestId(), request.source(),
-                    manifest.details(request.source()))) compiler.acceptServerManifest(message);
-        }
-    }
-
-    private final BlockingQueue<ServerSourceRequestMessage> requests = new LinkedBlockingQueue<>();
     private final BlockingQueue<RunScriptMessage> sent = new LinkedBlockingQueue<>();
     private final BlockingQueue<ExecutionResult> failures = new LinkedBlockingQueue<>();
 
     private ScriptCompilationService service() {
-        return new ScriptCompilationService(this.sent::add, this.requests::add);
+        return new ScriptCompilationService(this.sent::add);
     }
 
     private CompletableFuture<Void> holdCacheLock(CountDownLatch release) throws Exception {

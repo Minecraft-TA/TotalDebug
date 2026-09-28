@@ -170,7 +170,7 @@ class CompanionSessionRejectionTest {
         Object lifecycle = new Object();
         var scope = new ProjectScope(lifecycle, new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory(), ChangeRecord.inMemory());
         try (var session = new CompanionSession(token);
-             var compiler = new ScriptCompilationService(message -> true, message -> true);
+             var compiler = new ScriptCompilationService(message -> true);
              Client client = configuredClient(null)) {
             var scripts = new ScriptExecutionService(session, compiler, session::isConnected);
             session.bindAndPublish(configuration);

@@ -19,7 +19,6 @@ public final class ProtocolBindings {
         processor.registerOutgoing(CompanionProtocol.RUNTIME_INVENTORY, RuntimeInventoryMessage.class);
         processor.registerIncoming(CompanionProtocol.RETRY_RUNTIME_INVENTORY, RetryRuntimeInventoryMessage.class, RetryRuntimeInventoryMessage::new);
         processor.registerOutgoing(CompanionProtocol.DEBUG_TARGET, DebugTargetMessage.class);
-        processor.registerOutgoing(CompanionProtocol.SERVER_MANIFEST, ServerManifestMessage.class);
         processor.registerOutgoing(CompanionProtocol.INSPECT_SUBJECT, InspectSubjectMessage.class);
         processor.registerOutgoing(CompanionProtocol.RESOURCE_SNAPSHOT, ResourceSnapshotMessage.class);
         processor.registerOutgoing(CompanionProtocol.PACK_CATALOG, PackCatalogMessage.class);
@@ -46,7 +45,6 @@ public final class ProtocolBindings {
         processor.registerIncoming(CompanionProtocol.RUNTIME_INVENTORY, RuntimeInventoryMessage.class, RuntimeInventoryMessage::new);
         processor.registerOutgoing(CompanionProtocol.RETRY_RUNTIME_INVENTORY, RetryRuntimeInventoryMessage.class);
         processor.registerIncoming(CompanionProtocol.DEBUG_TARGET, DebugTargetMessage.class, DebugTargetMessage::new);
-        processor.registerIncoming(CompanionProtocol.SERVER_MANIFEST, ServerManifestMessage.class, ServerManifestMessage::new);
         processor.registerIncoming(CompanionProtocol.INSPECT_SUBJECT, InspectSubjectMessage.class, InspectSubjectMessage::new);
         processor.registerIncoming(CompanionProtocol.RESOURCE_SNAPSHOT, ResourceSnapshotMessage.class, ResourceSnapshotMessage::new);
         processor.registerIncoming(CompanionProtocol.PACK_CATALOG, PackCatalogMessage.class, PackCatalogMessage::new);

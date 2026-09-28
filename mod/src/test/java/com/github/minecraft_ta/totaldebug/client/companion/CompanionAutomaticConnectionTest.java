@@ -212,7 +212,7 @@ class CompanionAutomaticConnectionTest {
         var enabled = new AtomicBoolean(true);
         var closedSessions = new AtomicInteger();
         try (var endpoint = new Endpoint(); var client = client()) {
-            client.setSessionClosedHandler(closedSessions::incrementAndGet);
+            client.setSessionClosedHandler(number -> closedSessions.incrementAndGet());
             endpoint.publish(profile());
             client.startDiscovery(enabled::get);
             await(client::isConnected);
@@ -237,7 +237,7 @@ class CompanionAutomaticConnectionTest {
         var timeouts = new CompanionTimeouts(Duration.ofSeconds(3), Duration.ofSeconds(30), Duration.ofSeconds(30), Duration.ofMillis(20));
         try (var endpoint = new Endpoint(); var client = new CompanionAppClient(game.resolve("total-debug"), timeouts,
                 new CompanionForegroundHandoff(pid -> focus.incrementAndGet()))) {
-            client.setSessionClosedHandler(closedSessions::incrementAndGet);
+            client.setSessionClosedHandler(number -> closedSessions.incrementAndGet());
             endpoint.hold = true;
             endpoint.publish(profile());
             client.startDiscovery(enabled::get);
@@ -257,7 +257,7 @@ class CompanionAutomaticConnectionTest {
         var release = new CountDownLatch(1);
         var cleanupCalls = new AtomicInteger();
         try (var endpoint = new Endpoint(); var client = client()) {
-            client.setSessionClosedHandler(() -> {
+            client.setSessionClosedHandler(number -> {
                 if (cleanupCalls.incrementAndGet() != 1) return;
                 cleaning.countDown();
                 try { assertTrue(release.await(5, TimeUnit.SECONDS)); }
