@@ -165,13 +165,17 @@ class ResourceTextEditorTest {
             SwingUtilities.invokeAndWait(() -> {
                 assertTrue(editor[0].oneLineOffered(), "one long line, ending in a line break, offers Reformat Code");
                 editor[0].textPanel().editorPane.insert("//", 0);
+                assertTrue(editor[0].oneLineOffered(), "typing leaves the offer, so the text does not move");
                 editor[0].reformat();
-                assertTrue(editor[0].noticeText().startsWith("Not reformatted: "), editor[0].noticeText());
+            });
+            awaitOnSwing(() -> editor[0].noticeText().startsWith("Not reformatted: "));
+            SwingUtilities.invokeAndWait(() -> {
                 editor[0].textPanel().editorPane.replaceRange("", 0, 2);
                 assertEquals("", editor[0].noticeText(), "the problem ends with the edit");
                 editor[0].reformat();
-                String laidOut = editor[0].textPanel().text();
-                assertTrue(laidOut.startsWith("{\n  \"item.testmod.gear_0\": \"Gear\",\n"), laidOut.substring(0, 60));
+            });
+            awaitOnSwing(() -> editor[0].textPanel().text().startsWith("{\n  \"item.testmod.gear_0\": \"Gear\",\n"));
+            SwingUtilities.invokeAndWait(() -> {
                 assertTrue(editor[0].textPanel().modified(), "an edit that Save writes");
                 assertFalse(editor[0].oneLineOffered());
                 editor[0].textPanel().editorPane.undoLastAction();

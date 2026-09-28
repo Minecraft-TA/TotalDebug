@@ -45,6 +45,17 @@ public final class JsonFormat {
             throw new IllegalArgumentException(problem(invalid), invalid);
         }
         String formatted = PRETTY.toJson(parsed);
+        // Written as it is, a lone surrogate, such as an escaped D800, would become ? in the saved UTF-8.
+        for (int index = 0; index < formatted.length(); index++) {
+            char unit = formatted.charAt(index);
+            if (Character.isHighSurrogate(unit) && index + 1 < formatted.length()
+                    && Character.isLowSurrogate(formatted.charAt(index + 1))) {
+                index++;
+            } else if (Character.isSurrogate(unit)) {
+                throw new IllegalArgumentException(String.format(Locale.ROOT,
+                        "A text holds \\u%04X without its pair, which UTF-8 cannot store", (int) unit));
+            }
+        }
         return text.endsWith("\n") ? formatted + "\n" : formatted;
     }
 

@@ -17,6 +17,7 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import java.awt.BorderLayout;
@@ -26,6 +27,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -53,13 +56,17 @@ final class ResourceTextEditor extends PackResourceEditor<String> {
             Tooltip.action("Reformat Code", "Ctrl+Alt+L").text("Lays the JSON out one value per line").html(), this::reformat);
     /** Why the last Reformat Code left the text as it was, shown until the text changes. */
     private String reformatProblem;
+    /** The text laid out by the running Reformat Code, or null. */
+    private CompletableFuture<String> formatting;
+    private final boolean json;
 
     ResourceTextEditor(String path, String origin, Path pack, LoadedResource.Text content, ResourceEdits edits) {
         super(path, origin, pack, content.value(), edits);
         this.text = new EditableTextPanel(content.syntaxStyle(), this::changed, this::save);
         this.text.load(content.value());
         JPanel view = new JPanel(new BorderLayout());
-        if (JsonFormat.formats(path)) {
+        this.json = JsonFormat.formats(path);
+        if (this.json) {
             this.reformat.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke("ctrl alt L"));
             this.text.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ctrl alt L"), "reformatCode");
             this.text.editorPane.getActionMap().put("reformatCode", this.reformat);
@@ -70,10 +77,7 @@ final class ResourceTextEditor extends PackResourceEditor<String> {
             this.oneLine.add(this.reformatLink);
             this.oneLine.setBorder(UiMetrics.noticePadding());
             view.add(this.oneLine, BorderLayout.NORTH);
-            this.text.editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> {
-                showOneLine();
-                clearReformatProblem();
-            });
+            this.text.editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> clearReformatProblem());
             showOneLine();
         } else {
             this.oneLine.setVisible(false);
@@ -87,7 +91,10 @@ final class ResourceTextEditor extends PackResourceEditor<String> {
         return this.oneLine.isVisible();
     }
 
-    /** Shows the offer to lay the text out while it is one long line, which may end in a line break. */
+    /**
+     * Shows the offer to lay the text out when the loaded text is one long line, which may end in a line break. Typing
+     * leaves the offer as it is, so the text does not move while it is edited.
+     */
     private void showOneLine() {
         int lines = this.text.editorPane.getLineCount();
         boolean one = this.text.editorPane.getDocument().getLength() > LONG_LINE && (lines == 1 || lines == 2 && endsInLineBreak());
@@ -112,28 +119,36 @@ final class ResourceTextEditor extends PackResourceEditor<String> {
         this.reformatProblem = null;
     }
 
-    /** Lays the JSON out one value per line, as one edit; text that is not strict JSON is left as it is, saying why. */
+    /**
+     * Lays the JSON out one value per line, as one edit; text that is not strict JSON is left as it is, saying why. A
+     * large file is laid out off the Swing thread, and text typed meanwhile is kept instead.
+     */
     void reformat() {
         // Before the working pack's copy is read, the text on screen is not what a save would write over.
-        if (!this.text.editorPane.isEditable()) return;
+        if (!this.text.editorPane.isEditable() || this.formatting != null) return;
         String shown = this.text.text();
-        String formatted;
-        try {
-            formatted = JsonFormat.format(shown);
-        } catch (IllegalArgumentException invalid) {
-            this.reformatProblem = "Not reformatted: " + invalid.getMessage();
-            showNotice(this.reformatProblem, ThemeColors::error);
-            return;
-        }
-        clearReformatProblem();
-        if (formatted.equals(shown)) return;
-        this.text.editorPane.beginAtomicEdit();
-        try {
-            this.text.editorPane.replaceRange(formatted, 0, shown.length());
-            this.text.editorPane.setCaretPosition(0);
-        } finally {
-            this.text.editorPane.endAtomicEdit();
-        }
+        CompletableFuture<String> task = CompletableFuture.supplyAsync(() -> JsonFormat.format(shown));
+        this.formatting = task;
+        task.whenComplete((formatted, failure) -> SwingUtilities.invokeLater(() -> {
+            this.formatting = null;
+            if (disposed() || !this.text.editorPane.isEditable() || !this.text.text().equals(shown)) return;
+            if (failure != null) {
+                Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
+                this.reformatProblem = "Not reformatted: " + cause.getMessage();
+                showNotice(this.reformatProblem, ThemeColors::error);
+                return;
+            }
+            clearReformatProblem();
+            if (formatted.equals(shown)) return;
+            this.text.editorPane.beginAtomicEdit();
+            try {
+                this.text.editorPane.replaceRange(formatted, 0, shown.length());
+                this.text.editorPane.setCaretPosition(0);
+            } finally {
+                this.text.editorPane.endAtomicEdit();
+            }
+            this.oneLine.setVisible(false);
+        }));
     }
 
     EditableTextPanel textPanel() {
@@ -153,6 +168,7 @@ final class ResourceTextEditor extends PackResourceEditor<String> {
     @Override
     protected void load(String content) {
         this.text.load(content);
+        if (this.json) showOneLine();
     }
 
     @Override

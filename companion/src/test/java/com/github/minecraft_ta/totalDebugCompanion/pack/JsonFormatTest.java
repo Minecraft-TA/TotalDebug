@@ -35,6 +35,10 @@ class JsonFormatTest {
         IllegalArgumentException twice = assertThrows(IllegalArgumentException.class,
                 () -> JsonFormat.format("{\"a\":{\"b\":1,\"b\":2}}"), "one of the two would be lost");
         assertEquals("\"b\" appears twice in one object at line 1 column 16", twice.getMessage());
+        IllegalArgumentException lone = assertThrows(IllegalArgumentException.class,
+                () -> JsonFormat.format("{\"a\":\"\\uD800\"}"), "UTF-8 would store it as ?");
+        assertEquals("A text holds \\uD800 without its pair, which UTF-8 cannot store", lone.getMessage());
+        assertEquals("{\n  \"a\": \"\uD83D\uDE00\"\n}", JsonFormat.format("{\"a\":\"\\uD83D\\uDE00\"}"), "a pair is one character");
         assertTrue(JsonFormat.formats("assets/ns/lang/en_us.json"));
         assertTrue(JsonFormat.formats("assets/ns/textures/block/gear.png.mcmeta"));
         assertFalse(JsonFormat.formats("data/ns/function/tick.mcfunction"));
