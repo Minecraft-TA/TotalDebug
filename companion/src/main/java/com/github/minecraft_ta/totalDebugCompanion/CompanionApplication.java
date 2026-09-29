@@ -236,7 +236,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 @Override
                 public void reloadResult(ReloadResultMessage message) {
                     ProjectScope scope = current;
-                    if (scope != null) scope.resources().answered(message.payload());
+                    if (scope != null) scope.pipeline().reloads().answered(message.payload());
                 }
 
                 @Override public void failed(String detail, ClientHelloMessage hello) {

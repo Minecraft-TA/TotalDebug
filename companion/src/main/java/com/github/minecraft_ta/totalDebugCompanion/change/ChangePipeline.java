@@ -64,12 +64,14 @@ public final class ChangePipeline {
     private final Executor writes;
     private final AtomicInteger requests = new AtomicInteger();
     private final Map<Integer, CompletableFuture<ChangeResultPayload>> waiting = new ConcurrentHashMap<>();
+    private final Reloads reloads;
 
     /** Changes the game {@code location} tells of; {@code writes} is the project's write queue. */
     public ChangePipeline(GameLocation location, ChangeRecord record, Executor writes) {
         this.location = Objects.requireNonNull(location, "location");
         this.record = Objects.requireNonNull(record, "record");
         this.writes = Objects.requireNonNull(writes, "writes");
+        this.reloads = new Reloads(location);
         location.addListener(change -> {
             if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
         });
@@ -81,6 +83,11 @@ public final class ChangePipeline {
 
     public ChangeRecord record() {
         return this.record;
+    }
+
+    /** The reloads that make the running game use what changes wrote. */
+    public Reloads reloads() {
+        return this.reloads;
     }
 
     /** Takes the game's answer to a change. */

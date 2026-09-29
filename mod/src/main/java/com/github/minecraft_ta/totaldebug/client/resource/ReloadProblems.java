@@ -15,21 +15,25 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Collects the warnings and errors logged during a reload that name an edited resource, by its path or by the
  * resource locations the game uses for it, such as {@code ns:block/slab} for {@code assets/ns/models/block/slab.json}.
- * Every thread's log is watched while the collector is open, since reloads run on worker threads.
+ * Every thread's log is watched while the collector is open, since reloads run on worker threads. Collectors of reloads
+ * that run at once, such as of the client's resources and a world's data, each watch under a name of their own.
  */
 final class ReloadProblems extends AbstractAppender implements AutoCloseable {
     private static final int MAX_PROBLEMS = 64;
+    private static final AtomicInteger COLLECTORS = new AtomicInteger();
 
     /** The watched paths each name identifies; one id, such as {@code ns:gear}, can stand for several kinds of file. */
     private final Map<String, List<String>> names;
     private final Set<ReloadResultPayload.Problem> problems = new LinkedHashSet<>();
 
     private ReloadProblems(Map<String, List<String>> names) {
-        super("TotalDebugReloadProblems", null, null, true, Property.EMPTY_ARRAY);
+        // The logger keeps its appenders by name, so a second collector under the same name would replace the first.
+        super("TotalDebugReloadProblems-" + COLLECTORS.incrementAndGet(), null, null, true, Property.EMPTY_ARRAY);
         this.names = names;
     }
 
