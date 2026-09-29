@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
@@ -139,7 +140,7 @@ class ExternalEditsTest {
     }
 
     private ResourceEdits edits(ChangeRecord record) {
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record,
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),

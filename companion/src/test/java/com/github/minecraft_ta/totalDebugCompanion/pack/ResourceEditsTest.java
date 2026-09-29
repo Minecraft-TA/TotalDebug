@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
@@ -97,7 +98,7 @@ class ResourceEditsTest {
         Files.writeString(file, "{\"a\":\"by hand\"}");
 
         Throwable failure = edits.revert(record.changes().getFirst()).handle((ignored, thrown) -> thrown).join();
-        assertTrue(failure.getMessage().contains("changed outside Companion"), failure.getMessage());
+        assertTrue(failure.getMessage().contains("en_us.json changed in the TotalDebug resource pack since Companion read it"), failure.getMessage());
         assertEquals("{\"a\":\"by hand\"}", Files.readString(file));
         assertEquals(1, record.size());
 
@@ -156,7 +157,7 @@ class ResourceEditsTest {
     void aRunningGameNotConnectedKeepsItsOptionsAndIsAskedToConnect() throws Exception {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "resourcePacks:[\"vanilla\"]\n");
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, true), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, true), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(STACK);
@@ -236,7 +237,7 @@ class ResourceEditsTest {
         LevelDatFixture.write(world, LevelDatFixture.world("World"));
         Path pack = Files.createDirectories(world.resolve("datapacks/TotalDebug"));
         Files.writeString(pack.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":48,\"description\":\"\"}}");
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, true), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, true), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, InstanceState.inMemory());
 
         try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
@@ -397,7 +398,7 @@ class ResourceEditsTest {
         ChangeRecord record = ChangeRecord.inMemory();
         ExecutorService queue = Executors.newSingleThreadExecutor();
         try {
-            ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record,
+            ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, queue),
                     new ResourceOriginals(this.directory.resolve("total-debug/originals")), queue, InstanceState.inMemory());
             edits.packStack(STACK);
             List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
@@ -449,7 +450,7 @@ class ResourceEditsTest {
 
         ExecutionException refused = assertThrows(ExecutionException.class, () -> edits.save(texture, null, bytes("this tab"),
                 Map.of(texture + ".mcmeta", bytes("{}")), seen).get(5, TimeUnit.SECONDS));
-        assertTrue(refused.getCause() instanceof ResourceEdits.ChangedSince, refused.getCause().toString());
+        assertTrue(refused.getCause() instanceof ChangePipeline.Stale, refused.getCause().toString());
         assertEquals("other tab", Files.readString(pack.resolve(texture)));
         assertFalse(Files.exists(pack.resolve(texture + ".mcmeta")), "nothing beside it is written either");
 
@@ -780,7 +781,7 @@ class ResourceEditsTest {
     }
 
     private ResourceEdits edits(ChangeRecord record, InstanceState state) {
-        return new ResourceEdits(GameLocations.of(this.directory, false), record, new ResourceOriginals(this.directory.resolve("total-debug/originals")),
+        return new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run), new ResourceOriginals(this.directory.resolve("total-debug/originals")),
                 Runnable::run, state);
     }
 

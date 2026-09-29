@@ -44,7 +44,7 @@ class ChangesPanelTest {
         ChangeRecord record = ChangeRecord.inMemory();
         record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", file, "widgets.speed"), "9", "12");
         ChangesPanel[] panel = new ChangesPanel[1];
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record, new ResourceOriginals(this.directory.resolve("originals")),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run), new ResourceOriginals(this.directory.resolve("originals")),
                 Runnable::run, InstanceState.inMemory());
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(GameLocations.of(this.directory, false), record),
                 new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run)), edits,

@@ -2,7 +2,7 @@
 
 Design for item A3 of the [roadmap](ROADMAP.md): one path for every change Companion makes to the pack, the running game or a world. It builds on [GAME_LOCATION.md](GAME_LOCATION.md), which answers where the game is and whether a change is live, written to a file or refused, and on [MOD_SIDES.md](MOD_SIDES.md), which carries changes the server owns. A category then only says how to read and write its values; the pipeline does the rest, the same way for every category.
 
-Built so far: layer 1 of the [order of work](#order-of-work), the pipeline with key bindings on it.
+Built so far: layers 1 and 2 of the [order of work](#order-of-work), the pipeline with key bindings and resources on it.
 
 ## Before the pipeline
 

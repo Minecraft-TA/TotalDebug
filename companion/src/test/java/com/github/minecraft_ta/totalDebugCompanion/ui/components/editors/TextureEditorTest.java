@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
@@ -39,7 +40,7 @@ class TextureEditorTest {
     @Test
     void anErasedPixelIsSavedIntoTheWorkingPackAndLaterStrokesAreDiscarded() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record,
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
@@ -86,7 +87,7 @@ class TextureEditorTest {
 
     @Test
     void thePencilStartsWithTheMostUsedColorAndTheColorPickerTakesAnother() throws Exception {
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         BufferedImage gear = new BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB);
@@ -126,7 +127,7 @@ class TextureEditorTest {
 
     @Test
     void aWorkingPackCopyTooLargeToEditIsRefusedBeforeItIsDecoded() throws Exception {
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         Path copy = edits.pack(TEXTURE).resolve(TEXTURE);
@@ -149,7 +150,7 @@ class TextureEditorTest {
 
     @Test
     void thePacksCopyPlaysItsOwnAnimation() throws Exception {
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         Path copy = edits.pack(TEXTURE).resolve(TEXTURE);
