@@ -204,7 +204,7 @@ public final class ConfigChanges {
     }
 
     /** The world directory holding {@code file} as {@code saves/<world>/serverconfig/<file>}, or null. */
-    private Path world(Path file) {
+    public Path world(Path file) {
         Path saves = this.workspace.resolve("saves").toAbsolutePath().normalize();
         for (Path world = file.getParent(); world != null; world = world.getParent()) {
             if (saves.equals(world.getParent())) return file.startsWith(world.resolve("serverconfig")) ? world : null;

@@ -112,27 +112,23 @@ public final class ConfigLabels implements ChangeLabels {
     }
 
     /**
-     * The Configuration tab on the setting's file, which that tab lists from the catalog. A world's server configuration
-     * opens nothing: the tab picks which world's copy it shows by rules of its own, so it could show another world's.
+     * The Configuration tab on the setting's file, which that tab lists from the catalog; only for the config folder's
+     * copy. A world's copy and the defaults for new worlds open nothing: the tab picks which copy it shows by rules of
+     * its own, so it could show another.
      */
-    private static NavigationTarget opens(CatalogIndex index, ChangeRecord.Setting target) {
-        if (world(target) != null || file(index, target) == null) return null;
+    private NavigationTarget opens(CatalogIndex index, ChangeRecord.Setting target) {
+        if (this.settings.where(target.file()) != ConfigChanges.Location.CONFIG || file(index, target) == null) return null;
         return new NavigationTarget.ModPage(target.modId(), ModTab.CONFIGURATION, target.fileName());
-    }
-
-    /** The world whose {@code serverconfig} holds the setting's file, in a folder of its own or not, or null. */
-    private static Path world(ChangeRecord.Setting target) {
-        for (Path folder = target.file().getParent(); folder != null; folder = folder.getParent()) {
-            if (folder.getFileName() != null && folder.getFileName().toString().equals("serverconfig")) return folder.getParent();
-        }
-        return null;
     }
 
     /** The mod and file of a setting, and the world a server configuration file is in. */
     private String where(CatalogIndex index, ChangeRecord.Setting target) {
         String where = modName(index, target.modId()) + ", " + target.fileName();
-        Path world = world(target);
-        return world == null || world.getFileName() == null ? where : where + ", " + world.getFileName();
+        return switch (this.settings.where(target.file())) {
+            case WORLD -> where + ", " + this.settings.world(target.file()).getFileName();
+            case DEFAULTS -> where + ", new worlds";
+            case CONFIG -> where;
+        };
     }
 
     private static String modName(CatalogIndex index, String modId) {

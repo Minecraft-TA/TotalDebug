@@ -90,6 +90,16 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
         this.pipeline = Objects.requireNonNull(pipeline, "pipeline");
     }
 
+    /** Where a configuration file is: a world's server configuration, the defaults for new worlds, or the config folder. */
+    public ConfigChanges.Location where(Path file) {
+        return this.changes.location(file);
+    }
+
+    /** The world holding a server configuration file, or null. */
+    public Path world(Path file) {
+        return this.changes.world(file.toAbsolutePath().normalize());
+    }
+
     public GameLocation location() {
         return this.changes.location();
     }
