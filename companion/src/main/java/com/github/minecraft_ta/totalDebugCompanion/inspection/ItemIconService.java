@@ -71,9 +71,14 @@ public final class ItemIconService implements AutoCloseable {
     private ItemRenderBackend backend;
     private volatile boolean closed;
 
-    /** Adopts a newer resource snapshot; views are told on the EDT so they can draw again. */
-    public void accept(String archive, int layers) {
-        adopt(start(), new Snapshot(Path.of(archive), layers));
+    /**
+     * Adopts a newer resource snapshot; views are told on the EDT so they can draw again. An archive that cannot be read
+     * is not adopted, so the icons already shown stay.
+     */
+    public void accept(Path archive) {
+        long generation = start();
+        Snapshot next = snapshot(archive);
+        if (next != null) adopt(generation, next);
     }
 
     /**
@@ -122,21 +127,26 @@ public final class ItemIconService implements AutoCloseable {
             return null;
         }
         for (Path archive : archives) {
-            try (ZipFile zip = new ZipFile(archive.toFile())) {
-                int layers = zip.stream()
-                        .map(ZipEntry::getName)
-                        .map(LAYER::matcher)
-                        .filter(Matcher::lookingAt)
-                        .mapToInt(matcher -> Integer.parseInt(matcher.group(1)) + 1)
-                        .max().orElse(0);
-                if (layers > 0) {
-                    return new Snapshot(archive.toAbsolutePath().normalize(), layers);
-                }
-            } catch (IOException | RuntimeException unreadable) {
-                // A partly written or damaged archive is skipped in favor of an older complete one.
-            }
+            // A partly written or damaged archive is skipped in favor of an older complete one.
+            Snapshot snapshot = snapshot(archive);
+            if (snapshot != null) return snapshot;
         }
         return null;
+    }
+
+    /** The archive with its number of layers, the {@code layers/<n>/} folders it holds, or null when it cannot be read. */
+    static Snapshot snapshot(Path archive) {
+        try (ZipFile zip = new ZipFile(archive.toFile())) {
+            int layers = zip.stream()
+                    .map(ZipEntry::getName)
+                    .map(LAYER::matcher)
+                    .filter(Matcher::lookingAt)
+                    .mapToInt(matcher -> Integer.parseInt(matcher.group(1)) + 1)
+                    .max().orElse(0);
+            return layers > 0 ? new Snapshot(archive.toAbsolutePath().normalize(), layers) : null;
+        } catch (IOException | RuntimeException unreadable) {
+            return null;
+        }
     }
 
     private static FileTime modified(Path file) {

@@ -17,14 +17,12 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.KeyBindingResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
@@ -33,7 +31,8 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PreparedFileMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
@@ -59,6 +58,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -114,7 +114,8 @@ public final class CompanionAppClient implements AutoCloseable {
     private final Object connectionLock = new Object();
     private volatile Connection connection;
     private final AtomicInteger connections = new AtomicInteger();
-    private volatile ResourceSnapshotMessage resourceSnapshot;
+    /** The latest state of each file prepared for Companion, told again after each handshake. */
+    private final Map<PreparedFilePayload.Kind, PreparedFilePayload> preparedFiles = new EnumMap<>(PreparedFilePayload.Kind.class);
     private volatile CompanionDiscovery discovery;
     private volatile BooleanSupplier companionEnabled = () -> true;
 
@@ -139,8 +140,8 @@ public final class CompanionAppClient implements AutoCloseable {
     private volatile RuntimeInventoryPublisher.PublishedInventory publishedInventory;
     private volatile Consumer<CompanionStartupProgress> progressListener = progress -> { };
     private volatile boolean closing;
-    private volatile RuntimeInventoryMessage runtimeInventoryState = RuntimeInventoryMessage.preparing(
-            "Waiting for the Minecraft session"
+    private volatile PreparedFilePayload runtimeInventoryState = PreparedFilePayload.preparing(
+            PreparedFilePayload.Kind.RUNTIME_INVENTORY, "", "Waiting for the Minecraft session"
     );
 
     private Process launchedProcess;
@@ -269,8 +270,16 @@ public final class CompanionAppClient implements AutoCloseable {
         this.packCatalogHandler = Objects.requireNonNull(handler, "handler");
     }
 
-    public void sendPackCatalog(PackCatalogMessage message) {
-        send(message);
+    /**
+     * Tells Companion the state of a file prepared for it. The latest state of each kind is kept and told again when a
+     * session authenticates, since a file can be ready before its connection is. Kept and sent under one lock, so a
+     * handshake never tells an older state after a newer one.
+     */
+    public void sendPreparedFile(PreparedFilePayload file) {
+        synchronized (this.preparedFiles) {
+            this.preparedFiles.put(file.kind(), file);
+            send(new PreparedFileMessage(file));
+        }
     }
 
     /** Receives Companion's requests to put a key binding on a key; runs on the connection thread. */
@@ -344,16 +353,6 @@ public final class CompanionAppClient implements AutoCloseable {
         send(new ExecutionResultMessage(scriptId, result));
     }
 
-    /**
-     * Tells Companion where to read item icon resources. The newest snapshot is kept and sent again when a session
-     * authenticates, since a capture can finish before its connection does.
-     */
-    public void sendResourceSnapshot(String archive, int layers) {
-        ResourceSnapshotMessage snapshot = new ResourceSnapshotMessage(archive, layers);
-        this.resourceSnapshot = snapshot;
-        send(snapshot);
-    }
-
 
     public synchronized void inspectAndFocus(InspectSubjectPayload subject, Runnable beforeTransfer)
             throws IOException {
@@ -415,7 +414,7 @@ public final class CompanionAppClient implements AutoCloseable {
                 return;
             }
             var inventory = this.runtimeInventoryState;
-            if (inventory.state() != RuntimeInventoryMessage.AVAILABLE || !inventory.inventoryId().equals(message.inventoryId())) {
+            if (inventory.state() != PreparedFilePayload.State.READY || !inventory.inventoryId().equals(message.inventoryId())) {
                 sendExecutionResult(message.scriptId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
                         "The script was compiled against a different runtime inventory. Wait for Companion to load the current index."));
                 return;
@@ -482,8 +481,9 @@ public final class CompanionAppClient implements AutoCloseable {
         attempt.number = this.connections.incrementAndGet();
         attempt.authenticated.complete(null);
         send(new DebugTargetMessage("minecraft-client", "Minecraft Client", DebugTargetMessage.LOCAL_JVM, ProcessHandle.current().pid()));
-        ResourceSnapshotMessage snapshot = this.resourceSnapshot;
-        if (snapshot != null) send(snapshot);
+        synchronized (this.preparedFiles) {
+            this.preparedFiles.values().forEach(file -> send(new PreparedFileMessage(file)));
+        }
         this.sessionOpenedHandler.run();
         startRuntimeInventoryPreparation(false);
     }
@@ -566,42 +566,37 @@ public final class CompanionAppClient implements AutoCloseable {
             if (this.closing || !isAuthenticated()) {
                 return;
             }
-            if (!force && this.runtimeInventoryState.state() == RuntimeInventoryMessage.AVAILABLE) {
-                sendRuntimeInventoryState();
+            // The handshake told the inventory's state; a ready one is announced again for the pack catalog.
+            if (!force && this.runtimeInventoryState.state() == PreparedFilePayload.State.READY) {
                 announceInventory();
                 return;
             }
             if (this.runtimeInventoryTask != null && !this.runtimeInventoryTask.isDone()) {
-                sendRuntimeInventoryState();
                 return;
             }
 
-            this.runtimeInventoryState = RuntimeInventoryMessage.preparing("Discovering runtime class sources");
-            sendRuntimeInventoryState();
+            setRuntimeInventoryState(PreparedFilePayload.preparing(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "",
+                    "Discovering runtime class sources"));
             this.runtimeInventoryTask = this.runtimeInventoryWorker.submit(() -> {
                 try {
                     RuntimeInventoryPublisher.PublishedInventory published = this.runtimeInventoryPublisher.publish();
                     this.publishedInventory = published;
-                    this.runtimeInventoryState = RuntimeInventoryMessage.available(
-                            published.id(),
-                            published.file().toString()
-                    );
-                    sendRuntimeInventoryState();
+                    setRuntimeInventoryState(PreparedFilePayload.ready(PreparedFilePayload.Kind.RUNTIME_INVENTORY,
+                            published.id(), published.file().toString()));
                     announceInventory();
                 } catch (IOException | RuntimeException exception) {
                     TotalDebug.LOGGER.error("Unable to publish the Companion runtime inventory", exception);
                     String detail = exception.getMessage();
-                    this.runtimeInventoryState = RuntimeInventoryMessage.failed(
-                            detail == null || detail.isBlank() ? "Runtime inventory preparation failed" : detail
-                    );
-                    sendRuntimeInventoryState();
+                    setRuntimeInventoryState(PreparedFilePayload.failed(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "",
+                            detail == null || detail.isBlank() ? "Runtime inventory preparation failed" : detail));
                 }
             });
         }
     }
 
-    private void sendRuntimeInventoryState() {
-        send(this.runtimeInventoryState);
+    private void setRuntimeInventoryState(PreparedFilePayload state) {
+        this.runtimeInventoryState = state;
+        sendPreparedFile(state);
     }
 
     /**

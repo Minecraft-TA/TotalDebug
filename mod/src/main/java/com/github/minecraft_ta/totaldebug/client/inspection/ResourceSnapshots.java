@@ -31,7 +31,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -53,20 +53,17 @@ public final class ResourceSnapshots {
     private static final long RETRY_NANOS = 10_000_000_000L;
     static final String FLUID_APPEARANCES = "totaldebug/fluid-appearances.json";
 
-    private record Ready(Path archive, int layers) {
-    }
-
     private final Path directory;
-    private final BiConsumer<String, Integer> publish;
+    private final Consumer<Path> publish;
     private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> Thread.ofPlatform()
             .daemon()
             .name("TotalDebug resource snapshot")
             .unstarted(task));
     private List<PackResources> packs = List.of();
-    private CompletableFuture<Ready> pending;
+    private CompletableFuture<Path> pending;
     private long attemptedAt;
 
-    public ResourceSnapshots(Path directory, BiConsumer<String, Integer> publish) {
+    public ResourceSnapshots(Path directory, Consumer<Path> publish) {
         this.directory = Objects.requireNonNull(directory, "directory");
         this.publish = Objects.requireNonNull(publish, "publish");
     }
@@ -94,7 +91,7 @@ public final class ResourceSnapshots {
                 }
             });
         }
-        this.pending.thenAccept(ready -> this.publish.accept(ready.archive().toString(), ready.layers()));
+        this.pending.thenAccept(this.publish);
     }
 
     /** Reads every fluid's client appearance. Client thread only, since mod extensions are client state. */
@@ -127,14 +124,13 @@ public final class ResourceSnapshots {
         return root.toString().getBytes(StandardCharsets.UTF_8);
     }
 
-    private Ready capture(ResourceManager manager, List<PackResources> expected, byte[] fluids) throws IOException {
+    private Path capture(ResourceManager manager, List<PackResources> expected, byte[] fluids) throws IOException {
         Files.createDirectories(this.directory);
         trimArchives();
         if (retainedBytes() > MAX_RETAINED_BYTES) {
             throw new IOException("Older icon archives are still open; close Companion inspections and retry");
         }
         Path output = this.directory.resolve(UUID.randomUUID() + ".zip");
-        int[] layers = {1};
         AtomicFiles.replace(output, staged -> {
             try (var zip = new ZipOutputStream(Files.newOutputStream(staged))) {
                 zip.setLevel(1);
@@ -149,7 +145,6 @@ public final class ResourceSnapshots {
                         List<Resource> retained = folder.equals("atlases")
                                 ? entry.getValue()
                                 : List.of(entry.getValue().getLast());
-                        layers[0] = Math.max(layers[0], retained.size());
                         ResourceLocation id = entry.getKey();
                         for (int layer = 0; layer < retained.size(); layer++) {
                             write(zip, written, total, path(layer, id, ""), retained.get(layer)::open,
@@ -168,7 +163,7 @@ public final class ResourceSnapshots {
                         () -> new ByteArrayInputStream(fluids), MAX_METADATA_BYTES * 4);
             }
         });
-        return new Ready(output, layers[0]);
+        return output;
     }
 
     private static String path(int layer, ResourceLocation id, String suffix) {

@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.catalog;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
@@ -29,29 +29,25 @@ public final class PackCatalogPublisher implements AutoCloseable {
     private final Path file;
     private final Supplier<String> language;
     private final CaptureStarter captures;
-    private final Consumer<PackCatalogMessage> send;
+    private final Consumer<PreparedFilePayload> send;
     private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> Thread.ofPlatform()
             .daemon()
             .name("TotalDebug pack catalog")
             .unstarted(task));
     private String inventoryId;
     private String requestedLanguage;
-    private PackCatalogMessage state;
+    private PreparedFilePayload state;
     private long generation;
     private boolean stale;
 
     public PackCatalogPublisher(Path file, Supplier<String> language, CaptureStarter captures,
-                                Consumer<PackCatalogMessage> send) {
+                                Consumer<PreparedFilePayload> send) {
         this.file = Objects.requireNonNull(file, "file").toAbsolutePath().normalize();
         this.language = Objects.requireNonNull(language, "language");
         this.captures = Objects.requireNonNull(captures, "captures");
         this.send = Objects.requireNonNull(send, "send");
     }
 
-    /**
-     * Called whenever Companion has the given inventory; repeats the current state for the same inventory and
-     * language. Names are translated, so a language change captures again.
-     */
     /**
      * Captures again on the next request, also for the same inventory and language: the game's resources changed, and
      * the catalog's names come from them. Nothing happens before the first request, so a saved catalog is still reused
@@ -63,17 +59,16 @@ public final class PackCatalogPublisher implements AutoCloseable {
         this.stale = true;
     }
 
+    /**
+     * Called whenever Companion has the given inventory. The catalog for the same inventory and language is already
+     * told, or being captured; a failed one is captured again. Names are translated, so a language change captures again.
+     */
     public synchronized void request(String inventoryId, Map<String, String> moduleByModId) {
         Objects.requireNonNull(inventoryId, "inventoryId");
         String language = this.language.get();
-        if (inventoryId.equals(this.inventoryId) && language.equals(this.requestedLanguage)) {
-            if (this.state == null) {
-                return;
-            }
-            if (this.state.state() != PackCatalogMessage.FAILED) {
-                this.send.accept(this.state);
-                return;
-            }
+        if (inventoryId.equals(this.inventoryId) && language.equals(this.requestedLanguage)
+                && (this.state == null || this.state.state() != PreparedFilePayload.State.FAILED)) {
+            return;
         }
         this.inventoryId = inventoryId;
         this.requestedLanguage = language;
@@ -92,14 +87,14 @@ public final class PackCatalogPublisher implements AutoCloseable {
                 // Read in full: a file whose header matches but whose body is damaged is captured again.
                 PackCatalog saved = PackCatalog.read(this.file);
                 if (saved.inventoryId().equals(inventoryId) && saved.language().equals(language)) {
-                    publish(generation, PackCatalogMessage.available(inventoryId, this.file.toString()));
+                    publish(generation, ready(inventoryId));
                     return;
                 }
             } catch (IOException | RuntimeException exception) {
                 TotalDebug.LOGGER.info("Recapturing the pack catalog: {}", exception.getMessage());
             }
         }
-        publish(generation, PackCatalogMessage.capturing(inventoryId));
+        publish(generation, PreparedFilePayload.preparing(PreparedFilePayload.Kind.PACK_CATALOG, inventoryId, ""));
         this.captures.start(inventoryId, language, modules).whenCompleteAsync((catalog, failure) -> {
             // A newer request owns the file and the announced state; a superseded capture leaves both alone.
             if (!isCurrent(generation)) {
@@ -108,7 +103,7 @@ public final class PackCatalogPublisher implements AutoCloseable {
             if (failure == null) {
                 try {
                     catalog.write(this.file);
-                    publish(generation, PackCatalogMessage.available(inventoryId, this.file.toString()));
+                    publish(generation, ready(inventoryId));
                     return;
                 } catch (IOException | RuntimeException exception) {
                     failure = exception;
@@ -116,16 +111,20 @@ public final class PackCatalogPublisher implements AutoCloseable {
             }
             TotalDebug.LOGGER.error("Unable to publish the pack catalog", failure);
             String detail = failure.getMessage();
-            publish(generation, PackCatalogMessage.failed(inventoryId,
+            publish(generation, PreparedFilePayload.failed(PreparedFilePayload.Kind.PACK_CATALOG, inventoryId,
                     detail == null || detail.isBlank() ? "Pack catalog capture failed" : detail));
         }, this.worker);
+    }
+
+    private PreparedFilePayload ready(String inventoryId) {
+        return PreparedFilePayload.ready(PreparedFilePayload.Kind.PACK_CATALOG, inventoryId, this.file.toString());
     }
 
     private synchronized boolean isCurrent(long generation) {
         return generation == this.generation;
     }
 
-    private synchronized void publish(long generation, PackCatalogMessage message) {
+    private synchronized void publish(long generation, PreparedFilePayload message) {
         if (generation != this.generation) {
             return;
         }

@@ -19,7 +19,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.Applicat
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
@@ -219,14 +219,14 @@ class OfflineProjectIntegrationTest {
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
             var previous = app.requireProject().requireRuntime();
             Files.writeString(paths.inventory(), "invalid runtime capture");
-            var receive = CompanionApplication.class.getDeclaredMethod("handleRuntimeInventory", RuntimeInventoryMessage.class);
+            var receive = CompanionApplication.class.getDeclaredMethod("handleRuntimeInventory", PreparedFilePayload.class);
             receive.setAccessible(true);
-            receive.invoke(app, RuntimeInventoryMessage.available("invalid", paths.inventory().toString()));
+            receive.invoke(app, PreparedFilePayload.ready(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "invalid", paths.inventory().toString()));
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.FAILED);
             assertEquals(IndexIdentity.Kind.RUNTIME, app.getRuntimeIndexStatus().sourceKind());
             assertSame(previous, app.requireProject().runtime());
             assertNotNull(previous.snapshot().index().findClass("demo", "Example"));
-            receive.invoke(app, RuntimeInventoryMessage.failed("Capture failed"));
+            receive.invoke(app, PreparedFilePayload.failed(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "", "Capture failed"));
             assertSame(previous, app.requireProject().runtime());
             app.retryIndex().get(10, TimeUnit.SECONDS);
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
