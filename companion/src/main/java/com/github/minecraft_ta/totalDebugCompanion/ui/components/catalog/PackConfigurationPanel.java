@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
@@ -41,7 +41,7 @@ public final class PackConfigurationPanel extends JPanel {
     private record Listed(PackCatalog.Mod mod, PackCatalog.ConfigFile file, ConfigSources.Source source) {
     }
 
-    private record Loaded(List<ConfigSettingsTable.Row> rows, Map<String, ConfigWriter.Target> targets,
+    private record Loaded(List<ConfigSettingsTable.Row> rows, Map<String, ConfigSettings.Target> targets,
                           Map<String, Listed> sections, List<String> problems) {
     }
 
@@ -54,7 +54,7 @@ public final class PackConfigurationPanel extends JPanel {
     private final ConfigSettingsTable table = new ConfigSettingsTable();
     private final BrowserBody body;
     /** Where each listed setting is written, by row path. */
-    private Map<String, ConfigWriter.Target> targets = Map.of();
+    private Map<String, ConfigSettings.Target> targets = Map.of();
     /** The mod or file of each section row, by row path. */
     private Map<String, Listed> sections = Map.of();
     private String problem = "";
@@ -62,7 +62,7 @@ public final class PackConfigurationPanel extends JPanel {
     private String unavailable = "";
     private String status = "";
 
-    public PackConfigurationPanel(PackCatalogService catalog, ConfigChanges changes,
+    public PackConfigurationPanel(PackCatalogService catalog, ConfigSettings changes,
                                  Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
@@ -77,10 +77,10 @@ public final class PackConfigurationPanel extends JPanel {
         add(this.body, BorderLayout.CENTER);
 
         this.table.setEditing(this::edit, this::setStatus, row -> {
-            ConfigWriter.Target target = this.targets.get(row.path());
+            ConfigSettings.Target target = this.targets.get(row.path());
             return target == null ? null : this.writer.pending(target.file(), target.setting().path());
         }, row -> {
-            ConfigWriter.Target target = this.targets.get(row.path());
+            ConfigSettings.Target target = this.targets.get(row.path());
             return target == null ? null : this.writer.original(target.file(), target.setting().path());
         });
         this.table.setSectionTooltip(this::sectionTooltip);
@@ -125,7 +125,7 @@ public final class PackConfigurationPanel extends JPanel {
     /** The settings of every mod, mods by name. Blocking. */
     private Loaded read(CatalogIndex index) {
         List<ConfigSettingsTable.Row> rows = new ArrayList<>();
-        Map<String, ConfigWriter.Target> targets = new HashMap<>();
+        Map<String, ConfigSettings.Target> targets = new HashMap<>();
         Map<String, Listed> sections = new HashMap<>();
         List<String> problems = new ArrayList<>();
         List<PackCatalog.Mod> mods = new ArrayList<>(index.mods());
@@ -152,7 +152,7 @@ public final class PackConfigurationPanel extends JPanel {
                             row.name(), row.comment(), row.setting(), row.value(), row.literal());
                     settings.add(listed);
                     if (row.setting() != null) {
-                        targets.put(listed.path(), new ConfigWriter.Target(mod.id(), file.fileName(), source.path(),
+                        targets.put(listed.path(), new ConfigSettings.Target(mod.id(), file.fileName(), source.path(),
                                 file.type(), row.setting()));
                     }
                 }
@@ -180,7 +180,7 @@ public final class PackConfigurationPanel extends JPanel {
     }
 
     private void edit(ConfigSettingsTable.Row row, String literal) {
-        ConfigWriter.Target target = this.targets.get(row.path());
+        ConfigSettings.Target target = this.targets.get(row.path());
         if (target != null) this.writer.edit(target, row.literal(), literal);
     }
 

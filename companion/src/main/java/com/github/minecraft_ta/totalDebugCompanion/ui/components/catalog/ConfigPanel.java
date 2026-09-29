@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
@@ -98,7 +98,7 @@ final class ConfigPanel extends JPanel {
     private Object shownSource;
 
     /** {@code modId} is the mod whose files are shown. */
-    ConfigPanel(String modId, ConfigChanges changes, Consumer<NavigationTarget> navigator) {
+    ConfigPanel(String modId, ConfigSettings changes, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
         this.location = changes.location();
@@ -395,7 +395,7 @@ final class ConfigPanel extends JPanel {
         showNotice();
         Path path = selectedPath();
         this.textEditor.setDocument(path == null ? null : new ConfigTextEditor.Document(
-                new ConfigWriter.FileTarget(this.modId, file.fileName(), path, file.type()), file.settings()));
+                new ConfigSettings.FileTarget(this.modId, file.fileName(), path, file.type()), file.settings()));
         // Unsaved text stays; saving compares it with the file and asks when the file changed meanwhile.
         this.textEditor.load(fileText);
         this.mode.setEnabled(TEXT_CARD, !fileText.isEmpty() || this.textEditor.modified());
@@ -427,7 +427,7 @@ final class ConfigPanel extends JPanel {
             return;
         }
         if (path != null && file != null) {
-            this.writer.edit(new ConfigWriter.Target(this.modId, file.fileName(), path, file.type(), row.setting()),
+            this.writer.edit(new ConfigSettings.Target(this.modId, file.fileName(), path, file.type(), row.setting()),
                     row.literal(), literal);
         }
     }

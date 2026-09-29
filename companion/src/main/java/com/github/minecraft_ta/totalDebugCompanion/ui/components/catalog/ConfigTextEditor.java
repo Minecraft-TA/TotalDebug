@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigEdit;
@@ -27,7 +28,7 @@ final class ConfigTextEditor {
     private static final Pattern LINE = Pattern.compile("line (\\d+)");
 
     /** The file shown: where it is written and the settings its specification declares, empty without one. */
-    record Document(ConfigWriter.FileTarget target, List<PackCatalog.ConfigSetting> settings) {
+    record Document(ConfigSettings.FileTarget target, List<PackCatalog.ConfigSetting> settings) {
         Document {
             Objects.requireNonNull(target, "target");
             settings = List.copyOf(settings);

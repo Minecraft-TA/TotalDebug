@@ -2,7 +2,7 @@
 
 Design for item A3 of the [roadmap](ROADMAP.md): one path for every change Companion makes to the pack, the running game or a world. It builds on [GAME_LOCATION.md](GAME_LOCATION.md), which answers where the game is and whether a change is live, written to a file or refused, and on [MOD_SIDES.md](MOD_SIDES.md), which carries changes the server owns. A category then only says how to read and write its values; the pipeline does the rest, the same way for every category.
 
-Built so far: layers 1 to 4 of the [order of work](#order-of-work): the pipeline with key bindings, resources and pack order on it, and its reload queues.
+Built so far: layers 1 to 5 of the [order of work](#order-of-work): the pipeline with key bindings, resources, pack order and configuration on it, and its reload queues.
 
 ## Before the pipeline
 
@@ -106,7 +106,12 @@ A stack, each layer at most about 500 lines and reviewed on its own. The first t
 4. **Pack order** onto it; `SET_PACKS` goes. Two PRs, one per owner:
    - **The resource packs:** a `CHANGE` of the category `resourcePacks` selects them in the game client, saves `options.txt` and reloads the resources, as the pack screen does, and is answered once they reloaded; the Apply button waits for it and names a reload that failed. A closed game's `options.txt` is written through the pipeline, read as the game reads it: the required packs it leaves out count where the game adds them. Setting a selection replaces what the game holds (a `CHANGE` edit may expect no value), as the pack screen does; a revert expects what Companion last enabled. The game client no longer takes `SET_PACKS`.
    - **The datapacks:** the same `CHANGE` of the category `datapacks`, through the relay to the server of the world the game plays, which the category names (`world`) and the envelope carries as the world's identity. The server selects them, reloads its data, which saves the selection with the world, and answers once it did; should the reload fail, it puts the selection before back. Only the owner of a singleplayer world may change them, as with the data reload. A closed world's `level.dat` is written through the pipeline. The value is the enabled ids as the server and `level.dat` keep them: without the hidden parts of the mods' pack, while a mod's own datapack is a pack like any other. `SET_PACKS` goes; `RELAY_FAILED` of a `CHANGE` fails the change.
-5. **Configuration** onto it; the writing in `ConfigWriter` leaves the UI, its Ctrl+Z becomes a change back, and `ConfigChanges.Effect` becomes the pipeline's.
+5. **Configuration** onto it; the writing in `ConfigWriter` leaves the UI, its Ctrl+Z becomes a change back, and `ConfigChanges.Effect` becomes the pipeline's. Built as `ConfigSettings`:
+   - A setting's value is its TOML literal as the file writes it. An edit expects the literal shown, so a setting changed in its file since, such as by the game, is refused rather than overwritten; it had no check before.
+   - A file saved as text is one change of every setting it changes. It keeps its whole-text check, which asks whether to overwrite when the file changed since it was opened. A text that changes no setting, only comments, is written without a record.
+   - `ConfigWriter` keeps only the view's undo history and status. Ctrl+Z is a change back that expects the value it wrote.
+   - `ConfigChanges` no longer records; it tells when the game uses a value and keeps a rejoin or restart pending.
+   - `Effect` is the pipeline's.
 6. **The Changes page** through the categories' labels, without knowing the kinds.
 
 Each layer stands on its own; nothing outside these categories waits for the whole stack.

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -24,36 +25,11 @@ import java.util.function.Supplier;
 /**
  * When configuration edits take effect in the game, and the edits the running game has not applied yet. NeoForge
  * reloads a changed file of a running game unless its config watcher is off; a setting that needs the world rejoined
- * waits until the world it was edited in closes, and one that needs a restart until the game disconnects. Every edit
- * is also entered in the instance's {@link ChangeRecord}, which keeps the value a setting had before Companion first
- * changed it.
+ * waits until the world it was edited in closes, and one that needs a restart until the game disconnects. The change
+ * pipeline writes and records the edits ({@link ConfigSettings}); the instance's {@link ChangeRecord} keeps the value a
+ * setting had before Companion first changed it.
  */
 public final class ConfigChanges {
-
-    /** When an edit takes effect. */
-    public enum Effect {
-        NOW("the game reloaded it"),
-        REJOIN("takes effect after rejoining the world"),
-        RESTART("takes effect after restarting the game"),
-        GAME_STARTS("applies when the game starts"),
-        WORLD_OPENS("applies when the world opens"),
-        NEW_WORLDS("applies to worlds created from now on");
-
-        private final String description;
-
-        Effect(String description) {
-            this.description = description;
-        }
-
-        public String description() {
-            return this.description;
-        }
-
-        /** Whether the running game keeps using the previous value until something happens. */
-        public boolean pending() {
-            return this == REJOIN || this == RESTART;
-        }
-    }
 
     /** Where an edited file sits in the game directory. */
     public enum Location { CONFIG, WORLD, DEFAULTS }
@@ -158,12 +134,11 @@ public final class ConfigChanges {
     }
 
     /**
-     * Records that {@code target} changed from {@code previous} to {@code written} and tells when the game uses the new
-     * value. Blocking; it looks at the game directory.
+     * Tells when the game uses the value {@code target} was changed to from {@code previous}, and keeps it pending while
+     * the running game waits for a rejoin or a restart. Blocking; it looks at the game directory.
      */
     public Effect edited(ChangeRecord.Setting target, PackCatalog.ConfigType type, PackCatalog.Restart restart,
                          String previous, String written) {
-        this.record.changed(target, previous, written);
         Key key = new Key(target.file(), target.setting());
         Pending earlier = this.pending.get(key);
         Location location = location(target.file());

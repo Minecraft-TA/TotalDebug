@@ -1,9 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettingsFixture;
+import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
@@ -77,7 +79,7 @@ class ConfigPanelTest {
         assertTrue(speed.contains("widgets.speed") && speed.contains("How fast widgets spin")
                 && speed.contains("Accepts 1 to 16") && speed.contains(">4</font>"), speed);
         assertTrue(ConfigSettingsTable.tooltip(rows.get(2), null, null).contains("Takes effect after rejoining the world"));
-        String edited = ConfigSettingsTable.tooltip(rows.get(3), ConfigChanges.Effect.RESTART, "false");
+        String edited = ConfigSettingsTable.tooltip(rows.get(3), Effect.RESTART, "false");
         assertTrue(edited.contains("takes effect after restarting the game") && edited.contains("Before your edit"), edited);
     }
 
@@ -95,7 +97,7 @@ class ConfigPanelTest {
                 file, FILE.sections(), FILE.settings().subList(0, 2));
         ConfigPanel[] panel = new ConfigPanel[1];
         SwingUtilities.invokeAndWait(() -> {
-            panel[0] = new ConfigPanel("testmod", new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), target -> { });
+            panel[0] = new ConfigPanel("testmod", ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), target -> { });
             panel[0].setFiles(List.of(common));
         });
         ConfigSettingsTable table = component(panel[0], ConfigSettingsTable.class);
@@ -135,13 +137,13 @@ class ConfigPanelTest {
         Path file = Files.createDirectories(this.directory.resolve("config")).resolve("testmod-common.toml");
         Files.writeString(file, "[widgets]\n\tspeed = 12\n");
         List<String> shown = new ArrayList<>();
-        ConfigWriter writer = new ConfigWriter(new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), shown::add, () -> { });
+        ConfigWriter writer = new ConfigWriter(ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), shown::add, () -> { });
         PackCatalog.ConfigSetting speed = FILE.settings().getFirst();
 
-        assertEquals("", writer.revert(new ConfigWriter.Target("testmod", "testmod-common.toml", file,
+        assertEquals("", writer.revert(new ConfigSettings.Target("testmod", "testmod-common.toml", file,
                 PackCatalog.ConfigType.COMMON, speed), "12", "9").get(5, TimeUnit.SECONDS));
         assertTrue(Files.readString(file).contains("\tspeed = 9\n"));
-        String failure = writer.revert(new ConfigWriter.Target("testmod", "testmod-common.toml", file.resolveSibling("gone.toml"),
+        String failure = writer.revert(new ConfigSettings.Target("testmod", "testmod-common.toml", file.resolveSibling("gone.toml"),
                 PackCatalog.ConfigType.COMMON, speed), "12", "9").get(5, TimeUnit.SECONDS);
         assertTrue(failure.startsWith(speed.name() + ": "), failure);
         SwingUtilities.invokeAndWait(() -> { });
@@ -164,7 +166,7 @@ class ConfigPanelTest {
         ChangeRecord record = ChangeRecord.inMemory();
         ConfigPanel[] panel = new ConfigPanel[1];
         SwingUtilities.invokeAndWait(() -> {
-            panel[0] = new ConfigPanel("testmod", new ConfigChanges(GameLocations.of(this.directory, false), record), target -> { });
+            panel[0] = new ConfigPanel("testmod", ConfigSettingsFixture.of(GameLocations.of(this.directory, false), record), target -> { });
             panel[0].setFiles(List.of(common));
         });
         ConfigSettingsTable table = component(panel[0], ConfigSettingsTable.class);
@@ -205,7 +207,7 @@ class ConfigPanelTest {
         location.playing(new PlayingPayload.Singleplayer(first.getParent().getParent().toString()));
         ConfigPanel[] panel = new ConfigPanel[1];
         SwingUtilities.invokeAndWait(() -> {
-            panel[0] = new ConfigPanel("testmod", new ConfigChanges(location, ChangeRecord.inMemory()), target -> { });
+            panel[0] = new ConfigPanel("testmod", ConfigSettingsFixture.of(location, ChangeRecord.inMemory()), target -> { });
             panel[0].setFiles(List.of(FILE));
         });
         JComboBox<?> source = component(panel[0], JComboBox.class);
@@ -229,7 +231,7 @@ class ConfigPanelTest {
                 List.of(), List.of());
         ConfigPanel[] panel = new ConfigPanel[1];
         SwingUtilities.invokeAndWait(() -> {
-            panel[0] = new ConfigPanel("testmod", new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
+            panel[0] = new ConfigPanel("testmod", ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
                     target -> { });
             panel[0].setFiles(List.of(a));
         });
@@ -260,8 +262,8 @@ class ConfigPanelTest {
         Path file = Files.createDirectories(this.directory.resolve("config")).resolve("testmod-common.toml");
         Files.writeString(file, "speed = 5\n");
         boolean[] conflicted = new boolean[1];
-        ConfigWriter writer = new ConfigWriter(new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), status -> { }, () -> { });
-        ConfigWriter.FileTarget target = new ConfigWriter.FileTarget("testmod", "testmod-common.toml", file,
+        ConfigWriter writer = new ConfigWriter(ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), status -> { }, () -> { });
+        ConfigSettings.FileTarget target = new ConfigSettings.FileTarget("testmod", "testmod-common.toml", file,
                 PackCatalog.ConfigType.COMMON);
 
         SwingUtilities.invokeAndWait(() -> writer.saveText(target, List.of(), "speed = 4\n", "speed = 6\n", false,
