@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
@@ -169,7 +170,7 @@ class PackSelectionsTest {
     }
 
     private ResourceEdits edits(ChangeRecord record, boolean gameRunning) {
-        return new ResourceEdits(GameLocations.of(this.directory, gameRunning), record,
+        return new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, gameRunning), record, Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, InstanceState.inMemory());
     }
 

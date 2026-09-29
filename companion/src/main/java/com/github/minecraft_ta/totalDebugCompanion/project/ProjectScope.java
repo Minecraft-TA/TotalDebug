@@ -89,7 +89,7 @@ public final class ProjectScope implements AutoCloseable {
         this.configChanges = new ConfigChanges(this.location, changes);
         this.pipeline = new ChangePipeline(this.location, changes, this.configChanges.writes());
         this.keyBindings = new KeyBindingControl(this.pipeline);
-        this.resources = new ResourceEdits(this.location, changes, new ResourceOriginals(paths().originals()),
+        this.resources = new ResourceEdits(this.pipeline, new ResourceOriginals(paths().originals()),
                 this.configChanges.writes(), state);
         this.packSelections = new PackSelections(changes, this.resources, this.configChanges.writes());
     }

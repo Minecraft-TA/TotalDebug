@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
@@ -117,7 +118,7 @@ abstract class PackResourceEditor<V> extends JPanel {
     /** The hash of {@code packContent}, the copy Discard goes back to, which becomes the baseline then. */
     private String packHash;
     /** Asks whether to save over a copy written since this tab read the pack's; tests answer it themselves. */
-    Predicate<ResourceEdits.ChangedSince> askToReplace = this::replaceChangedCopy;
+    Predicate<ChangePipeline.Stale> askToReplace = this::replaceChangedCopy;
     private boolean disposed;
 
     /**
@@ -467,7 +468,7 @@ abstract class PackResourceEditor<V> extends JPanel {
                 showNotice("Not opened: " + message(failure), ThemeColors::error);
             } else if (held.equals(read)) {
                 after.accept(pack);
-            } else if (this.askToReplace.test(new ResourceEdits.ChangedSince(this.path.substring(this.path.lastIndexOf('/') + 1)
+            } else if (this.askToReplace.test(new ChangePipeline.Stale(this.path.substring(this.path.lastIndexOf('/') + 1)
                     + " changed in " + this.packName + " since this tab read it"))) {
                 this.baseline = null;
                 save(after);
@@ -512,7 +513,7 @@ abstract class PackResourceEditor<V> extends JPanel {
                         showState("");
                         changed();
                         // Asked before following a change that came during the save, which would hold the overwrite back.
-                        if (cause(failure) instanceof ResourceEdits.ChangedSince changedSince && this.askToReplace.test(changedSince)) {
+                        if (cause(failure) instanceof ChangePipeline.Stale changedSince && this.askToReplace.test(changedSince)) {
                             this.baseline = null;
                             save(after);
                             return;
@@ -612,7 +613,7 @@ abstract class PackResourceEditor<V> extends JPanel {
     }
 
     /** Whether to save over a copy written since this tab read the pack's, after asking. */
-    private boolean replaceChangedCopy(ResourceEdits.ChangedSince changedSince) {
+    private boolean replaceChangedCopy(ChangePipeline.Stale changedSince) {
         Object[] options = {"Overwrite", "Cancel"};
         int choice = JOptionPane.showOptionDialog(this, changedSince.getMessage() + ". Overwrite it with this tab's " + noun() + "?",
                 "Changed since", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[1]);

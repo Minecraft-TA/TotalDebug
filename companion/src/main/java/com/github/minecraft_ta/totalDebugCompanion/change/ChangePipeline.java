@@ -10,10 +10,12 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,17 +28,26 @@ import java.util.concurrent.atomic.AtomicInteger;
  * The one path of a change Companion makes to values the game keeps (see {@code docs/CHANGE_PIPELINE.md}). A change
  * waits in the project's write queue behind the changes before it; its category decides whether it goes to the connected
  * game or into the file, or is refused; every target must still hold the value the change was made against before any
- * is set; and each value set is entered in the change record. A change is made whole or not at all.
+ * is set; and each value set is entered in the change record. A change the game makes is made whole or not at all; a
+ * change of several files is written in order, and a failure part way leaves what was written recorded.
  */
 public final class ChangePipeline {
     private static final long ANSWER_SECONDS = 5;
 
-    /** One value of a change: {@code expected} is the value it was made against, {@code value} the new one. */
-    public record Edit<T extends ChangeRecord.Target>(T target, String expected, String value) {
+    /**
+     * One value of a change: {@code expected} is the value, as text, the change was made against, or null where the user
+     * chose to replace whatever the target holds; {@code value} is the new one.
+     */
+    public record Edit<T extends ChangeRecord.Target, V>(T target, String expected, V value) {
         public Edit {
             Objects.requireNonNull(target, "target");
-            Objects.requireNonNull(expected, "expected");
-            Objects.requireNonNull(value, "value");
+        }
+    }
+
+    /** A target no longer holds the value a change was made against; its message names the target. */
+    public static final class Stale extends IOException {
+        public Stale(String message) {
+            super(message);
         }
     }
 
@@ -86,8 +97,8 @@ public final class ChangePipeline {
     }
 
     /** Makes {@code edits} as one change of {@code category}. */
-    public <T extends ChangeRecord.Target> CompletableFuture<Outcome<T>> change(ChangeCategory<T> category, List<Edit<T>> edits) {
-        List<Edit<T>> change = List.copyOf(edits);
+    public <T extends ChangeRecord.Target, V> CompletableFuture<Outcome<T>> change(ChangeCategory<T, V> category, List<Edit<T, V>> edits) {
+        List<Edit<T, V>> change = List.copyOf(edits);
         if (change.isEmpty()) throw new IllegalArgumentException("A change needs an edit");
         CompletableFuture<Decided<T>> decided;
         try {
@@ -95,7 +106,7 @@ public final class ChangePipeline {
             decided = CompletableFuture.supplyAsync(() -> {
                 try {
                     GameLocation.Connection live = connection(category, this.location.read(), change);
-                    return live != null ? new Decided<>(null, live) : new Decided<>(writeFile(category, change), null);
+                    return live != null ? new Decided<>(null, live) : new Decided<>(write(category, change), null);
                 } catch (IOException exception) {
                     throw new CompletionException(exception);
                 }
@@ -112,11 +123,11 @@ public final class ChangePipeline {
     }
 
     /** The connection of the game that makes the change, or null where the file is written; fails where it is refused. */
-    private static <T extends ChangeRecord.Target> GameLocation.Connection connection(ChangeCategory<T> category, GameState game,
-                                                                                     List<Edit<T>> change) throws IOException {
+    private static <T extends ChangeRecord.Target, V> GameLocation.Connection connection(ChangeCategory<T, V> category, GameState game,
+                                                                                        List<Edit<T, V>> change) throws IOException {
         GameLocation.Connection live = null;
         boolean files = false;
-        for (Edit<T> edit : change) {
+        for (Edit<T, V> edit : change) {
             switch (category.access(game, edit.target())) {
                 case Access.Live access -> live = access.connection();
                 case Access.Files ignored -> files = true;
@@ -127,28 +138,50 @@ public final class ChangePipeline {
         return live;
     }
 
-    /** Writes the change into the file, after checking every target still holds the value the change expects. */
-    private <T extends ChangeRecord.Target> Outcome<T> writeFile(ChangeCategory<T> category, List<Edit<T>> change) throws IOException {
+    /**
+     * Writes a change into its files now; blocking, and only in the project's write queue, after the changes before it.
+     * Every target is checked before any is written. A target that already holds its new value is only recorded, such as
+     * a revert of a file someone else put back. The rest are written in order, each recorded as it lands, so a failure
+     * part way leaves the written ones recorded and names them.
+     */
+    public <T extends ChangeRecord.Target, V> Outcome<T> write(ChangeCategory<T, V> category, List<Edit<T, V>> change) throws IOException {
         Map<T, String> held = category.readFile(change.stream().map(Edit::target).toList());
-        Map<T, String> values = new LinkedHashMap<>();
+        List<ChangeCategory.Write<T, V>> writes = new ArrayList<>();
         List<Applied<T>> applied = new ArrayList<>();
-        for (Edit<T> edit : change) {
+        for (Edit<T, V> edit : change) {
+            String now = category.text(edit.value());
             String before = held.get(edit.target());
-            if (before != null && !before.equals(edit.expected())) {
-                throw new IOException(category.name(edit.target()) + " changed in its file since Companion read it");
+            if (now.equals(before)) {
+                applied.add(new Applied<>(edit.target(), before, now));
+                continue;
             }
-            values.put(edit.target(), edit.value());
+            if (before != null && edit.expected() != null && !before.equals(edit.expected())) {
+                throw new Stale(category.changedSince(edit.target()));
+            }
+            writes.add(new ChangeCategory.Write<>(edit.target(), edit.value()));
             // A target the file names nothing for had the value it was shown with.
-            applied.add(new Applied<>(edit.target(), before != null ? before : edit.expected(), edit.value()));
+            applied.add(new Applied<>(edit.target(), before != null ? before : Objects.requireNonNullElse(edit.expected(), ""), now));
         }
-        category.writeFile(values);
+        Set<T> landed = new LinkedHashSet<>();
+        try {
+            if (!writes.isEmpty()) category.writeFile(writes, landed::add);
+        } catch (IOException failure) {
+            Set<T> unwritten = new HashSet<>();
+            writes.forEach(write -> unwritten.add(write.target()));
+            unwritten.removeAll(landed);
+            applied.stream().filter(value -> !unwritten.contains(value.target())).forEach(this::recorded);
+            if (landed.isEmpty()) throw failure;
+            List<String> names = landed.stream().map(category::name).toList();
+            throw new IOException(failure.getMessage() + "; " + String.join(", ", names) + (names.size() == 1 ? " was" : " were")
+                    + " written before that", failure);
+        }
         applied.forEach(this::recorded);
         return new Outcome<>(applied, false);
     }
 
     /** Sends the change to the connected game, and records it whenever the game answers. */
-    private <T extends ChangeRecord.Target> CompletableFuture<Outcome<T>> live(GameLocation.Connection connection,
-                                                                              ChangeCategory<T> category, List<Edit<T>> change) {
+    private <T extends ChangeRecord.Target, V> CompletableFuture<Outcome<T>> live(GameLocation.Connection connection,
+                                                                                 ChangeCategory<T, V> category, List<Edit<T, V>> change) {
         int id = this.requests.incrementAndGet();
         CompletableFuture<ChangeResultPayload> answer = new CompletableFuture<>();
         this.waiting.put(id, answer);
@@ -167,7 +200,7 @@ public final class ChangePipeline {
             return new Outcome<>(applied, true);
         });
         List<ChangePayload.Edit> edits = change.stream().map(edit -> new ChangePayload.Edit(category.id(),
-                category.name(edit.target()), edit.expected(), edit.value())).toList();
+                category.name(edit.target()), Objects.requireNonNullElse(edit.expected(), ""), category.text(edit.value()))).toList();
         if (!connection.send(new ChangeMessage(new ChangePayload(id, edits)))) {
             this.waiting.remove(id);
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));

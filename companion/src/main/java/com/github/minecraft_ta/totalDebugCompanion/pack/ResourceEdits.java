@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.Access;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
@@ -30,6 +32,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -55,8 +59,9 @@ import java.util.zip.ZipFile;
  * working pack of its side: the pack Companion manages unless another folder pack was chosen, which for assets is
  * {@code resourcepacks/TotalDebug} and for data {@code datapacks/TotalDebug} of the current world, the open one or the
  * one played last while none is open. Only the managed pack is enabled and placed on top; the player's own packs keep
- * their place. Files are written in the project's write queue, so the record holds every write before it closes.
- * Reloads asked for while one runs are merged into one more reload after it.
+ * their place. Files are written through the {@link ChangePipeline}, as a category whose value is a file's content and
+ * is recorded as its hash; the game takes them up when it reloads. Reloads asked for while one runs are merged into one
+ * more reload after it.
  */
 public final class ResourceEdits {
     public static final String PACK_NAME = "TotalDebug";
@@ -106,8 +111,10 @@ public final class ResourceEdits {
 
     private final GameLocation location;
     private final Path workspace;
+    private final ChangePipeline pipeline;
     private final ChangeRecord record;
     private final ResourceOriginals originals;
+    private final PackFiles files = new PackFiles();
     private final Executor writes;
     private final InstanceState state;
     private final AtomicInteger requests = new AtomicInteger();
@@ -131,14 +138,15 @@ public final class ResourceEdits {
     private final ExternalEdits external = new ExternalEdits(this);
 
     /**
-     * Edits the resources of the game {@code location} tells of; {@code writes} is the project's write queue, and
+     * Edits the resources of the pipeline's game; {@code writes} is the project's write queue, the pipeline's, and
      * {@code state} keeps the working pack of each side.
      */
-    public ResourceEdits(GameLocation location, ChangeRecord record, ResourceOriginals originals, Executor writes,
-                         InstanceState state) {
-        this.location = Objects.requireNonNull(location, "location");
-        this.workspace = location.workspace();
-        this.record = Objects.requireNonNull(record, "record");
+    public ResourceEdits(ChangePipeline pipeline, ResourceOriginals originals, Executor writes, InstanceState state) {
+        this.pipeline = Objects.requireNonNull(pipeline, "pipeline");
+        this.location = pipeline.location();
+        this.workspace = this.location.workspace();
+        this.record = pipeline.record();
+        GameLocation location = this.location;
         this.originals = Objects.requireNonNull(originals, "originals");
         this.writes = Objects.requireNonNull(writes, "writes");
         this.state = Objects.requireNonNull(state, "state");
@@ -490,19 +498,9 @@ public final class ResourceEdits {
     }
 
     /**
-     * A copy in the pack other than the one a save expected to replace, such as one another tab or program wrote since;
-     * its message names the file.
-     */
-    public static final class ChangedSince extends IOException {
-        public ChangedSince(String message) {
-            super(message);
-        }
-    }
-
-    /**
      * Saves as {@link #save(String, Path, byte[], Map)} does, but only over the copy whose hash is {@code expected}, empty
-     * for none; another copy fails the save with {@link ChangedSince}. A null {@code expected} replaces whatever the pack
-     * holds.
+     * for none; another copy fails the save with {@link ChangePipeline.Stale}. A null {@code expected} replaces whatever the
+     * pack holds.
      */
     public CompletableFuture<Saved> save(String path, Path into, byte[] content, Map<String, byte[]> alongside, String expected) {
         Objects.requireNonNull(content, "content");
@@ -517,30 +515,20 @@ public final class ResourceEdits {
                 else if (!PackFolders.isPack(pack)) {
                     throw new IOException("The " + PackFolders.label(pack) + " is gone or has no readable pack.mcmeta, so the game does not load it");
                 }
-                Path file = pack.resolve(path);
-                // Checked before anything is written, so a refused save leaves the pack as it was.
-                byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
-                if (expected != null && !expected.equals(ResourceOriginals.hash(previous))) {
-                    throw new ChangedSince(path.substring(path.lastIndexOf('/') + 1) + " changed in the "
-                            + PackFolders.label(pack) + " since this tab read it");
-                }
+                List<ChangePipeline.Edit<ChangeRecord.Resource, byte[]>> edits = new ArrayList<>();
                 // Only a copy the save makes gets them: a pack's own copy without them, such as a static texture, stays so.
-                // Written first: should one fail, the resource itself is left as it was, and the save fails whole.
-                for (Map.Entry<String, byte[]> companion : previous != null ? Map.<String, byte[]>of().entrySet() : alongside.entrySet()) {
-                    Path companionFile = pack.resolve(companion.getKey());
-                    // The pack's own copy, even a different one, stays.
-                    if (Files.exists(companionFile)) continue;
-                    ChangeRecord.Resource beside = new ChangeRecord.Resource(companion.getKey(), pack);
-                    if (this.record.change(beside) == null) this.originals.keep(null);
-                    AtomicFiles.replace(companionFile, staged -> Files.write(staged, companion.getValue()));
-                    this.record.changed(beside, ResourceOriginals.hash(null), ResourceOriginals.hash(companion.getValue()));
-                    added.add(companion.getKey());
+                // Written first: should one fail, the resource itself is left as it was.
+                if (!Files.isRegularFile(pack.resolve(path))) {
+                    for (Map.Entry<String, byte[]> companion : alongside.entrySet()) {
+                        // The pack's own copy, even a different one, stays.
+                        if (Files.exists(pack.resolve(companion.getKey()))) continue;
+                        edits.add(new ChangePipeline.Edit<>(new ChangeRecord.Resource(companion.getKey(), pack),
+                                ResourceOriginals.hash(null), companion.getValue()));
+                        added.add(companion.getKey());
+                    }
                 }
-                ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
-                if (this.record.change(target) == null) this.originals.keep(previous);
-                AtomicFiles.replace(file, staged -> Files.write(staged, content));
-                this.lastWritten.put(target, ResourceOriginals.hash(content));
-                this.record.changed(target, ResourceOriginals.hash(previous), ResourceOriginals.hash(content));
+                edits.add(new ChangePipeline.Edit<>(new ChangeRecord.Resource(path, pack), expected, content));
+                wrote(this.pipeline.write(this.files, edits));
                 return pack;
             } catch (IOException exception) {
                 throw new CompletionException(exception);
@@ -563,18 +551,9 @@ public final class ResourceEdits {
             try {
                 // Reverted already, such as twice from the Changes page before it refreshed.
                 if (!change.equals(this.record.change(target))) return target.location();
-                Path file = target.location().resolve(target.path());
-                String held = ResourceOriginals.hash(Files.isRegularFile(file) ? Files.readAllBytes(file) : null);
-                if (!held.equals(change.current()) && !held.equals(change.original())) {
-                    throw new IOException(target.path() + " was changed outside Companion since, and reverting would replace that");
-                }
-                if (!held.equals(change.original())) {
-                    byte[] original = this.originals.read(change.original());
-                    if (original == null) Files.deleteIfExists(file);
-                    else AtomicFiles.replace(file, staged -> Files.write(staged, original));
-                }
-                this.lastWritten.put(target, change.original());
-                this.record.changed(target, change.current(), change.original());
+                // A file changed outside Companion since is left alone, unless it holds the original again.
+                wrote(this.pipeline.write(this.files, List.of(new ChangePipeline.Edit<>(target, change.current(),
+                        this.originals.read(change.original())))));
                 return target.location();
             } catch (IOException exception) {
                 throw new CompletionException(exception);
@@ -630,6 +609,67 @@ public final class ResourceEdits {
                 wrote();
             }
         }).thenCompose(Function.identity()));
+    }
+
+    /** What Companion wrote last to each target of {@code outcome}, so a program's save is told from it. */
+    private void wrote(ChangePipeline.Outcome<ChangeRecord.Resource> outcome) {
+        outcome.applied().forEach(applied -> this.lastWritten.put(applied.target(), applied.now()));
+    }
+
+    /**
+     * Resources as a category of the pipeline: a file of a pack, whose value is its content, null for none, and is
+     * recorded as its hash. The game takes a written file up when it reloads, so a change always goes into the file. The
+     * content a file held before Companion first changed it is kept among the originals, so the change can be reverted.
+     */
+    private final class PackFiles implements ChangeCategory<ChangeRecord.Resource, byte[]> {
+        @Override
+        public String id() {
+            return "resource";
+        }
+
+        @Override
+        public String name(ChangeRecord.Resource target) {
+            return target.path().substring(target.path().lastIndexOf('/') + 1);
+        }
+
+        @Override
+        public String changedSince(ChangeRecord.Resource target) {
+            return name(target) + " changed in the " + PackFolders.label(target.location()) + " since Companion read it";
+        }
+
+        @Override
+        public Access access(GameState game, ChangeRecord.Resource target) {
+            return new Access.Files();
+        }
+
+        @Override
+        public String text(byte[] content) {
+            return ResourceOriginals.hash(content);
+        }
+
+        @Override
+        public Map<ChangeRecord.Resource, String> readFile(Collection<ChangeRecord.Resource> targets) throws IOException {
+            Map<ChangeRecord.Resource, String> held = new HashMap<>();
+            for (ChangeRecord.Resource target : targets) held.put(target, ResourceOriginals.hash(content(target)));
+            return held;
+        }
+
+        @Override
+        public void writeFile(List<Write<ChangeRecord.Resource, byte[]>> writes, Consumer<ChangeRecord.Resource> landed) throws IOException {
+            for (Write<ChangeRecord.Resource, byte[]> write : writes) {
+                Path file = write.target().location().resolve(write.target().path());
+                if (record.change(write.target()) == null) originals.keep(content(write.target()));
+                if (write.value() == null) Files.deleteIfExists(file);
+                else AtomicFiles.replace(file, staged -> Files.write(staged, write.value()));
+                lastWritten.put(write.target(), text(write.value()));
+                landed.accept(write.target());
+            }
+        }
+
+        private static byte[] content(ChangeRecord.Resource target) throws IOException {
+            Path file = target.location().resolve(target.path());
+            return Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+        }
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
@@ -31,7 +32,7 @@ class ResourceTextEditorTest {
     @Test
     void aRevertElsewhereShowsTheOpenedFileAgain() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record,
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
@@ -57,7 +58,7 @@ class ResourceTextEditorTest {
     @Test
     void aDeletedFileOfTheManagedPackStaysAsUnsavedText() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record,
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
@@ -81,7 +82,7 @@ class ResourceTextEditorTest {
 
     @Test
     void aSaveRightAfterChoosingAnotherPackGoesIntoThatPack() throws Exception {
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
@@ -122,7 +123,7 @@ class ResourceTextEditorTest {
 
     @Test
     void theWarningThatTheGameDoesNotUseTheCopyEndsWhenItDoes() throws Exception {
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         PackStackPayload.Pack managed = new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "");
@@ -148,7 +149,7 @@ class ResourceTextEditorTest {
 
     @Test
     void aSaveOverTextAnotherTabSavedSinceAsksFirst() throws Exception {
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
@@ -201,7 +202,7 @@ class ResourceTextEditorTest {
 
     @Test
     void aTabWhoseChangesAnotherTabSavedSavesItsNextChangeWithoutAsking() throws Exception {
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
@@ -248,7 +249,7 @@ class ResourceTextEditorTest {
 
     @Test
     void changesCarriedToAnotherPackAreSavedThereWithoutAsking() throws Exception {
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
@@ -281,7 +282,7 @@ class ResourceTextEditorTest {
 
     @Test
     void aMinifiedLanguageFileIsReformattedAsOneEditThatUndoTakesBack() throws Exception {
-        ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         StringBuilder minified = new StringBuilder("{");

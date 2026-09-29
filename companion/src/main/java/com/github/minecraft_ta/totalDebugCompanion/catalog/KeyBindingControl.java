@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.function.Consumer;
 
 /**
  * Puts key bindings on keys, as a category of the {@link ChangePipeline}: a binding is named as in {@code options.txt},
@@ -27,7 +28,7 @@ import java.util.concurrent.CompletionException;
  * in {@code options.txt}, which the game reads when it starts. Writing that file while the game runs would be undone the
  * next time the game saves its options, so a game running without a connection is asked to connect first.
  */
-public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyBinding> {
+public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyBinding, String> {
     /** A change to make: the binding {@code name}, the key it had when the change was made, and its new key. */
     public record Change(String name, KeyBindings.Assignment shown, KeyBindings.Assignment assignment) {
     }
@@ -51,7 +52,7 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
      * or the game refuses one. Completes, never exceptionally, with why nothing was changed, or empty.
      */
     public CompletableFuture<String> set(List<Change> changes) {
-        List<ChangePipeline.Edit<ChangeRecord.KeyBinding>> edits = changes.stream().map(change -> new ChangePipeline.Edit<>(
+        List<ChangePipeline.Edit<ChangeRecord.KeyBinding, String>> edits = changes.stream().map(change -> new ChangePipeline.Edit<>(
                 new ChangeRecord.KeyBinding(change.name()), change.shown().encode(), change.assignment().encode())).toList();
         return this.pipeline.change(this, edits).handle((done, failure) -> failure == null ? "" : message(failure));
     }
@@ -83,6 +84,11 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
     }
 
     @Override
+    public String text(String value) {
+        return value;
+    }
+
+    @Override
     public Map<ChangeRecord.KeyBinding, String> readFile(Collection<ChangeRecord.KeyBinding> targets) throws IOException {
         Map<ChangeRecord.KeyBinding, String> held = new HashMap<>();
         if (!Files.isRegularFile(this.options)) return held;
@@ -96,21 +102,23 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
         return held;
     }
 
-    /** Writes each binding's line of {@code options.txt}, adding the lines it lacks. */
+    /** Writes each binding's line of {@code options.txt}, adding the lines it lacks, in one write of the file. */
     @Override
-    public void writeFile(Map<ChangeRecord.KeyBinding, String> values) throws IOException {
+    public void writeFile(List<Write<ChangeRecord.KeyBinding, String>> writes, Consumer<ChangeRecord.KeyBinding> landed) throws IOException {
         List<String> lines = Files.isRegularFile(this.options)
                 ? new ArrayList<>(Files.readAllLines(this.options, StandardCharsets.UTF_8)) : new ArrayList<>();
-        Map<ChangeRecord.KeyBinding, String> missing = new LinkedHashMap<>(values);
+        Map<ChangeRecord.KeyBinding, String> missing = new LinkedHashMap<>();
+        writes.forEach(write -> missing.put(write.target(), write.value()));
         for (int index = 0; index < lines.size(); index++) {
-            for (Map.Entry<ChangeRecord.KeyBinding, String> value : values.entrySet()) {
-                String prefix = "key_" + value.getKey().name() + ":";
+            for (Write<ChangeRecord.KeyBinding, String> write : writes) {
+                String prefix = "key_" + write.target().name() + ":";
                 if (!lines.get(index).startsWith(prefix)) continue;
-                lines.set(index, prefix + value.getValue());
-                missing.remove(value.getKey());
+                lines.set(index, prefix + write.value());
+                missing.remove(write.target());
             }
         }
         missing.forEach((target, value) -> lines.add("key_" + target.name() + ":" + value));
         Files.write(this.options, lines, StandardCharsets.UTF_8);
+        writes.forEach(write -> landed.accept(write.target()));
     }
 }
