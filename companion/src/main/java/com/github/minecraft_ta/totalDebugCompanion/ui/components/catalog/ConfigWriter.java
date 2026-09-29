@@ -86,11 +86,12 @@ final class ConfigWriter {
      * nothing itself, and completes with why the setting kept its value, or empty.
      */
     CompletableFuture<String> revert(ConfigSettings.Target target, String before, String after) {
-        SettingStep step = new SettingStep(target, before, after);
         return this.settings.set(target, before, after).handle((saved, failure) -> {
             if (failure == null) {
+                // Undone to what the revert replaced; one that changed nothing is nothing to undo.
+                ConfigSettings.Changed changed = saved.changed().getFirst();
                 SwingUtilities.invokeLater(() -> {
-                    done(step);
+                    if (!changed.before().equals(changed.after())) done(new SettingStep(target, changed.before(), after));
                     this.written.run();
                 });
                 return "";
