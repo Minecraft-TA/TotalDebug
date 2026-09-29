@@ -30,7 +30,8 @@ import java.util.zip.ZipFile;
  * answers which pack's copy of a file the game uses, for the views and the edits that show whether a copy is used.
  *
  * <p>Each side tells its own listeners, only when its packs may differ: the resource packs when the game client names
- * others, the datapacks when the world's server does or the game goes to another world, and a side whose file Companion
+ * others; the datapacks whenever the world's server names them, since it does after each data load, which may change
+ * the packs' files though not their order, and when the game goes to another world; and a side whose file Companion
  * wrote. A disconnect changes both, since the files take over from the game.
  */
 public final class GamePacks {
@@ -130,12 +131,8 @@ public final class GamePacks {
             boolean current = world.isEmpty() ? playing instanceof PlayingPayload.Multiplayer
                     : playing != null && playing.identity().equals(world);
             if (!current) return;
-            PackStackPayload named = refusal.isEmpty() ? packs : null;
-            if (Objects.equals(this.datapacksFor, playing) && Objects.equals(this.datapacks, named) && this.worldRefusal.equals(refusal)) {
-                return;
-            }
             this.datapacksFor = playing;
-            this.datapacks = named;
+            this.datapacks = refusal.isEmpty() ? packs : null;
             this.worldRefusal = refusal;
         }
         tell(ChangeRecord.PackSide.DATA);

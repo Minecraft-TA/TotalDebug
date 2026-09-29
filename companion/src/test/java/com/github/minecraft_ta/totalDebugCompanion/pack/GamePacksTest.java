@@ -39,10 +39,10 @@ class GamePacksTest {
         assertEquals(List.of(2, 2), told(), "another world has other datapacks; the resource packs stay");
         packs.datapacks(world.identity(), stack("vanilla", "mod_data"), "");
         packs.datapacks(world.identity(), stack("vanilla", "mod_data"), "");
-        assertEquals(List.of(2, 3), told(), "the server naming the same datapacks again tells nobody");
+        assertEquals(List.of(2, 4), told(), "the server names them after each data load, which may change their files");
 
         location.disconnected();
-        assertEquals(List.of(3, 4), told(), "without the game, the files stand for both");
+        assertEquals(List.of(3, 5), told(), "without the game, the files stand for both");
     }
 
     @Test

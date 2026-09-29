@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
-import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
@@ -93,7 +92,6 @@ public final class WorldPanel extends JPanel {
     private final WorldReadings readings;
     private final PageLoader<Loaded> loader;
     private final Runnable removeCatalogListener;
-    private final Runnable removePlayingListener;
     private final SubjectHeader header = new SubjectHeader();
     /** Why Show in Explorer could not show the world. */
     private final NoticeLine notice = new NoticeLine();
@@ -155,22 +153,15 @@ public final class WorldPanel extends JPanel {
         this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, () -> {
             if (!this.disposed && (this.saved != null || this.server != null)) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
         });
-        // The game saves the world while it runs, so the page reads it whenever it is shown.
-        // A change of the datapacks, named by the world's server or written by Companion, is read again at once.
+        // The game saves the world while it runs, so the page reads it whenever it is shown. A change of the datapacks,
+        // which also comes with another world or a disconnect, is read at once, shown or not: the tab names the world or
+        // server it reads.
         this.loader = new PageLoader<>(() -> {
             PackStackPayload stack = edits.packs().datapacks();
             String refusal = edits.packs().worldRefusal();
             return () -> read(edits.location().read(), stack, refusal);
         }, this::show, failure -> show(Loaded.problem("The world could not be read: " + failure.getMessage())))
-                .whenShown(this).follow(edits.packs()::addDatapackListener);
-        // The tab names the world the game plays, or the last one played without a game. A shown page reads another
-        // world through the datapacks, which change with it; a hidden one is read for its tab.
-        this.removePlayingListener = edits.location().addListener(change -> {
-            if (change != GameLocation.Change.PLAYING && change != GameLocation.Change.DISCONNECTED) return;
-            SwingUtilities.invokeLater(() -> {
-                if (!this.disposed && !isShowing()) this.loader.load();
-            });
-        });
+                .readsWhenShown(this).follow(edits.packs()::addDatapackListener);
     }
 
     private static Loaded read(GameState game, PackStackPayload stack, String refusal) {
@@ -362,7 +353,6 @@ public final class WorldPanel extends JPanel {
         this.disposed = true;
         this.loader.dispose();
         this.removeCatalogListener.run();
-        this.removePlayingListener.run();
     }
 
     GameRulesPanel rules() {

@@ -66,7 +66,7 @@ public final class PackResourcesPanel extends JPanel {
             TabTitles.setUncounted(this.tabs, 0, ResourcesTab.FILES.title());
             this.browser.setResources(List.of());
             this.browser.setMessage("Resources could not be read: " + failure.getMessage());
-        }).whileShown(this).follow(catalog::addListener).follow(edits.packs()::addResourcePackListener)
+        }).waitsWhileHidden(this).follow(catalog::addListener).follow(edits.packs()::addResourcePackListener)
                 .follow(edits.packs()::addDatapackListener).follow(edits::addEditListener);
         this.packLoader = new PageLoader<>(() -> {
             PackStackPayload stack = this.edits.packs().resourcePacks();
@@ -78,7 +78,9 @@ public final class PackResourcesPanel extends JPanel {
             TabTitles.setUncounted(this.tabs, 1, ResourcesTab.PACKS.title());
             this.packs.showFailure("The resource packs could not be listed: " + failure.getMessage());
         })
-                .whenShown(this).follow(edits.packs()::addResourcePackListener).follow(catalog::addListener);
+                // Its count on the tab follows while the page is shown; the folders are read again when the tab is chosen.
+                .waitsWhileHidden(this).readsWhenShown(this.packs)
+                .follow(edits.packs()::addResourcePackListener).follow(catalog::addListener);
         load();
     }
 

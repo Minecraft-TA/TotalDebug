@@ -40,11 +40,15 @@ public final class PageLoader<T> {
     private boolean disposed;
     /** The page whose visibility decides when a followed change loads, or null to load at once. */
     private JComponent page;
-    /** Whether the page loads every time it is shown, not only after a change it missed. */
-    private boolean everyShow;
     /** Whether a followed source changed while the page was hidden. */
     private boolean stale;
-    private HierarchyListener shown;
+    /** Removes the listeners on the components whose showing this loader watches. */
+    private final List<Runnable> unwatch = new ArrayList<>();
+    /**
+     * Whether a read for a component being shown waits for the end of the Swing step. Showing a page shows the part of it
+     * chosen in the same step, and both read once.
+     */
+    private boolean showReadQueued;
 
     /** {@code show} and {@code fail} run on the Swing thread with what a read returned or why it failed. */
     public PageLoader(Read<T> read, Consumer<T> show, Consumer<Throwable> fail) {
@@ -54,31 +58,44 @@ public final class PageLoader<T> {
     }
 
     /**
-     * Loads whenever {@code page} becomes visible, since what it shows may have changed while it was hidden without a
-     * source telling, such as a file the game writes. Followed changes wait while it is hidden.
+     * Waits while {@code page} is hidden and reads every time it is shown, since what it shows may have changed while it
+     * was hidden without a source telling, such as a file the game writes.
      */
     public PageLoader<T> whenShown(JComponent page) {
-        return watch(page, true);
+        this.page = Objects.requireNonNull(page, "page");
+        return readsWhenShown(page);
     }
 
     /**
-     * Loads a followed change at once while {@code page} is shown; a change while it is hidden loads once it is shown
-     * again. For pages whose sources tell every change, so showing them again reads nothing new otherwise.
+     * Waits while {@code page} is hidden: a followed change then reads once the page is shown again, and not at all when
+     * none came. For pages whose sources tell every change.
      */
-    public PageLoader<T> whileShown(JComponent page) {
+    public PageLoader<T> waitsWhileHidden(JComponent page) {
+        this.page = Objects.requireNonNull(page, "page");
         return watch(page, false);
     }
 
-    private PageLoader<T> watch(JComponent page, boolean everyShow) {
-        this.page = Objects.requireNonNull(page, "page");
-        this.everyShow = everyShow;
-        this.shown = event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !page.isShowing()) return;
-            if (!this.everyShow && !this.stale) return;
-            this.stale = false;
-            load();
+    /**
+     * Reads every time {@code component} is shown, such as a tab listing files that change without telling. It may be a
+     * part of the page, which then reads when that part is chosen.
+     */
+    public PageLoader<T> readsWhenShown(JComponent component) {
+        return watch(component, true);
+    }
+
+    /** Reads when {@code component} is shown: {@code always}, or only after a change it missed. */
+    private PageLoader<T> watch(JComponent component, boolean always) {
+        HierarchyListener listener = event -> {
+            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !component.isShowing()) return;
+            if (!always && !this.stale || this.showReadQueued) return;
+            this.showReadQueued = true;
+            SwingUtilities.invokeLater(() -> {
+                this.showReadQueued = false;
+                load();
+            });
         };
-        page.addHierarchyListener(this.shown);
+        component.addHierarchyListener(listener);
+        this.unwatch.add(() -> component.removeHierarchyListener(listener));
         return this;
     }
 
@@ -107,6 +124,7 @@ public final class PageLoader<T> {
             return;
         }
         if (this.disposed) return;
+        this.stale = false;
         if (this.running) {
             this.again = true;
             return;
@@ -161,6 +179,7 @@ public final class PageLoader<T> {
         this.unsubscribe.forEach(Runnable::run);
         this.unsubscribe.clear();
         // The page may outlive the loader, as a subject page outlives the details of a definition it replaced.
-        if (this.page != null) this.page.removeHierarchyListener(this.shown);
+        this.unwatch.forEach(Runnable::run);
+        this.unwatch.clear();
     }
 }

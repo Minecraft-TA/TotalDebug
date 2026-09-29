@@ -110,7 +110,7 @@ class PageLoaderTest {
     @Test
     void aChangeWhileThePageIsHiddenIsReadOnceItIsShown() throws Exception {
         ShowablePage page = new ShowablePage();
-        PageLoader<String> loader = onEdt(() -> loader().whileShown(page).follow(subscribe()));
+        PageLoader<String> loader = onEdt(() -> loader().waitsWhileHidden(page).follow(subscribe()));
 
         changed();
         assertEquals(0, this.prepared.get(), "a hidden page does not read");
@@ -136,6 +136,33 @@ class PageLoaderTest {
         show(page, loader, false);
         show(page, loader, true);
         assertEquals(2, this.prepared.get(), "it reads every time it is shown, for what changed without telling");
+    }
+
+    @Test
+    void aPartOfThePageReadsWhenItIsChosenAndChangesFollowWhileThePageIsShown() throws Exception {
+        ShowablePage page = new ShowablePage();
+        ShowablePage tab = new ShowablePage();
+        PageLoader<String> loader = onEdt(() -> loader().waitsWhileHidden(page).readsWhenShown(tab).follow(subscribe()));
+
+        show(page, loader, true);
+        changed();
+        settle(loader);
+        assertEquals(1, this.prepared.get(), "a change reads while the page is shown, though its tab is not chosen");
+        show(tab, loader, true);
+        assertEquals(2, this.prepared.get(), "choosing the tab reads what changed without telling, such as a folder");
+
+        // Hidden with its tab, a change missed, and shown again with its tab in one event: one read.
+        SwingUtilities.invokeAndWait(() -> {
+            page.setShown(false);
+            tab.setShown(false);
+        });
+        changed();
+        SwingUtilities.invokeAndWait(() -> {
+            page.setShown(true);
+            tab.setShown(true);
+        });
+        settle(loader);
+        assertEquals(3, this.prepared.get(), "the page and its tab shown together read once");
     }
 
     @Test
