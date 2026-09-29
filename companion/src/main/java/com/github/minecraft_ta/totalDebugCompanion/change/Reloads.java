@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.change;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
@@ -164,12 +163,7 @@ public final class Reloads {
      * when the game plays another world.
      */
     public String identity(Path world) throws IOException {
-        PlayingPayload playing = this.location.playing();
-        if (playing instanceof PlayingPayload.Singleplayer singleplayer
-                && Path.of(singleplayer.world()).toAbsolutePath().normalize().equals(world.toAbsolutePath().normalize())) {
-            return playing.identity();
-        }
-        throw new IOException("The game went to another world before it reloaded");
+        return this.location.read().identity(world).orElseThrow(() -> new IOException("The game went to another world before it reloaded"));
     }
 
     /**

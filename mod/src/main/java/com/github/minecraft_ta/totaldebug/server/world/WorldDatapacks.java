@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.server.world;
 import com.github.minecraft_ta.totaldebug.change.ChangeTable;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
@@ -15,7 +16,9 @@ import com.github.minecraft_ta.totaldebug.resource.ReloadProblems;
 import com.github.minecraft_ta.totaldebug.server.ServerPolicy;
 import com.github.minecraft_ta.totaldebug.server.ServerRelay;
 import net.minecraft.SharedConstants;
+import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.PackType;
@@ -111,10 +114,26 @@ public final class WorldDatapacks {
                 ? PlayingPayload.Singleplayer.of(server.getWorldPath(LevelResource.ROOT)).identity() : "";
         int format = SharedConstants.getCurrentVersion().getPackVersion(PackType.SERVER_DATA);
         ServerPolicy.Decision decision = decision(player);
-        this.relay.send(server, player, companion, !decision.allowed()
-                ? DatapacksMessage.refused(world, format, decision.rejectionReason())
-                : new DatapacksMessage(world, PackStacks.of(server.getPackRepository(), format, server.getWorldPath(LevelResource.DATAPACK_DIR),
-                        server.getWorldData().enabledFeatures())));
+        if (!decision.allowed()) {
+            this.relay.send(server, player, companion, DatapacksMessage.refused(world, format, decision.rejectionReason()));
+            return;
+        }
+        PackStackPayload packs = PackStacks.of(server.getPackRepository(), format, server.getWorldPath(LevelResource.DATAPACK_DIR),
+                server.getWorldData().enabledFeatures());
+        // The files are the server's, which a player on another machine cannot read, and whose paths are not theirs to see.
+        this.relay.send(server, player, companion, new DatapacksMessage(world, world.isEmpty() ? PackStacks.withoutSources(packs) : packs));
+    }
+
+    /**
+     * {@code player}'s permission changes, such as when they are made an operator: names the datapacks again, or why they
+     * may not change them, once the new level holds, which is after the event. Server thread.
+     */
+    public void permissionChanged(ServerPlayer player) {
+        MinecraftServer server = player.server;
+        server.tell(new TickTask(server.getTickCount(), () -> {
+            int companion = this.relay.companion(player);
+            if (companion != 0 && !player.hasDisconnected()) report(player, companion);
+        }));
     }
 
     /** The world's data loaded again: names the datapacks to those of {@code players} whose Companion reached the server. */
@@ -132,7 +151,8 @@ public final class WorldDatapacks {
     private static ServerPolicy.Decision decision(ServerPlayer player) {
         MinecraftServer server = player.server;
         boolean owner = server.isSingleplayerOwner(player.getGameProfile());
-        return decision(owner, player.hasPermissions(server.getOperatorUserPermissionLevel()), owner ? null : ServerPolicy.worldChanges());
+        // The level /datapack and /reload require, whatever level the server gives new operators.
+        return decision(owner, player.hasPermissions(Commands.LEVEL_GAMEMASTERS), owner ? null : ServerPolicy.worldChanges());
     }
 
     /** Whether the owner of a singleplayer world, or another player with or without operator permission, may change it. */

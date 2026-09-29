@@ -6,7 +6,7 @@ Design for item A2 of the roadmap: the mod's common, client and server parts, wi
 
 Today the mod does server work in two ways:
 
-- **Scripts** go the right way: Companion → client → server as NeoForge payloads (`RunServerScriptPayload`, `StopServerScriptPayload`, `ServerSourceRequestPayload`), with results coming back as `ForwardedCompanionPayload`. That already works on remote servers, under `ServerScriptPolicy`.
+- **Scripts** go the right way: Companion → client → server as NeoForge payloads (`RunServerScriptPayload`, `StopServerScriptPayload`, `ServerSourceRequestPayload`), with results coming back as `ForwardedCompanionPayload`. That already works on remote servers, under the server's script policy.
 - **Everything added since** reaches from client code straight into the integrated server with `getSingleplayerServer()`: selecting datapacks and reloading data (`ResourceReloads`), naming the world's datapacks (`PackStackPublisher`) and, in #75, game rules (`GameRuleControl`). None of it works on a remote server, and each feature that follows copies the shortcut.
 
 Each script operation also has its own payload type, so every new server feature needs NeoForge networking code on both sides.
@@ -80,10 +80,10 @@ The same relay serves the integrated server. A singleplayer game talks to its ow
 | Player | May change the world |
 |---|---|
 | The owner of a singleplayer world, open to LAN or not | Always, as today: it is their world, and Companion writes its `level.dat` when it is closed anyway |
-| Anyone else | With the permission level the server's configuration sets, by default the operator level (`getOperatorUserPermissionLevel()`, usually 2). The same level `/datapack`, `/reload` and `/gamerule` require. |
+| Anyone else | As the server's configuration sets it, by default with operator permission: the level `/datapack`, `/reload` and `/gamerule` require (`Commands.LEVEL_GAMEMASTERS`, 2), whatever level the server gives new operators. |
 
 - The server's configuration gains a switch for world changes beside the existing one for scripts, both off-able by the server owner. `ServerScriptPolicy` becomes the policy for both.
-- Companion asks the server whether the player may change its world, as it asks whether it runs scripts (`SERVER_SCRIPTS`), and can then answer "you need operator permission on this server" before sending a change. The server checks each change again; its answer is the one that counts.
+- Companion asks the server whether the player may change its world, as it asks whether it runs scripts (`SERVER_SCRIPTS`), and can then answer "you need operator permission on this server" before sending a change. The server checks each change again; its answer is the one that counts. The server tells again when the player's permission changes, such as by `/op`.
 
 ## Companion
 

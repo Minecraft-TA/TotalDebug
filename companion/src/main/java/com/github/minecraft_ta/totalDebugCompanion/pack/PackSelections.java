@@ -42,7 +42,7 @@ public final class PackSelections {
         this.location = edits.location();
         this.pipeline = edits.pipeline();
         this.resourcePacks = new ResourcePackSelection(options());
-        this.datapacks = new DatapackSelection(edits.packs());
+        this.datapacks = new DatapackSelection();
     }
 
     /** The record's target for the resource packs, or for {@code world}'s datapacks. */

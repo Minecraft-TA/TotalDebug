@@ -108,8 +108,9 @@ public final class GamePacks {
     public void datapacks(String world, PackStackPayload packs, String refusal) {
         synchronized (this) {
             PlayingPayload playing = this.location.playing();
-            boolean current = playing != null && (playing.identity().equals(world)
-                    || world.isEmpty() && playing instanceof PlayingPayload.Multiplayer);
+            // A report names a singleplayer world by its folder, and a server's by none; the menu plays neither.
+            boolean current = world.isEmpty() ? playing instanceof PlayingPayload.Multiplayer
+                    : playing != null && playing.identity().equals(world);
             if (!current) return;
             this.datapacksFor = playing;
             this.datapacks = refusal.isEmpty() ? packs : null;
@@ -118,7 +119,10 @@ public final class GamePacks {
         this.stackListeners.forEach(Runnable::run);
     }
 
-    /** Why the server of the world the game plays does not let the player change it, or empty. */
+    /**
+     * Why the server of the world the game plays does not let the player change it, or empty, as it last said; the server
+     * decides each change itself.
+     */
     public String worldRefusal() {
         return this.worldRefusal;
     }

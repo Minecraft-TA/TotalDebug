@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
@@ -33,6 +34,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -297,6 +299,8 @@ class PackSelectionsTest {
         edits.location().playing(new PlayingPayload.Menu());
         edits.packs().datapacks(left.identity(), report, "");
         assertNull(edits.packs().datapacks(), "its server sent it before the game left, so it arrived after PLAYING(Menu)");
+        edits.packs().datapacks("", report, "");
+        assertNull(edits.packs().datapacks(), "nor does a server's report, which names no world, count in the menu");
 
         PlayingPayload other = new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString());
         edits.location().playing(other);
@@ -347,12 +351,15 @@ class PackSelectionsTest {
         assertEquals("The server vanilla.example.net does not have TotalDebug, which Companion needs to change its datapacks",
                 refusal(selections.set(ChangeRecord.PackSide.DATA, vanillaWorld, List.of("vanilla"))));
 
-        PlayingPayload.Multiplayer modded = new PlayingPayload.Multiplayer("modded.example.net", false, true);
+        PlayingPayload.Multiplayer modded = new PlayingPayload.Multiplayer("modded.example.net:25565", false, true);
         edits.location().playing(modded);
         edits.packs().datapacks("", new PackStackPayload(48, List.of()), "You need operator permission on this server to change its world");
-        assertEquals("You need operator permission on this server to change its world",
-                refusal(selections.set(ChangeRecord.PackSide.DATA, edits.location().read().serverWorld(modded), List.of("vanilla"))),
-                "the server's answer, before a change is sent");
+        assertEquals("You need operator permission on this server to change its world", edits.packs().worldRefusal(),
+                "shown, while the server decides each change itself, as the player may be made an operator meanwhile");
+        Path moddedWorld = edits.location().read().serverWorld(modded);
+        assertEquals("modded.example.net:25565", GameState.worldName(moddedWorld));
+        assertNotEquals(moddedWorld, edits.location().read().serverWorld(new PlayingPayload.Multiplayer("modded.example.net_25565", false, true)),
+                "no two addresses share the change record's place");
         assertEquals("The world of vanilla.example.net is on its server; join it in the game to change its datapacks",
                 refusal(selections.set(ChangeRecord.PackSide.DATA, vanillaWorld, List.of("vanilla"))), "never files: the world is not here");
         assertFalse(sent.stream().anyMatch(message -> SentMessage.of(message).message() instanceof ChangeMessage));

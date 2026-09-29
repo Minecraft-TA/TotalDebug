@@ -72,10 +72,12 @@ public final class ClientRelay {
 
     /**
      * Takes one piece of a message the server sent Companion. An answer to an earlier Companion connection is dropped:
-     * the connected Companion counts its run ids from the beginning again.
+     * the connected Companion counts its run ids from the beginning again. So is one the game handles after it left the
+     * world, which Companion would take for the next world's.
      */
     public void fromServer(RelayChunk chunk) {
         if (chunk.companion() != this.companionApp.companionConnection()) return;
+        if (this.world.get().isEmpty()) return;
         if (chunk.companion() != this.assembling) {
             // What was put together for an earlier connection would otherwise hold the budget.
             this.fromServer.clear();

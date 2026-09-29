@@ -30,12 +30,6 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
     /** The one target the server's change table knows, the selection of the world it runs. */
     static final String GAME_TARGET = "datapacks";
 
-    private final GamePacks packs;
-
-    /** {@code packs} tells whether the server of the world the game plays lets the player change it. */
-    DatapackSelection(GamePacks packs) {
-        this.packs = packs;
-    }
 
     @Override
     public String id() {
@@ -44,7 +38,7 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
 
     @Override
     public String name(ChangeRecord.PackSelection target) {
-        return "The datapacks of " + target.location().getFileName();
+        return "The datapacks of " + GameState.worldName(target.location());
     }
 
     @Override
@@ -68,15 +62,10 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
         return name(target) + " changed outside Companion since, and reverting would replace that";
     }
 
-    /**
-     * As the world's state says; while the game plays the world, a server that told Companion the player may not change
-     * it refuses, with its reason, before a change is sent. The server checks each change again.
-     */
+    /** As the world's state says; the server decides whether the player may change its world, and says why not. */
     @Override
     public Access access(GameState game, ChangeRecord.PackSelection target) {
-        Access access = game.world(target.location(), "change its datapacks");
-        String refusal = this.packs.worldRefusal();
-        return access instanceof Access.Live && game.plays(target.location()) && !refusal.isEmpty() ? new Access.Refused(refusal) : access;
+        return game.world(target.location(), "change its datapacks");
     }
 
     @Override

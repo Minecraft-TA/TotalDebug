@@ -15,8 +15,8 @@ public record ServerPolicy(boolean enabled, boolean operatorOnly, String disable
     }
 
     /**
-     * Changing the world, such as its datapacks, as the server's configuration sets it; by default open to its operators,
-     * at the level {@code /datapack} and {@code /reload} require.
+     * Changing the world, such as its datapacks, as the server's configuration sets it; by default open to its operators.
+     * Operator permission is the level {@code /datapack} and {@code /reload} require, which the caller checks.
      */
     public static ServerPolicy worldChanges() {
         return new ServerPolicy(TotalDebugConfig.SERVER.enableWorldChanges.get(), TotalDebugConfig.SERVER.enableWorldChangesOnlyForOp.get(),

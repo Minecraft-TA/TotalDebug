@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totalDebugCompanion.game;
 
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
@@ -111,7 +113,34 @@ public final class GameState {
      * named after the address the game joined, since the world itself is on the server.
      */
     public Path serverWorld(PlayingPayload.Multiplayer server) {
-        return this.workspace.resolve(SERVER_WORLDS).resolve(server.address().replaceAll("[^A-Za-z0-9._-]", "_")).toAbsolutePath().normalize();
+        return this.workspace.resolve(SERVER_WORLDS).resolve(encode(server.address())).toAbsolutePath().normalize();
+    }
+
+    /**
+     * How the user names a world: a folder's name, or for the place the change record keeps a server's world, the address
+     * of the server.
+     */
+    public static String worldName(Path world) {
+        Path parent = world.getParent();
+        boolean server = parent != null && parent.getFileName() != null && parent.getFileName().toString().equals("servers")
+                && parent.getParent() != null && parent.getParent().getFileName() != null
+                && parent.getParent().getFileName().toString().equals("total-debug");
+        String name = world.getFileName().toString();
+        return server ? URLDecoder.decode(name, StandardCharsets.UTF_8) : name;
+    }
+
+    /**
+     * {@code address} as a file name that names only it: every character but letters, digits, {@code .} and {@code -} as
+     * {@code %} and the hexadecimal of its UTF-8 bytes, so no two addresses share the change record's place.
+     */
+    private static String encode(String address) {
+        StringBuilder name = new StringBuilder();
+        for (byte value : address.getBytes(StandardCharsets.UTF_8)) {
+            char c = (char) (value & 0xFF);
+            if (c < 0x80 && (Character.isLetterOrDigit(c) || c == '.' || c == '-')) name.append(c);
+            else name.append('%').append(String.format("%02X", value & 0xFF));
+        }
+        return name.isEmpty() ? "%" : name.toString();
     }
 
     /** Whether {@code world} is where the change record keeps the world of a server. */
