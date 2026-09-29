@@ -100,24 +100,27 @@ public final class GameLocation {
         if (established.playing() != null) tell(Change.PLAYING);
     }
 
-    /** The game's process, as it announced it on the current connection. */
+    /** The game's process, as it announced it on the current connection; listeners hear of it when it changed. */
     public void process(long process) {
         synchronized (this) {
             this.toldProcess = process;
             Link current = this.link;
-            if (current == null) return;
+            if (current == null || current.process() == process) return;
             this.link = new Link(current.connection(), process, current.playing());
         }
         tell(Change.PROCESS);
     }
 
-    /** What the game plays, as it told on the current connection. */
+    /**
+     * What the game plays, as it told on the current connection; listeners hear of it when it changed. The game tells it
+     * again after each handshake, which may repeat what {@link #connected} already announced.
+     */
     public void playing(PlayingPayload playing) {
         Objects.requireNonNull(playing, "playing");
         synchronized (this) {
             this.toldPlaying = playing;
             Link current = this.link;
-            if (current == null) return;
+            if (current == null || playing.equals(current.playing())) return;
             this.link = new Link(current.connection(), current.process(), playing);
         }
         tell(Change.PLAYING);

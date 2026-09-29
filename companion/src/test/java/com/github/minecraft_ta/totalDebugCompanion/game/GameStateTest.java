@@ -153,6 +153,9 @@ class GameStateTest {
 
         assertEquals(List.of(GameLocation.Change.CONNECTED, GameLocation.Change.PROCESS, GameLocation.Change.PLAYING), heard,
                 "what the game told before is heard as told now");
+        location.process(7);
+        location.playing(new PlayingPayload.Singleplayer(WORLD.toString()));
+        assertEquals(3, heard.size(), "the game telling the same process and world again after the handshake changes nothing");
         assertEquals(7, location.process());
         assertInstanceOf(Access.Live.class, location.read().world(WORLD, "change its rules"));
 
