@@ -35,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -124,10 +125,13 @@ class ResourceEditsTest {
                 seen.add(unreadable.toString());
             }
         });
+        AtomicInteger resourcePacks = new AtomicInteger();
+        edits.packs().addResourcePackListener(resourcePacks::incrementAndGet);
 
         edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
         assertEquals(List.of("resourcePacks:[\"vanilla\",\"file/TotalDebug\"]\n"), seen,
                 "a listener reading the pack stack then finds the pack enabled");
+        assertTrue(resourcePacks.get() > 0, "the pack created and enabled on disk is told to the views of the resource packs");
     }
 
     @Test

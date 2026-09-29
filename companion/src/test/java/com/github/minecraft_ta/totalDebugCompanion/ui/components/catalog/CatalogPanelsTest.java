@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.Icon;
 import javax.imageio.ImageIO;
@@ -172,7 +173,7 @@ class CatalogPanelsTest {
                     icons, target -> { });
             onEdt(() -> {
                 DefinitionDetails block = new DefinitionDetails(
-                        new SubjectRef.Definition(RegistryIds.BLOCK, "testmod:widget_block"), services, () -> { });
+                        new SubjectRef.Definition(RegistryIds.BLOCK, "testmod:widget_block"), services, new JPanel(), () -> { });
                 try {
                     assertEquals("Widget Block", block.title());
                     assertEquals("Test Mod", block.modName());
@@ -188,7 +189,7 @@ class CatalogPanelsTest {
                     block.dispose();
                 }
                 DefinitionDetails fluid = new DefinitionDetails(new SubjectRef.Definition(RegistryIds.FLUID, "testmod:goo"),
-                        services, () -> { });
+                        services, new JPanel(), () -> { });
                 try {
                     assertEquals("Goo", fluid.title());
                     assertEquals(Optional.of(Fact.text("Class", "GooFluid").withLink(FactLink.toClass("testmod.GooFluid"))),

@@ -5,10 +5,10 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.SwingUtilities;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.util.Objects;
@@ -35,7 +35,7 @@ public final class ContentPanel extends JPanel {
         this.browser = new ContentBrowser(this.icons, this::iconOf, Objects.requireNonNull(navigator, "navigator"),
                 entry -> this.index == null ? entry.namespace() : this.index.ownerName(entry.namespace()));
         this.message.setVerticalAlignment(JLabel.TOP);
-        this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(this::load));
+        this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, this::load);
         load();
     }
 

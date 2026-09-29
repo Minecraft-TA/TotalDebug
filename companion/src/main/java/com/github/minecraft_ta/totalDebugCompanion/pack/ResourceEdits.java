@@ -637,10 +637,12 @@ public final class ResourceEdits {
             packs.add(PACK_ID);
             lines.set(index, "resourcePacks:" + packs);
             AtomicFiles.writeString(options, String.join("\n", lines) + "\n");
+            this.packs.written(ChangeRecord.PackSide.RESOURCES);
             return;
         }
         lines.add("resourcePacks:[\"vanilla\",\"" + PACK_ID + "\"]");
         AtomicFiles.writeString(options, String.join("\n", lines) + "\n");
+        this.packs.written(ChangeRecord.PackSide.RESOURCES);
     }
 
     /**
@@ -657,5 +659,6 @@ public final class ResourceEdits {
         JsonObject json = new JsonObject();
         json.add("pack", description);
         AtomicFiles.writeString(meta, json + "\n");
+        this.packs.written(assets ? ChangeRecord.PackSide.RESOURCES : ChangeRecord.PackSide.DATA);
     }
 }

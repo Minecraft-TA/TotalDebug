@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
@@ -15,7 +16,9 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -25,6 +28,10 @@ import java.util.zip.ZipFile;
  * The packs the game uses: the resource packs the connected game client names, and the datapacks the server of the world
  * it plays names, each in its order; without them, what {@code options.txt} and a world's {@code level.dat} enable. It
  * answers which pack's copy of a file the game uses, for the views and the edits that show whether a copy is used.
+ *
+ * <p>Each side tells its own listeners, only when its packs may differ: the resource packs when the game client names
+ * others, the datapacks when the world's server does or the game goes to another world, and a side whose file Companion
+ * wrote. A disconnect changes both, since the files take over from the game.
  */
 public final class GamePacks {
     private final GameLocation location;
@@ -37,8 +44,9 @@ public final class GamePacks {
     private volatile String worldRefusal = "";
     /** What the game played when its server named {@link #datapacks}, whose datapacks they are. */
     private volatile PlayingPayload datapacksFor;
-    /** Run whenever the game or its server names packs again, such as after another world opened. */
-    private final List<Runnable> stackListeners = new CopyOnWriteArrayList<>();
+    private final Map<ChangeRecord.PackSide, List<Runnable>> listeners = new EnumMap<>(Map.of(
+            ChangeRecord.PackSide.RESOURCES, new CopyOnWriteArrayList<>(),
+            ChangeRecord.PackSide.DATA, new CopyOnWriteArrayList<>()));
 
     /** The packs of the game {@code location} tells of. */
     public GamePacks(GameLocation location) {
@@ -55,7 +63,8 @@ public final class GamePacks {
                     }
                 }
                 askForDatapacks();
-                this.stackListeners.forEach(Runnable::run);
+                // Without datapacks named yet, the world's own files stand for them, and they are another world's now.
+                tell(ChangeRecord.PackSide.DATA);
             }
         });
     }
@@ -71,7 +80,8 @@ public final class GamePacks {
         this.dataFormat = 0;
         this.datapacks = null;
         this.worldRefusal = "";
-        this.stackListeners.forEach(Runnable::run);
+        tell(ChangeRecord.PackSide.RESOURCES);
+        tell(ChangeRecord.PackSide.DATA);
     }
 
     /**
@@ -89,9 +99,17 @@ public final class GamePacks {
 
     /** Takes the resource packs the game client names, and its version's datapack format. */
     public void named(ClientPacksPayload packs) {
-        this.resourcePacks = packs.resourcePacks();
-        this.dataFormat = packs.dataFormat();
-        this.stackListeners.forEach(Runnable::run);
+        boolean resources;
+        boolean format;
+        synchronized (this) {
+            resources = !Objects.equals(packs.resourcePacks(), this.resourcePacks);
+            format = packs.dataFormat() != this.dataFormat;
+            this.resourcePacks = packs.resourcePacks();
+            this.dataFormat = packs.dataFormat();
+        }
+        if (resources) tell(ChangeRecord.PackSide.RESOURCES);
+        // The version's format stands for the datapacks' until the world's server names them.
+        if (format) tell(ChangeRecord.PackSide.DATA);
     }
 
     /** The resource packs the connected game named last, or null while no game is connected. */
@@ -112,11 +130,23 @@ public final class GamePacks {
             boolean current = world.isEmpty() ? playing instanceof PlayingPayload.Multiplayer
                     : playing != null && playing.identity().equals(world);
             if (!current) return;
+            PackStackPayload named = refusal.isEmpty() ? packs : null;
+            if (Objects.equals(this.datapacksFor, playing) && Objects.equals(this.datapacks, named) && this.worldRefusal.equals(refusal)) {
+                return;
+            }
             this.datapacksFor = playing;
-            this.datapacks = refusal.isEmpty() ? packs : null;
+            this.datapacks = named;
             this.worldRefusal = refusal;
         }
-        this.stackListeners.forEach(Runnable::run);
+        tell(ChangeRecord.PackSide.DATA);
+    }
+
+    /**
+     * Companion changed the packs of {@code side} on disk: it wrote their selection to {@code options.txt} or a world's
+     * {@code level.dat}, as it does while the game is closed or has another world open, or it created the managed pack.
+     */
+    public void written(ChangeRecord.PackSide side) {
+        tell(side);
     }
 
     /**
@@ -143,17 +173,36 @@ public final class GamePacks {
 
     /** The enabled packs of {@code path}'s side as the game or its server named them, or null where they did not. */
     private List<PackStackPayload.Pack> enabled(String path) {
-        PackStackPayload stack = path.startsWith("assets/") ? this.resourcePacks : this.datapacks;
+        PackStackPayload stack = side(path) == ChangeRecord.PackSide.RESOURCES ? this.resourcePacks : this.datapacks;
         return stack == null ? null : stack.enabled();
     }
 
     /**
-     * Runs {@code listener} whenever the game names its packs again, says what it plays, or disconnects, on the thread
-     * that saw it; returns its removal.
+     * Runs {@code listener} whenever the packs of {@code side} may differ, on the thread that saw it; returns its removal.
      */
-    public Runnable addStackListener(Runnable listener) {
-        this.stackListeners.add(listener);
-        return () -> this.stackListeners.remove(listener);
+    public Runnable addListener(ChangeRecord.PackSide side, Runnable listener) {
+        List<Runnable> listeners = this.listeners.get(Objects.requireNonNull(side, "side"));
+        listeners.add(listener);
+        return () -> listeners.remove(listener);
+    }
+
+    /** The side whose packs supply {@code path}: resource packs for {@code assets/}, datapacks for the rest. */
+    public static ChangeRecord.PackSide side(String path) {
+        return path.startsWith("assets/") ? ChangeRecord.PackSide.RESOURCES : ChangeRecord.PackSide.DATA;
+    }
+
+    /** Listens to the resource packs, for {@code PageLoader.follow}. */
+    public Runnable addResourcePackListener(Runnable listener) {
+        return addListener(ChangeRecord.PackSide.RESOURCES, listener);
+    }
+
+    /** Listens to the datapacks of the world the game plays, for {@code PageLoader.follow}. */
+    public Runnable addDatapackListener(Runnable listener) {
+        return addListener(ChangeRecord.PackSide.DATA, listener);
+    }
+
+    private void tell(ChangeRecord.PackSide side) {
+        this.listeners.get(side).forEach(Runnable::run);
     }
 
     /**

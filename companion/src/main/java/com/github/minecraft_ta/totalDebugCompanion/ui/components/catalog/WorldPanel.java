@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
@@ -15,6 +16,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.NoticeLine;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
@@ -91,6 +93,7 @@ public final class WorldPanel extends JPanel {
     private final WorldReadings readings;
     private final PageLoader<Loaded> loader;
     private final Runnable removeCatalogListener;
+    private final Runnable removePlayingListener;
     private final SubjectHeader header = new SubjectHeader();
     /** Why Show in Explorer could not show the world. */
     private final NoticeLine notice = new NoticeLine();
@@ -149,17 +152,22 @@ public final class WorldPanel extends JPanel {
         add(this.cards, BorderLayout.CENTER);
 
         // Only the names of the mods behind datapacks come from the catalog.
-        this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(() -> {
+        this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, () -> {
             if (!this.disposed && (this.saved != null || this.server != null)) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
-        }));
+        });
         // The game saves the world while it runs, so the page reads it whenever it is shown.
-        // A change of the game's datapacks, or one Companion wrote, is read again at once.
+        // A change of the datapacks, named by the world's server or written by Companion, is read again at once.
         this.loader = new PageLoader<>(() -> {
             PackStackPayload stack = edits.packs().datapacks();
             String refusal = edits.packs().worldRefusal();
             return () -> read(edits.location().read(), stack, refusal);
         }, this::show, failure -> show(Loaded.problem("The world could not be read: " + failure.getMessage())))
-                .whenShown(this).follow(edits.packs()::addStackListener).follow(edits.record()::addListener);
+                .whenShown(this).follow(edits.packs()::addDatapackListener);
+        // The tab names the world the game plays, or the last one played without a game, so another world is read at
+        // once, whether the page is shown or not.
+        this.removePlayingListener = edits.location().addListener(change -> {
+            if (change == GameLocation.Change.PLAYING || change == GameLocation.Change.DISCONNECTED) this.loader.load();
+        });
     }
 
     private static Loaded read(GameState game, PackStackPayload stack, String refusal) {
@@ -351,6 +359,7 @@ public final class WorldPanel extends JPanel {
         this.disposed = true;
         this.loader.dispose();
         this.removeCatalogListener.run();
+        this.removePlayingListener.run();
     }
 
     GameRulesPanel rules() {

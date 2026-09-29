@@ -443,6 +443,12 @@ final class ConfigPanel extends JPanel {
         return this.textEditor.confirmLeave();
     }
 
+    /** Stops following the game to another world; the page is closed. */
+    void dispose() {
+        this.values.dispose();
+        this.sources.dispose();
+    }
+
     private void selectQuietly(int index) {
         this.updating = true;
         try {

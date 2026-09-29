@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.pack.GamePacks;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
@@ -245,7 +246,7 @@ abstract class PackResourceEditor<V> extends JPanel {
         // A revert on the Changes page changes what the game uses.
         this.stopListening = this.edits.record().addListener(() -> SwingUtilities.invokeLater(this::recordChanged));
         // Another world opening changes the current world's datapack a data file is shown from and saved into.
-        this.stopFollowingPacks = this.edits.packs().addStackListener(() -> SwingUtilities.invokeLater(this::packsChanged));
+        this.stopFollowingPacks = this.edits.packs().addListener(GamePacks.side(this.path), () -> SwingUtilities.invokeLater(this::packsChanged));
         // A working pack chosen in another tab is where this one saves too.
         this.stopFollowingWorkingPack = this.edits.addWorkingPackListener(side -> {
             if (side.equals(ResourceEdits.side(this.path))) SwingUtilities.invokeLater(this::targetChanged);

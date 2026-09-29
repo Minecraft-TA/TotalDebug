@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
 import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -16,8 +17,8 @@ import java.util.function.Function;
  * Reads what a page shows off the Swing thread and shows it on that thread (docs/UI_GUIDE.md, Building and checking).
  * One read runs at a time: asking again while one runs reads once more when it finishes, and the older read is not
  * shown, since it may predate what the new request is about, such as a write. So a page shows only what its last request
- * read, and the same files are never read twice at once. A page loads when it is shown and whenever a source it follows
- * changes.
+ * read, and the same files are never read twice at once. A page loads whenever a source it follows changes; with a page
+ * named, a change while the page is hidden loads once it is shown, so hidden pages do no work for what they cannot show.
  */
 public final class PageLoader<T> {
     /** What to read: prepared on the Swing thread, where the page's state is captured, then run off it. */
@@ -37,6 +38,13 @@ public final class PageLoader<T> {
     private boolean cancelled;
     private CompletableFuture<Void> current = CompletableFuture.completedFuture(null);
     private boolean disposed;
+    /** The page whose visibility decides when a followed change loads, or null to load at once. */
+    private JComponent page;
+    /** Whether the page loads every time it is shown, not only after a change it missed. */
+    private boolean everyShow;
+    /** Whether a followed source changed while the page was hidden. */
+    private boolean stale;
+    private HierarchyListener shown;
 
     /** {@code show} and {@code fail} run on the Swing thread with what a read returned or why it failed. */
     public PageLoader(Read<T> read, Consumer<T> show, Consumer<Throwable> fail) {
@@ -45,21 +53,51 @@ public final class PageLoader<T> {
         this.fail = Objects.requireNonNull(fail, "fail");
     }
 
-    /** Loads whenever {@code page} becomes visible, since what it shows may have changed while it was hidden. */
+    /**
+     * Loads whenever {@code page} becomes visible, since what it shows may have changed while it was hidden without a
+     * source telling, such as a file the game writes. Followed changes wait while it is hidden.
+     */
     public PageLoader<T> whenShown(JComponent page) {
-        page.addHierarchyListener(event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && page.isShowing()) load();
-        });
+        return watch(page, true);
+    }
+
+    /**
+     * Loads a followed change at once while {@code page} is shown; a change while it is hidden loads once it is shown
+     * again. For pages whose sources tell every change, so showing them again reads nothing new otherwise.
+     */
+    public PageLoader<T> whileShown(JComponent page) {
+        return watch(page, false);
+    }
+
+    private PageLoader<T> watch(JComponent page, boolean everyShow) {
+        this.page = Objects.requireNonNull(page, "page");
+        this.everyShow = everyShow;
+        this.shown = event -> {
+            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !page.isShowing()) return;
+            if (!this.everyShow && !this.stale) return;
+            this.stale = false;
+            load();
+        };
+        page.addHierarchyListener(this.shown);
         return this;
     }
 
     /**
-     * Loads whenever a source changes. {@code subscribe} adds a listener to the source and returns what removes it, as
-     * {@code catalog::addListener} does; the listener may be called on any thread.
+     * Loads whenever a source changes, or once the page is shown again. {@code subscribe} adds a listener to the source
+     * and returns what removes it, as {@code catalog::addListener} does; the listener may be called on any thread.
      */
     public PageLoader<T> follow(Function<Runnable, Runnable> subscribe) {
-        this.unsubscribe.add(subscribe.apply(() -> SwingUtilities.invokeLater(this::load)));
+        this.unsubscribe.add(subscribe.apply(() -> SwingUtilities.invokeLater(this::changed)));
         return this;
+    }
+
+    /** A followed source changed: loads now, or marks a hidden page to load when shown. */
+    private void changed() {
+        if (this.page != null && !this.page.isShowing()) {
+            this.stale = true;
+            return;
+        }
+        load();
     }
 
     /** Reads again, now or once the running read has finished. */
@@ -122,5 +160,7 @@ public final class PageLoader<T> {
         this.disposed = true;
         this.unsubscribe.forEach(Runnable::run);
         this.unsubscribe.clear();
+        // The page may outlive the loader, as a subject page outlives the details of a definition it replaced.
+        if (this.page != null) this.page.removeHierarchyListener(this.shown);
     }
 }
