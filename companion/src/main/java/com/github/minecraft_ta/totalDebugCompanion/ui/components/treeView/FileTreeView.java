@@ -242,7 +242,7 @@ public class FileTreeView extends JScrollPane {
             rootItems.add(mods);
         }
         if (Files.isDirectory(scope.profile().workspaceDirectory().resolve("saves"))) {
-            rootItems.add(new WorldTreeItems.Root(scope.location(), scope.world()));
+            rootItems.add(new WorldTreeItems.Root(scope.location(), scope.world(), scope.packs()));
         }
         if (binding != null && !catalog.modules().isEmpty()) {
             rootItems.add(new DecompiledSourcesTreeItem(this.tree, binding.decompiler()));
@@ -276,9 +276,12 @@ public class FileTreeView extends JScrollPane {
             Runnable removePlayed = scope.location().addListener(change -> {
                 if (change == GameLocation.Change.PLAYING) refresh.run();
             });
+            // A server names its world's datapacks after the game joined it.
+            Runnable removeNamed = scope.packs().addStackListener(refresh);
             this.removeWorldListener = () -> {
                 removeRead.run();
                 removePlayed.run();
+                removeNamed.run();
             };
         }
         this.displayedProject = scope;

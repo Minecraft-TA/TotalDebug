@@ -30,6 +30,7 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -65,7 +66,8 @@ import java.util.concurrent.CompletableFuture;
 /**
  * The current world as its {@code level.dat} saved it: an overview of its settings, time and weather, its game rules
  * and its datapacks. It is read whenever the page is shown, so it works without the game; while the game has the world
- * open, the header says when the game saved it last.
+ * open, the header says when the game saved it last. While the game plays on a server, the page shows that server's
+ * world as the server names it: its datapacks, changed live, since the rest of it is on the server.
  */
 public final class WorldPanel extends JPanel {
     private static final String PAGE_CARD = "page";
@@ -74,7 +76,14 @@ public final class WorldPanel extends JPanel {
             .withZone(ZoneId.systemDefault());
 
     /** A read world with its icon, or null for either; {@code problem} says why there is no world. */
-    private record Loaded(CurrentWorld.Saved saved, List<ListedPack> datapacks, BufferedImage icon, String problem) {
+    record Loaded(CurrentWorld.Saved saved, ServerWorld server, List<ListedPack> datapacks, BufferedImage icon, String problem) {
+        static Loaded problem(String problem) {
+            return new Loaded(null, null, List.of(), null, problem);
+        }
+    }
+
+    /** The world of the server the game plays on: its address, and where the change record keeps it. */
+    record ServerWorld(String address, Path world) {
     }
 
     private final PackCatalogService catalog;
@@ -93,6 +102,8 @@ public final class WorldPanel extends JPanel {
     private final JLabel message = new JLabel();
     private final JPanel cards = new JPanel(new CardLayout());
     private CurrentWorld.Saved saved;
+    /** The server's world shown instead of a world of the instance, or null. */
+    private ServerWorld server;
     /** The world's datapacks: as the connected game names them while it has the world open, or as level.dat saved them. */
     private List<ListedPack> datapackList = List.of();
     private WorldTab requested;
@@ -110,10 +121,10 @@ public final class WorldPanel extends JPanel {
         this.icons = Objects.requireNonNull(icons, "icons");
         this.datapacks = new PacksPanel(PacksPanel.Side.DATA, Objects.requireNonNull(navigator, "navigator"));
         this.datapacks.setApplier(enabled -> {
-            CurrentWorld.Saved shown = this.saved;
+            Path shown = this.saved != null ? this.saved.directory() : this.server != null ? this.server.world() : null;
             if (shown == null) return CompletableFuture.failedFuture(new IllegalStateException("No world is shown"));
-            return selections.set(ChangeRecord.PackSide.DATA, shown.directory(), enabled);
-        }, "Enables the checked datapacks in this order: in the world the connected game has open, which reloads its data, otherwise in the world's level.dat");
+            return selections.set(ChangeRecord.PackSide.DATA, shown, enabled);
+        }, "Enables the checked datapacks in this order: in the world the connected game plays, which reloads its data, otherwise in the world's level.dat");
 
         this.tabContent.put(WorldTab.OVERVIEW, scroll(this.overview));
         this.tabContent.put(WorldTab.GAME_RULES, this.rules);
@@ -137,26 +148,41 @@ public final class WorldPanel extends JPanel {
 
         // Only the names of the mods behind datapacks come from the catalog.
         this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(() -> {
-            if (!this.disposed && this.saved != null) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
+            if (!this.disposed && (this.saved != null || this.server != null)) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
         }));
         // The game saves the world while it runs, so the page reads it whenever it is shown.
         // A change of the game's datapacks, or one Companion wrote, is read again at once.
         this.loader = new PageLoader<>(() -> {
             PackStackPayload stack = edits.packs().datapacks();
-            return () -> read(edits.location().read(), stack);
-        }, this::show, failure -> show(new Loaded(null, List.of(), null, "The world could not be read: " + failure.getMessage())))
+            String refusal = edits.packs().worldRefusal();
+            return () -> read(edits.location().read(), stack, refusal);
+        }, this::show, failure -> show(Loaded.problem("The world could not be read: " + failure.getMessage())))
                 .whenShown(this).follow(edits.packs()::addStackListener).follow(edits.record()::addListener);
     }
 
-    private static Loaded read(GameState game, PackStackPayload stack) {
+    private static Loaded read(GameState game, PackStackPayload stack, String refusal) {
+        Optional<PlayingPayload.Multiplayer> server = game.server();
+        if (server.isPresent()) return readServer(game, server.get(), stack, refusal);
         Optional<Path> world = CurrentWorld.directory(game);
-        if (world.isEmpty()) return new Loaded(null, List.of(), null, "No world has been played in this instance yet.");
+        if (world.isEmpty()) return Loaded.problem("No world has been played in this instance yet.");
         try {
             CurrentWorld.Saved saved = CurrentWorld.read(game, world.get());
-            return new Loaded(saved, PackResources.worldDatapacks(stack, saved), icon(world.get().resolve("icon.png")), "");
+            return new Loaded(saved, null, PackResources.worldDatapacks(stack, saved), icon(world.get().resolve("icon.png")), "");
         } catch (IOException | RuntimeException unreadable) {
-            return new Loaded(null, List.of(), null, "The world " + world.get().getFileName() + " could not be read: " + unreadable.getMessage());
+            return Loaded.problem("The world " + world.get().getFileName() + " could not be read: " + unreadable.getMessage());
         }
+    }
+
+    /**
+     * The world of the server the game plays on, as the server named its datapacks; or why it cannot be shown: the
+     * server lacks TotalDebug, does not let the player change its world, or has not named them yet.
+     */
+    static Loaded readServer(GameState game, PlayingPayload.Multiplayer server, PackStackPayload stack, String refusal) {
+        String address = server.address().isEmpty() ? "this server" : server.address();
+        if (!server.totalDebug()) return Loaded.problem("The server " + address + " does not have TotalDebug, which Companion needs to show its world.");
+        if (!refusal.isEmpty()) return Loaded.problem(refusal + ".");
+        if (stack == null) return Loaded.problem("Waiting for the server " + address + " to name its world's datapacks.");
+        return new Loaded(null, new ServerWorld(address, game.serverWorld(server)), PackResources.serverDatapacks(stack), null, "");
     }
 
     /** The world's icon, which the game takes when the world is first saved; null without one. */
@@ -172,8 +198,14 @@ public final class WorldPanel extends JPanel {
 
     private void show(Loaded loaded) {
         this.saved = loaded.saved();
+        this.server = loaded.server();
         this.datapackList = loaded.datapacks();
-        this.readings.read(WorldReadings.Summary.of(this.saved));
+        this.readings.read(this.server != null ? new WorldReadings.Summary(this.server.world(), 0, this.datapackList.size())
+                : WorldReadings.Summary.of(this.saved));
+        if (this.server != null) {
+            showServer(this.server);
+            return;
+        }
         if (this.saved == null) {
             this.message.setText(loaded.problem());
             ((CardLayout) this.cards.getLayout()).show(this.cards, MESSAGE_CARD);
@@ -193,6 +225,30 @@ public final class WorldPanel extends JPanel {
         this.rules.setRules(saved.gameRules());
         this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
         setTab(WorldTab.GAME_RULES, saved.gameRules().size());
+        setTab(WorldTab.DATAPACKS, this.datapackList.size());
+        ((CardLayout) this.cards.getLayout()).show(this.cards, PAGE_CARD);
+        if (this.requested != null) show(this.requested);
+        refreshTitle();
+    }
+
+    /** The server's world: its address, and its datapacks, which the server names; the rest of the world is on the server. */
+    private void showServer(ServerWorld server) {
+        this.header.setTitle(server.address());
+        this.header.setIcon(new PlateIcon(Icons.WORLD, SubjectHeader.ICON_SIZE));
+        this.header.setSubtitle(List.of(SubjectHeader.text("Played on this server now")));
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        FactsPanel facts = new FactsPanel(List.of(new FactSection("Server", List.of(Fact.text("Address", server.address()),
+                Fact.text("World", "Kept on the server, which names its datapacks")), 2)), this.icons);
+        facts.setAlignmentX(Component.LEFT_ALIGNMENT);
+        content.add(facts);
+        this.overview.removeAll();
+        this.overview.add(content, BorderLayout.NORTH);
+        this.overview.revalidate();
+        this.overview.repaint();
+        this.rules.setRules(Map.of());
+        this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
+        setTab(WorldTab.GAME_RULES, 0);
         setTab(WorldTab.DATAPACKS, this.datapackList.size());
         ((CardLayout) this.cards.getLayout()).show(this.cards, PAGE_CARD);
         if (this.requested != null) show(this.requested);
@@ -237,7 +293,7 @@ public final class WorldPanel extends JPanel {
     /** Selects a tab, now or once the world is read. */
     public void show(WorldTab tab) {
         this.requested = tab;
-        if (this.saved == null) return;
+        if (this.saved == null && this.server == null) return;
         int index = this.tabs.indexOfComponent(this.tabContent.get(tab));
         if (index >= 0) this.tabs.setSelectedIndex(index);
         this.requested = null;
@@ -252,8 +308,9 @@ public final class WorldPanel extends JPanel {
         return WorldTab.OVERVIEW;
     }
 
-    /** The world's name once it is read. */
+    /** The world's name once it is read, or the address of the server whose world is shown. */
     public String title() {
+        if (this.server != null) return this.server.address();
         return this.saved == null ? "World" : this.saved.name();
     }
 

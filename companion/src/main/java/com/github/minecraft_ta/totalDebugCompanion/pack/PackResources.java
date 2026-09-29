@@ -200,6 +200,21 @@ public final class PackResources {
         return packs;
     }
 
+    /**
+     * The datapacks the server the game plays on names, as the game's pack screen lists them: enabled ones with the
+     * highest first, then the others. Their files are the server's, so none is listed.
+     */
+    public static List<ListedPack> serverDatapacks(PackStackPayload datapacks) {
+        List<ListedPack> packs = new ArrayList<>();
+        for (PackStackPayload.Pack pack : datapacks.enabled().reversed()) {
+            if (!pack.is(PackStackPayload.HIDDEN)) packs.add(new ListedPack(pack.id(), ListedPack.State.ENABLED, null, pack.title(), rules(pack)));
+        }
+        for (PackStackPayload.Pack pack : datapacks.others()) {
+            packs.add(new ListedPack(pack.id(), ListedPack.State.DISABLED, null, pack.title(), rules(pack)));
+        }
+        return packs;
+    }
+
     private static PackStackPayload.Pack required(String id) {
         return new PackStackPayload.Pack(id, "", "", PackStackPayload.REQUIRED);
     }

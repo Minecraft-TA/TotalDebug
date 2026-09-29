@@ -117,7 +117,7 @@ Layer 4 lands as two PRs. The first holds the rules and the live changes:
 - In Companion, the change record keeps a server's world under `total-debug/servers/<address>` of the instance (`GameState.serverWorld`). `GameState.world` answers for it: live through the relay while the game plays on that server and it has TotalDebug, refused otherwise, never files. The datapack category refuses with the server's reason before a change is sent. The server checks each change again.
 - Protocol 41.
 
-The second is the World page for a server.
+The second is the World page for a server: while the game plays on one, the page and the World root show the server's world, its address and the datapacks it names, instead of the local world played last, and the Datapacks tab changes them live. The server's refusal, a server without TotalDebug and a report still on its way each replace the page with what they say. A data file saved while the game plays on a server still goes into the local world played last, whose name the save shows, since remote file writes are a later step.
 
 Between layers 2 and 3, the class manifest handshake was replaced by the per-run link check described under [Server scripts](#server-scripts), with the numbered Companion connections.
 

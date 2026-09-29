@@ -7,11 +7,15 @@ import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
+import com.github.minecraft_ta.totalDebugCompanion.pack.GamePacks;
+import com.github.minecraft_ta.totalDebugCompanion.pack.PackResources;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.text.NumberFormat;
@@ -39,18 +43,20 @@ final class WorldTreeItems {
     static final class Root extends DirectoryTreeItem implements NavigableTreeItem {
         private final GameLocation location;
         private final WorldReadings readings;
+        private final GamePacks packs;
 
-        Root(GameLocation location, WorldReadings readings) {
+        Root(GameLocation location, WorldReadings readings, GamePacks packs) {
             super(ROOT);
             this.location = location;
             this.readings = readings;
+            this.packs = packs;
             setPresentation(PrimarySecondaryText.primary("World"));
             setIcon(Icons.WORLD);
         }
 
         @Override
         public String getTooltip() {
-            return "The world the game has open, or the one played last";
+            return "The world the game plays, on a server too, or the one played last";
         }
 
         @Override
@@ -66,6 +72,14 @@ final class WorldTreeItems {
         @Override
         public List<TreeItem> loadChildren() {
             GameState game = this.location.read();
+            Optional<PlayingPayload.Multiplayer> server = game.server();
+            if (server.isPresent()) {
+                // The server's world, as the server names its datapacks.
+                PackStackPayload datapacks = this.packs.datapacks();
+                int count = datapacks == null || !server.get().totalDebug() ? 0 : PackResources.serverDatapacks(datapacks).size();
+                this.readings.shown(new WorldReadings.Summary(game.serverWorld(server.get()), 0, count));
+                return count == 0 ? List.of() : List.of(new Tab(WorldTab.DATAPACKS, count));
+            }
             Optional<Path> world = CurrentWorld.directory(game);
             CurrentWorld.Saved saved = null;
             try {

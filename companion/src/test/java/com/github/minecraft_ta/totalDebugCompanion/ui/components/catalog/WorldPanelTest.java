@@ -5,9 +5,13 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
+import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -16,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class WorldPanelTest {
     @TempDir Path directory;
@@ -65,6 +70,32 @@ class WorldPanelTest {
                 "Programmer Art"), null, PacksPanel.Side.RESOURCES);
         assertEquals(List.of("Programmer Art", "Minecraft"), List.of(programmerArt.name(), programmerArt.from()),
                 "the running game's title names it");
+    }
+
+    @Test
+    void onAServerThePageShowsTheDatapacksItNamesOrWhyItCannot() {
+        GameLocation location = GameLocations.of(this.directory, true);
+        location.connected(message -> true);
+        PlayingPayload.Multiplayer server = new PlayingPayload.Multiplayer("play.example.net", false, true);
+        location.playing(server);
+        GameState game = location.read();
+        PackStackPayload named = new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Default", ""),
+                new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN),
+                new PackStackPayload.Pack("file/Arena", "Arena", "")), List.of(new PackStackPayload.Pack("file/Events", "Events", "")));
+
+        WorldPanel.Loaded loaded = WorldPanel.readServer(game, server, named, "");
+        assertEquals(new WorldPanel.ServerWorld("play.example.net", game.serverWorld(server)), loaded.server(),
+                "changes go to the place the change record keeps the server's world");
+        assertEquals(List.of("+file/Arena", "+vanilla", "-file/Events"), loaded.datapacks().stream()
+                .map(pack -> (pack.state() == ListedPack.State.ENABLED ? "+" : "-") + pack.id()).toList(),
+                "as the pack screen lists them, without the parts of the mods' pack; the files are the server's");
+        assertNull(loaded.datapacks().getFirst().file());
+
+        assertEquals("Waiting for the server play.example.net to name its world's datapacks.", WorldPanel.readServer(game, server, null, "").problem());
+        assertEquals("You need operator permission on this server to change its world.",
+                WorldPanel.readServer(game, server, null, "You need operator permission on this server to change its world").problem());
+        assertEquals("The server vanilla.example.net does not have TotalDebug, which Companion needs to show its world.",
+                WorldPanel.readServer(game, new PlayingPayload.Multiplayer("vanilla.example.net", false, false), null, "").problem());
     }
 
     private static List<String> row(String id, CatalogIndex index) {
