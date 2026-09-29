@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.pack;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
+import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
@@ -60,7 +61,7 @@ class ResourceEditsTest {
 
         Path pack = this.directory.resolve("resourcepacks/TotalDebug");
         assertEquals(pack, saved.pack());
-        assertEquals(ConfigChanges.Effect.GAME_STARTS, saved.effect(), "no game runs");
+        assertEquals(Effect.GAME_STARTS, saved.effect(), "no game runs");
         assertEquals("{\"item.testmod.gear\":\"Cog\"}", Files.readString(pack.resolve(LANG)));
         assertTrue(Files.readString(pack.resolve("pack.mcmeta")).contains("\"pack_format\":34"));
         ChangeRecord.Change change = record.changes().getFirst();
@@ -208,7 +209,7 @@ class ResourceEditsTest {
         ResourceEdits.Saved saved = edits.save("data/testmod/recipe/gear.json", bytes("{}")).get(5, TimeUnit.SECONDS);
 
         assertEquals(newer.resolve("datapacks/TotalDebug"), saved.pack());
-        assertEquals(ConfigChanges.Effect.WORLD_OPENS, saved.effect());
+        assertEquals(Effect.WORLD_OPENS, saved.effect());
         assertTrue(Files.readString(saved.pack().resolve("pack.mcmeta")).contains("\"pack_format\":48"));
     }
 
@@ -273,7 +274,7 @@ class ResourceEditsTest {
             ResourceEdits.Saved saved = edits.save("data/testmod/recipe/gear.json", bytes("{}")).get(5, TimeUnit.SECONDS);
 
             assertEquals("{}", Files.readString(pack.resolve("data/testmod/recipe/gear.json")), "the game only reads a datapack");
-            assertEquals(ConfigChanges.Effect.WORLD_OPENS, saved.effect());
+            assertEquals(Effect.WORLD_OPENS, saved.effect());
             assertEquals("The world World is open in a game that is not connected to Companion; it uses the change when the world is loaded again",
                     saved.reloadFailure());
         }
@@ -316,13 +317,13 @@ class ResourceEditsTest {
         Thread.sleep(100);
         assertEquals(2, sent.size(), "nothing is left to ask for the first world");
         edits.pipeline().reloads().answered(new ReloadResultPayload(sent.get(1).requestId(), 10, List.of(), ""));
-        assertEquals(ConfigChanges.Effect.NOW, language.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(Effect.NOW, language.get(5, TimeUnit.SECONDS).effect());
 
         CompletableFuture<ResourceEdits.Saved> later = edits.save("data/testmod/recipe/axle.json", bytes("{}"));
         awaitSent(sent, 3);
         assertEquals(new PlayingPayload.Singleplayer(second.toString()).identity(), worlds.get(2));
         edits.pipeline().reloads().answered(new ReloadResultPayload(sent.get(2).requestId(), 10, List.of(), ""));
-        assertEquals(ConfigChanges.Effect.NOW, later.get(5, TimeUnit.SECONDS).effect(), "later reloads are not held up");
+        assertEquals(Effect.NOW, later.get(5, TimeUnit.SECONDS).effect(), "later reloads are not held up");
     }
 
     @Test
@@ -360,7 +361,7 @@ class ResourceEditsTest {
         assertEquals("", sent.getFirst().managedDataPack(), "no data edit asks for the managed datapack");
 
         edits.pipeline().reloads().answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
-        assertEquals(ConfigChanges.Effect.NOW, first.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(Effect.NOW, first.get(5, TimeUnit.SECONDS).effect());
         awaitSent(sent, 2);
         ReloadPayload merged = sent.get(1);
         assertEquals(Set.of(ReloadPayload.Kind.RESOURCES), merged.kinds(), "a full reload covers the language and textures");
@@ -369,7 +370,7 @@ class ResourceEditsTest {
         edits.pipeline().reloads().answered(new ReloadResultPayload(merged.requestId(), 900, List.of(new ReloadResultPayload.Problem(
                 "assets/testmod/models/block/gear.json", "Unable to load model testmod:block/gear")), ""));
         assertEquals(List.of("Unable to load model testmod:block/gear"), second.get(5, TimeUnit.SECONDS).problems());
-        assertEquals(ConfigChanges.Effect.NOW, third.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(Effect.NOW, third.get(5, TimeUnit.SECONDS).effect());
         assertEquals(List.of(), third.get(5, TimeUnit.SECONDS).problems(), "the model's problem is not the language file's");
     }
 

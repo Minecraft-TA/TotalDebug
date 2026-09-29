@@ -1,9 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
+import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totalDebugCompanion.game.Access;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
@@ -60,7 +60,7 @@ public final class ResourceEdits {
      * {@code unused} says why the game does not use the pack's copy even so, such as the pack not being enabled; empty
      * when it does.
      */
-    public record Saved(ConfigChanges.Effect effect, Path pack, List<String> problems, String reloadFailure, String unused) {
+    public record Saved(Effect effect, Path pack, List<String> problems, String reloadFailure, String unused) {
         public Saved {
             Objects.requireNonNull(effect, "effect");
             problems = List.copyOf(problems);
@@ -68,7 +68,7 @@ public final class ResourceEdits {
             Objects.requireNonNull(unused, "unused");
         }
 
-        Saved(ConfigChanges.Effect effect, Path pack, List<String> problems, String reloadFailure) {
+        Saved(Effect effect, Path pack, List<String> problems, String reloadFailure) {
             this(effect, pack, problems, reloadFailure, "");
         }
     }
@@ -571,7 +571,7 @@ public final class ResourceEdits {
         // whatever holds the world; only the connected game playing it uses it at once.
         Path world = assets ? null : pack.getParent().getParent();
         Access access = assets ? game.client("use the change") : game.plays(world) ? game.world(world, "use the change") : new Access.Files();
-        ConfigChanges.Effect later = assets ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS;
+        Effect later = assets ? Effect.GAME_STARTS : Effect.WORLD_OPENS;
         if (access instanceof Access.Refused refused) {
             return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), refused.reason()));
         }
@@ -594,7 +594,7 @@ public final class ResourceEdits {
             return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), ""));
         }
         if (!assets && apply == ResourcePaths.Apply.WORLD_LOAD) {
-            return CompletableFuture.completedFuture(new Saved(ConfigChanges.Effect.REJOIN, pack, List.of(), ""));
+            return CompletableFuture.completedFuture(new Saved(Effect.REJOIN, pack, List.of(), ""));
         }
         // Files written beside it join the same reload, which they are part of.
         GameLocation.Connection connection = ((Access.Live) access).connection();
@@ -602,11 +602,11 @@ public final class ResourceEdits {
         for (String beside : alsoWatched) reload(connection, world, beside, managedPack);
         return reload(connection, world, path, managedPack).handle((result, failure) -> {
             if (failure != null) {
-                return new Saved(assets ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS, pack,
+                return new Saved(assets ? Effect.GAME_STARTS : Effect.WORLD_OPENS, pack,
                         List.of(), message(failure));
             }
-            return new Saved(result.error().isEmpty() ? ConfigChanges.Effect.NOW : assets ? ConfigChanges.Effect.GAME_STARTS
-                    : ConfigChanges.Effect.WORLD_OPENS, pack, problemsOf(result, path, alsoWatched), result.error());
+            return new Saved(result.error().isEmpty() ? Effect.NOW : assets ? Effect.GAME_STARTS
+                    : Effect.WORLD_OPENS, pack, problemsOf(result, path, alsoWatched), result.error());
         });
     }
 

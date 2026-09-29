@@ -1,11 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.GroupedRowCell;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigEdit;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
@@ -115,7 +115,7 @@ final class ConfigSettingsTable extends JTable {
     private BiConsumer<Row, String> edited = (row, literal) -> { };
     /** Receives why a typed value was refused, and an empty text once nothing is refused. */
     private Consumer<String> refused = problem -> { };
-    private Function<Row, ConfigChanges.Effect> pending = row -> null;
+    private Function<Row, Effect> pending = row -> null;
     /** The value a setting had before it was first edited while Companion runs, as the file writes it, or null. */
     private Function<Row, String> original = row -> null;
     /** A section row's own tooltip, or null for its key and comment. */
@@ -179,7 +179,7 @@ final class ConfigSettingsTable extends JTable {
      * {@code pending} tells what the running game waits for before it uses a setting's edited value, and
      * {@code original} the value a setting had before it was first edited, as the file wrote it.
      */
-    void setEditing(BiConsumer<Row, String> edited, Consumer<String> refused, Function<Row, ConfigChanges.Effect> pending,
+    void setEditing(BiConsumer<Row, String> edited, Consumer<String> refused, Function<Row, Effect> pending,
                     Function<Row, String> original) {
         this.edited = Objects.requireNonNull(edited, "edited");
         this.refused = Objects.requireNonNull(refused, "refused");
@@ -374,7 +374,7 @@ final class ConfigSettingsTable extends JTable {
      * accepts and what must restart after a change. {@code before} is the value the setting had before it was edited,
      * and {@code pending} what the game waits for before using the edit.
      */
-    static String tooltip(Row row, ConfigChanges.Effect pending, String before) {
+    static String tooltip(Row row, Effect pending, String before) {
         Tooltip tooltip = Tooltip.of("").detail(row.setting() == null ? row.path() : row.setting().path()).text(row.comment());
         if (before != null) tooltip.fact("Before your edit", literal(row.kind(), before), color(row.kind()));
         if (pending != null) tooltip.fact("Edited value", pending.description());

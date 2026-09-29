@@ -16,7 +16,7 @@ public final class ConfigFileView implements IEditorPanel {
     private final EditorLocation location;
 
     public ConfigFileView(EditorContext context, Path file, ConfigSources.Owner owner) {
-        this.panel = new ConfigFilePanel(file, owner, context.project().configChanges());
+        this.panel = new ConfigFilePanel(file, owner, context.project().configSettings());
         this.location = EditorLocation.forFile(file, context.project().profile().workspaceDirectory());
     }
 

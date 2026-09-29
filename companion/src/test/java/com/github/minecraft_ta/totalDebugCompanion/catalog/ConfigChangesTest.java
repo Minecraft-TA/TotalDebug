@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
+import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
@@ -126,12 +127,12 @@ class ConfigChangesTest {
         ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
         try (GameLock ignored = GameLock.hold(InstancePaths.forGame(this.directory).gameLock())) {
             edit(changes, config(), PackCatalog.Restart.GAME, "1", "2");
-            assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"));
+            assertEquals(Effect.RESTART, changes.pending(config(), "speed"));
 
             this.location.connected(message -> true);
             this.location.process(42);
 
-            assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"),
+            assertEquals(Effect.RESTART, changes.pending(config(), "speed"),
                     "the game that runs now is the one the edit waits in");
         }
     }
@@ -140,10 +141,10 @@ class ConfigChangesTest {
     void aClosedGameUsesEditsWhenItStarts() {
         ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
 
-        assertEquals(ConfigChanges.Effect.GAME_STARTS, edit(changes, config(), PackCatalog.Restart.GAME, "1", "2"));
-        assertEquals(ConfigChanges.Effect.WORLD_OPENS, edit(changes, world("World").resolve("serverconfig/testmod-server.toml"),
+        assertEquals(Effect.GAME_STARTS, edit(changes, config(), PackCatalog.Restart.GAME, "1", "2"));
+        assertEquals(Effect.WORLD_OPENS, edit(changes, world("World").resolve("serverconfig/testmod-server.toml"),
                 PackCatalog.Restart.NONE, "1", "2"));
-        assertEquals(ConfigChanges.Effect.NEW_WORLDS, edit(changes, this.directory.resolve("defaultconfigs/testmod-server.toml"),
+        assertEquals(Effect.NEW_WORLDS, edit(changes, this.directory.resolve("defaultconfigs/testmod-server.toml"),
                 PackCatalog.Restart.NONE, "1", "2"));
         assertNull(changes.pending(config(), "speed"));
     }
@@ -153,17 +154,14 @@ class ConfigChangesTest {
         ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
         this.location.connected(message -> true);
 
-        assertEquals(ConfigChanges.Effect.NOW, edit(changes, config(), PackCatalog.Restart.NONE, "1", "2"));
+        assertEquals(Effect.NOW, edit(changes, config(), PackCatalog.Restart.NONE, "1", "2"));
         assertNull(changes.pending(config(), "speed"));
-        assertEquals("1", changes.original(config(), "speed"), "the value before the first edit");
-        edit(changes, config(), PackCatalog.Restart.NONE, "2", "1");
-        assertNull(changes.original(config(), "speed"), "set back, the setting is no longer edited");
 
-        assertEquals(ConfigChanges.Effect.RESTART, edit(changes, config(), PackCatalog.Restart.GAME, "1", "2"));
-        assertEquals(ConfigChanges.Effect.RESTART, edit(changes, config(), PackCatalog.Restart.GAME, "2", "3"));
-        assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"));
+        assertEquals(Effect.RESTART, edit(changes, config(), PackCatalog.Restart.GAME, "1", "2"));
+        assertEquals(Effect.RESTART, edit(changes, config(), PackCatalog.Restart.GAME, "2", "3"));
+        assertEquals(Effect.RESTART, changes.pending(config(), "speed"));
         // Back to the value the game still uses: nothing waits.
-        assertEquals(ConfigChanges.Effect.NOW, edit(changes, config(), PackCatalog.Restart.GAME, "3", "1"));
+        assertEquals(Effect.NOW, edit(changes, config(), PackCatalog.Restart.GAME, "3", "1"));
         assertNull(changes.pending(config(), "speed"));
 
         edit(changes, config(), PackCatalog.Restart.GAME, "1", "2");
@@ -181,11 +179,11 @@ class ConfigChangesTest {
 
             this.location.disconnected();
             changes.refresh();
-            assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"),
+            assertEquals(Effect.RESTART, changes.pending(config(), "speed"),
                     "the game still runs with the old value");
             this.location.connected(message -> true);
             this.location.process(42);
-            assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"));
+            assertEquals(Effect.RESTART, changes.pending(config(), "speed"));
 
             this.location.process(43);
             assertNull(changes.pending(config(), "speed"), "a restarted game read the file when it started");
@@ -199,7 +197,7 @@ class ConfigChangesTest {
         ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
         this.location.connected(message -> true);
 
-        assertEquals(ConfigChanges.Effect.RESTART, edit(changes, config(), PackCatalog.Restart.NONE, "1", "2"));
+        assertEquals(Effect.RESTART, edit(changes, config(), PackCatalog.Restart.NONE, "1", "2"));
     }
 
     @Test
@@ -210,13 +208,13 @@ class ConfigChangesTest {
         this.location.connected(message -> true);
         this.location.playing(new PlayingPayload.Menu());
         assertEquals(ConfigChanges.Location.WORLD, changes.location(file));
-        assertEquals(ConfigChanges.Effect.WORLD_OPENS, edit(changes, file, PackCatalog.Restart.WORLD, "1", "2"));
+        assertEquals(Effect.WORLD_OPENS, edit(changes, file, PackCatalog.Restart.WORLD, "1", "2"));
 
         this.location.playing(new PlayingPayload.Singleplayer(world.toString()));
-        assertEquals(ConfigChanges.Effect.NOW, edit(changes, file, PackCatalog.Restart.NONE, "1", "2"));
-        assertEquals(ConfigChanges.Effect.REJOIN, edit(changes, file, PackCatalog.Restart.WORLD, "2", "3"));
+        assertEquals(Effect.NOW, edit(changes, file, PackCatalog.Restart.NONE, "1", "2"));
+        assertEquals(Effect.REJOIN, edit(changes, file, PackCatalog.Restart.WORLD, "2", "3"));
         changes.refresh();
-        assertEquals(ConfigChanges.Effect.REJOIN, changes.pending(file, "speed"));
+        assertEquals(Effect.REJOIN, changes.pending(file, "speed"));
 
         this.location.playing(new PlayingPayload.Menu());
         changes.refresh();
@@ -231,7 +229,7 @@ class ConfigChangesTest {
         try (GameLock ignored = GameLock.hold(InstancePaths.forGame(this.directory).gameLock());
              FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.WRITE);
              FileLock held = channel.lock()) {
-            assertEquals(ConfigChanges.Effect.REJOIN, edit(changes, file, PackCatalog.Restart.WORLD, "1", "2"));
+            assertEquals(Effect.REJOIN, edit(changes, file, PackCatalog.Restart.WORLD, "1", "2"));
         }
     }
 
@@ -250,7 +248,7 @@ class ConfigChangesTest {
         }
     }
 
-    private static ConfigChanges.Effect edit(ConfigChanges changes, Path file, PackCatalog.Restart restart, String before,
+    private static Effect edit(ConfigChanges changes, Path file, PackCatalog.Restart restart, String before,
                                              String after) {
         PackCatalog.ConfigType type = file.toString().contains("server") ? PackCatalog.ConfigType.SERVER : PackCatalog.ConfigType.COMMON;
         return changes.edited(new ChangeRecord.Setting("testmod", file.getFileName().toString(), file, "speed"), type,

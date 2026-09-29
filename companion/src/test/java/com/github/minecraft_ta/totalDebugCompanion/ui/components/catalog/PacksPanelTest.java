@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
+import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
 import org.junit.jupiter.api.Test;
 
@@ -24,7 +25,7 @@ class PacksPanelTest {
             PacksPanel panel = new PacksPanel(PacksPanel.Side.DATA, target -> { });
             panel.setApplier(enabled -> {
                 applied.add(enabled);
-                return CompletableFuture.completedFuture(new PackSelections.Applied(ConfigChanges.Effect.WORLD_OPENS));
+                return CompletableFuture.completedFuture(new PackSelections.Applied(Effect.WORLD_OPENS));
             }, "");
             panel.setPacks(List.of(
                     new ListedPack("mod_data", ListedPack.State.ENABLED, null, "", Set.of(ListedPack.Rule.REQUIRED)),

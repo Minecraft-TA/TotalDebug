@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
@@ -8,7 +9,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigEdit;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
@@ -103,7 +103,7 @@ public final class ChangesPanel extends JPanel {
     private record PackChange(ChangeRecord.Change change, String name, String enabled, boolean held) {
     }
 
-    private record Loaded(List<ConfigSettingsTable.Row> rows, Map<String, ConfigWriter.Target> targets,
+    private record Loaded(List<ConfigSettingsTable.Row> rows, Map<String, ConfigSettings.Target> targets,
                           Map<String, ChangeRecord.Change> changes, Map<String, Section> sections, List<KeyChange> keys,
                           KeyBindings bindings, List<ResourceChange> resources, List<PackChange> packs, List<String> problems) {
     }
@@ -133,7 +133,7 @@ public final class ChangesPanel extends JPanel {
     private final JTabbedPane tabs = new JTabbedPane();
     private final JLabel message = new JLabel();
     private final JPanel cards = new JPanel(new CardLayout());
-    private Map<String, ConfigWriter.Target> targets = Map.of();
+    private Map<String, ConfigSettings.Target> targets = Map.of();
     private Map<String, ChangeRecord.Change> changes = Map.of();
     private Map<String, Section> sections = Map.of();
     private List<KeyChange> keys = List.of();
@@ -143,16 +143,16 @@ public final class ChangesPanel extends JPanel {
     private String problem = "";
     private String status = "";
 
-    public ChangesPanel(PackCatalogService catalog, ConfigChanges configChanges, KeyBindingControl keyControl,
+    public ChangesPanel(PackCatalogService catalog, ConfigSettings configSettings, KeyBindingControl keyControl,
                         ResourceEdits resourceEdits, PackSelections packSelections, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
-        this.record = configChanges.record();
+        this.record = configSettings.record();
         this.keyControl = Objects.requireNonNull(keyControl, "keyControl");
         this.resourceEdits = Objects.requireNonNull(resourceEdits, "resourceEdits");
         this.packSelections = Objects.requireNonNull(packSelections, "packSelections");
         this.navigator = Objects.requireNonNull(navigator, "navigator");
-        this.writer = new ConfigWriter(configChanges, this::setStatus, this::load);
+        this.writer = new ConfigWriter(configSettings, this::setStatus, this::load);
 
         this.filter.putClientProperty("JTextField.placeholderText", "Filter changes");
         this.filter.getDocument().addDocumentListener(new DocumentListener() {
@@ -188,7 +188,7 @@ public final class ChangesPanel extends JPanel {
         add(this.cards, BorderLayout.CENTER);
 
         this.table.setEditing(this::edit, this::setStatus, row -> {
-            ConfigWriter.Target target = this.targets.get(row.path());
+            ConfigSettings.Target target = this.targets.get(row.path());
             return target == null ? null : this.writer.pending(target.file(), target.setting().path());
         }, row -> {
             ChangeRecord.Change change = this.changes.get(row.path());
@@ -470,7 +470,7 @@ public final class ChangesPanel extends JPanel {
         List<String> mods = new ArrayList<>(byMod.keySet());
         mods.sort(Comparator.comparing(modId -> modName(index, modId).toLowerCase(Locale.ROOT)));
         List<ConfigSettingsTable.Row> rows = new ArrayList<>();
-        Map<String, ConfigWriter.Target> targets = new HashMap<>();
+        Map<String, ConfigSettings.Target> targets = new HashMap<>();
         Map<String, ChangeRecord.Change> changes = new HashMap<>();
         Map<String, Section> sections = new HashMap<>();
         List<String> problems = new ArrayList<>();
@@ -507,7 +507,7 @@ public final class ChangesPanel extends JPanel {
                             setting, values.values().getOrDefault(key, ""), literal);
                     fileRows.add(row);
                     changes.put(row.path(), change);
-                    targets.put(row.path(), new ConfigWriter.Target(modId, fileName, file,
+                    targets.put(row.path(), new ConfigSettings.Target(modId, fileName, file,
                             described == null ? PackCatalog.ConfigType.COMMON : described.type(), setting));
                 }
                 if (fileRows.isEmpty()) continue;
@@ -638,7 +638,7 @@ public final class ChangesPanel extends JPanel {
     }
 
     private void edit(ConfigSettingsTable.Row row, String literal) {
-        ConfigWriter.Target target = this.targets.get(row.path());
+        ConfigSettings.Target target = this.targets.get(row.path());
         if (target != null) this.writer.edit(target, row.literal(), literal);
     }
 
@@ -669,9 +669,9 @@ public final class ChangesPanel extends JPanel {
                 "Put back the original value of " + total + (total == 1 ? " change?" : " changes?"),
                 "Revert All", JOptionPane.OK_CANCEL_OPTION);
         if (answer != JOptionPane.OK_OPTION) return;
-        Map<ConfigWriter.Target, ChangeRecord.Change> files = new LinkedHashMap<>();
+        Map<ConfigSettings.Target, ChangeRecord.Change> files = new LinkedHashMap<>();
         this.changes.forEach((path, change) -> {
-            ConfigWriter.Target target = this.targets.get(path);
+            ConfigSettings.Target target = this.targets.get(path);
             if (target != null) files.put(target, change);
         });
         List<CompletableFuture<String>> writes = new ArrayList<>();

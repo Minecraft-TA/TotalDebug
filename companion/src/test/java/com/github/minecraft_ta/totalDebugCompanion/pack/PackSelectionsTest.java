@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
+import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -54,7 +55,7 @@ class PackSelectionsTest {
 
         PackSelections.Applied applied = selections.set(ChangeRecord.PackSide.RESOURCES, null,
                 List.of("vanilla", "file/New", "mod_resources")).get(5, TimeUnit.SECONDS);
-        assertEquals(ConfigChanges.Effect.GAME_STARTS, applied.effect());
+        assertEquals(Effect.GAME_STARTS, applied.effect());
         assertEquals("version:3955\nresourcePacks:[\"vanilla\",\"file/New\",\"mod_resources\"]\n"
                 + "incompatibleResourcePacks:[\"file/New\"]\nlang:en_us\n", Files.readString(options),
                 "a pack enabled here is kept even if it was made for another version; one no longer enabled leaves that list");
@@ -104,7 +105,7 @@ class PackSelectionsTest {
 
         PackSelections.Applied applied = selections.set(ChangeRecord.PackSide.DATA, world,
                 List.of("vanilla", "file/Fresh", "mod_data")).get(5, TimeUnit.SECONDS);
-        assertEquals(ConfigChanges.Effect.WORLD_OPENS, applied.effect());
+        assertEquals(Effect.WORLD_OPENS, applied.effect());
         CurrentWorld.Saved saved = CurrentWorld.read(GameLocations.of(this.directory, false).read(), world);
         assertEquals(List.of("+mod_data", "+file/Fresh", "+vanilla", "-file/Tweaks", "-bundle",
                         "-mod/testmod:data/testmod/datapacks/extra"),
@@ -135,7 +136,7 @@ class PackSelectionsTest {
 
         edits.pipeline().answered(new ChangeResultPayload(change.requestId(), List.of(new ChangeResultPayload.Applied(
                 "[\"vanilla\",\"mod_resources\"]", "[\"vanilla\",\"mod_resources\",\"programmer_art\"]")), ""));
-        assertEquals(ConfigChanges.Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
         assertEquals("[\"vanilla\",\"mod_resources\"]", record.changes().getFirst().original(), "recorded as the game answered");
         assertEquals(1, sent.size(), "the game reloads what the selection needs itself");
         assertFalse(Files.exists(this.directory.resolve("options.txt")), "the game saves options.txt itself");
@@ -156,7 +157,7 @@ class PackSelectionsTest {
         assertEquals(changed, change.edits().getFirst().expected(), "a revert expects what Companion last enabled");
         assertEquals(original, change.edits().getFirst().value());
         edits.pipeline().answered(new ChangeResultPayload(change.requestId(), List.of(new ChangeResultPayload.Applied(original, original)), ""));
-        assertEquals(ConfigChanges.Effect.NOW, reverted.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(Effect.NOW, reverted.get(5, TimeUnit.SECONDS).effect());
         assertEquals(0, record.size(), "back to the original, the change ends");
 
         CompletableFuture<PackSelections.Applied> applied = selections.set(ChangeRecord.PackSide.RESOURCES, null,
@@ -244,7 +245,7 @@ class PackSelectionsTest {
         String before = "[\"vanilla\",\"mod_data\"]";
         String now = "[\"vanilla\",\"mod_data\",\"mod/shown\",\"mod/testmod:data/testmod/datapacks/extra\",\"file/Tweaks\"]";
         edits.pipeline().answered(new ChangeResultPayload(change.requestId(), List.of(new ChangeResultPayload.Applied(before, now)), ""));
-        assertEquals(ConfigChanges.Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
         ChangeRecord.Change recorded = record.changes().getFirst();
         assertEquals(before, recorded.original());
         assertFalse(selections.holds(recorded), "the server has not named its new datapacks yet");
@@ -335,7 +336,7 @@ class PackSelectionsTest {
         ChangePayload payload = ((ChangeMessage) change.message()).payload();
         edits.pipeline().answered(new ChangeResultPayload(payload.requestId(), List.of(new ChangeResultPayload.Applied(
                 "[\"vanilla\"]", "[\"vanilla\",\"file/Tweaks\"]")), ""));
-        assertEquals(ConfigChanges.Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
         assertEquals(world, ((ChangeRecord.PackSelection) record.changes().getFirst().target()).location(), "recorded for the server's world, and revertible there");
     }
 

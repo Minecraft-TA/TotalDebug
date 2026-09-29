@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
+import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -27,7 +27,7 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class PackSelections {
     /** Where a selection was written, and when the game uses it. */
-    public record Applied(ConfigChanges.Effect effect) {
+    public record Applied(Effect effect) {
     }
 
     private final GameLocation location;
@@ -76,8 +76,8 @@ public final class PackSelections {
      */
     private CompletableFuture<Applied> change(ChangePipeline.Edit<ChangeRecord.PackSelection, List<String>> edit) {
         ChangeRecord.PackSide side = edit.target().side();
-        return this.pipeline.change(category(side), List.of(edit)).thenApply(outcome -> new Applied(outcome.live() ? ConfigChanges.Effect.NOW
-                : side == ChangeRecord.PackSide.RESOURCES ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS));
+        return this.pipeline.change(category(side), List.of(edit)).thenApply(outcome -> new Applied(outcome.live() ? Effect.NOW
+                : side == ChangeRecord.PackSide.RESOURCES ? Effect.GAME_STARTS : Effect.WORLD_OPENS));
     }
 
     private ChangeCategory<ChangeRecord.PackSelection, List<String>> category(ChangeRecord.PackSide side) {

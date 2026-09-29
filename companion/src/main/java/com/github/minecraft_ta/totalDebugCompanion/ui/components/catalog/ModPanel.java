@@ -1,12 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
@@ -97,10 +97,10 @@ public final class ModPanel extends JPanel {
 
     /**
      * {@code workspace} is the game directory, where server configurations of each world are found, and
-     * {@code changes} tracks configuration edits the running game has not applied yet.
+     * {@code configSettings} writes configuration edits and tracks those the running game has not applied yet.
      */
     public ModPanel(String modId, PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources,
-                    ItemIconService icons, Path workspace, ConfigChanges changes, KeyBindingControl keyControl,
+                    ItemIconService icons, Path workspace, ConfigSettings configSettings, KeyBindingControl keyControl,
                     Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
@@ -119,7 +119,7 @@ public final class ModPanel extends JPanel {
             this.resources.setMessage("Resources could not be read: " + failure.getMessage());
             setTab(ModTab.RESOURCES, 1);
         });
-        this.configs = new ConfigPanel(modId, changes, navigator);
+        this.configs = new ConfigPanel(modId, configSettings, navigator);
         this.keyBindings = new KeyBindingsPanel(catalog, keyControl, modId, navigator);
         this.content = new ContentBrowser(this.listIcons, this::iconOf, navigator, null);
 

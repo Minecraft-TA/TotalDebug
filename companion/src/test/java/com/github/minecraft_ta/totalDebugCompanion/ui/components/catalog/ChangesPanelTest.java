@@ -1,9 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettingsFixture;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
@@ -48,7 +48,7 @@ class ChangesPanelTest {
         ChangesPanel[] panel = new ChangesPanel[1];
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), record, new ResourceOriginals(this.directory.resolve("originals")),
                 Runnable::run, InstanceState.inMemory());
-        SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(GameLocations.of(this.directory, false), record),
+        SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), record),
                 new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run)), edits,
                 new PackSelections(edits), target -> { }));
         ConfigSettingsTable table = panel[0].settingsTable();

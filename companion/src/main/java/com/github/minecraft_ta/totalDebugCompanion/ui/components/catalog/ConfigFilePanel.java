@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -29,12 +29,12 @@ public final class ConfigFilePanel extends JPanel {
     private final PageLoader<String> loader;
 
     /** {@code owner} is the mod configuration {@code file} holds, such as a world's copy of a server configuration. */
-    public ConfigFilePanel(Path file, ConfigSources.Owner owner, ConfigChanges changes) {
+    public ConfigFilePanel(Path file, ConfigSources.Owner owner, ConfigSettings configSettings) {
         super(new BorderLayout());
         this.file = Objects.requireNonNull(file, "file");
-        ConfigWriter writer = new ConfigWriter(changes, this::setStatus, this::load);
+        ConfigWriter writer = new ConfigWriter(configSettings, this::setStatus, this::load);
         this.editor = new ConfigTextEditor(writer, this::setStatus, this::load);
-        this.editor.setDocument(new ConfigTextEditor.Document(new ConfigWriter.FileTarget(owner.mod().id(),
+        this.editor.setDocument(new ConfigTextEditor.Document(new ConfigSettings.FileTarget(owner.mod().id(),
                 owner.file().fileName(), file, owner.file().type()), owner.file().settings()));
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));

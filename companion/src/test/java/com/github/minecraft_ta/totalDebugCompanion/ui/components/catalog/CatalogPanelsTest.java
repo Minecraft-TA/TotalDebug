@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettingsFixture;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
@@ -94,7 +94,7 @@ class CatalogPanelsTest {
         List<NavigationTarget> opened = new ArrayList<>();
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
-                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
+                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
                         new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run)), opened::add);
                 try {
                     assertEquals("Test Mod", panel.title());
@@ -130,7 +130,7 @@ class CatalogPanelsTest {
         PackCatalogService catalog = readyCatalog();
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
-                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
+                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
                         new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run)), target -> { });
                 try {
                     List<FactSection> sections = panel.sections(catalog.index().orElseThrow().mod("testmod").orElseThrow());
@@ -151,7 +151,7 @@ class CatalogPanelsTest {
         PackCatalogService catalog = readyCatalog();
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
-                ModPanel panel = new ModPanel("absent", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
+                ModPanel panel = new ModPanel("absent", catalog, RuntimeSourceCatalog::empty, icons, this.directory, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
                         new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run)), target -> { });
                 try {
                     assertTrue(labels(panel).contains("absent is not an installed mod"), labels(panel)::toString);

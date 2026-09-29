@@ -14,7 +14,7 @@ public final class PackConfigurationView implements IEditorPanel {
 
     public PackConfigurationView(EditorContext context) {
         this.panel = new PackConfigurationPanel(context.project().catalog(),
-                context.project().configChanges(), context.navigation()::navigate);
+                context.project().configSettings(), context.navigation()::navigate);
     }
 
     /** Reads the configuration files again. */

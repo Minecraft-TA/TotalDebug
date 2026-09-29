@@ -376,6 +376,25 @@ public final class ConfigEdit {
      * replaced. The file is read again first, so edits made meanwhile by the game or an editor are kept.
      */
     public static String write(Path file, String key, String literal) throws IOException {
+        return write(file, key, literal, null);
+    }
+
+    /**
+     * Writes {@code literal} as the value of {@code key} as {@link #write(Path, String, String)} does, when the file read
+     * again still holds {@code expected} there, the same value if not the same text; fails with {@code changed} otherwise.
+     * {@code expected} null writes whatever the file holds.
+     */
+    public static String write(Path file, String key, String literal, String expected, String changed) throws IOException {
+        return write(file, key, literal, expected == null ? null : previous -> {
+            if (!sameValue(previous, expected)) throw new IOException(changed);
+        });
+    }
+
+    private interface Check {
+        void check(String previous) throws IOException;
+    }
+
+    private static String write(Path file, String key, String literal, Check check) throws IOException {
         String text = Files.readString(file, StandardCharsets.UTF_8);
         String name = file.getFileName().toString();
         TomlText toml;
@@ -386,6 +405,7 @@ public final class ConfigEdit {
         }
         String previous = toml.literal(key);
         if (previous == null) throw new IOException(key + " is not in " + name);
+        if (check != null) check.check(previous);
         String updated = toml.with(key, literal);
         // The edited text must hold the same settings with only this one changed.
         Map<String, String> before = new HashMap<>(ConfigValues.parse(text, name).values());

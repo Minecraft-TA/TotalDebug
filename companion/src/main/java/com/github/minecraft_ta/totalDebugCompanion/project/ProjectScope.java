@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.project;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
@@ -57,7 +58,8 @@ public final class ProjectScope implements AutoCloseable {
     /** What Companion changed in the pack, kept with the instance. */
     public ChangeRecord changes() { return changes; }
     private final ConfigChanges configChanges;
-    public ConfigChanges configChanges() { return configChanges; }
+    private final ConfigSettings configSettings;
+    public ConfigSettings configSettings() { return configSettings; }
     private final ChangePipeline pipeline;
     /** The one path of the changes Companion makes to values the game keeps. */
     public ChangePipeline pipeline() { return pipeline; }
@@ -92,6 +94,7 @@ public final class ProjectScope implements AutoCloseable {
         this.location = new GameLocation(profile.workspaceDirectory());
         this.configChanges = new ConfigChanges(this.location, changes);
         this.pipeline = new ChangePipeline(this.location, changes, this.configChanges.writes());
+        this.configSettings = new ConfigSettings(this.configChanges, this.pipeline);
         this.keyBindings = new KeyBindingControl(this.pipeline);
         this.packs = new GamePacks(this.location);
         this.resources = new ResourceEdits(this.pipeline, this.packs, new ResourceOriginals(paths().originals()),
