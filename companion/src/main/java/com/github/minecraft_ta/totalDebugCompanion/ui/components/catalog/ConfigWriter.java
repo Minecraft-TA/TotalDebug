@@ -75,7 +75,10 @@ final class ConfigWriter {
 
     /** Writes {@code after} in place of {@code before}, the value shown when the edit was made. */
     void edit(ConfigSettings.Target target, String before, String after) {
-        write(new SettingStep(target, before, after), false, this::done, () -> { }, null);
+        // An edit the file already held, perhaps written another way, changes nothing to undo.
+        write(new SettingStep(target, before, after), false, made -> {
+            if (!(made instanceof SettingStep setting && setting.before().equals(setting.after()))) done(made);
+        }, () -> { }, null);
     }
 
     /**
@@ -167,7 +170,8 @@ final class ConfigWriter {
             if (step instanceof TextStep text && result.replaced() != null) {
                 made = new TextStep(text.target(), text.settings(), result.replaced(), text.after());
             } else if (step instanceof SettingStep setting && !result.changed().isEmpty()) {
-                made = new SettingStep(setting.target(), result.changed().getFirst().before(), setting.after());
+                ConfigSettings.Changed changed = result.changed().getFirst();
+                made = new SettingStep(setting.target(), changed.before(), changed.before().equals(changed.after()) ? changed.after() : setting.after());
             }
             saved.accept(made);
             this.status.accept(result.message());

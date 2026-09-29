@@ -143,7 +143,7 @@ public final class ConfigChanges {
         Effect effect = effect(state, type, restart, location, world);
         if (!effect.pending()) {
             this.pending.remove(key);
-        } else if (earlier != null && earlier.applied().equals(written)) {
+        } else if (earlier != null && ConfigEdit.sameValue(earlier.applied(), written)) {
             // Set back to the value the game still uses: nothing is waiting any more.
             this.pending.remove(key);
             return Effect.NOW;
@@ -163,6 +163,16 @@ public final class ConfigChanges {
         if (location == Location.WORLD && !state.isOpen(world)) return Effect.WORLD_OPENS;
         if (restart == PackCatalog.Restart.WORLD) return state.openWorld() == null ? Effect.NOW : Effect.REJOIN;
         return Effect.NOW;
+    }
+
+    /**
+     * {@code setting} of {@code file} holds {@code literal} and nothing was written: an edit that waited for the game to
+     * use that value, the one the game still uses, waits no more.
+     */
+    public void unchanged(Path file, String setting, String literal) {
+        Key key = new Key(file.toAbsolutePath().normalize(), setting);
+        Pending earlier = this.pending.get(key);
+        if (earlier != null && ConfigEdit.sameValue(earlier.applied(), literal)) this.pending.remove(key);
     }
 
     /** What the running game still waits for before it uses the edited value of a setting, or null. */
