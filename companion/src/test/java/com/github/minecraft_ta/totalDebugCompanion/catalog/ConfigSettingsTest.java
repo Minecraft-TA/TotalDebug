@@ -121,6 +121,13 @@ class ConfigSettingsTest {
         assertEquals("[widgets]\n\tnames = [\"c\"]\n", Files.readString(file), "the same value written another way changes nothing");
         assertEquals("[\"c\"]", same.changed().getFirst().after(), "the file keeps its text");
         assertEquals("[\"c\"]", settings.record().changes().getFirst().current(), "and the record keeps it too");
+
+        // Put back outside Companion in another spelling: reverting writes nothing and ends the change.
+        Files.writeString(file, "[widgets]\n\tnames = [\"a\",\"b\"]\n");
+        ChangeRecord.Change change = settings.record().changes().getFirst();
+        settings.set(target(file, names), change.current(), change.original()).get(5, TimeUnit.SECONDS);
+        assertEquals("[widgets]\n\tnames = [\"a\",\"b\"]\n", Files.readString(file));
+        assertEquals(0, settings.record().size(), "the original value, however it is written");
     }
 
     private Path file(String text) throws Exception {

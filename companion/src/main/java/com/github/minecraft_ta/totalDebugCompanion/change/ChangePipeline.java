@@ -185,13 +185,13 @@ public final class ChangePipeline {
             Set<T> unwritten = new HashSet<>();
             writes.forEach(write -> unwritten.add(write.target()));
             unwritten.removeAll(landed);
-            applied.stream().filter(value -> !unwritten.contains(value.target())).forEach(this::recorded);
+            applied.stream().filter(value -> !unwritten.contains(value.target())).forEach(value -> recorded(category, value));
             if (landed.isEmpty()) throw failure;
             List<String> names = landed.stream().map(category::name).toList();
             throw new IOException(failure.getMessage() + "; " + String.join(", ", names) + (names.size() == 1 ? " was" : " were")
                     + " written before that", failure);
         }
-        applied.forEach(this::recorded);
+        applied.forEach(value -> recorded(category, value));
         return new Outcome<>(applied, false);
     }
 
@@ -214,7 +214,7 @@ public final class ChangePipeline {
                 ChangeResultPayload.Applied value = result.applied().get(index);
                 applied.add(new Applied<>(change.get(index).target(), value.before(), value.now()));
             }
-            applied.forEach(this::recorded);
+            applied.forEach(value -> recorded(category, value));
             if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
             return new Outcome<>(applied, true);
         });
@@ -245,7 +245,8 @@ public final class ChangePipeline {
                 .orElseThrow(() -> new IOException("The game went to another world before the change reached it"));
     }
 
-    private void recorded(Applied<?> applied) {
-        this.record.changed(applied.target(), applied.before(), applied.now());
+    /** Enters a value in the record, which ends the change when it is the original value again, as the category compares. */
+    private void recorded(ChangeCategory<?, ?> category, Applied<?> applied) {
+        this.record.changed(applied.target(), applied.before(), applied.now(), category::same);
     }
 }

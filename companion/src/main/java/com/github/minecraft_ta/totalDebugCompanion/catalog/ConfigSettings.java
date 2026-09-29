@@ -108,7 +108,9 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
                 ChangePipeline.Applied<ChangeRecord.Setting> applied = this.pipeline.write(this,
                         List.of(new ChangePipeline.Edit<>(target.recorded(), expected, new Value(literal)))).applied().getFirst();
                 if (applied.before().equals(applied.now())) {
-                    // The file held that value already: nothing was written, and nothing waits for the game.
+                    // The file held that value already: nothing was written, and an edit waiting for the game to use it,
+                    // perhaps written another way, waits no more.
+                    this.changes.unchanged(target.file(), target.setting().path(), applied.now());
                     Effect pending = this.changes.pending(target.file(), target.setting().path());
                     return new Saved(List.of(new Changed(target, applied.before(), applied.now(), pending == null ? Effect.NOW : pending)),
                             target.setting().name() + " already holds that value", null);

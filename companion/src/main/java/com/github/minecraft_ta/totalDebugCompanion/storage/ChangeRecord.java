@@ -201,6 +201,14 @@ public final class ChangeRecord implements AutoCloseable {
 
     /** Records that {@code target} changed from {@code previous} to {@code written}. */
     public void changed(Target target, String previous, String written) {
+        changed(target, previous, written, String::equals);
+    }
+
+    /**
+     * Records that {@code target} changed from {@code previous} to {@code written}, which ends the change when it is the
+     * original value again as {@code sameValue} compares, such as two ways a TOML file writes one value.
+     */
+    public void changed(Target target, String previous, String written, BiPredicate<String, String> sameValue) {
         Path file = switch (target) {
             case Setting setting -> setting.file();
             case Resource resource -> resource.location();
@@ -213,7 +221,7 @@ public final class ChangeRecord implements AutoCloseable {
         synchronized (this) {
             Change earlier = this.changes.get(target);
             String original = earlier == null ? previous : earlier.original();
-            if (original.equals(written)) {
+            if (sameValue.test(original, written)) {
                 this.changes.remove(target);
             } else {
                 Instant now = this.clock.instant();
