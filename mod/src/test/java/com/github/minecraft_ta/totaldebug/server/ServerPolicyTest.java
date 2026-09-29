@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.server.script;
+package com.github.minecraft_ta.totaldebug.server;
 
 import org.junit.jupiter.api.Test;
 
@@ -6,10 +6,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ServerScriptPolicyTest {
+class ServerPolicyTest {
+    private static ServerPolicy scripts(boolean enabled, boolean operatorOnly) {
+        return new ServerPolicy(enabled, operatorOnly, "Server-side scripts are disabled by the server configuration",
+                "You do not have permission to run server-side scripts");
+    }
+
     @Test
     void rejectsScriptsWhenTheServerSettingIsDisabled() {
-        ServerScriptPolicy.Decision decision = new ServerScriptPolicy(false, false).evaluate(true);
+        ServerPolicy.Decision decision = scripts(false, false).evaluate(true);
 
         assertFalse(decision.allowed());
         assertEquals("Server-side scripts are disabled by the server configuration", decision.rejectionReason());
@@ -17,7 +22,7 @@ class ServerScriptPolicyTest {
 
     @Test
     void rejectsNonOperatorsWhenTheOperatorSettingIsEnabled() {
-        ServerScriptPolicy.Decision decision = new ServerScriptPolicy(true, true).evaluate(false);
+        ServerPolicy.Decision decision = scripts(true, true).evaluate(false);
 
         assertFalse(decision.allowed());
         assertEquals("You do not have permission to run server-side scripts", decision.rejectionReason());
@@ -25,7 +30,7 @@ class ServerScriptPolicyTest {
 
     @Test
     void acceptsAnOperatorOrAnExplicitlyPublicServer() {
-        assertTrue(new ServerScriptPolicy(true, true).evaluate(true).allowed());
-        assertTrue(new ServerScriptPolicy(true, false).evaluate(false).allowed());
+        assertTrue(scripts(true, true).evaluate(true).allowed());
+        assertTrue(scripts(true, false).evaluate(false).allowed());
     }
 }

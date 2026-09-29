@@ -6,7 +6,6 @@ import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
@@ -241,12 +240,8 @@ public final class ChangePipeline {
 
     /** {@code world} as {@code PLAYING} names it; fails when the game plays another world. */
     private String identity(Path world) throws IOException {
-        PlayingPayload playing = this.location.playing();
-        if (playing instanceof PlayingPayload.Singleplayer singleplayer
-                && Path.of(singleplayer.world()).toAbsolutePath().normalize().equals(world.toAbsolutePath().normalize())) {
-            return playing.identity();
-        }
-        throw new IOException("The game went to another world before the change reached it");
+        return this.location.read().identity(world)
+                .orElseThrow(() -> new IOException("The game went to another world before the change reached it"));
     }
 
     private void recorded(Applied<?> applied) {

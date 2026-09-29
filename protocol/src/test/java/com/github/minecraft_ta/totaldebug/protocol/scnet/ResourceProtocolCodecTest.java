@@ -34,6 +34,11 @@ class ResourceProtocolCodecTest {
         readDatapacks.read(new ByteBufferInputStream(written(new DatapacksMessage("world C:/saves/World", datapacks))));
         assertEquals("world C:/saves/World", readDatapacks.world());
         assertEquals(datapacks, readDatapacks.payload());
+        assertEquals("", readDatapacks.refusal());
+        readDatapacks.read(new ByteBufferInputStream(written(DatapacksMessage.refused("", 48, "You need operator permission on this server to change its world"))));
+        assertEquals("", readDatapacks.world(), "a server names its world by no folder");
+        assertEquals("You need operator permission on this server to change its world", readDatapacks.refusal());
+        assertEquals(List.of(), readDatapacks.payload().enabled());
     }
 
     @Test
