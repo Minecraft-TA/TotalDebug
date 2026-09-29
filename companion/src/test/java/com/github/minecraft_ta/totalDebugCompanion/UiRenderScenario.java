@@ -62,6 +62,7 @@ enum UiRenderScenario {
     LOGS_CRASH("logs-crash", "A crash report with its stack frames by mod"),
     KEY_BINDINGS("key-bindings", "The pack's key bindings with a changed key that collides"),
     CONTENT("content", "The pack's registered content with every kind listed together"),
+    CHANGES("changes", "The Changes page: a tab per category, a setting waiting for nothing, a key sharing its key, the resource packs"),
     WORLD("world", "The current world's overview as its level.dat saved it"),
     WORLD_RULES("world-rules", "The current world's game rules"),
     WORLD_DATAPACKS("world-datapacks", "The current world's datapacks, enabled, disabled and new"),

@@ -1,13 +1,18 @@
 package com.github.minecraft_ta.totalDebugCompanion.project;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigLabels;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingLabels;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangeLabels;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
+import com.github.minecraft_ta.totalDebugCompanion.pack.PackLabels;
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceLabels;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
@@ -60,6 +65,11 @@ public final class ProjectScope implements AutoCloseable {
     private final ConfigChanges configChanges;
     private final ConfigSettings configSettings;
     public ConfigSettings configSettings() { return configSettings; }
+    /** How the Changes page names and reverts each category's changes, in the order of its tabs. */
+    public List<ChangeLabels> changeLabels() {
+        return List.of(new ConfigLabels(this.configSettings), new KeyBindingLabels(this.keyBindings), new ResourceLabels(this.resources),
+                new PackLabels(this.packSelections));
+    }
     private final ChangePipeline pipeline;
     /** The one path of the changes Companion makes to values the game keeps. */
     public ChangePipeline pipeline() { return pipeline; }

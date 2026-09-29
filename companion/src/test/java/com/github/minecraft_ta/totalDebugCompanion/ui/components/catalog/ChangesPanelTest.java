@@ -1,7 +1,15 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigLabels;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettingsFixture;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingLabels;
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangeLabels;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.pack.PackLabels;
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceLabels;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
@@ -25,7 +33,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChangesPanelTest {
     @TempDir Path directory;
@@ -48,24 +55,24 @@ class ChangesPanelTest {
         ChangesPanel[] panel = new ChangesPanel[1];
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), record, new ResourceOriginals(this.directory.resolve("originals")),
                 Runnable::run, InstanceState.inMemory());
-        SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), record),
-                new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run)), edits,
-                new PackSelections(edits), target -> { }));
-        ConfigSettingsTable table = panel[0].settingsTable();
+        ConfigSettings settings = ConfigSettingsFixture.of(GameLocations.of(this.directory, false), record);
+        List<ChangeLabels> labels = List.of(new ConfigLabels(settings),
+                new KeyBindingLabels(new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run))),
+                new ResourceLabels(edits), new PackLabels(new PackSelections(edits)));
+        SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, record, labels, target -> { }));
         try {
-            awaitOnSwing(() -> table.getRowCount() == 3);
+            awaitOnSwing(() -> panel[0].rows("Configuration").size() == 1);
             SwingUtilities.invokeAndWait(() -> {
-                assertEquals(List.of("Test Mod", "testmod-common.toml", "widgets.speed"),
-                        List.of(table.row(0).name(), table.row(1).name(), table.row(2).name()));
-                assertEquals("12", table.row(2).value());
-                String tooltip = ConfigSettingsTable.tooltip(table.row(2), null, "9");
-                assertTrue(tooltip.contains("Before your edit"), tooltip);
+                ChangeLabels.Row row = panel[0].rows("Configuration").getFirst();
+                assertEquals(List.of("speed", "Test Mod, testmod-common.toml", "12", "9"), List.of(row.name(), row.where(), row.now(), row.before()),
+                        "the category names the row; the page only lists it");
+                assertEquals(new NavigationTarget.ModPage("testmod", ModTab.CONFIGURATION, ""), row.opens());
             });
 
             // Written back outside Companion: the change is over.
             Files.writeString(file, Files.readString(file).replace("speed = 12", "speed = 9"));
             SwingUtilities.invokeAndWait(panel[0]::load);
-            awaitOnSwing(() -> table.getRowCount() == 0);
+            awaitOnSwing(() -> panel[0].rows("Configuration").isEmpty());
             assertEquals(0, record.size());
         } finally {
             SwingUtilities.invokeAndWait(panel[0]::dispose);

@@ -13,8 +13,7 @@ public final class ChangesView implements IEditorPanel {
     private final ChangesPanel panel;
 
     public ChangesView(EditorContext context) {
-        this.panel = new ChangesPanel(context.project().catalog(), context.project().configSettings(),
-                context.project().keyBindings(), context.project().resources(), context.project().packSelections(),
+        this.panel = new ChangesPanel(context.project().catalog(), context.project().changes(), context.project().changeLabels(),
                 context.navigation()::navigate);
     }
 

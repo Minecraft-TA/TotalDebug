@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.ui.HtmlText;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
@@ -654,6 +655,16 @@ final class UiScenarioDriver {
                     context.once("inspection-read", () -> panel.session().present(InspectionSample.read(), null, text -> text));
                 }
             }
+            case CHANGES -> context.once("changes", () -> {
+                var project = mainWindow.editorContext().project();
+                Path workspace = project.profile().workspaceDirectory();
+                project.changes().changed(new ChangeRecord.Setting("testmod", "testmod-common.toml",
+                        workspace.resolve("config/testmod-common.toml"), "widgets.speed"), "4", "9");
+                project.changes().changed(new ChangeRecord.KeyBinding("key.testmod.spin"), "key.keyboard.r", "key.keyboard.q");
+                project.changes().changed(new ChangeRecord.PackSelection(ChangeRecord.PackSide.RESOURCES, workspace.resolve("options.txt")),
+                        "[\"vanilla\",\"mod_resources\"]", "[\"vanilla\",\"mod_resources\",\"file/Faithful\"]");
+                navigate(new NavigationTarget.Changes());
+            });
             case MOD_CONFIGURATION -> context.once("mod-configuration", () ->
                     navigate(new NavigationTarget.ModPage("testmod", ModTab.CONFIGURATION, "")));
             case MOD_RESOURCES -> context.once("mod-resources", () ->
@@ -732,6 +743,7 @@ final class UiScenarioDriver {
         return switch (scenario) {
             case MOD_PAGE -> mainWindow.getEditorTabs().getSelectedEditor() instanceof ModView view
                     && "Test Mod".equals(view.getTitle());
+            case CHANGES -> showsTable("Changes", "Name");
             case MOD_CONFIGURATION -> showsTable("Test Mod", "Setting");
             case PACK_CONFIGURATION -> showsTable("Configuration", "Setting");
             case PACK_RESOURCES -> {
