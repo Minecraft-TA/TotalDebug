@@ -163,10 +163,13 @@ public final class WorldPanel extends JPanel {
             return () -> read(edits.location().read(), stack, refusal);
         }, this::show, failure -> show(Loaded.problem("The world could not be read: " + failure.getMessage())))
                 .whenShown(this).follow(edits.packs()::addDatapackListener);
-        // The tab names the world the game plays, or the last one played without a game, so another world is read at
-        // once, whether the page is shown or not.
+        // The tab names the world the game plays, or the last one played without a game. A shown page reads another
+        // world through the datapacks, which change with it; a hidden one is read for its tab.
         this.removePlayingListener = edits.location().addListener(change -> {
-            if (change == GameLocation.Change.PLAYING || change == GameLocation.Change.DISCONNECTED) this.loader.load();
+            if (change != GameLocation.Change.PLAYING && change != GameLocation.Change.DISCONNECTED) return;
+            SwingUtilities.invokeLater(() -> {
+                if (!this.disposed && !isShowing()) this.loader.load();
+            });
         });
     }
 
