@@ -510,7 +510,10 @@ public final class KeyBindingsPanel extends JPanel {
             names.put(binding.spec().name(), binding.name());
         });
         if (requests.isEmpty()) return;
-        this.control.setAll(requests).thenAccept(failed -> SwingUtilities.invokeLater(() -> {
+        // One change: the bindings move together, or none does.
+        this.control.set(requests).thenAccept(reason -> SwingUtilities.invokeLater(() -> {
+            Map<String, String> failed = new LinkedHashMap<>();
+            if (!reason.isEmpty()) requests.forEach(request -> failed.put(request.name(), reason));
             setStatus(notChanged(failed, names));
             load();
         }));

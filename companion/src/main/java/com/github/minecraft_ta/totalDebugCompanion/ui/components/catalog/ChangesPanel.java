@@ -644,13 +644,21 @@ public final class ChangesPanel extends JPanel {
 
     /** Puts bindings back on the keys they had before Companion changed them; completes with what failed, or empty. */
     private CompletableFuture<String> revert(List<KeyChange> reverted) {
-        List<KeyBindingControl.Change> requests = new ArrayList<>();
+        // Each binding is reverted on its own, so one changed since does not keep the others from their keys.
+        Map<String, CompletableFuture<String>> reverts = new LinkedHashMap<>();
         Map<String, String> names = new HashMap<>();
         for (KeyChange change : reverted) {
-            requests.add(new KeyBindingControl.Change(change.name(), change.current(), change.original()));
+            reverts.put(change.name(), this.keyControl.set(List.of(
+                    new KeyBindingControl.Change(change.name(), change.current(), change.original()))));
             names.put(change.name(), change.action());
         }
-        return this.keyControl.setAll(requests).thenApply(failed -> KeyBindingsPanel.notChanged(failed, names));
+        return CompletableFuture.allOf(reverts.values().toArray(CompletableFuture[]::new)).thenApply(ignored -> {
+            Map<String, String> failed = new LinkedHashMap<>();
+            reverts.forEach((name, revert) -> {
+                if (!revert.join().isEmpty()) failed.put(name, revert.join());
+            });
+            return KeyBindingsPanel.notChanged(failed, names);
+        });
     }
 
     /** Writes every original value back, after asking. */

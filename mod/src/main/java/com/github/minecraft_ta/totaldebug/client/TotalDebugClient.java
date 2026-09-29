@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.client;
 import com.github.minecraft_ta.totaldebug.client.catalog.KeyBindingEdits;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogCapture;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogPublisher;
+import com.github.minecraft_ta.totaldebug.client.companion.ClientChanges;
 import com.github.minecraft_ta.totaldebug.client.companion.ClientRelay;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionRequests;
@@ -19,7 +20,7 @@ import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
@@ -95,8 +96,9 @@ public final class TotalDebugClient {
             this.snapshotRequested = true;
             this.catalogs.request(inventoryId, modules);
         });
-        companionApp.setKeyBindingHandler(message -> Minecraft.getInstance().execute(() ->
-                companionApp.sendKeyBindingResult(new KeyBindingResultMessage(KeyBindingEdits.apply(message.payload())))));
+        ClientChanges changes = new ClientChanges(Map.of(KeyBindingEdits.CATEGORY, new KeyBindingEdits()));
+        companionApp.setChangeHandler(message -> Minecraft.getInstance().execute(() ->
+                companionApp.sendChangeResult(new ChangeResultMessage(changes.apply(message.payload())))));
         companionApp.setReloadHandler(message -> Minecraft.getInstance().execute(() ->
                 ResourceReloads.reload(message.payload(), this::answerReload)));
         companionApp.setPacksHandler(message -> Minecraft.getInstance().execute(() ->
