@@ -46,7 +46,9 @@ public final class GamePacks {
             if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
             else if (change == GameLocation.Change.PLAYING) {
                 // The datapacks the server named belong to the world it played; its next world's server is asked.
-                if (!Objects.equals(this.datapacksFor, location.playing())) this.datapacks = null;
+                synchronized (this) {
+                    if (!Objects.equals(this.datapacksFor, location.playing())) this.datapacks = null;
+                }
                 askForDatapacks();
                 this.stackListeners.forEach(Runnable::run);
             }
@@ -89,10 +91,17 @@ public final class GamePacks {
         return this.resourcePacks;
     }
 
-    /** Takes the datapacks the server of the world the game plays names. */
-    public void datapacks(PackStackPayload packs) {
-        this.datapacksFor = this.location.playing();
-        this.datapacks = packs;
+    /**
+     * Takes the datapacks the server of {@code world}, by its identity, names. A report of a world the game no longer
+     * plays, sent before it left, is dropped: it would stand for the datapacks of the world played now.
+     */
+    public void datapacks(String world, PackStackPayload packs) {
+        synchronized (this) {
+            PlayingPayload playing = this.location.playing();
+            if (playing == null || !playing.identity().equals(world)) return;
+            this.datapacksFor = playing;
+            this.datapacks = packs;
+        }
         this.stackListeners.forEach(Runnable::run);
     }
 

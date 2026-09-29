@@ -111,7 +111,7 @@ public final class PackResourcesPanel extends JPanel {
         if (this.browser.rowCount() == 0) this.browser.setMessage("Reading the resources of every pack");
         return () -> {
             PackResources.Joined joined = PackResources.join(PackResources.assets(resourcePacks, index, this.workspace),
-                    PackResources.data(datapacks, resourcePacks != null, index, this.edits.location()));
+                    PackResources.data(datapacks, index, this.edits.location()));
             return ResourceBrowser.prepare(joined.resources(), joined.from(), joined.hidden());
         };
     }

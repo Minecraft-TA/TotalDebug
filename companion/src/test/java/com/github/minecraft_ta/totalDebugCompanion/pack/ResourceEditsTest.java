@@ -635,10 +635,11 @@ class ResourceEditsTest {
         Path live = LevelDatFixture.datapack(world, "Live");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         edits.location().connected(message -> true);
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
+        PlayingPayload playing = new PlayingPayload.Singleplayer(world.toString());
+        edits.location().playing(playing);
         edits.packs().named(new ClientPacksPayload(STACK, 48));
         // The world's server names the datapacks it uses: none of these.
-        edits.packs().datapacks(new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Default", ""))));
+        edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Default", ""))));
         String recipe = "data/tweaks/recipe/gear.json";
 
         assertTrue(edits.packs().unusedBecause(recipe, added).isEmpty(), "a reload enables it, as /reload does");

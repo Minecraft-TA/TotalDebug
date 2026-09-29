@@ -156,8 +156,9 @@ class PackSelectionsTest {
             }
             return true;
         });
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
-        edits.packs().datapacks(new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+        PlayingPayload playing = new PlayingPayload.Singleplayer(world.toString());
+        edits.location().playing(playing);
+        edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
 
         selections(record, edits).set(SetPacksPayload.Side.DATA, world, List.of("vanilla", "file/Tweaks"));
 
@@ -177,7 +178,10 @@ class PackSelectionsTest {
         });
         PackStackPayload resourcePacks = new PackStackPayload(34, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", "")));
         edits.packs().named(new ClientPacksPayload(resourcePacks, 48));
-        edits.packs().datapacks(new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+        PlayingPayload played = new PlayingPayload.Singleplayer(this.directory.resolve("saves/World").toString());
+        edits.location().playing(played);
+        edits.packs().datapacks(played.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+        asked.clear();
 
         PlayingPayload other = new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString());
         edits.location().playing(other);
@@ -185,6 +189,27 @@ class PackSelectionsTest {
         assertNull(edits.packs().datapacks(), "the datapacks named were the previous world's server's");
         assertEquals(resourcePacks, edits.packs().resourcePacks(), "the resource packs are the game client's, whatever it plays");
         assertEquals(List.of(other.identity()), asked, "the new world's server is asked for its datapacks");
+    }
+
+    @Test
+    void aReportOfTheWorldTheGameLeftIsDropped() {
+        ResourceEdits edits = edits(ChangeRecord.inMemory(), true);
+        edits.location().connected(message -> true);
+        PlayingPayload left = new PlayingPayload.Singleplayer(this.directory.resolve("saves/World").toString());
+        edits.location().playing(left);
+        PackStackPayload report = new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", "")));
+
+        edits.location().playing(new PlayingPayload.Menu());
+        edits.packs().datapacks(left.identity(), report);
+        assertNull(edits.packs().datapacks(), "its server sent it before the game left, so it arrived after PLAYING(Menu)");
+
+        PlayingPayload other = new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString());
+        edits.location().playing(other);
+        edits.packs().datapacks(left.identity(), report);
+        assertNull(edits.packs().datapacks(), "nor does it stand for the datapacks of the world played next");
+
+        edits.packs().datapacks(other.identity(), report);
+        assertEquals(report, edits.packs().datapacks());
     }
 
     private ResourceEdits edits(ChangeRecord record, boolean gameRunning) {

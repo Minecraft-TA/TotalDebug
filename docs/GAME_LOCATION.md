@@ -93,7 +93,7 @@ A world of the instance is never live while the game plays on a remote server: t
 - A category that waits for the game's answers listens to `GameLocation` to fail them when the game disconnects.
 - A page that shows something chosen by where the game is, such as the open world's copy of a server configuration, reads it again when `GameLocation` changes. A page where the user chose the world keeps that choice.
 - A live request for a world, such as a datapack selection or a data reload, names that world, and the game refuses it when it plays another by the time the request arrives: a request can be on its way while the player leaves.
-- What the game reports about a world, such as its datapacks, belongs to what it plays. Companion drops it when the game plays something else, and the game reports it again.
+- What the game reports about a world, such as its datapacks, belongs to what it plays. Companion drops it when the game plays something else, and the game reports it again. A report names the world it is of, so one sent just before the player left is dropped too, rather than taken for what the game plays now.
 - Reloads asked for together go to the game on one connection; asked for on an earlier connection, they fail rather than reach a game that connected since. Data asked for a world the game has left is dropped from the reload alone.
 
 ## One side type

@@ -32,7 +32,8 @@ class ResourceProtocolCodecTest {
         PackStackPayload datapacks = new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Default", "")),
                 List.of(new PackStackPayload.Pack("trade_rebalance", "Trade Rebalance", "", PackStackPayload.MISSING_FEATURES)));
         DatapacksMessage readDatapacks = new DatapacksMessage();
-        readDatapacks.read(new ByteBufferInputStream(written(new DatapacksMessage(datapacks))));
+        readDatapacks.read(new ByteBufferInputStream(written(new DatapacksMessage("world C:/saves/World", datapacks))));
+        assertEquals("world C:/saves/World", readDatapacks.world());
         assertEquals(datapacks, readDatapacks.payload());
     }
 

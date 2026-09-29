@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -88,15 +89,20 @@ public final class PackResources {
 
     /**
      * The packs data comes from, lowest first. {@code datapacks} are what the server of the world the game plays named,
-     * or null; {@code connected} is whether a game is connected. A game at its menu or on a server names no datapacks,
-     * since no data of its own is loaded, so none are listed then. Without a game, the current world's {@code level.dat}
-     * names them; a pack the game builds in memory, such as one a mod generates, adds nothing Companion can read. Blocking.
+     * or null. A game at its menu or on a server has no data of its own loaded, so none are listed then. Without a game,
+     * and while the server of the singleplayer world the game plays has not named them yet, the current world's
+     * {@code level.dat} names them; a pack the game builds in memory, such as one a mod generates, adds nothing Companion
+     * can read. Blocking.
      */
-    public static List<Source> data(PackStackPayload datapacks, boolean connected, CatalogIndex index, GameLocation location) throws IOException {
+    public static List<Source> data(PackStackPayload datapacks, CatalogIndex index, GameLocation location) throws IOException {
         if (datapacks != null) return datapacks.enabled().stream().map(pack -> source(pack, index)).toList();
-        if (connected) return List.of();
+        GameState game = location.read();
+        if (game.game() instanceof GameState.Game.Connected connected
+                && (connected.playing() instanceof PlayingPayload.Menu || connected.playing() instanceof PlayingPayload.Multiplayer)) {
+            return List.of();
+        }
         // The game enables a new pack of the world's folder above the others when it loads the world.
-        List<ListedPack> listed = worldDatapacks(location.read());
+        List<ListedPack> listed = worldDatapacks(game);
         List<ListedPack> enabled = new ArrayList<>(listed.stream().filter(pack -> pack.state() == ListedPack.State.ENABLED).toList().reversed());
         enabled.addAll(listed.stream().filter(pack -> pack.state() == ListedPack.State.NEW).toList());
         List<Source> sources = new ArrayList<>();

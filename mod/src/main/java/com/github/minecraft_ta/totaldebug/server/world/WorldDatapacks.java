@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.server.world;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
@@ -114,7 +115,8 @@ public final class WorldDatapacks {
     public void report(ServerPlayer player, int companion) {
         MinecraftServer server = player.server;
         if (!server.isSingleplayerOwner(player.getGameProfile())) return;
-        this.relay.send(server, player, companion, new DatapacksMessage(PackStacks.of(server.getPackRepository(),
+        String world = PlayingPayload.Singleplayer.of(server.getWorldPath(LevelResource.ROOT)).identity();
+        this.relay.send(server, player, companion, new DatapacksMessage(world, PackStacks.of(server.getPackRepository(),
                 SharedConstants.getCurrentVersion().getPackVersion(PackType.SERVER_DATA), server.getWorldPath(LevelResource.DATAPACK_DIR),
                 server.getWorldData().enabledFeatures())));
     }

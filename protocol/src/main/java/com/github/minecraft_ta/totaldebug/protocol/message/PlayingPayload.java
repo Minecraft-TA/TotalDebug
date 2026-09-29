@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 
+import java.nio.file.Path;
 import java.util.Objects;
 
 /**
@@ -20,6 +21,11 @@ public sealed interface PlayingPayload {
         public Singleplayer {
             Objects.requireNonNull(world, "world");
             if (world.isBlank()) throw new IllegalArgumentException("A singleplayer world needs its folder");
+        }
+
+        /** The world in {@code folder}, named as both endpoints name it: by its absolute, normalized path. */
+        public static Singleplayer of(Path folder) {
+            return new Singleplayer(folder.toAbsolutePath().normalize().toString());
         }
     }
 
