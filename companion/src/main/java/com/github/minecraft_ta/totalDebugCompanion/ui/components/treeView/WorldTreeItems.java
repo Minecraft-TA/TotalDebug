@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totalDebugCompanion.pack.GamePacks;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackResources;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
@@ -56,7 +57,7 @@ final class WorldTreeItems {
 
         @Override
         public String getTooltip() {
-            return "The world the game plays, on a server too, or the one played last";
+            return Tooltip.of("The world the game plays, on a server too, or the one played last").html();
         }
 
         @Override
