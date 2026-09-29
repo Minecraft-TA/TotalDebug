@@ -22,9 +22,14 @@ import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEditsFixture;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+import java.awt.Component;
+import java.awt.Container;
+import java.util.ArrayList;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChangesPanelTest {
     @TempDir Path directory;
@@ -70,14 +76,44 @@ class ChangesPanelTest {
                 assertEquals(List.of("Show in Configuration", "Revert to 9"), List.of(row.actions().open(), row.actions().revert()));
             });
 
+            // A pack selection too; a read again keeps the tab shown.
+            Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\",\"file/Faithful\"]\n");
+            record.changed(new ChangeRecord.PackSelection(ChangeRecord.PackSide.RESOURCES, this.directory.resolve("options.txt")),
+                    "[\"vanilla\",\"mod_resources\"]", "[\"vanilla\",\"mod_resources\",\"file/Faithful\"]");
+            awaitOnSwing(() -> panel[0].rows("Packs").size() == 1);
+            JTabbedPane tabs = SwingUtilities.getAncestorOfClass(JTabbedPane.class, table(panel[0], "Packs")) instanceof JTabbedPane pane ? pane : null;
+            SwingUtilities.invokeAndWait(() -> tabs.setSelectedIndex(1));
+            SwingUtilities.invokeAndWait(panel[0]::load);
+            Thread.sleep(300);
+            SwingUtilities.invokeAndWait(() -> assertEquals("Packs", tabs.getTitleAt(tabs.getSelectedIndex()).split(" ")[0],
+                    "a refresh keeps the tab shown"));
+
             // Written back outside Companion: the change is over.
             Files.writeString(file, Files.readString(file).replace("speed = 12", "speed = 9"));
             SwingUtilities.invokeAndWait(panel[0]::load);
             awaitOnSwing(() -> panel[0].rows("Configuration").isEmpty());
-            assertEquals(0, record.size());
+            assertTrue(record.changes().stream().noneMatch(change -> change.target() instanceof ChangeRecord.Setting), "the setting left the record");
         } finally {
             SwingUtilities.invokeAndWait(panel[0]::dispose);
         }
+    }
+
+    /** The table of the tab named {@code tab}. */
+    private static JTable table(ChangesPanel panel, String tab) {
+        for (JTable table : findTables(panel)) {
+            if (table.getModel().getRowCount() > 0 && table.getModel().getValueAt(0, 0) instanceof String name
+                    && panel.rows(tab).stream().anyMatch(row -> row.name().equals(name))) return table;
+        }
+        throw new AssertionError("No table for " + tab);
+    }
+
+    private static List<JTable> findTables(Container container) {
+        List<JTable> tables = new ArrayList<>();
+        for (Component child : container.getComponents()) {
+            if (child instanceof JTable table) tables.add(table);
+            if (child instanceof Container nested) tables.addAll(findTables(nested));
+        }
+        return tables;
     }
 
     private static void awaitOnSwing(BooleanSupplier condition) throws Exception {

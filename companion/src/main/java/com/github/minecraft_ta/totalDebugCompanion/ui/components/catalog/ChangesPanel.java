@@ -44,11 +44,13 @@ import java.awt.event.MouseEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -151,6 +153,14 @@ public final class ChangesPanel extends JPanel {
             report(revert(rows));
         }
 
+        /** Selects the shown rows of {@code targets}. */
+        void select(Set<ChangeRecord.Target> targets) {
+            this.table.clearSelection();
+            for (int row = 0; row < this.model.shown.size(); row++) {
+                if (targets.contains(this.model.shown.get(row).change().target())) this.table.addRowSelectionInterval(row, row);
+            }
+        }
+
         private List<ChangeLabels.Row> selected() {
             List<ChangeLabels.Row> rows = new ArrayList<>();
             for (int row : this.table.getSelectedRows()) rows.add(this.model.shown.get(row));
@@ -244,6 +254,14 @@ public final class ChangesPanel extends JPanel {
         this.index = loaded.index();
         this.problem = String.join("; ", loaded.problems());
         showNotice();
+        // A read again keeps the tab shown and the rows selected that are still listed.
+        Component shownTab = this.tabs.getSelectedComponent();
+        Map<Category, Set<ChangeRecord.Target>> selected = new LinkedHashMap<>();
+        for (Category category : this.categories) {
+            Set<ChangeRecord.Target> targets = new HashSet<>();
+            for (ChangeLabels.Row row : category.selected()) targets.add(row.change().target());
+            selected.put(category, targets);
+        }
         this.tabs.removeAll();
         int total = 0;
         for (Category category : this.categories) {
@@ -256,6 +274,9 @@ public final class ChangesPanel extends JPanel {
         }
         this.revertAll.setEnabled(total > 0);
         applyFilter();
+        int shown = shownTab == null ? -1 : this.tabs.indexOfComponent(shownTab);
+        if (shown >= 0) this.tabs.setSelectedIndex(shown);
+        selected.forEach(Category::select);
     }
 
     private void open(ChangeLabels.Row row) {
