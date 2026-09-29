@@ -21,6 +21,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.Subj
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totalDebugCompanion.testui.OffscreenPopupFactory;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
+import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import java.io.UncheckedIOException;
 import java.io.IOException;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -628,6 +630,14 @@ final class UiScenarioDriver {
                     context.completedActions.add("pack-order-toggle");
                 });
             }
+            case WORLD_SERVER -> context.once("world-server", () -> {
+                playOnServer("");
+                navigate(new NavigationTarget.World(WorldTab.DATAPACKS));
+            });
+            case WORLD_SERVER_REFUSED -> context.once("world-server-refused", () -> {
+                playOnServer("You need operator permission on this server to change its world");
+                navigate(new NavigationTarget.World(WorldTab.OVERVIEW));
+            });
             case WORLD_NONE -> context.once("world-none", () -> {
                 Path saves = mainWindow.editorContext().project().profile().workspaceDirectory().resolve("saves");
                 try {
@@ -688,6 +698,17 @@ final class UiScenarioDriver {
     }
 
     /** Whether the selected page shows a message starting with {@code text} in place of its content. */
+    /** The game plays on a server with TotalDebug, which names its datapacks, or {@code refusal}, why it does not let the player change its world. */
+    private void playOnServer(String refusal) {
+        var project = mainWindow.editorContext().project();
+        project.location().connected(message -> true);
+        project.location().playing(new PlayingPayload.Multiplayer("play.example.net", false, true));
+        List<PackStackPayload.Pack> enabled = refusal.isEmpty() ? List.of(new PackStackPayload.Pack("vanilla", "Default", ""),
+                new PackStackPayload.Pack("mod_data", "Mod Data", ""), new PackStackPayload.Pack("file/Arena", "Arena", "")) : List.of();
+        List<PackStackPayload.Pack> others = refusal.isEmpty() ? List.of(new PackStackPayload.Pack("file/Events", "Events", "")) : List.of();
+        project.packs().datapacks("", new PackStackPayload(48, enabled, others), refusal);
+    }
+
     private boolean showsMessage(String text) {
         return mainWindow.getEditorTabs().getSelectedEditor() != null && findComponents(mainWindow, JLabel.class).stream()
                 .anyMatch(label -> label.isShowing() && label.getText() != null && label.getText().startsWith(text));
@@ -731,6 +752,8 @@ final class UiScenarioDriver {
             case WORLD_NO_MATCH -> showsMessage("No game rule matches the filter.");
             case WORLD_UNREADABLE -> showsMessage("The world Test World could not be read");
             case WORLD_NONE -> showsMessage("No world has been played in this instance yet.");
+            case WORLD_SERVER -> showsTable("play.example.net", "Pack");
+            case WORLD_SERVER_REFUSED -> showsMessage("You need operator permission on this server to change its world");
             case PACK_PAGE -> {
                 ResourceBrowser browser = findComponent(mainWindow, ResourceBrowser.class);
                 yield mainWindow.getEditorTabs().getSelectedEditor() instanceof PackView && browser != null

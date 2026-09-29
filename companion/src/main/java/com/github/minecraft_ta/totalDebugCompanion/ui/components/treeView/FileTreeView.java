@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
@@ -241,8 +242,10 @@ public class FileTreeView extends JScrollPane {
         if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent() || scope.changes().size() > 0 || logs) {
             rootItems.add(mods);
         }
-        if (Files.isDirectory(scope.profile().workspaceDirectory().resolve("saves"))) {
-            rootItems.add(new WorldTreeItems.Root(scope.location(), scope.world()));
+        // A server's world is on the server, so an instance without worlds of its own has one while it plays there.
+        if (Files.isDirectory(scope.profile().workspaceDirectory().resolve("saves"))
+                || scope.location().playing() instanceof PlayingPayload.Multiplayer) {
+            rootItems.add(new WorldTreeItems.Root(scope.location(), scope.world(), scope.packs()));
         }
         if (binding != null && !catalog.modules().isEmpty()) {
             rootItems.add(new DecompiledSourcesTreeItem(this.tree, binding.decompiler()));
@@ -273,12 +276,21 @@ public class FileTreeView extends JScrollPane {
                 if (!this.disposed && project.get() == scope) this.tree.refreshRoot(WorldTreeItems.ROOT);
             });
             Runnable removeRead = scope.world().addListener(refresh);
+            // What the game plays also decides whether there is a World root at all.
             Runnable removePlayed = scope.location().addListener(change -> {
-                if (change == GameLocation.Change.PLAYING) refresh.run();
+                if (change != GameLocation.Change.PLAYING) return;
+                SwingUtilities.invokeLater(() -> {
+                    if (this.disposed || project.get() != scope) return;
+                    reloadProfile();
+                    this.tree.refreshRoot(WorldTreeItems.ROOT);
+                });
             });
+            // A server names its world's datapacks after the game joined it.
+            Runnable removeNamed = scope.packs().addStackListener(refresh);
             this.removeWorldListener = () -> {
                 removeRead.run();
                 removePlayed.run();
+                removeNamed.run();
             };
         }
         this.displayedProject = scope;

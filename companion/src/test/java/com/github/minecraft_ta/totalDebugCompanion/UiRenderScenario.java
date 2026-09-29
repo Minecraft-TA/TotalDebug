@@ -68,6 +68,8 @@ enum UiRenderScenario {
     WORLD_NO_MATCH("world-no-match", "The current world's game rules with a filter nothing matches"),
     WORLD_UNREADABLE("world-unreadable", "The World page when the current world's level.dat cannot be read"),
     WORLD_NONE("world-none", "The World page before any world was played"),
+    WORLD_SERVER("world-server", "The World page while the game plays on a server: the datapacks the server names"),
+    WORLD_SERVER_REFUSED("world-server-refused", "The World page on a server that does not let the player change its world"),
     PACK_PAGE("pack-page", "A datapack of the world's folder with its files"),
     RESOURCE_PACKS("resource-packs", "The resource packs on the Resources page, one enabled above the mods and one not"),
     PACK_ORDER("pack-order", "The resource packs with a pack enabled at the top, waiting for Apply"),
