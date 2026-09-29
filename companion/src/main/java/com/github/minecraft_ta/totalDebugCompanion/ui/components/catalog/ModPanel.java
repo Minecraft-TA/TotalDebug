@@ -81,7 +81,6 @@ public final class ModPanel extends JPanel {
     private final ItemIconService icons;
     private final CatalogIcons listIcons;
     private final Runnable removeCatalogListener;
-    private final Runnable removeTitleListener;
     private final SubjectHeader header = new SubjectHeader();
     private final JButton browseCode = new JButton("Browse Code", Icons.JAVA_CLASS);
     private final JTabbedPane tabs = new JTabbedPane();
@@ -144,9 +143,7 @@ public final class ModPanel extends JPanel {
         }
         add(this.tabs, BorderLayout.CENTER);
         TypeToFilter.forwardTyping(this.tabs, this::selectedFilter);
-        // The tab strip names the mod whether its page is shown or not; the page follows once it is shown.
         this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, this::rebuild);
-        this.removeTitleListener = catalog.addListener(this::retitle);
         rebuild();
     }
 
@@ -158,8 +155,10 @@ public final class ModPanel extends JPanel {
         return this.modId;
     }
 
+    /** The mod's name as the catalog shown now has it, for the tab, which names hidden pages too. */
     public String title() {
-        return this.summary == null ? this.modId : this.summary.title();
+        return ModSummary.resolve(this.modId, PackCatalogService.shown(this.catalog.state()), this.sources.get())
+                .map(ModSummary::title).orElse(this.modId);
     }
 
     /** Selects the requested tab, and the kind on the Content tab, the file on the Configuration tab or the category on the Resources tab. */
@@ -236,13 +235,6 @@ public final class ModPanel extends JPanel {
         setTab(ModTab.CONFIGURATION, configFiles.size());
         setTab(ModTab.KEY_BINDINGS, this.index == null ? 0 : this.index.keyBindings(this.summary.id()).size());
         loadResources();
-        refreshTitle();
-    }
-
-    /** Names the tab of a hidden page as the catalog now does; a shown page rebuilds, which names it too. */
-    private void retitle() {
-        if (this.disposed || isShowing()) return;
-        this.summary = ModSummary.resolve(this.modId, PackCatalogService.shown(this.catalog.state()), this.sources.get()).orElse(null);
         refreshTitle();
     }
 
@@ -446,7 +438,6 @@ public final class ModPanel extends JPanel {
         this.disposed = true;
         this.resourceLoader.dispose();
         this.removeCatalogListener.run();
-        this.removeTitleListener.run();
         this.listIcons.dispose();
         this.resources.dispose();
         this.keyBindings.dispose();

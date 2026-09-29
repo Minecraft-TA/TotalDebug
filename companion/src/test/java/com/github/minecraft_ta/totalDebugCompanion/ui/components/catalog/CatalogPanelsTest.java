@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -199,6 +200,36 @@ class CatalogPanelsTest {
                     fluid.dispose();
                 }
             });
+        }
+    }
+
+    @Test
+    void aHiddenDefinitionPageNamesItsTabFromTheCatalogCapturedSince() throws Exception {
+        InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
+        PackCatalogService catalog = new PackCatalogService(paths);
+        AtomicInteger reads = new AtomicInteger();
+        try (ItemIconService icons = new ItemIconService()) {
+            DefinitionDetails.Services services = new DefinitionDetails.Services(catalog, RuntimeSourceCatalog::empty,
+                    icons, target -> { });
+            DefinitionDetails[] details = new DefinitionDetails[1];
+            onEdt(() -> details[0] = new DefinitionDetails(new SubjectRef.Definition(RegistryIds.BLOCK, "testmod:widget_block"),
+                    services, new JPanel(), reads::incrementAndGet));
+            try {
+                onEdt(() -> assertEquals("testmod:widget_block", details[0].title(), "no catalog yet: the id"));
+
+                CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)).write(paths.catalog());
+                catalog.accept(CatalogFixtures.INVENTORY, paths.catalog(), Runnable::run);
+                SwingUtilities.invokeAndWait(() -> { });
+                onEdt(() -> {
+                    assertEquals("Widget Block", details[0].title(), "the tab names it from the catalog captured since");
+                    assertEquals(0, reads.get(), "the hidden page itself reads it once it is shown");
+                });
+            } finally {
+                onEdt(() -> {
+                    settle(details[0].resourceLoad());
+                    details[0].dispose();
+                });
+            }
         }
     }
 

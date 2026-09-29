@@ -119,6 +119,8 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.frameNavigation = frameNavigation;
         setAutoRequestFocus(false);
 
+        // Tabs draw items; a new icon snapshot draws them again, shown or not.
+        itemIcons.addListener(this.editorTabs::refreshTabIdentities);
         this.fileTreeView = new FileTreeView(project, target -> navigation().navigate(target));
         this.navigationService = new NavigationService(this, this.editorTabs, this.fileTreeView, project.get(), this::editorContext);
         this.scriptFileActions = new ScriptFileActions(this, editorTabs, fileTreeView, this::editorContext);
@@ -274,6 +276,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     @Override public void catalogChanged() {
         this.fileTreeView.refreshModpack(true);
+        this.editorTabs.refreshTabIdentities();
         if (this.searchEverywherePopup != null) this.searchEverywherePopup.catalogChanged();
     }
     @Override public void runtimeChanged() { statusBar.refreshContext(); editorTabs.astCache().refreshEnvironment(); navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }

@@ -17,6 +17,13 @@ public interface IEditorPanel {
 
     Icon getIcon();
 
+    /**
+     * The catalog or the item icons changed: draws the tab's icon again where it depends on them, whether the page is
+     * shown or not, since the tab strip shows it either way. {@link #getTitle()} is read when asked, so it needs nothing.
+     */
+    default void refreshTabIcon() {
+    }
+
     Component getComponent();
 
     default CompletableFuture<Void> ready() {

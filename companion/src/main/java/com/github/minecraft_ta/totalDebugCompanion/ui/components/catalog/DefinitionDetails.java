@@ -75,7 +75,6 @@ public final class DefinitionDetails {
     private final Services services;
     private final Runnable changed;
     private final Runnable removeCatalogListener;
-    private final Runnable stopReadingFiles;
     private final JPanel extras = new JPanel();
     private PackCatalogService.State state;
     private CatalogIndex index;
@@ -91,9 +90,9 @@ public final class DefinitionDetails {
     private boolean disposed;
 
     /**
-     * Reads {@code subject} for {@code page}, which shows it. A change of the catalog is read at once, since the page's
-     * tab names the definition whether the page is shown or not, and {@code changed} runs after it; the files it draws
-     * and lists are read again once the page is shown.
+     * Reads {@code subject} for {@code page}, which shows it. A change of the catalog or the icons while the page is
+     * hidden is read once it is shown; {@code changed} runs after the definition was read again. {@link #title()} and
+     * {@link #icon()} look the catalog up when asked, for the page's tab.
      */
     public DefinitionDetails(SubjectRef.Definition subject, Services services, JComponent page, Runnable changed) {
         this.subject = Objects.requireNonNull(subject, "subject");
@@ -114,8 +113,7 @@ public final class DefinitionDetails {
             this.matched = List.of();
             showExtras();
         });
-        this.removeCatalogListener = services.catalog().addListener(this::reread);
-        this.stopReadingFiles = ShownUpdates.follow(page, services.catalog()::addListener, this::readFiles);
+        this.removeCatalogListener = ShownUpdates.follow(page, services.catalog()::addListener, this::reload);
         read();
         loadAppearance();
         loadResources();
@@ -125,9 +123,9 @@ public final class DefinitionDetails {
         return this.subject;
     }
 
-    /** The catalog's title for the definition, or its id when the catalog does not have it. */
+    /** The catalog's title for the definition, or its id when the catalog does not have it; looked up now. */
     public String title() {
-        return this.entry == null ? this.subject.id() : this.entry.title();
+        return current().map(CatalogIndex.Entry::title).orElse(this.subject.id());
     }
 
     /** Why the catalog cannot describe the definition, or empty when it does. */
@@ -145,8 +143,14 @@ public final class DefinitionDetails {
 
     /** The item drawn for the definition, when the catalog names one. */
     public Optional<CatalogIndex.ItemIcon> icon() {
-        return this.index == null || this.entry == null || this.entry.iconItem().isEmpty()
-                ? Optional.empty() : this.index.itemIcon(this.entry.iconItem());
+        CatalogIndex index = PackCatalogService.shown(this.services.catalog().state());
+        return current().filter(entry -> !entry.iconItem().isEmpty()).flatMap(entry -> index.itemIcon(entry.iconItem()));
+    }
+
+    /** The definition as the catalog shown now has it, which may be newer than what the page read. */
+    private Optional<CatalogIndex.Entry> current() {
+        CatalogIndex index = PackCatalogService.shown(this.services.catalog().state());
+        return index == null ? Optional.empty() : index.entry(this.subject);
     }
 
     /** The class the catalog records for the definition, linked to its source. */
@@ -195,18 +199,13 @@ public final class DefinitionDetails {
         this.entry = this.index == null ? null : this.index.entry(this.subject).orElse(null);
     }
 
-    /** Looks the definition up in the catalog again; the catalog tells on the Swing thread. */
-    private void reread() {
+    /** Reads the definition, the files that draw it and its mod's files again. */
+    private void reload() {
         if (this.disposed) return;
         read();
-        this.changed.run();
-    }
-
-    /** Reads the files that draw the definition and its mod's files again. */
-    private void readFiles() {
-        if (this.disposed) return;
         loadAppearance();
         loadResources();
+        this.changed.run();
     }
 
     /**
@@ -408,6 +407,5 @@ public final class DefinitionDetails {
         this.appearanceLoader.dispose();
         this.resourceLoader.dispose();
         this.removeCatalogListener.run();
-        this.stopReadingFiles.run();
     }
 }

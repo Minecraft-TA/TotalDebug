@@ -51,7 +51,6 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.event.HierarchyEvent;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -75,7 +74,6 @@ public final class SubjectPanel extends JPanel {
     private final JPanel sections = new JPanel();
     private final Set<String> collapsed = new HashSet<>();
     private final Runnable removeIconListener;
-    private final Runnable removeTabIconListener;
     private final Live live;
     private final FactsPanel.Actions actions = new FactsPanel.Actions() {
         @Override
@@ -103,8 +101,6 @@ public final class SubjectPanel extends JPanel {
     /** Counts icon loads, so a render started for an earlier subject cannot replace a newer icon. */
     private long iconLoads;
     private long tabIconLoads;
-    /** Whether the catalog changed while the page was hidden, which it shows once it is shown again. */
-    private boolean pageStale;
 
     /** The page of a registered block, item or entity type. */
     public static SubjectPanel definition(SubjectRef.Definition subject, DefinitionDetails.Services services) {
@@ -124,7 +120,7 @@ public final class SubjectPanel extends JPanel {
         super(new BorderLayout());
         this.services = Objects.requireNonNull(services, "services");
         this.tabIcon = new ItemTabIcon(ContentKinds.of(definition.registry()).icon());
-        this.details = new DefinitionDetails(definition, services, this, this::catalogChanged);
+        this.details = new DefinitionDetails(definition, services, this, this::definitionChanged);
         this.sections.setLayout(new BoxLayout(this.sections, BoxLayout.Y_AXIS));
         JPanel overview = new JPanel(new BorderLayout());
         overview.add(this.sections, BorderLayout.NORTH);
@@ -141,14 +137,8 @@ public final class SubjectPanel extends JPanel {
         add(top, BorderLayout.NORTH);
         showHeader();
         showSections();
-        // The tab strip draws the item whether the page is shown or not; the page draws its own once it is shown.
+        // The page draws its items once it is shown; the editor tabs draw the tab's (refreshTabIcon).
         this.removeIconListener = ShownUpdates.follow(this, services.icons()::addListener, this::reloadPageIcons);
-        this.removeTabIconListener = services.icons().addListener(this::reloadTabIcon);
-        addHierarchyListener(event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !isShowing() || !this.pageStale) return;
-            this.pageStale = false;
-            definitionChanged();
-        });
         reloadIcons();
     }
 
@@ -256,21 +246,6 @@ public final class SubjectPanel extends JPanel {
         this.sections.repaint();
     }
 
-    /**
-     * The catalog changed: the tab's title and item follow at once, since the tab strip shows them for hidden pages too;
-     * the page follows once it is shown.
-     */
-    private void catalogChanged() {
-        if (this.disposed) return;
-        if (isShowing()) {
-            definitionChanged();
-            return;
-        }
-        this.pageStale = true;
-        reloadTabIcon();
-        refreshTitles();
-    }
-
     /** The catalog changed or the page now shows another definition: header, identity, icons and tab title. */
     private void definitionChanged() {
         if (this.disposed) return;
@@ -293,14 +268,14 @@ public final class SubjectPanel extends JPanel {
             return;
         }
         this.details.dispose();
-        this.details = new DefinitionDetails(definition, this.services, this, this::catalogChanged);
+        this.details = new DefinitionDetails(definition, this.services, this, this::definitionChanged);
         definitionChanged();
     }
 
     /** Draws the page's items and the tab's item. */
     private void reloadIcons() {
         reloadPageIcons();
-        reloadTabIcon();
+        refreshTabIcon();
     }
 
     /** Draws the header's item and the items of the facts. Without an item the header shows the kind's tile. */
@@ -317,7 +292,7 @@ public final class SubjectPanel extends JPanel {
     }
 
     /** Draws the tab's item. */
-    private void reloadTabIcon() {
+    public void refreshTabIcon() {
         if (this.disposed) return;
         CatalogIndex.ItemIcon item = drawnItem();
         long load = ++this.tabIconLoads;
@@ -350,7 +325,6 @@ public final class SubjectPanel extends JPanel {
         if (this.live != null) this.live.dispose();
         this.details.dispose();
         this.removeIconListener.run();
-        this.removeTabIconListener.run();
     }
 
     private static JScrollPane scroll(JComponent content) {

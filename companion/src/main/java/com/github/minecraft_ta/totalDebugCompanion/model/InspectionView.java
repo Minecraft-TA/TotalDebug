@@ -60,6 +60,11 @@ public final class InspectionView implements IEditorPanel {
     }
 
     @Override
+    public void refreshTabIcon() {
+        this.panel.refreshTabIcon();
+    }
+
+    @Override
     public Component getComponent() {
         return this.panel;
     }
