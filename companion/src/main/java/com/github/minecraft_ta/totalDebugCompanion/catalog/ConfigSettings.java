@@ -142,7 +142,7 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
                 List<Changed> changed = new ArrayList<>();
                 for (ConfigEdit.TextChange change : textChanges) {
                     Target setting = new Target(target.modId(), target.fileName(), target.file(), target.type(), change.setting());
-                    this.pipeline.record().changed(setting.recorded(), change.before(), change.after());
+                    this.pipeline.record().changed(setting.recorded(), change.before(), change.after(), ConfigEdit::sameValue);
                     changed.add(changed(setting, change.before(), change.after()));
                 }
                 return new Saved(changed, textMessage(fileName, changed), current);
