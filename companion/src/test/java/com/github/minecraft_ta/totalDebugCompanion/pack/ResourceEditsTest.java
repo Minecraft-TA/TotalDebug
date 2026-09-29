@@ -252,7 +252,7 @@ class ResourceEditsTest {
     }
 
     @Test
-    void leavingAWorldDropsOnlyItsDataFromTheNextReload() throws Exception {
+    void aWorldsDataReloadsInItsOwnQueueWhichLeavingTheWorldDrops() throws Exception {
         Path first = this.directory.resolve("saves/First");
         Path second = this.directory.resolve("saves/Second");
         LevelDatFixture.write(first, LevelDatFixture.world("First"));
@@ -266,82 +266,29 @@ class ResourceEditsTest {
         edits.location().playing(new PlayingPayload.Singleplayer(first.toString()));
         edits.packStack(STACK);
 
-        CompletableFuture<ResourceEdits.Saved> running = edits.save(LANG, bytes("{}"));
+        CompletableFuture<ResourceEdits.Saved> running = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
         awaitSent(sent, 1);
-        CompletableFuture<ResourceEdits.Saved> model = edits.save("assets/testmod/models/block/gear.json", bytes("{}"));
-        CompletableFuture<ResourceEdits.Saved> firstData = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
+        CompletableFuture<ResourceEdits.Saved> waiting = edits.save("data/testmod/recipe/wheel.json", bytes("{}"));
+        CompletableFuture<ResourceEdits.Saved> language = edits.save(LANG, bytes("{}"));
+        awaitSent(sent, 2);
+        assertEquals(Set.of(ReloadPayload.Kind.LANGUAGE), sent.get(1).kinds(), "the client's resources do not wait for the data");
+        assertEquals("", sent.get(1).dataWorld());
+
         edits.location().playing(new PlayingPayload.Singleplayer(second.toString()));
         edits.packStack(STACK);
-        CompletableFuture<ResourceEdits.Saved> secondData = edits.save("data/testmod/recipe/wheel.json", bytes("{}"));
-
-        assertTrue(firstData.get(5, TimeUnit.SECONDS).reloadFailure().contains("another world"), "the first world's data is not reloaded in the second");
-        edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
-        running.get(5, TimeUnit.SECONDS);
-        awaitSent(sent, 2);
-        ReloadPayload next = sent.get(1);
-        assertEquals(Set.of(ReloadPayload.Kind.RESOURCES, ReloadPayload.Kind.DATA), next.kinds(), "the model's reload stays");
-        assertEquals(second.toAbsolutePath().normalize().toString(), next.dataWorld());
-        edits.answered(new ReloadResultPayload(next.requestId(), 10, List.of(), ""));
-        assertEquals(ConfigChanges.Effect.NOW, model.get(5, TimeUnit.SECONDS).effect());
-        assertEquals(ConfigChanges.Effect.NOW, secondData.get(5, TimeUnit.SECONDS).effect());
-    }
-
-    @Test
-    void leavingAWorldDropsItsWaitingDataAtOnce() throws Exception {
-        Path world = this.directory.resolve("saves/World");
-        LevelDatFixture.write(world, LevelDatFixture.world("World"));
-        ResourceEdits edits = edits(ChangeRecord.inMemory());
-        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
-        edits.location().connected(message -> {
-            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
-            return true;
-        });
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
-        edits.packStack(STACK);
-
-        CompletableFuture<ResourceEdits.Saved> running = edits.save(LANG, bytes("{}"));
-        awaitSent(sent, 1);
-        CompletableFuture<ResourceEdits.Saved> model = edits.save("assets/testmod/models/block/gear.json", bytes("{}"));
-        CompletableFuture<ResourceEdits.Saved> data = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
-        edits.location().playing(new PlayingPayload.Menu());
-
-        assertTrue(data.get(5, TimeUnit.SECONDS).reloadFailure().contains("another world"));
-        edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
-        running.get(5, TimeUnit.SECONDS);
-        awaitSent(sent, 2);
-        assertEquals(Set.of(ReloadPayload.Kind.RESOURCES), sent.get(1).kinds(), "the left world's data is not asked for");
-        assertEquals("", sent.get(1).dataWorld());
-        edits.answered(new ReloadResultPayload(sent.get(1).requestId(), 10, List.of(), ""));
-        assertEquals(ConfigChanges.Effect.NOW, model.get(5, TimeUnit.SECONDS).effect());
-    }
-
-    @Test
-    void aWaitingReloadOfTheLeftWorldsDataAloneIsDroppedAndLaterReloadsStillGo() throws Exception {
-        Path world = this.directory.resolve("saves/World");
-        LevelDatFixture.write(world, LevelDatFixture.world("World"));
-        ResourceEdits edits = edits(ChangeRecord.inMemory());
-        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
-        edits.location().connected(message -> {
-            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
-            return true;
-        });
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
-        edits.packStack(STACK);
-
-        CompletableFuture<ResourceEdits.Saved> running = edits.save(LANG, bytes("{}"));
-        awaitSent(sent, 1);
-        CompletableFuture<ResourceEdits.Saved> data = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
-        edits.location().playing(new PlayingPayload.Menu());
-        assertTrue(data.get(5, TimeUnit.SECONDS).reloadFailure().contains("another world"));
-
-        edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
+        assertTrue(waiting.get(5, TimeUnit.SECONDS).reloadFailure().contains("another world"),
+                "the first world's waiting data is not reloaded in the second");
+        edits.pipeline().reloads().answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
         running.get(5, TimeUnit.SECONDS);
         Thread.sleep(100);
-        assertEquals(1, sent.size(), "nothing is left to ask for");
+        assertEquals(2, sent.size(), "nothing is left to ask for the first world");
+        edits.pipeline().reloads().answered(new ReloadResultPayload(sent.get(1).requestId(), 10, List.of(), ""));
+        assertEquals(ConfigChanges.Effect.NOW, language.get(5, TimeUnit.SECONDS).effect());
 
-        CompletableFuture<ResourceEdits.Saved> later = edits.save("assets/testmod/lang/de_de.json", bytes("{}"));
-        awaitSent(sent, 2);
-        edits.answered(new ReloadResultPayload(sent.get(1).requestId(), 10, List.of(), ""));
+        CompletableFuture<ResourceEdits.Saved> later = edits.save("data/testmod/recipe/axle.json", bytes("{}"));
+        awaitSent(sent, 3);
+        assertEquals(second.toAbsolutePath().normalize().toString(), sent.get(2).dataWorld());
+        edits.pipeline().reloads().answered(new ReloadResultPayload(sent.get(2).requestId(), 10, List.of(), ""));
         assertEquals(ConfigChanges.Effect.NOW, later.get(5, TimeUnit.SECONDS).effect(), "later reloads are not held up");
     }
 
@@ -379,14 +326,14 @@ class ResourceEditsTest {
         assertEquals(ResourceEdits.PACK_ID, sent.getFirst().managedResourcePack());
         assertEquals("", sent.getFirst().managedDataPack(), "no data edit asks for the managed datapack");
 
-        edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
+        edits.pipeline().reloads().answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
         assertEquals(ConfigChanges.Effect.NOW, first.get(5, TimeUnit.SECONDS).effect());
         awaitSent(sent, 2);
         ReloadPayload merged = sent.get(1);
         assertEquals(Set.of(ReloadPayload.Kind.RESOURCES), merged.kinds(), "a full reload covers the language and textures");
         assertEquals(3, merged.watched().size());
 
-        edits.answered(new ReloadResultPayload(merged.requestId(), 900, List.of(new ReloadResultPayload.Problem(
+        edits.pipeline().reloads().answered(new ReloadResultPayload(merged.requestId(), 900, List.of(new ReloadResultPayload.Problem(
                 "assets/testmod/models/block/gear.json", "Unable to load model testmod:block/gear")), ""));
         assertEquals(List.of("Unable to load model testmod:block/gear"), second.get(5, TimeUnit.SECONDS).problems());
         assertEquals(ConfigChanges.Effect.NOW, third.get(5, TimeUnit.SECONDS).effect());
@@ -405,7 +352,7 @@ class ResourceEditsTest {
             edits.location().connected(message -> {
                 if (message instanceof ReloadMessage reload) {
                     sent.add(reload.payload());
-                    edits.answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(), ""));
+                    edits.pipeline().reloads().answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(), ""));
                 }
                 return true;
             });
@@ -553,7 +500,7 @@ class ResourceEditsTest {
         edits.location().connected(message -> {
             if (message instanceof ReloadMessage reload) {
                 sent.add(reload.payload());
-                edits.answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(new ReloadResultPayload.Problem(
+                edits.pipeline().reloads().answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(new ReloadResultPayload.Problem(
                         "assets/testmod/textures/block/gear.png.mcmeta", "Bad section")), ""));
             }
             return true;
@@ -761,7 +708,7 @@ class ResourceEditsTest {
         awaitSent(sent, 1);
         assertEquals("", sent.getFirst().managedResourcePack(), "the game reloads without enabling or moving any pack");
         assertEquals("", sent.getFirst().managedDataPack());
-        edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
+        edits.pipeline().reloads().answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
         assertEquals(mine, saved.get(5, TimeUnit.SECONDS).pack());
         assertTrue(Files.isRegularFile(mine.resolve(LANG)));
         assertTrue(Files.notExists(managed), "saving into their own pack does not create the managed one");

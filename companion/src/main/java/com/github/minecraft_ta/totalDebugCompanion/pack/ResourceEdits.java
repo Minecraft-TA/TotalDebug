@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
+import com.github.minecraft_ta.totalDebugCompanion.change.Reloads;
 import com.github.minecraft_ta.totalDebugCompanion.game.Access;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
@@ -18,7 +19,6 @@ import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.google.gson.JsonArray;
@@ -30,8 +30,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.LinkedHashSet;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -39,15 +37,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -60,13 +55,11 @@ import java.util.zip.ZipFile;
  * {@code resourcepacks/TotalDebug} and for data {@code datapacks/TotalDebug} of the current world, the open one or the
  * one played last while none is open. Only the managed pack is enabled and placed on top; the player's own packs keep
  * their place. Files are written through the {@link ChangePipeline}, as a category whose value is a file's content and
- * is recorded as its hash; the game takes them up when it reloads. Reloads asked for while one runs are merged into one
- * more reload after it.
+ * is recorded as its hash; the game takes them up when it reloads, which the pipeline's {@link Reloads} ask for.
  */
 public final class ResourceEdits {
     public static final String PACK_NAME = "TotalDebug";
     public static final String PACK_ID = "file/" + PACK_NAME;
-    private static final long RELOAD_MINUTES = 10;
 
     /**
      * What a write did: when the game uses it, the pack folder it went to, and the problems
@@ -87,28 +80,6 @@ public final class ResourceEdits {
         }
     }
 
-    /** Reloads to send together, to the game on one connection. */
-    private static final class Batch {
-        final GameLocation.Connection connection;
-        /** The world whose data the batch reloads, or null while it reloads no data. */
-        Path dataWorld;
-        /** What the batch's data edits wait for: its result, or a failure once their world was left. */
-        CompletableFuture<ReloadResultPayload> dataResult = new CompletableFuture<>();
-        final Set<ReloadPayload.Kind> kinds = EnumSet.noneOf(ReloadPayload.Kind.class);
-        final Set<String> watched = new LinkedHashSet<>();
-        final CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
-        /**
-         * Whether a save in the batch went into the managed pack of the resource packs, or of the datapacks, which the
-         * game then enables on top of that stack only.
-         */
-        boolean managedAssets;
-        boolean managedData;
-
-        Batch(GameLocation.Connection connection) {
-            this.connection = connection;
-        }
-    }
-
     private final GameLocation location;
     private final Path workspace;
     private final ChangePipeline pipeline;
@@ -117,8 +88,6 @@ public final class ResourceEdits {
     private final PackFiles files = new PackFiles();
     private final Executor writes;
     private final InstanceState state;
-    private final AtomicInteger requests = new AtomicInteger();
-    private final Map<Integer, CompletableFuture<ReloadResultPayload>> waiting = new ConcurrentHashMap<>();
     private volatile PackStackPayload stack;
     /** What the game played when it named {@link #stack}, whose packs they are. */
     private volatile PlayingPayload stackFor;
@@ -128,10 +97,6 @@ public final class ResourceEdits {
     private final List<Runnable> editListeners = new CopyOnWriteArrayList<>();
     /** Run when a working pack is chosen, which changes where resource tabs save. */
     private final List<Consumer<String>> workingPackListeners = new CopyOnWriteArrayList<>();
-    private Batch running;
-    private Batch next;
-    /** Saves and reverts queued but not yet past asking for their reload; the next reload waits for them. */
-    private int writing;
     /** The hash of what Companion last wrote to each resource, by the write queue, so a program's save is told from it. */
     private final Map<ChangeRecord.Resource, String> lastWritten = new ConcurrentHashMap<>();
     /** Opens resources in other programs and takes their saves; started when the first is opened. */
@@ -155,10 +120,14 @@ public final class ResourceEdits {
             else if (change == GameLocation.Change.PLAYING) {
                 // The packs the game named belong to what it played; it names them again for what it plays now.
                 if (!Objects.equals(this.stackFor, location.playing())) this.stack = null;
-                dropLeftWorldData();
                 this.stackListeners.forEach(Runnable::run);
             }
         });
+    }
+
+    /** The pipeline the edits are written and reloaded through. */
+    public ChangePipeline pipeline() {
+        return this.pipeline;
     }
 
     /** Where the game of the instance is. */
@@ -180,14 +149,10 @@ public final class ResourceEdits {
         this.external.close();
     }
 
-    /** The game disconnected: reloads it did not answer have failed. */
+    /** The game disconnected: the packs it named no longer hold. */
     private void gameDisconnected() {
         this.stack = null;
         this.stackListeners.forEach(Runnable::run);
-        for (CompletableFuture<ReloadResultPayload> request : this.waiting.values()) {
-            request.completeExceptionally(new IOException("The game disconnected before it finished reloading"));
-        }
-        this.waiting.clear();
     }
 
     /** Takes the game's enabled packs. */
@@ -223,12 +188,6 @@ public final class ResourceEdits {
     /** Tells the edit listeners once {@code edit} has finished, whether it worked or not. */
     private CompletableFuture<Saved> finished(CompletableFuture<Saved> edit) {
         return edit.whenComplete((ignored, failure) -> this.editListeners.forEach(Runnable::run));
-    }
-
-    /** Takes the game's answer to a reload. */
-    public void answered(ReloadResultPayload result) {
-        CompletableFuture<ReloadResultPayload> request = this.waiting.remove(result.requestId());
-        if (request != null) request.complete(result);
     }
 
     /**
@@ -576,9 +535,7 @@ public final class ResourceEdits {
      */
     public CompletableFuture<Saved> adopt(String path, Path pack, byte[] before, byte[] seen) {
         ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
-        synchronized (this) {
-            this.writing++;
-        }
+        this.pipeline.reloads().writing();
         // Checked in the write queue, after every save and revert queued before it has written and been recorded.
         CompletableFuture<Boolean> taken = write(() -> {
             try {
@@ -606,7 +563,7 @@ public final class ResourceEdits {
                 return apply(path, List.of(), pack).thenApply(saved -> new Saved(saved.effect(), saved.pack(), saved.problems(),
                         saved.reloadFailure(), unusedBecause(path, saved.pack()).orElse("")));
             } finally {
-                wrote();
+                this.pipeline.reloads().written();
             }
         }).thenCompose(Function.identity()));
     }
@@ -696,15 +653,13 @@ public final class ResourceEdits {
      */
     public List<CompletableFuture<Saved>> revert(List<ChangeRecord.Change> changes) {
         // The batch counts as a write until every revert is queued, so the first to finish cannot reload alone.
-        synchronized (this) {
-            this.writing++;
-        }
+        this.pipeline.reloads().writing();
         try {
             List<CompletableFuture<Saved>> reverts = new ArrayList<>();
             for (ChangeRecord.Change change : changes) reverts.add(revert(change));
             return reverts;
         } finally {
-            wrote();
+            this.pipeline.reloads().written();
         }
     }
 
@@ -714,22 +669,14 @@ public final class ResourceEdits {
      * quick succession, take one reload: it is asked for once the last of them has written.
      */
     private CompletableFuture<Saved> writeAndApply(String path, List<String> alsoWatched, Supplier<Path> write) {
-        synchronized (this) {
-            this.writing++;
-        }
+        this.pipeline.reloads().writing();
         return write(write).handle((pack, failure) -> {
             try {
                 return failure != null ? CompletableFuture.<Saved>failedFuture(failure) : apply(path, alsoWatched, pack);
             } finally {
-                wrote();
+                this.pipeline.reloads().written();
             }
         }).thenCompose(Function.identity());
-    }
-
-    /** Sends the reload the writes asked for once none is left in the queue. */
-    private synchronized void wrote() {
-        this.writing--;
-        if (this.writing == 0 && this.running == null && this.next != null) sendNext();
     }
 
     /** Runs {@code write} in the project's write queue; refused once the project closes. */
@@ -837,8 +784,9 @@ public final class ResourceEdits {
         }
         // Files written beside it join the same reload, which they are part of.
         GameLocation.Connection connection = ((Access.Live) access).connection();
-        for (String beside : alsoWatched) reload(connection, world, kind(beside), beside, managed(pack));
-        return reload(connection, world, kind(path), path, managed(pack)).handle((result, failure) -> {
+        String managedPack = managed(pack) ? PACK_ID : "";
+        for (String beside : alsoWatched) reload(connection, world, beside, managedPack);
+        return reload(connection, world, path, managedPack).handle((result, failure) -> {
             if (failure != null) {
                 return new Saved(assets ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS, pack,
                         List.of(), message(failure));
@@ -855,100 +803,14 @@ public final class ResourceEdits {
      */
     public CompletableFuture<ReloadResultPayload> select(GameLocation.Connection send, SetPacksPayload.Side side, Path world,
                                                          List<String> enabled) {
-        int id = this.requests.incrementAndGet();
-        CompletableFuture<ReloadResultPayload> result = new CompletableFuture<>();
-        this.waiting.put(id, result);
-        if (send == null || !send.send(new SetPacksMessage(new SetPacksPayload(id, side, world == null ? "" : world.toAbsolutePath().normalize().toString(), enabled)))) {
-            this.waiting.remove(id);
-            return CompletableFuture.failedFuture(new IOException("The game is not connected"));
-        }
-        return result.orTimeout(RELOAD_MINUTES, TimeUnit.MINUTES).whenComplete((ignored, failure) -> this.waiting.remove(id));
+        return this.pipeline.reloads().ask(send, id -> new SetPacksMessage(new SetPacksPayload(id, side,
+                world == null ? "" : world.toAbsolutePath().normalize().toString(), enabled)));
     }
 
-    /** Asks the game to reload {@code kind}, merged into the next reload while one runs. */
-    private synchronized CompletableFuture<ReloadResultPayload> reload(GameLocation.Connection connection, Path world,
-                                                                       ReloadPayload.Kind kind, String path, boolean managed) {
-        if (this.next != null && this.next.connection != connection) {
-            // Asked for on an earlier connection: that game is gone, and the one connected now never saw these writes.
-            IOException gone = new IOException("The game disconnected before it reloaded");
-            this.next.result.completeExceptionally(gone);
-            this.next.dataResult.completeExceptionally(gone);
-            this.next = null;
-        }
-        if (this.next == null) this.next = new Batch(connection);
-        Batch batch = this.next;
-        if (world != null && batch.dataWorld != null && !batch.dataWorld.equals(world.toAbsolutePath().normalize())) dropData(batch);
-        if (world != null) batch.dataWorld = world.toAbsolutePath().normalize();
-        this.next.kinds.add(kind);
-        this.next.watched.add(path);
-        if (path.startsWith("assets/")) this.next.managedAssets |= managed;
-        else this.next.managedData |= managed;
-        CompletableFuture<ReloadResultPayload> result = world != null ? this.next.dataResult : this.next.result;
-        // A write still queued joins this reload rather than taking another after it.
-        if (this.running == null && this.writing == 0) sendNext();
-        return result;
-    }
-
-    /** Drops the waiting reload's data when the game no longer plays its world. */
-    private synchronized void dropLeftWorldData() {
-        if (this.next == null || this.next.dataWorld == null || this.location.read().plays(this.next.dataWorld)) return;
-        dropData(this.next);
-        // A reload of that data alone leaves nothing to ask for.
-        if (this.next.kinds.isEmpty()) this.next = null;
-    }
-
-    /**
-     * Drops {@code batch}'s data: the game plays another world now, which never saw these writes. The batch's asset
-     * reloads stay, and its data saves fail with that reason.
-     */
-    private static void dropData(Batch batch) {
-        batch.dataResult.completeExceptionally(new IOException("The game went to another world before it reloaded"));
-        batch.dataResult = new CompletableFuture<>();
-        batch.dataWorld = null;
-        batch.kinds.remove(ReloadPayload.Kind.DATA);
-        batch.managedData = false;
-    }
-
-    private synchronized void sendNext() {
-        Batch batch = this.next;
-        this.next = null;
-        this.running = batch;
-        if (batch == null) return;
-        // A full reload covers the language and textures.
-        if (batch.kinds.contains(ReloadPayload.Kind.RESOURCES)) {
-            batch.kinds.remove(ReloadPayload.Kind.LANGUAGE);
-            batch.kinds.remove(ReloadPayload.Kind.TEXTURES);
-        }
-        GameLocation.Connection send = batch.connection;
-        CompletableFuture<ReloadResultPayload> data = batch.dataResult;
-        batch.result.whenComplete((answer, failure) -> {
-            if (failure != null) data.completeExceptionally(failure);
-            else data.complete(answer);
-        });
-        int id = this.requests.incrementAndGet();
-        this.waiting.put(id, batch.result);
-        List<String> watched = new ArrayList<>(batch.watched);
-        if (watched.size() > ReloadPayload.MAX_WATCHED) watched = watched.subList(0, ReloadPayload.MAX_WATCHED);
-        try {
-            if (send == null || !send.send(new ReloadMessage(new ReloadPayload(id, batch.kinds, batch.managedAssets ? PACK_ID : "",
-                    batch.managedData ? PACK_ID : "", batch.dataWorld == null ? "" : batch.dataWorld.toString(), watched)))) {
-                this.waiting.remove(id);
-                batch.result.completeExceptionally(new IOException("The game is not connected"));
-            }
-        } catch (RuntimeException unsendable) {
-            // A reload that cannot be asked for fails its saves; the next reload is not held up behind it.
-            this.waiting.remove(id);
-            batch.result.completeExceptionally(unsendable);
-        }
-        batch.result.orTimeout(RELOAD_MINUTES, TimeUnit.MINUTES).whenComplete((ignored, failure) -> {
-            this.waiting.remove(id);
-            synchronized (this) {
-                if (this.running == batch) {
-                    this.running = null;
-                    if (this.next != null && this.writing == 0) sendNext();
-                }
-            }
-        });
+    /** Asks the game to reload what {@code path} needs: the client's resources, or the data of {@code world}. */
+    private CompletableFuture<ReloadResultPayload> reload(GameLocation.Connection connection, Path world, String path, String managedPack) {
+        return world == null ? this.pipeline.reloads().resources(connection, kind(path), path, managedPack)
+                : this.pipeline.reloads().data(connection, world, path, managedPack);
     }
 
     /**

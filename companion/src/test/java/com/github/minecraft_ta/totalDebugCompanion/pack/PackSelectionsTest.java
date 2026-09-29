@@ -131,7 +131,7 @@ class PackSelectionsTest {
         assertEquals(List.of("vanilla", "mod_resources", "programmer_art"), sent.getFirst().enabled());
         assertEquals(0, record.size(), "recorded once the game did it");
 
-        edits.answered(new ReloadResultPayload(sent.getFirst().requestId(), 900, List.of(), ""));
+        edits.pipeline().reloads().answered(new ReloadResultPayload(sent.getFirst().requestId(), 900, List.of(), ""));
         assertEquals(ConfigChanges.Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
         assertEquals("[\"vanilla\",\"mod_resources\"]", record.changes().getFirst().original(),
                 "as options.txt keeps it: without the parts of the mods' pack");

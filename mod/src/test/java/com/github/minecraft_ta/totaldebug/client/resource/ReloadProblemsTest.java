@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.client.resource;
 
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.impl.Log4jLogEvent;
 import org.apache.logging.log4j.message.SimpleMessage;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,23 @@ class ReloadProblemsTest {
         assertEquals(List.of(new ReloadResultPayload.Problem("data/ns/recipe/gear.json", "Couldn't parse ns:gear"),
                         new ReloadResultPayload.Problem("data/ns/loot_table/gear.json", "Couldn't parse ns:gear")),
                 problems.problems(), "a recipe and a loot table share the id ns:gear; the log line cannot tell them apart");
+    }
+
+    @Test
+    void collectorsOfReloadsRunningAtOnceEachHearTheLog() {
+        ReloadProblems resources = ReloadProblems.open(List.of("assets/ns/models/block/gear.json"));
+        ReloadProblems data = ReloadProblems.open(List.of("data/ns/recipe/cog.json"));
+        try {
+            LogManager.getLogger("reloads").warn("Unable to load model ns:block/gear, and recipe ns:cog failed");
+            data.close();
+            LogManager.getLogger("reloads").warn("Unable to load model ns:block/gear again");
+        } finally {
+            resources.close();
+            data.close();
+        }
+        assertEquals(2, resources.problems().size(), "closing the data reload's collector leaves the other listening");
+        assertEquals(List.of(new ReloadResultPayload.Problem("data/ns/recipe/cog.json",
+                "Unable to load model ns:block/gear, and recipe ns:cog failed")), data.problems());
     }
 
     @Test
