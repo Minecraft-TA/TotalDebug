@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
@@ -46,7 +47,7 @@ class ChangesPanelTest {
         ResourceEdits edits = new ResourceEdits(GameLocations.of(this.directory, false), record, new ResourceOriginals(this.directory.resolve("originals")),
                 Runnable::run, InstanceState.inMemory());
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(GameLocations.of(this.directory, false), record),
-                new KeyBindingControl(GameLocations.of(this.directory, false), record, Runnable::run), edits,
+                new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run)), edits,
                 new PackSelections(record, edits, Runnable::run), target -> { }));
         ConfigSettingsTable table = panel[0].settingsTable();
         try {

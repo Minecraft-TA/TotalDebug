@@ -16,7 +16,8 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
@@ -24,7 +25,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.KeyBindingResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
@@ -36,7 +37,6 @@ import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.SetKeyBindingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.tth05.scnet.Client;
@@ -130,9 +130,8 @@ public final class CompanionAppClient implements AutoCloseable {
     private volatile IntConsumer sessionClosedHandler = number -> { };
     private volatile Runnable sessionOpenedHandler = () -> { };
     private volatile BiConsumer<String, Map<String, String>> packCatalogHandler = (inventoryId, modules) -> { };
-    private volatile Consumer<SetKeyBindingMessage> keyBindingHandler = message -> send(new KeyBindingResultMessage(
-            new KeyBindingResultPayload(message.payload().requestId(), message.payload().name(), "", "", "", "",
-                    "The game is not ready to change key bindings yet")));
+    private volatile Consumer<ChangeMessage> changeHandler = message -> send(new ChangeResultMessage(
+            ChangeResultPayload.refused(message.payload().requestId(), "The game is not ready to change anything yet")));
     private volatile Consumer<ReloadMessage> reloadHandler = message -> send(new ReloadResultMessage(
             new ReloadResultPayload(message.payload().requestId(), 0, List.of(), "The game is not ready to reload resources yet")));
     private volatile Consumer<SetPacksMessage> packsHandler = message -> send(new ReloadResultMessage(
@@ -282,12 +281,12 @@ public final class CompanionAppClient implements AutoCloseable {
         }
     }
 
-    /** Receives Companion's requests to put a key binding on a key; runs on the connection thread. */
-    public void setKeyBindingHandler(Consumer<SetKeyBindingMessage> handler) {
-        this.keyBindingHandler = Objects.requireNonNull(handler, "handler");
+    /** Receives Companion's changes of values the game keeps, such as key bindings; runs on the connection thread. */
+    public void setChangeHandler(Consumer<ChangeMessage> handler) {
+        this.changeHandler = Objects.requireNonNull(handler, "handler");
     }
 
-    public void sendKeyBindingResult(KeyBindingResultMessage message) {
+    public void sendChangeResult(ChangeResultMessage message) {
         send(message);
     }
 
@@ -421,12 +420,12 @@ public final class CompanionAppClient implements AutoCloseable {
             }
             this.scriptRequestHandler.accept(message);
         });
-        transport.getMessageBus().listenAlways(SetKeyBindingMessage.class, message -> {
+        transport.getMessageBus().listenAlways(ChangeMessage.class, message -> {
             if (!attempt.authenticated()) {
-                failSession(attempt, "Companion sent a key binding request before authentication", null);
+                failSession(attempt, "Companion sent a change before authentication", null);
                 return;
             }
-            this.keyBindingHandler.accept(message);
+            this.changeHandler.accept(message);
         });
         transport.getMessageBus().listenAlways(ReloadMessage.class, message -> {
             if (!attempt.authenticated()) {

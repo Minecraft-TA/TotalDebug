@@ -19,8 +19,6 @@ public final class ProtocolBindings {
         processor.registerIncoming(CompanionProtocol.RETRY_RUNTIME_INVENTORY, RetryRuntimeInventoryMessage.class, RetryRuntimeInventoryMessage::new);
         processor.registerOutgoing(CompanionProtocol.DEBUG_TARGET, DebugTargetMessage.class);
         processor.registerOutgoing(CompanionProtocol.INSPECT_SUBJECT, InspectSubjectMessage.class);
-        processor.registerIncoming(CompanionProtocol.SET_KEY_BINDING, SetKeyBindingMessage.class, SetKeyBindingMessage::new);
-        processor.registerOutgoing(CompanionProtocol.KEY_BINDING_RESULT, KeyBindingResultMessage.class);
         processor.registerOutgoing(CompanionProtocol.PACK_STACK, PackStackMessage.class);
         processor.registerIncoming(CompanionProtocol.RELOAD, ReloadMessage.class, ReloadMessage::new);
         processor.registerIncoming(CompanionProtocol.SET_PACKS, SetPacksMessage.class, SetPacksMessage::new);
@@ -30,6 +28,8 @@ public final class ProtocolBindings {
         processor.registerOutgoing(CompanionProtocol.FROM_SERVER, FromServerMessage.class);
         processor.registerOutgoing(CompanionProtocol.RELAY_FAILED, RelayFailedMessage.class);
         processor.registerOutgoing(CompanionProtocol.PREPARED_FILE, PreparedFileMessage.class);
+        processor.registerIncoming(CompanionProtocol.CHANGE, ChangeMessage.class, ChangeMessage::new);
+        processor.registerOutgoing(CompanionProtocol.CHANGE_RESULT, ChangeResultMessage.class);
     }
 
     public static void registerCompanion(IMessageProcessor processor) {
@@ -43,8 +43,6 @@ public final class ProtocolBindings {
         processor.registerOutgoing(CompanionProtocol.RETRY_RUNTIME_INVENTORY, RetryRuntimeInventoryMessage.class);
         processor.registerIncoming(CompanionProtocol.DEBUG_TARGET, DebugTargetMessage.class, DebugTargetMessage::new);
         processor.registerIncoming(CompanionProtocol.INSPECT_SUBJECT, InspectSubjectMessage.class, InspectSubjectMessage::new);
-        processor.registerOutgoing(CompanionProtocol.SET_KEY_BINDING, SetKeyBindingMessage.class);
-        processor.registerIncoming(CompanionProtocol.KEY_BINDING_RESULT, KeyBindingResultMessage.class, KeyBindingResultMessage::new);
         processor.registerIncoming(CompanionProtocol.PACK_STACK, PackStackMessage.class, PackStackMessage::new);
         processor.registerOutgoing(CompanionProtocol.RELOAD, ReloadMessage.class);
         processor.registerOutgoing(CompanionProtocol.SET_PACKS, SetPacksMessage.class);
@@ -54,5 +52,7 @@ public final class ProtocolBindings {
         processor.registerIncoming(CompanionProtocol.FROM_SERVER, FromServerMessage.class, FromServerMessage::new);
         processor.registerIncoming(CompanionProtocol.RELAY_FAILED, RelayFailedMessage.class, RelayFailedMessage::new);
         processor.registerIncoming(CompanionProtocol.PREPARED_FILE, PreparedFileMessage.class, PreparedFileMessage::new);
+        processor.registerOutgoing(CompanionProtocol.CHANGE, ChangeMessage.class);
+        processor.registerIncoming(CompanionProtocol.CHANGE_RESULT, ChangeResultMessage.class, ChangeResultMessage::new);
     }
 }

@@ -32,7 +32,7 @@ import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
@@ -215,9 +215,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 }
 
                 @Override
-                public void keyBindingResult(KeyBindingResultMessage message) {
+                public void changeResult(ChangeResultMessage message) {
                     ProjectScope scope = current;
-                    if (scope != null) scope.keyBindings().answered(message.payload());
+                    if (scope != null) scope.pipeline().answered(message.payload());
                 }
 
                 @Override

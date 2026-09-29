@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.project;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
@@ -56,6 +57,9 @@ public final class ProjectScope implements AutoCloseable {
     public ChangeRecord changes() { return changes; }
     private final ConfigChanges configChanges;
     public ConfigChanges configChanges() { return configChanges; }
+    private final ChangePipeline pipeline;
+    /** The one path of the changes Companion makes to values the game keeps. */
+    public ChangePipeline pipeline() { return pipeline; }
     private final KeyBindingControl keyBindings;
     /** Puts the instance's key bindings on keys, in the running game or in options.txt. */
     public KeyBindingControl keyBindings() { return keyBindings; }
@@ -83,7 +87,8 @@ public final class ProjectScope implements AutoCloseable {
         this.changes = Objects.requireNonNull(changes);
         this.location = new GameLocation(profile.workspaceDirectory());
         this.configChanges = new ConfigChanges(this.location, changes);
-        this.keyBindings = new KeyBindingControl(this.location, changes, this.configChanges.writes());
+        this.pipeline = new ChangePipeline(this.location, changes, this.configChanges.writes());
+        this.keyBindings = new KeyBindingControl(this.pipeline);
         this.resources = new ResourceEdits(this.location, changes, new ResourceOriginals(paths().originals()),
                 this.configChanges.writes(), state);
         this.packSelections = new PackSelections(changes, this.resources, this.configChanges.writes());

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
@@ -97,7 +98,7 @@ class ConfigChangesTest {
         Files.writeString(options, "key_key.jump:key.keyboard.space\n");
         ChangeRecord record = ChangeRecord.inMemory();
         ConfigChanges changes = new ConfigChanges(this.location, record);
-        KeyBindingControl keys = new KeyBindingControl(this.location, record, changes.writes());
+        KeyBindingControl keys = new KeyBindingControl(new ChangePipeline(this.location, record, changes.writes()));
         CountDownLatch release = new CountDownLatch(1);
         changes.write(() -> {
             try {
@@ -107,8 +108,8 @@ class ConfigChangesTest {
             }
             return null;
         });
-        CompletableFuture<KeyBindingControl.Result> key = keys.set("key.jump",
-                new KeyBindings.Assignment("key.keyboard.space", "NONE"), new KeyBindings.Assignment("key.keyboard.g", "NONE"));
+        CompletableFuture<String> key = keys.set(List.of(new KeyBindingControl.Change("key.jump",
+                new KeyBindings.Assignment("key.keyboard.space", "NONE"), new KeyBindings.Assignment("key.keyboard.g", "NONE"))));
 
         CompletableFuture<Void> closing = CompletableFuture.runAsync(changes::close);
         release.countDown();

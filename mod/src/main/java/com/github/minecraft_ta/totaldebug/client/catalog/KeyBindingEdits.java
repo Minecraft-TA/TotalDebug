@@ -1,54 +1,68 @@
 package com.github.minecraft_ta.totaldebug.client.catalog;
 
-import com.github.minecraft_ta.totaldebug.protocol.message.KeyBindingResultPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetKeyBindingPayload;
+import com.github.minecraft_ta.totaldebug.client.companion.ClientChanges;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Options;
 import net.neoforged.neoforge.client.settings.KeyModifier;
 
 /**
- * Puts a key binding on a key the way the controls screen does: the key and modifier change, the key lookup is
- * rebuilt and {@code options.txt} is saved.
+ * Puts key bindings on keys the way the controls screen does: the key and modifier change, the key lookup is rebuilt
+ * and {@code options.txt} is saved. A binding is named as in {@code options.txt}, such as {@code key.jump}, and its
+ * value written as there: the key, with {@code :} and the modifier when there is one, such as
+ * {@code key.keyboard.g:CONTROL}. Client thread only.
  */
-public final class KeyBindingEdits {
-    private KeyBindingEdits() {
+public final class KeyBindingEdits implements ClientChanges.Category {
+    public static final String CATEGORY = "keyBinding";
+
+    @Override
+    public String read(String name) {
+        KeyMapping mapping = mapping(name);
+        KeyModifier modifier = mapping.getKeyModifier();
+        return mapping.getKey().getName() + (modifier == KeyModifier.NONE ? "" : ":" + modifier.name());
     }
 
-    /** Applies a request and answers with the binding before and after, or why it stayed. Render thread only. */
-    public static KeyBindingResultPayload apply(SetKeyBindingPayload request) {
-        Options options = Minecraft.getInstance().options;
-        KeyMapping mapping = null;
-        for (KeyMapping candidate : options.keyMappings) {
-            if (candidate.getName().equals(request.name())) {
-                mapping = candidate;
-                break;
-            }
-        }
-        if (mapping == null) return failed(request, request.name() + " is not a key binding of this game");
-        String previousKey = mapping.getKey().getName();
-        String previousModifier = mapping.getKeyModifier().name();
-        InputConstants.Key key;
-        KeyModifier modifier;
-        try {
-            key = InputConstants.getKey(request.key());
-        } catch (IllegalArgumentException unknown) {
-            return failed(request, request.key() + " is not a key of this game");
-        }
-        try {
-            modifier = KeyModifier.valueOf(request.modifier());
-        } catch (IllegalArgumentException unknown) {
-            return failed(request, request.modifier() + " is not a key modifier");
-        }
-        mapping.setKeyModifierAndCode(modifier, key);
+    @Override
+    public void check(String name, String value) {
+        mapping(name);
+        key(value);
+        modifier(value);
+    }
+
+    @Override
+    public void set(String name, String value) {
+        mapping(name).setKeyModifierAndCode(modifier(value), key(value));
+    }
+
+    @Override
+    public void finish() {
         KeyMapping.resetMapping();
-        options.save();
-        return new KeyBindingResultPayload(request.requestId(), request.name(), previousKey, previousModifier,
-                mapping.getKey().getName(), mapping.getKeyModifier().name(), "");
+        Minecraft.getInstance().options.save();
     }
 
-    private static KeyBindingResultPayload failed(SetKeyBindingPayload request, String error) {
-        return new KeyBindingResultPayload(request.requestId(), request.name(), "", "", "", "", error);
+    private static KeyMapping mapping(String name) {
+        for (KeyMapping candidate : Minecraft.getInstance().options.keyMappings) {
+            if (candidate.getName().equals(name)) return candidate;
+        }
+        throw new IllegalArgumentException(name + " is not a key binding of this game");
+    }
+
+    private static InputConstants.Key key(String value) {
+        String key = value.split(":", 2)[0];
+        try {
+            return InputConstants.getKey(key);
+        } catch (IllegalArgumentException unknown) {
+            throw new IllegalArgumentException(key + " is not a key of this game");
+        }
+    }
+
+    private static KeyModifier modifier(String value) {
+        String[] parts = value.split(":", 2);
+        if (parts.length < 2) return KeyModifier.NONE;
+        try {
+            return KeyModifier.valueOf(parts[1]);
+        } catch (IllegalArgumentException unknown) {
+            throw new IllegalArgumentException(parts[1] + " is not a key modifier");
+        }
     }
 }

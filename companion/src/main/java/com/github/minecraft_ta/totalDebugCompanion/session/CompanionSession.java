@@ -14,7 +14,7 @@ import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
@@ -62,7 +62,8 @@ public final class CompanionSession implements AutoCloseable {
 
         default void inspectSubject(InspectSubjectMessage message) { }
 
-        default void keyBindingResult(KeyBindingResultMessage message) { }
+        /** The game answered a change of values it keeps. */
+        default void changeResult(ChangeResultMessage message) { }
 
         default void packStack(PackStackMessage message) { }
 
@@ -273,7 +274,7 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageBus().listenAlways(PlayingMessage.class, this.listener::playing);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
         this.server.getMessageBus().listenAlways(InspectSubjectMessage.class, this.listener::inspectSubject);
-        this.server.getMessageBus().listenAlways(KeyBindingResultMessage.class, this.listener::keyBindingResult);
+        this.server.getMessageBus().listenAlways(ChangeResultMessage.class, this.listener::changeResult);
         this.server.getMessageBus().listenAlways(PackStackMessage.class, this.listener::packStack);
         this.server.getMessageBus().listenAlways(ReloadResultMessage.class, this.listener::reloadResult);
         this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->
