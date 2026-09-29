@@ -116,6 +116,11 @@ class ConfigSettingsTest {
 
         settings.set(target(file, names), "[\"a\",\"b\"]", "[\"c\"]").get(5, TimeUnit.SECONDS);
         assertEquals("[widgets]\n\tnames = [\"c\"]\n", Files.readString(file), "not refused as changed in its file");
+
+        ConfigSettings.Saved same = settings.set(target(file, names), "[\"c\"]", "[ \"c\" ]").get(5, TimeUnit.SECONDS);
+        assertEquals("[widgets]\n\tnames = [\"c\"]\n", Files.readString(file), "the same value written another way changes nothing");
+        assertEquals("[\"c\"]", same.changed().getFirst().after(), "the file keeps its text");
+        assertEquals("[\"c\"]", settings.record().changes().getFirst().current(), "and the record keeps it too");
     }
 
     private Path file(String text) throws Exception {

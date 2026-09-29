@@ -143,9 +143,15 @@ final class ConfigWriter {
                 this.status.accept(cause.getMessage());
                 return;
             }
-            // An overwritten text is undone to what the file held, not to the text the edit was opened from.
-            saved.accept(step instanceof TextStep text && result.replaced() != null
-                    ? new TextStep(text.target(), text.settings(), result.replaced(), text.after()) : step);
+            // A step is undone to what the file held, not to what the edit was made against: an overwritten text, or a
+            // literal written another way.
+            Step made = step;
+            if (step instanceof TextStep text && result.replaced() != null) {
+                made = new TextStep(text.target(), text.settings(), result.replaced(), text.after());
+            } else if (step instanceof SettingStep setting && !result.changed().isEmpty()) {
+                made = new SettingStep(setting.target(), result.changed().getFirst().before(), setting.after());
+            }
+            saved.accept(made);
             this.status.accept(result.message());
             this.written.run();
         }));

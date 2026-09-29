@@ -167,7 +167,8 @@ public final class ChangePipeline {
             String now = category.text(edit.value());
             String before = held.get(edit.target());
             if (before != null && category.same(now, before)) {
-                applied.add(new Applied<>(edit.target(), before, now));
+                // The same value, perhaps written another way: nothing changes, and the target keeps the text it holds.
+                applied.add(new Applied<>(edit.target(), before, before));
                 continue;
             }
             if (before != null && edit.expected() != null && !category.same(before, edit.expected())) {
