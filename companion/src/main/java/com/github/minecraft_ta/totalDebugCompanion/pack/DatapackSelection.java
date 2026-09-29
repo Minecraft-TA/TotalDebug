@@ -23,9 +23,8 @@ import java.util.function.Consumer;
 /**
  * A world's datapack selection as a category of the change pipeline: the server of the world the game plays enables and
  * orders the datapacks and reloads its data, reached through the relay, and a closed world's {@code level.dat} is
- * written. Its value is the enabled packs, lowest first, without the parts of the mods' pack, {@code mod/<ids>}, which
- * come and go with it and which {@code level.dat} keeps too; a datapack a mod adds, {@code mod/<modid>:<path>}, is a pack
- * like any other.
+ * written. Its value is the enabled packs, lowest first, as {@code level.dat} and the server keep them: without the hidden
+ * parts of the mods' pack, while a mod's own datapack is a pack like any other.
  */
 final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelection, List<String>> {
     /** The one target the server's change table knows, the selection of the world it runs. */
@@ -69,7 +68,7 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
 
     @Override
     public String text(List<String> enabled) {
-        return PackSelections.json(withoutModParts(enabled));
+        return PackSelections.json(enabled);
     }
 
     @Override
@@ -109,11 +108,6 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
     /** The datapacks {@code world}'s {@code level.dat} enables, lowest first. Blocking. */
     static List<String> saved(Path world) throws IOException {
         return strings(dataPacks(LevelDat.read(LevelDat.file(world)).tag()), "Enabled");
-    }
-
-    /** {@code ids} without the parts of the mods' pack, {@code mod/<ids>}; a datapack a mod adds has a path after a colon. */
-    static List<String> withoutModParts(List<String> ids) {
-        return ids.stream().filter(id -> !(id.startsWith("mod/") && !id.contains(":"))).toList();
     }
 
     private static NbtData.CompoundTag dataPacks(NbtData.CompoundTag root) {

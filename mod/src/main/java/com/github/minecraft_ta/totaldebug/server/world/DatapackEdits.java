@@ -7,6 +7,7 @@ import com.google.gson.JsonParser;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.repository.PackRepository;
+import net.minecraft.world.level.WorldDataConfiguration;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,17 +16,19 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Enables and orders the world's datapacks the way {@code /datapack} does: the selection changes and the server reloads
  * its data, which saves the selection with the world, and the change is answered once it did. The one target is
- * {@value #TARGET}, and its value the enabled packs, lowest first, as a JSON array of their ids, without the parts of the
- * mods' pack, {@code mod/<ids>}, which come and go with it; a datapack a mod adds, {@code mod/<modid>:<path>}, is a pack
- * like any other. Packs the game requires are added where it puts them. Server thread only.
+ * {@value #TARGET}, and its value the enabled packs, lowest first, as a JSON array of their ids as the game keeps them:
+ * without the hidden parts of the mods' pack, which {@code PackRepository.getSelectedIds} and {@code level.dat} leave out
+ * too. Packs the game requires are added where it puts them. Server thread only.
  */
 final class DatapackEdits implements ChangeTable.Category {
     static final String CATEGORY = "datapacks";
     static final String TARGET = "datapacks";
 
     private final MinecraftServer server;
-    /** The selection before the change being made, put back when its reload fails; null while it selected nothing new. */
-    private List<String> before;
+    /** The selection the data was loaded with before the change being made, read before the folders are read again. */
+    private List<String> loaded;
+    /** The world's data configuration before the change, which a reload that got as far as taking the selection replaced. */
+    private WorldDataConfiguration configuration;
 
     DatapackEdits(MinecraftServer server) {
         this.server = server;
@@ -35,9 +38,7 @@ final class DatapackEdits implements ChangeTable.Category {
     public String read(String target) {
         target(target);
         JsonArray ids = new JsonArray();
-        for (String id : this.server.getPackRepository().getSelectedIds()) {
-            if (!partOfTheModsPack(id)) ids.add(id);
-        }
+        this.server.getPackRepository().getSelectedIds().forEach(ids::add);
         return ids.toString();
     }
 
@@ -45,7 +46,11 @@ final class DatapackEdits implements ChangeTable.Category {
     public void check(String target, String value) {
         target(target);
         PackRepository packs = this.server.getPackRepository();
-        // As /reload does, the world's folder is read again, so a pack put there since is found.
+        if (this.loaded == null) {
+            this.loaded = List.copyOf(packs.getSelectedIds());
+            this.configuration = this.server.getWorldData().getDataConfiguration();
+        }
+        // As /reload does, the world's folder is read again, so a pack put there since is found; one gone is dropped.
         packs.reload();
         List<String> refused = new ArrayList<>();
         for (String id : ids(value)) {
@@ -60,22 +65,22 @@ final class DatapackEdits implements ChangeTable.Category {
 
     @Override
     public void set(String target, String value) {
-        PackRepository packs = this.server.getPackRepository();
-        List<String> before = List.copyOf(packs.getSelectedIds());
-        packs.setSelected(ids(value));
-        if (this.before == null && !List.copyOf(packs.getSelectedIds()).equals(before)) this.before = before;
+        this.server.getPackRepository().setSelected(ids(value));
     }
 
     /**
-     * Reloads the data with the new selection, which the server then keeps for the world. Should the reload fail, the
-     * server keeps the data it had, so the selection before is put back.
+     * Reloads the data with the new selection, which the server then keeps for the world, unless the data was already
+     * loaded with it. Should the reload fail before the server took the selection, it keeps the data it had, so the
+     * selection it was loaded with is put back; one that failed after it took it keeps the new one, as the world does.
      */
     @Override
     public CompletableFuture<Void> finish() {
-        List<String> before = this.before;
-        this.before = null;
-        if (before == null) return CompletableFuture.completedFuture(null);
+        List<String> loaded = this.loaded;
+        WorldDataConfiguration configuration = this.configuration;
+        this.loaded = null;
+        this.configuration = null;
         PackRepository packs = this.server.getPackRepository();
+        if (loaded == null || List.copyOf(packs.getSelectedIds()).equals(loaded)) return CompletableFuture.completedFuture(null);
         CompletableFuture<Void> reloaded;
         try {
             reloaded = this.server.reloadResources(packs.getSelectedIds());
@@ -84,7 +89,7 @@ final class DatapackEdits implements ChangeTable.Category {
         }
         return reloaded.handleAsync((ignored, failure) -> {
             if (failure == null) return null;
-            packs.setSelected(before);
+            if (this.server.getWorldData().getDataConfiguration() == configuration) packs.setSelected(loaded);
             throw failure instanceof RuntimeException unchecked ? unchecked : new IllegalStateException(failure);
         }, this.server);
     }
@@ -92,11 +97,6 @@ final class DatapackEdits implements ChangeTable.Category {
     @Override
     public String name(String target) {
         return "The world's datapacks";
-    }
-
-    /** A part of the mods' pack, {@code mod/<ids>}, rather than a datapack a mod adds, {@code mod/<modid>:<path>}. */
-    static boolean partOfTheModsPack(String id) {
-        return id.startsWith("mod/") && !id.contains(":");
     }
 
     private static void target(String target) {

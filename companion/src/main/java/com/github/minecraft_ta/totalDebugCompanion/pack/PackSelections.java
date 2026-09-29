@@ -87,9 +87,7 @@ public final class PackSelections {
     public boolean holds(ChangeRecord.Change change) {
         if (!(change.target() instanceof ChangeRecord.PackSelection target)) return true;
         try {
-            List<String> recorded = parse(change.current());
-            if (target.side() == ChangeRecord.PackSide.DATA) recorded = DatapackSelection.withoutModParts(recorded);
-            return current(this.location.read(), target).equals(recorded);
+            return current(this.location.read(), target).equals(parse(change.current()));
         } catch (IOException unreadable) {
             return true;
         }
@@ -111,14 +109,10 @@ public final class PackSelections {
         }
         PackStackPayload datapacks = this.edits.packs().datapacks();
         if (datapacks != null && game.plays(target.location())) {
-            return DatapackSelection.withoutModParts(datapacks.enabled().stream().map(PackStackPayload.Pack::id).toList());
+            // As the server keeps them: without the parts of the mods' pack.
+            return datapacks.enabled().stream().filter(pack -> !pack.is(PackStackPayload.HIDDEN)).map(PackStackPayload.Pack::id).toList();
         }
-        return DatapackSelection.withoutModParts(DatapackSelection.saved(target.location()));
-    }
-
-    /** {@code ids} of a datapack selection without the parts of the mods' pack, which come and go with it. */
-    public static List<String> withoutModParts(List<String> ids) {
-        return DatapackSelection.withoutModParts(ids);
+        return DatapackSelection.saved(target.location());
     }
 
     static String json(List<String> ids) {

@@ -230,16 +230,16 @@ class PackSelectionsTest {
         PackSelections selections = selections(record, edits);
 
         CompletableFuture<PackSelections.Applied> applied = selections.set(ChangeRecord.PackSide.DATA, world,
-                List.of("vanilla", "mod_data", "mod/testmod:data/testmod/datapacks/extra", "file/Tweaks"));
+                List.of("vanilla", "mod_data", "mod/shown", "mod/testmod:data/testmod/datapacks/extra", "file/Tweaks"));
         assertEquals(playing.identity(), sent.getFirst().world(), "the relay refuses it if the game plays another world by the time it arrives");
         ChangePayload change = ((ChangeMessage) sent.getFirst().message()).payload();
         assertEquals(List.of(new ChangePayload.Edit("datapacks", "datapacks", null,
-                "[\"vanilla\",\"mod_data\",\"mod/testmod:data/testmod/datapacks/extra\",\"file/Tweaks\"]")), change.edits(),
-                "a datapack a mod adds is a pack like any other");
+                "[\"vanilla\",\"mod_data\",\"mod/shown\",\"mod/testmod:data/testmod/datapacks/extra\",\"file/Tweaks\"]")), change.edits(),
+                "a mod's own datapack and one a mod adds are packs like any other");
         assertFalse(applied.isDone(), "the server answers once its data reloaded");
 
         String before = "[\"vanilla\",\"mod_data\"]";
-        String now = "[\"vanilla\",\"mod_data\",\"mod/testmod:data/testmod/datapacks/extra\",\"file/Tweaks\"]";
+        String now = "[\"vanilla\",\"mod_data\",\"mod/shown\",\"mod/testmod:data/testmod/datapacks/extra\",\"file/Tweaks\"]";
         edits.pipeline().answered(new ChangeResultPayload(change.requestId(), List.of(new ChangeResultPayload.Applied(before, now)), ""));
         assertEquals(ConfigChanges.Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
         ChangeRecord.Change recorded = record.changes().getFirst();
@@ -248,9 +248,10 @@ class PackSelectionsTest {
         edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(
                 new PackStackPayload.Pack("vanilla", "Minecraft", ""), new PackStackPayload.Pack("mod_data", "Mod Data", ""),
                 new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN),
+                new PackStackPayload.Pack("mod/shown", "Shown", ""),
                 new PackStackPayload.Pack("mod/testmod:data/testmod/datapacks/extra", "Extra", ""),
                 new PackStackPayload.Pack("file/Tweaks", "Tweaks", ""))));
-        assertTrue(selections.holds(recorded), "the parts of the mods' pack come and go with it");
+        assertTrue(selections.holds(recorded), "the hidden parts of the mods' pack are left out, as the server keeps them");
 
         CompletableFuture<PackSelections.Applied> reverted = selections.revert(recorded);
         change = ((ChangeMessage) sent.get(1).message()).payload();
