@@ -79,24 +79,6 @@ final class ConfigWriter {
     }
 
     /**
-     * Writes {@code after} in place of {@code before}, the value Companion last wrote, as one of several reverts: shows
-     * nothing itself, and completes with why the setting kept its value, or empty.
-     */
-    CompletableFuture<String> revert(ConfigSettings.Target target, String before, String after) {
-        SettingStep step = new SettingStep(target, before, after);
-        return this.settings.set(target, before, after).handle((saved, failure) -> {
-            if (failure == null) {
-                SwingUtilities.invokeLater(() -> {
-                    done(step);
-                    this.written.run();
-                });
-                return "";
-            }
-            return target.setting().name() + ": " + cause(failure).getMessage();
-        });
-    }
-
-    /**
      * Writes a file's edited text in place of {@code before}, the text it was edited from. When the file holds other
      * text by now, {@code conflict} runs instead unless {@code overwrite}; {@code saved} runs after the write.
      */

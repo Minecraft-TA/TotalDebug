@@ -21,10 +21,10 @@ public interface ChangeLabels {
     /**
      * A recorded change as the page lists it: its name and where it is, its value now and before in the category's
      * words, a {@code notice} such as that it changed outside Companion since, or empty, and what opening it shows, or
-     * null.
+     * null. {@code actions} names what Open and Revert do for it.
      */
     record Row(ChangeRecord.Change change, String name, String where, String now, String before, String notice,
-               NavigationTarget opens) {
+               NavigationTarget opens, Actions actions) {
         public Row {
             Objects.requireNonNull(change, "change");
             Objects.requireNonNull(name, "name");
@@ -32,10 +32,31 @@ public interface ChangeLabels {
             Objects.requireNonNull(now, "now");
             Objects.requireNonNull(before, "before");
             Objects.requireNonNull(notice, "notice");
+            Objects.requireNonNull(actions, "actions");
+        }
+
+        public Row(ChangeRecord.Change change, String name, String where, String now, String before, String notice, NavigationTarget opens) {
+            this(change, name, where, now, before, notice, opens, Actions.PLAIN);
         }
 
         public Instant changed() {
             return this.change.lastChanged();
+        }
+    }
+
+    /**
+     * What a row's actions are called, such as "Show in Key Bindings" and "Revert to Space"; {@code confirm}, when not
+     * empty, is asked before Revert, which cannot be undone then, such as a file Companion added being deleted; {@code
+     * search} is more text the filter finds the row by, such as a key as it is typed.
+     */
+    record Actions(String open, String revert, String confirm, String search) {
+        public static final Actions PLAIN = new Actions("Open", "Revert", "", "");
+
+        public Actions {
+            Objects.requireNonNull(open, "open");
+            Objects.requireNonNull(revert, "revert");
+            Objects.requireNonNull(confirm, "confirm");
+            Objects.requireNonNull(search, "search");
         }
     }
 

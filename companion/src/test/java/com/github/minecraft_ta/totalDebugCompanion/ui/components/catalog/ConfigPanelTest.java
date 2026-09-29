@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigLabels;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettingsFixture;
 import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
@@ -136,18 +137,14 @@ class ConfigPanelTest {
     void aRevertAmongSeveralReportsWhyItFailedInsteadOfShowingIt() throws Exception {
         Path file = Files.createDirectories(this.directory.resolve("config")).resolve("testmod-common.toml");
         Files.writeString(file, "[widgets]\n\tspeed = 12\n");
-        List<String> shown = new ArrayList<>();
-        ConfigWriter writer = new ConfigWriter(ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), shown::add, () -> { });
-        PackCatalog.ConfigSetting speed = FILE.settings().getFirst();
+        ChangeRecord record = ChangeRecord.inMemory();
+        record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", file, "widgets.speed"), "9", "12");
+        record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", file.resolveSibling("gone.toml"), "widgets.speed"), "9", "12");
+        ConfigLabels labels = new ConfigLabels(ConfigSettingsFixture.of(GameLocations.of(this.directory, false), record));
 
-        assertEquals("", writer.revert(new ConfigSettings.Target("testmod", "testmod-common.toml", file,
-                PackCatalog.ConfigType.COMMON, speed), "12", "9").get(5, TimeUnit.SECONDS));
-        assertTrue(Files.readString(file).contains("\tspeed = 9\n"));
-        String failure = writer.revert(new ConfigSettings.Target("testmod", "testmod-common.toml", file.resolveSibling("gone.toml"),
-                PackCatalog.ConfigType.COMMON, speed), "12", "9").get(5, TimeUnit.SECONDS);
-        assertTrue(failure.startsWith(speed.name() + ": "), failure);
-        SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(List.of(), shown, "Revert All shows one status for all of its reverts");
+        String failure = labels.revert(record.changes(), null).get(5, TimeUnit.SECONDS);
+        assertTrue(Files.readString(file).contains("\tspeed = 9\n"), "one failing does not keep the others back");
+        assertTrue(failure.startsWith("Not reverted: widgets.speed: "), failure);
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.ResourcesTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -37,15 +38,28 @@ public final class PackLabels implements ChangeLabels {
     @Override
     public Rows rows(List<ChangeRecord.Change> changes, CatalogIndex index) {
         List<Row> rows = new ArrayList<>();
+        List<String> problems = new ArrayList<>();
+        GameState game = this.selections.location().read();
         for (ChangeRecord.Change change : changes) {
             ChangeRecord.PackSelection target = (ChangeRecord.PackSelection) change.target();
             boolean resources = target.side() == ChangeRecord.PackSide.RESOURCES;
-            rows.add(new Row(change, name(change), "", highestFirst(PackSelections.parse(change.current())),
-                    highestFirst(PackSelections.parse(change.original())),
-                    this.selections.holds(change) ? "" : "Changed outside Companion since",
-                    resources ? new NavigationTarget.PackResources(ResourcesTab.PACKS, "") : new NavigationTarget.World(WorldTab.DATAPACKS)));
+            // What the game or the file enables now, which is Companion's selection unless it changed outside it since.
+            List<String> now;
+            try {
+                now = this.selections.current(game, target);
+            } catch (IOException | RuntimeException unreadable) {
+                problems.add(name(change) + " could not be read: " + unreadable.getMessage());
+                now = PackSelections.parse(change.current());
+            }
+            this.selections.record().observed(target, PackSelections.json(now), String::equals);
+            if (PackSelections.json(now).equals(change.original())) continue;
+            // The World page shows the current world, so a row of another world opens nothing.
+            NavigationTarget opens = resources ? new NavigationTarget.PackResources(ResourcesTab.PACKS, "")
+                    : Objects.equals(game.currentWorld(), target.location()) || game.plays(target.location()) ? new NavigationTarget.World(WorldTab.DATAPACKS) : null;
+            rows.add(new Row(change, name(change), "", highestFirst(now), highestFirst(PackSelections.parse(change.original())),
+                    PackSelections.json(now).equals(change.current()) ? "" : "Changed outside Companion since", opens));
         }
-        return new Rows(rows, List.of());
+        return new Rows(rows, problems);
     }
 
     @Override

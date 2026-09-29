@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -64,12 +65,13 @@ public final class ConfigLabels implements ChangeLabels {
                 if (ConfigEdit.sameValue(literal, change.original())) continue;
                 PackCatalog.ConfigSetting described = described(index, target);
                 Effect pending = this.settings.pending(target.file(), target.setting());
-                rows.add(new Row(change, described.name(), modName(index, target.modId()) + ", " + target.fileName(), literal,
+                rows.add(new Row(change, target.setting(), where(index, target), literal,
                         change.original(), pending == null ? "" : Character.toUpperCase(pending.description().charAt(0)) + pending.description().substring(1),
-                        new NavigationTarget.ModPage(target.modId(), ModTab.CONFIGURATION, "")));
+                        new NavigationTarget.ModPage(target.modId(), ModTab.CONFIGURATION, target.fileName()),
+                        new Actions("Show in Configuration", "Revert to " + change.original(), "", described.name())));
             }
         }
-        rows.sort(Comparator.comparing(Row::where).thenComparing(Row::name));
+        rows.sort(Comparator.comparing((Row row) -> row.where().toLowerCase(Locale.ROOT)).thenComparing(Row::name));
         return new Rows(rows, problems);
     }
 
@@ -107,6 +109,17 @@ public final class ConfigLabels implements ChangeLabels {
     private static PackCatalog.ConfigType type(CatalogIndex index, ChangeRecord.Setting target) {
         PackCatalog.ConfigFile file = file(index, target);
         return file == null ? PackCatalog.ConfigType.COMMON : file.type();
+    }
+
+    /** The mod and file of a setting, and the world a server configuration file is in. */
+    private String where(CatalogIndex index, ChangeRecord.Setting target) {
+        String where = modName(index, target.modId()) + ", " + target.fileName();
+        Path serverconfig = target.file().getParent();
+        if (serverconfig != null && serverconfig.getFileName() != null && serverconfig.getFileName().toString().equals("serverconfig")
+                && serverconfig.getParent() != null) {
+            where += ", " + serverconfig.getParent().getFileName();
+        }
+        return where;
     }
 
     private static String modName(CatalogIndex index, String modId) {

@@ -40,9 +40,14 @@ public final class ResourceLabels implements ChangeLabels {
             ChangeRecord.Resource target = (ChangeRecord.Resource) change.target();
             boolean held = this.edits.holds(change);
             if (this.edits.pipeline().record().change(target) == null) continue;
-            rows.add(new Row(change, target.path().substring(target.path().indexOf('/') + 1), PackFolders.label(target.location()),
-                    "Edited", change.original().isEmpty() ? "Not in the pack" : "The pack's earlier copy",
-                    held ? "" : "Changed outside Companion since", new NavigationTarget.LocalFile(target.location().resolve(target.path()))));
+            String name = target.path().substring(target.path().indexOf('/') + 1);
+            boolean added = change.original().isEmpty();
+            // Reverting a file Companion added deletes it, which cannot be undone.
+            Actions actions = added ? new Actions("Open", "Revert and Delete",
+                    "Delete " + name + " from the " + PackFolders.label(target.location()) + "? Companion added it, and the file cannot be brought back.", "")
+                    : Actions.PLAIN;
+            rows.add(new Row(change, name, PackFolders.label(target.location()), "Edited", added ? "Not in the pack" : "The pack's earlier copy",
+                    held ? "" : "Changed outside Companion since", new NavigationTarget.LocalFile(target.location().resolve(target.path())), actions));
         }
         rows.sort(Comparator.comparing(Row::name));
         return new Rows(rows, List.of());

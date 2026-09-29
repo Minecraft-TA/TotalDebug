@@ -57,10 +57,13 @@ public final class KeyBindingLabels implements ChangeLabels {
             if (current.encode().equals(change.original())) continue;
             String mod = binding == null || index == null ? "" : index.mod(index.keyBindingOwner(binding.spec())).map(PackCatalog.Mod::name)
                     .orElse(index.keyBindingOwner(binding.spec()));
-            List<String> sharing = binding == null ? List.of() : bindings.clashes(binding).stream().map(clash -> clash.other().name()).toList();
-            rows.add(new Row(change, binding == null ? name : binding.name(), mod, key(bindings, current),
-                    key(bindings, KeyBindings.Assignment.decode(change.original())),
-                    sharing.isEmpty() ? "" : "Shares its key with " + String.join(", ", sharing), new NavigationTarget.KeyBindings(name)));
+            // Bindings whose contexts never conflict share a key harmlessly.
+            List<String> sharing = binding == null ? List.of() : bindings.clashes(binding).stream()
+                    .filter(clash -> clash.overlap() != KeyBindings.Overlap.SEPARATE_CONTEXTS).map(clash -> clash.other().name()).toList();
+            String before = key(bindings, KeyBindings.Assignment.decode(change.original()));
+            rows.add(new Row(change, binding == null ? name : binding.name(), mod, key(bindings, current), before,
+                    sharing.isEmpty() ? "" : "Shares its key with " + names(sharing), new NavigationTarget.KeyBindings(name),
+                    new Actions("Show in Key Bindings", "Revert to " + before, "", name)));
         }
         rows.sort(Comparator.comparing(Row::name));
         return new Rows(rows, problems);
@@ -69,11 +72,24 @@ public final class KeyBindingLabels implements ChangeLabels {
     @Override
     public CompletableFuture<String> revert(List<ChangeRecord.Change> changes, CatalogIndex index) {
         // Each binding is reverted on its own, so one changed since does not keep the others from their keys.
+        KeyBindings bindings = bindings(index, Map.of());
         return ChangeLabels.each(changes, change -> {
             String name = ((ChangeRecord.KeyBinding) change.target()).name();
             return this.keys.set(List.of(new KeyBindingControl.Change(name, KeyBindings.Assignment.decode(change.current()),
                     KeyBindings.Assignment.decode(change.original()))));
-        }, change -> ((ChangeRecord.KeyBinding) change.target()).name());
+        }, change -> action(bindings, ((ChangeRecord.KeyBinding) change.target()).name()));
+    }
+
+    /** The action a binding is named by on the Key bindings page, or its name where the catalog does not describe it. */
+    private static String action(KeyBindings bindings, String name) {
+        return bindings.bindings().stream().filter(binding -> binding.spec().name().equals(name)).map(KeyBindings.Binding::name)
+                .findFirst().orElse(name);
+    }
+
+    /** Up to three names, then how many more. */
+    private static String names(List<String> names) {
+        if (names.size() <= 3) return String.join(", ", names);
+        return String.join(", ", names.subList(0, 3)) + " and " + (names.size() - 3) + " more";
     }
 
     private static String key(KeyBindings bindings, KeyBindings.Assignment assignment) {

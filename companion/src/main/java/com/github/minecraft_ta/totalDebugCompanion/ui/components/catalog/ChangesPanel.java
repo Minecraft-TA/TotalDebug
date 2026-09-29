@@ -99,7 +99,7 @@ public final class ChangesPanel extends JPanel {
                 @Override
                 public void actionPerformed(ActionEvent event) {
                     List<ChangeLabels.Row> selected = selected();
-                    if (!selected.isEmpty()) report(revert(selected));
+                    if (!selected.isEmpty()) revertAsked(selected);
                 }
             });
             this.table.addMouseListener(new MouseAdapter() {
@@ -119,11 +119,25 @@ public final class ChangesPanel extends JPanel {
             List<ChangeLabels.Row> selected = selected();
             JPopupMenu menu = new JPopupMenu();
             ChangeLabels.Row clicked = this.model.shown.get(row);
-            if (selected.size() <= 1 && clicked.opens() != null) menu.add(ContextMenus.action("Open", null, null, () -> open(clicked)));
+            if (selected.size() <= 1 && clicked.opens() != null) {
+                menu.add(ContextMenus.action(clicked.actions().open(), null, null, () -> open(clicked)));
+            }
             List<ChangeLabels.Row> reverted = selected.isEmpty() ? List.of(clicked) : selected;
-            menu.add(ContextMenus.action(reverted.size() > 1 ? "Revert " + reverted.size() : "Revert", null, "DELETE",
-                    () -> report(revert(reverted))));
+            menu.add(ContextMenus.action(reverted.size() > 1 ? "Revert " + reverted.size() : reverted.getFirst().actions().revert(), null,
+                    "DELETE", () -> revertAsked(reverted)));
             return menu;
+        }
+
+        /** Reverts {@code rows}, after asking where reverting one cannot be undone, such as a file being deleted. */
+        private void revertAsked(List<ChangeLabels.Row> rows) {
+            List<String> confirms = rows.stream().map(row -> row.actions().confirm()).filter(confirm -> !confirm.isEmpty()).toList();
+            if (!confirms.isEmpty()) {
+                String question = confirms.size() == 1 ? confirms.getFirst() : confirms.size() + " of these are deleted and cannot be brought back. Revert them?";
+                int answer = JOptionPane.showConfirmDialog(ChangesPanel.this, question, rows.size() > 1 ? "Revert " + rows.size() : rows.getFirst().actions().revert(),
+                        JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+                if (answer != JOptionPane.OK_OPTION) return;
+            }
+            report(revert(rows));
         }
 
         private List<ChangeLabels.Row> selected() {
@@ -328,10 +342,17 @@ public final class ChangesPanel extends JPanel {
         }
 
         private static boolean matches(ChangeLabels.Row row, String query) {
-            for (String text : List.of(row.name(), row.where(), row.now(), row.before())) {
-                if (text.toLowerCase(Locale.ROOT).contains(query)) return true;
+            String squashed = squash(query);
+            for (String text : List.of(row.name(), row.where(), row.now(), row.before(), row.actions().search())) {
+                String lower = text.toLowerCase(Locale.ROOT);
+                if (lower.contains(query) || !squashed.isEmpty() && squash(lower).contains(squashed)) return true;
             }
             return false;
+        }
+
+        /** {@code text} without spaces and plus signs, so a key typed as {@code ctrl+g} finds "Ctrl + G". */
+        private static String squash(String text) {
+            return text.replace(" ", "").replace("+", "").replace("control", "ctrl");
         }
 
         @Override

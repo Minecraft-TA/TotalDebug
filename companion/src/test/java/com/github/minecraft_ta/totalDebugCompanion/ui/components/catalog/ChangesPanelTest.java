@@ -64,9 +64,10 @@ class ChangesPanelTest {
             awaitOnSwing(() -> panel[0].rows("Configuration").size() == 1);
             SwingUtilities.invokeAndWait(() -> {
                 ChangeLabels.Row row = panel[0].rows("Configuration").getFirst();
-                assertEquals(List.of("speed", "Test Mod, testmod-common.toml", "12", "9"), List.of(row.name(), row.where(), row.now(), row.before()),
+                assertEquals(List.of("widgets.speed", "Test Mod, testmod-common.toml", "12", "9"), List.of(row.name(), row.where(), row.now(), row.before()),
                         "the category names the row; the page only lists it");
-                assertEquals(new NavigationTarget.ModPage("testmod", ModTab.CONFIGURATION, ""), row.opens());
+                assertEquals(new NavigationTarget.ModPage("testmod", ModTab.CONFIGURATION, "testmod-common.toml"), row.opens(), "the file holding the setting");
+                assertEquals(List.of("Show in Configuration", "Revert to 9"), List.of(row.actions().open(), row.actions().revert()));
             });
 
             // Written back outside Companion: the change is over.
