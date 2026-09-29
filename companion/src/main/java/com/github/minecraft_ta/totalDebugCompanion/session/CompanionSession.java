@@ -15,14 +15,13 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PreparedFileMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
 import com.github.tth05.scnet.IConnectionListener;
@@ -63,10 +62,6 @@ public final class CompanionSession implements AutoCloseable {
 
         default void inspectSubject(InspectSubjectMessage message) { }
 
-        default void resourceSnapshot(ResourceSnapshotMessage message) { }
-
-        default void packCatalog(PackCatalogMessage message) { }
-
         default void keyBindingResult(KeyBindingResultMessage message) { }
 
         default void packStack(PackStackMessage message) { }
@@ -87,7 +82,8 @@ public final class CompanionSession implements AutoCloseable {
 
         default void failed(String detail, ClientHelloMessage hello) { }
 
-        default void runtimeInventory(RuntimeInventoryMessage message) {
+        /** The state of a file the game prepares for Companion: its runtime inventory, pack catalog or item icons. */
+        default void preparedFile(PreparedFilePayload file) {
         }
 
         /** The game's server answered whether it runs this player's scripts. */
@@ -255,7 +251,7 @@ public final class CompanionSession implements AutoCloseable {
 
     private void registerHandlers() {
         this.server.getMessageBus().listenAlways(ClientHelloMessage.class, this::handleHello);
-        this.server.getMessageBus().listenAlways(RuntimeInventoryMessage.class, this.listener::runtimeInventory);
+        this.server.getMessageBus().listenAlways(PreparedFileMessage.class, message -> this.listener.preparedFile(message.payload()));
         this.server.getMessageBus().listenAlways(ServerScriptsMessage.class, this.listener::serverScripts);
         this.server.getMessageBus().listenAlways(RelayFailedMessage.class, this.listener::relayFailed);
         // The server's messages arrive through the game client and reach the same listeners as the game's own.
@@ -277,8 +273,6 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageBus().listenAlways(PlayingMessage.class, this.listener::playing);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
         this.server.getMessageBus().listenAlways(InspectSubjectMessage.class, this.listener::inspectSubject);
-        this.server.getMessageBus().listenAlways(ResourceSnapshotMessage.class, this.listener::resourceSnapshot);
-        this.server.getMessageBus().listenAlways(PackCatalogMessage.class, this.listener::packCatalog);
         this.server.getMessageBus().listenAlways(KeyBindingResultMessage.class, this.listener::keyBindingResult);
         this.server.getMessageBus().listenAlways(PackStackMessage.class, this.listener::packStack);
         this.server.getMessageBus().listenAlways(ReloadResultMessage.class, this.listener::reloadResult);

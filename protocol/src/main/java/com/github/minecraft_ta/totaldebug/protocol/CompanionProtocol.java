@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 34;
+    public static final int VERSION = 35;
 
     public static final short READY = 1;
     // 2 was the game opening a class, which the /decompile command used.
@@ -11,7 +11,7 @@ public final class CompanionProtocol {
     public static final short FOCUS_WINDOW = 11;
     public static final short CLIENT_HELLO = 21;
     public static final short SERVER_HELLO = 22;
-    public static final short RUNTIME_INVENTORY = 23;
+    // 23 was the runtime inventory's state, now a prepared file.
     public static final short RETRY_RUNTIME_INVENTORY = 24;
     public static final short DEBUG_TARGET = 25;
 
@@ -19,8 +19,7 @@ public final class CompanionProtocol {
     public static final short SERVER_SCRIPTS = 28;
     // 29 was a request for a server source's class fingerprints.
     public static final short INSPECT_SUBJECT = 30;
-    public static final short RESOURCE_SNAPSHOT = 31;
-    public static final short PACK_CATALOG = 32;
+    // 31 and 32 were the item icon archive and the pack catalog, now prepared files.
     public static final short SET_KEY_BINDING = 33;
     public static final short KEY_BINDING_RESULT = 34;
     public static final short PACK_STACK = 35;
@@ -34,6 +33,7 @@ public final class CompanionProtocol {
     public static final short RELAY_FAILED = 44;
     public static final short SERVER_SCRIPTS_REQUEST = 45;
     public static final short COMPANION_LEFT = 46;
+    public static final short PREPARED_FILE = 47;
 
     private CompanionProtocol() {
     }

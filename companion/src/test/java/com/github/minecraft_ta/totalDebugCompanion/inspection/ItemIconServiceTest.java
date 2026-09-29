@@ -37,7 +37,7 @@ class ItemIconServiceTest {
         List<Runnable> reads = new ArrayList<>();
         try (ItemIconService icons = new ItemIconService()) {
             icons.restore(saved.getParent(), reads::add);
-            icons.accept(announced.toString(), 1);
+            icons.accept(announced);
 
             reads.getFirst().run();
 

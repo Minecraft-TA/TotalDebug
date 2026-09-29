@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.catalog;
 
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 @Timeout(10)
 class PackCatalogPublisherTest {
     @TempDir Path directory;
-    private final BlockingQueue<PackCatalogMessage> sent = new LinkedBlockingQueue<>();
+    private final BlockingQueue<PreparedFilePayload> sent = new LinkedBlockingQueue<>();
     private final AtomicInteger captures = new AtomicInteger();
     private final AtomicReference<String> language = new AtomicReference<>("en_us");
     private volatile CompletableFuture<PackCatalog> capture = new CompletableFuture<>();
@@ -40,17 +40,18 @@ class PackCatalogPublisherTest {
         PackCatalogPublisher publisher = publisher(file);
 
         publisher.request("inventory", Map.of("mekanism", "mekanism"));
-        assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        assertEquals(PreparedFilePayload.State.PREPARING, next().state());
         this.capture.complete(catalog("inventory", "en_us"));
 
-        PackCatalogMessage available = next();
-        assertEquals(PackCatalogMessage.AVAILABLE, available.state());
+        PreparedFilePayload available = next();
+        assertEquals(PreparedFilePayload.Kind.PACK_CATALOG, available.kind());
+        assertEquals(PreparedFilePayload.State.READY, available.state());
         assertEquals("inventory", available.inventoryId());
-        assertEquals(file.toString(), available.catalogFile());
+        assertEquals(file.toString(), available.file());
         assertEquals(catalog("inventory", "en_us"), PackCatalog.read(file));
 
         publisher.request("inventory", Map.of());
-        assertEquals(PackCatalogMessage.AVAILABLE, next().state());
+        assertNull(this.sent.poll(100, TimeUnit.MILLISECONDS), "the catalog told already is not told again");
         awaitCaptures(1);
     }
 
@@ -60,12 +61,12 @@ class PackCatalogPublisherTest {
         catalog("inventory", "en_us").write(file);
 
         publisher(file).request("inventory", Map.of());
-        assertEquals(PackCatalogMessage.AVAILABLE, next().state());
+        assertEquals(PreparedFilePayload.State.READY, next().state());
         assertEquals(0, this.captures.get());
 
         this.language.set("de_de");
         this.publisher.request("other", Map.of());
-        assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        assertEquals(PreparedFilePayload.State.PREPARING, next().state());
         awaitCaptures(1);
     }
 
@@ -76,12 +77,12 @@ class PackCatalogPublisherTest {
         PackCatalogPublisher publisher = publisher(file);
         publisher.recapture();
         publisher.request("inventory", Map.of());
-        assertEquals(PackCatalogMessage.AVAILABLE, next().state(), "before any request, the saved catalog is still reused");
+        assertEquals(PreparedFilePayload.State.READY, next().state(), "before any request, the saved catalog is still reused");
 
         publisher.recapture();
         publisher.request("inventory", Map.of());
 
-        assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        assertEquals(PreparedFilePayload.State.PREPARING, next().state());
         awaitCaptures(1);
     }
 
@@ -90,15 +91,15 @@ class PackCatalogPublisherTest {
         PackCatalogPublisher publisher = publisher(this.directory.resolve("catalog.json"));
 
         publisher.request("inventory", Map.of());
-        assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        assertEquals(PreparedFilePayload.State.PREPARING, next().state());
         this.capture.completeExceptionally(new IllegalStateException("registry exploded"));
-        PackCatalogMessage failed = next();
-        assertEquals(PackCatalogMessage.FAILED, failed.state());
+        PreparedFilePayload failed = next();
+        assertEquals(PreparedFilePayload.State.FAILED, failed.state());
         assertEquals("registry exploded", failed.detail());
 
         this.capture = new CompletableFuture<>();
         publisher.request("inventory", Map.of());
-        assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        assertEquals(PreparedFilePayload.State.PREPARING, next().state());
         awaitCaptures(2);
         assertNull(this.sent.poll(100, TimeUnit.MILLISECONDS));
     }
@@ -107,15 +108,15 @@ class PackCatalogPublisherTest {
     void aLanguageChangeCapturesAgainForTheSameInventory() throws Exception {
         PackCatalogPublisher publisher = publisher(this.directory.resolve("catalog.json"));
         publisher.request("inventory", Map.of());
-        assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        assertEquals(PreparedFilePayload.State.PREPARING, next().state());
         this.capture.complete(catalog("inventory", "en_us"));
-        assertEquals(PackCatalogMessage.AVAILABLE, next().state());
+        assertEquals(PreparedFilePayload.State.READY, next().state());
 
         this.language.set("de_de");
         this.capture = new CompletableFuture<>();
         publisher.request("inventory", Map.of());
 
-        assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        assertEquals(PreparedFilePayload.State.PREPARING, next().state());
         awaitCaptures(2);
     }
 
@@ -124,18 +125,18 @@ class PackCatalogPublisherTest {
         Path file = this.directory.resolve("catalog.json");
         PackCatalogPublisher publisher = publisher(file);
         publisher.request("old", Map.of());
-        assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        assertEquals(PreparedFilePayload.State.PREPARING, next().state());
         awaitCaptures(1);
         CompletableFuture<PackCatalog> superseded = this.capture;
         this.capture = new CompletableFuture<>();
         publisher.request("new", Map.of());
-        assertEquals(PackCatalogMessage.CAPTURING, next().state());
+        assertEquals(PreparedFilePayload.State.PREPARING, next().state());
         awaitCaptures(2);
 
         superseded.complete(catalog("old", "en_us"));
         this.capture.complete(catalog("new", "en_us"));
 
-        PackCatalogMessage available = next();
+        PreparedFilePayload available = next();
         assertEquals("new", available.inventoryId());
         assertNull(this.sent.poll(100, TimeUnit.MILLISECONDS));
         assertEquals("new", PackCatalog.readHeader(file).inventoryId());
@@ -158,7 +159,7 @@ class PackCatalogPublisherTest {
         assertEquals(expected, this.captures.get());
     }
 
-    private PackCatalogMessage next() throws InterruptedException {
+    private PreparedFilePayload next() throws InterruptedException {
         return this.sent.poll(5, TimeUnit.SECONDS);
     }
 

@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.GoldenMessages;
+import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import java.nio.ByteBuffer;
@@ -38,19 +39,6 @@ class SessionProtocolCodecTest {
         assertEquals(CompanionProtocol.VERSION, message.protocolVersion());
         assertTrue(message.accepted());
         assertEquals("", message.rejectionReason());
-    }
-
-    @Test
-    void runtimeInventoryMatchesTheSharedGoldenBytes() {
-        RuntimeInventoryMessage message = RuntimeInventoryMessage.available("id", "file");
-        ByteBufferOutputStream output = new ByteBufferOutputStream();
-
-        message.write(output);
-
-        assertArrayEquals(
-                HEX.parseHex(GoldenMessages.RUNTIME_INVENTORY),
-                writtenBytes(output)
-        );
     }
 
     @Test
@@ -95,32 +83,35 @@ class SessionProtocolCodecTest {
     }
 
     @Test
-    void runtimeInventoryReadsTheSharedGoldenBytes() {
-        RuntimeInventoryMessage message = new RuntimeInventoryMessage();
+    void aPreparedFileMatchesTheSharedGoldenBytes() {
+        ByteBufferOutputStream output = new ByteBufferOutputStream();
 
-        message.read(new ByteBufferInputStream(ByteBuffer.wrap(
-                HEX.parseHex(GoldenMessages.RUNTIME_INVENTORY)
-        )));
+        new PreparedFileMessage(PreparedFilePayload.ready(PreparedFilePayload.Kind.PACK_CATALOG, "id", "file")).write(output);
 
-        assertEquals(RuntimeInventoryMessage.AVAILABLE, message.state());
-        assertEquals("id", message.inventoryId());
-        assertEquals("file", message.inventoryFile());
-        assertEquals("", message.detail());
+        assertArrayEquals(HEX.parseHex(GoldenMessages.PREPARED_FILE), writtenBytes(output));
+        PreparedFileMessage message = new PreparedFileMessage();
+        message.read(new ByteBufferInputStream(ByteBuffer.wrap(HEX.parseHex(GoldenMessages.PREPARED_FILE))));
+        assertEquals(PreparedFilePayload.ready(PreparedFilePayload.Kind.PACK_CATALOG, "id", "file"), message.payload());
     }
 
     @Test
-    void packCatalogMatchesTheSharedGoldenBytes() {
+    void aReadyFileNamesItsFileAndItsInventoryUnlessItIsTheIcons() {
+        assertThrows(IllegalArgumentException.class,
+                () -> PreparedFilePayload.ready(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "id", ""));
+        assertThrows(IllegalArgumentException.class,
+                () -> PreparedFilePayload.ready(PreparedFilePayload.Kind.PACK_CATALOG, "", "file"));
+        assertEquals("", PreparedFilePayload.ready(PreparedFilePayload.Kind.ITEM_ICONS, "", "icons.zip").inventoryId());
+        assertEquals("", PreparedFilePayload.failed(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "", "Capture failed").file());
+    }
+
+    @Test
+    void aPreparedFileOfAnUnknownKindIsRefused() {
         ByteBufferOutputStream output = new ByteBufferOutputStream();
+        output.writeInt(PreparedFilePayload.Kind.values().length);
+        output.writeInt(0);
 
-        PackCatalogMessage.available("id", "file").write(output);
-
-        assertArrayEquals(HEX.parseHex(GoldenMessages.PACK_CATALOG), writtenBytes(output));
-        PackCatalogMessage message = new PackCatalogMessage();
-        message.read(new ByteBufferInputStream(ByteBuffer.wrap(HEX.parseHex(GoldenMessages.PACK_CATALOG))));
-        assertEquals(PackCatalogMessage.AVAILABLE, message.state());
-        assertEquals("id", message.inventoryId());
-        assertEquals("file", message.catalogFile());
-        assertThrows(IllegalArgumentException.class, () -> PackCatalogMessage.available("id", ""));
+        assertThrows(IllegalArgumentException.class, () -> new PreparedFileMessage().read(
+                new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output)))));
     }
 
     @Test

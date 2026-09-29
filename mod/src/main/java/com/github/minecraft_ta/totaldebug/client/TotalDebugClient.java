@@ -22,6 +22,7 @@ import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
@@ -71,7 +72,8 @@ public final class TotalDebugClient {
         this.companionApp = companionApp;
         companionApp.setProgressListener(progress -> CompanionProgressActionBar.show(Minecraft.getInstance(), progress));
         this.requests = new CompanionRequests(companionApp);
-        this.resources = new ResourceSnapshots(paths.previews(), companionApp::sendResourceSnapshot);
+        this.resources = new ResourceSnapshots(paths.previews(), archive -> companionApp.sendPreparedFile(
+                PreparedFilePayload.ready(PreparedFilePayload.Kind.ITEM_ICONS, "", archive.toString())));
         this.catalogs = new PackCatalogPublisher(
                 paths.catalog(),
                 () -> Minecraft.getInstance().getLanguageManager().getSelected(),
@@ -83,7 +85,7 @@ public final class TotalDebugClient {
                     }
                     return capture.result();
                 },
-                companionApp::sendPackCatalog
+                companionApp::sendPreparedFile
         );
         this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
         companionApp.setSessionOpenedHandler(() -> Minecraft.getInstance().execute(this::tellPlaying));

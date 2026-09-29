@@ -35,13 +35,11 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
@@ -167,11 +165,15 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             });
             restoreProfile();
             session = new CompanionSession(token, this::attachSelectedProfile, new CompanionSession.Listener() {
-                @Override public void resourceSnapshot(ResourceSnapshotMessage message) {
-                    itemIcons.accept(message.archive(), message.layers());
-                }
-                @Override public void packCatalog(PackCatalogMessage message) {
-                    handlePackCatalog(message);
+                @Override public void preparedFile(PreparedFilePayload file) {
+                    switch (file.kind()) {
+                        case RUNTIME_INVENTORY -> handleRuntimeInventory(file);
+                        case PACK_CATALOG -> handlePackCatalog(file);
+                        // Icons keep the last archive until a newer one is ready.
+                        case ITEM_ICONS -> {
+                            if (file.state() == PreparedFilePayload.State.READY) itemIcons.accept(Path.of(file.file()));
+                        }
+                    }
                 }
                 @Override public void inspectSubject(InspectSubjectMessage message) {
                     openOrQueue(new NavigationTarget.Inspection(message.payload()), NavigationService.Activation.ACTIVATE_WINDOW);
@@ -235,11 +237,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 public void reloadResult(ReloadResultMessage message) {
                     ProjectScope scope = current;
                     if (scope != null) scope.resources().answered(message.payload());
-                }
-
-                @Override
-                public void runtimeInventory(RuntimeInventoryMessage message) {
-                    handleRuntimeInventory(message);
                 }
 
                 @Override public void failed(String detail, ClientHelloMessage hello) {
@@ -803,7 +800,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         CompletableFuture.runAsync(scope.catalog()::restore);
     }
 
-    private void handlePackCatalog(PackCatalogMessage message) {
+    private void handlePackCatalog(PreparedFilePayload message) {
         ProjectScope scope;
         synchronized (lifecycleLock) {
             if (switching) return;
@@ -811,10 +808,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         }
         if (scope == null || !scope.isActive()) return;
         switch (message.state()) {
-            case PackCatalogMessage.CAPTURING -> scope.catalog().capturing();
-            case PackCatalogMessage.AVAILABLE -> scope.catalog().accept(message.inventoryId(),
-                    Path.of(message.catalogFile()), ForkJoinPool.commonPool());
-            default -> scope.catalog().failed(message.detail());
+            case PREPARING -> scope.catalog().capturing();
+            case READY -> scope.catalog().accept(message.inventoryId(), Path.of(message.file()), ForkJoinPool.commonPool());
+            case FAILED -> scope.catalog().failed(message.detail());
         }
     }
 
@@ -837,7 +833,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         runtimeIndexService.waiting(detail);
     }
 
-    private void handleRuntimeInventory(RuntimeInventoryMessage message) {
+    private void handleRuntimeInventory(PreparedFilePayload message) {
         synchronized (lifecycleLock) {
             if (switching) return;
             CompanionProfile current = currentProject();
@@ -845,20 +841,13 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 return;
             }
             switch (message.state()) {
-                case RuntimeInventoryMessage.PREPARING -> {
-                    runtimeInventoryPending(
-                            message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail());
-                }
-                case RuntimeInventoryMessage.AVAILABLE -> {
-                    runtimeIndexService.accept(
-                            current.dataDirectory(),
-                            message.inventoryId(),
-                            Path.of(message.inventoryFile())
-                    );
+                case PREPARING -> runtimeInventoryPending(
+                        message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail());
+                case READY -> {
+                    runtimeIndexService.accept(current.dataDirectory(), message.inventoryId(), Path.of(message.file()));
                     this.current.catalog().inventoryAnnounced(message.inventoryId());
                 }
-                case RuntimeInventoryMessage.FAILED -> runtimeIndexService.failedBeforeBuild(message.detail());
-                default -> runtimeIndexService.failedBeforeBuild("Minecraft sent an unknown runtime inventory state");
+                case FAILED -> runtimeIndexService.failedBeforeBuild(message.detail());
             }
         }
     }

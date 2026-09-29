@@ -12,7 +12,8 @@ import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PreparedFileMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
@@ -80,12 +81,12 @@ class LiveRuntimeStartupTest {
                 assertTrue(app.isConnected());
                 assertNotReady(executions, compiler, "Authentication alone must not authorize the restored inventory A");
                 awaitActionEnabled(evaluate, false);
-                game.inventory(RuntimeInventoryMessage.preparing("Preparing the new live inventory"));
+                game.inventory(PreparedFilePayload.preparing(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "", "Preparing the new live inventory"));
                 assertNotReady(executions, compiler, "PREPARING must not authorize cached inventory A");
                 awaitActionEnabled(evaluate, false);
 
                 try (var publication = new HeldCache(paths, () -> { copy(cachedB, paths); return null; })) {
-                    game.inventory(RuntimeInventoryMessage.available("B", paths.inventory().toString()));
+                    game.inventory(PreparedFilePayload.ready(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "B", paths.inventory().toString()));
                     assertNotReady(executions, compiler, "AVAILABLE cannot enable execution until inventory B is installed");
                     awaitActionEnabled(evaluate, false);
                     publication.release();
@@ -102,7 +103,7 @@ class LiveRuntimeStartupTest {
             try (var reconnected = new Game(app, profile, config)) {
                 assertNotReady(executions, compiler, "A reconnect must confirm its inventory even when the cached ID will match");
                 awaitActionEnabled(evaluate, false);
-                reconnected.inventory(RuntimeInventoryMessage.available("B", paths.inventory().toString()));
+                reconnected.inventory(PreparedFilePayload.ready(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "B", paths.inventory().toString()));
                 await(executions::isReady);
                 awaitActionEnabled(evaluate, true);
                 assertEquals("B", compiler.compile(probe("newOnly"), "Probe").get(5, TimeUnit.SECONDS).inventoryId());
@@ -122,7 +123,7 @@ class LiveRuntimeStartupTest {
             app.session().bindAndPublish(config);
             app.openProject(profile).get(10, TimeUnit.SECONDS);
             try (var game = new Game(app, profile, config)) {
-                game.inventory(RuntimeInventoryMessage.preparing("Live runtime is still preparing"));
+                game.inventory(PreparedFilePayload.preparing(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "", "Live runtime is still preparing"));
                 restoreGate.release();
                 var loader = field(app, "runtimeIndexService", RuntimeIndexService.class);
                 field(loader, "worker", ExecutorService.class).submit(() -> { }).get(10, TimeUnit.SECONDS);
@@ -157,9 +158,9 @@ class LiveRuntimeStartupTest {
             app.openProject(profile).get(10, TimeUnit.SECONDS);
             var executions = field(app, "scriptExecutions", ScriptExecutionService.class);
             try (var game = new Game(app, profile, config)) {
-                game.inventory(RuntimeInventoryMessage.preparing("Live runtime is still preparing"));
+                game.inventory(PreparedFilePayload.preparing(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "", "Live runtime is still preparing"));
                 if (failedInventory) {
-                    game.inventory(RuntimeInventoryMessage.failed("Runtime export failed"));
+                    game.inventory(PreparedFilePayload.failed(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "", "Runtime export failed"));
                     assertEquals(RuntimeIndexService.Phase.FAILED, app.getRuntimeIndexStatus().phase());
                 }
                 assertNull(app.requireProject().runtime(), "The held offline index must not have installed yet");
@@ -220,7 +221,7 @@ class LiveRuntimeStartupTest {
                 var executions = field(app, "scriptExecutions", ScriptExecutionService.class);
                 assertNotReady(executions, field(app, "scriptCompiler", ScriptCompilationService.class),
                         "Offline actions must not restore a cache after live admission has suspended it");
-                game.inventory(RuntimeInventoryMessage.available("A", new InstancePaths(profile.dataDirectory()).inventory().toString()));
+                game.inventory(PreparedFilePayload.ready(PreparedFilePayload.Kind.RUNTIME_INVENTORY, "A", new InstancePaths(profile.dataDirectory()).inventory().toString()));
                 await(executions::isReady);
             } finally {
                 releaseHandshake.countDown();
@@ -363,14 +364,14 @@ class LiveRuntimeStartupTest {
             attached.get(5, TimeUnit.SECONDS);
         }
 
-        void inventory(RuntimeInventoryMessage message) throws Exception {
+        void inventory(PreparedFilePayload file) throws Exception {
             var processed = new CompletableFuture<Void>();
-            Consumer<RuntimeInventoryMessage> barrier = ignored -> processed.complete(null);
-            app.session().server().getMessageBus().listenAlways(RuntimeInventoryMessage.class, barrier);
+            Consumer<PreparedFileMessage> barrier = ignored -> processed.complete(null);
+            app.session().server().getMessageBus().listenAlways(PreparedFileMessage.class, barrier);
             try {
-                client.getMessageProcessor().enqueueMessage(message);
+                client.getMessageProcessor().enqueueMessage(new PreparedFileMessage(file));
                 processed.get(5, TimeUnit.SECONDS);
-            } finally { app.session().server().getMessageBus().unregister(RuntimeInventoryMessage.class, barrier); }
+            } finally { app.session().server().getMessageBus().unregister(PreparedFileMessage.class, barrier); }
         }
 
         @Override public void close() { client.close(); }

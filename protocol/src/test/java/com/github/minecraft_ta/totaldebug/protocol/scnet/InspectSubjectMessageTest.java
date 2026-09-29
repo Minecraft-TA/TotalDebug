@@ -54,18 +54,4 @@ class InspectSubjectMessageTest {
                 "minecraft:pig", "", "",
                 Collections.nCopies(SubjectIdentity.MAX_CLASSES + 1, new ClassLink("Entity", "X")), ""));
     }
-
-    @Test
-    void resourceSnapshotRoundTripsAndRejectsAnEmptyArchive() {
-        ByteBufferOutputStream output = new ByteBufferOutputStream();
-        new ResourceSnapshotMessage("C:/instance/total-debug/cache/previews/a.zip", 3).write(output);
-        output.getBuffer().flip();
-
-        ResourceSnapshotMessage read = new ResourceSnapshotMessage();
-        read.read(new ByteBufferInputStream(output.getBuffer()));
-
-        assertEquals("C:/instance/total-debug/cache/previews/a.zip", read.archive());
-        assertEquals(3, read.layers());
-        assertThrows(IllegalArgumentException.class, () -> new ResourceSnapshotMessage("", 1));
-    }
 }
