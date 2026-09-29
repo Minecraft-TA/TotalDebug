@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEditsFixture;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
+import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -37,8 +38,7 @@ class ResourceTextEditorTest {
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), record,
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
-                List.of()));
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), 48));
         String saved = "{\"a\":\"saved\"}";
         String inJar = "{\"a\":\"jar\"}";
         edits.save(LANG, saved.getBytes(StandardCharsets.UTF_8)).get(5, TimeUnit.SECONDS);
@@ -63,8 +63,7 @@ class ResourceTextEditorTest {
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), record,
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
-                List.of()));
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), 48));
         String added = "{\"a\":\"added\"}";
         Path pack = edits.save(LANG, added.getBytes(StandardCharsets.UTF_8)).get(5, TimeUnit.SECONDS).pack();
 
@@ -87,8 +86,7 @@ class ResourceTextEditorTest {
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
-                List.of()));
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), 48));
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
         Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         Path managed = edits.pack(LANG);
@@ -129,7 +127,7 @@ class ResourceTextEditorTest {
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         PackStackPayload.Pack managed = new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "");
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(managed), List.of()));
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(managed)), 48));
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
         Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         edits.setWorkingPack(LANG, mine);
@@ -141,8 +139,8 @@ class ResourceTextEditorTest {
         try {
             awaitOnSwing(() -> editor[0].noticeText().contains("not enabled"));
             // The player enables the pack in the game.
-            edits.packs().packStack(new PackStackPayload(34, 48, List.of(managed,
-                    new PackStackPayload.Pack("file/MyPack", "MyPack", mine.toString())), List.of()));
+            edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(managed,
+                    new PackStackPayload.Pack("file/MyPack", "MyPack", mine.toString()))), 48));
             awaitOnSwing(() -> editor[0].noticeText().isEmpty());
         } finally {
             SwingUtilities.invokeAndWait(editor[0]::dispose);
@@ -154,8 +152,7 @@ class ResourceTextEditorTest {
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
-                List.of()));
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), 48));
         String inJar = "{\"a\":\"jar\"}";
         ResourceTextEditor[] tabs = new ResourceTextEditor[2];
         SwingUtilities.invokeAndWait(() -> {
@@ -207,8 +204,7 @@ class ResourceTextEditorTest {
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
-                List.of()));
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), 48));
         String inJar = "{\"a\":\"jar\"}";
         ResourceTextEditor[] tabs = new ResourceTextEditor[2];
         SwingUtilities.invokeAndWait(() -> {
@@ -254,8 +250,7 @@ class ResourceTextEditorTest {
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
-                List.of()));
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), 48));
         edits.save(LANG, "{}".getBytes(StandardCharsets.UTF_8)).get(5, TimeUnit.SECONDS);
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
         Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");

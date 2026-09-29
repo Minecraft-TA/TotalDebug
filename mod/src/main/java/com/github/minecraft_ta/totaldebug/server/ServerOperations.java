@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.server;
 
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.server.world.WorldDatapacks;
@@ -38,7 +39,8 @@ public final class ServerOperations {
                         scripts.stopScript(player, companion, ((StopScriptMessage) message).scriptId()),
                 CompanionLeftMessage.class, (player, companion, message) -> scripts.companionLeft(player, companion),
                 ReloadMessage.class, (player, companion, message) -> datapacks.reload(player, companion, ((ReloadMessage) message).payload()),
-                SetPacksMessage.class, (player, companion, message) -> datapacks.select(player, companion, ((SetPacksMessage) message).payload()));
+                SetPacksMessage.class, (player, companion, message) -> datapacks.select(player, companion, ((SetPacksMessage) message).payload()),
+                DatapacksRequestMessage.class, (player, companion, message) -> datapacks.report(player, companion));
     }
 
     /** Runs {@code message}'s operation for {@code player}'s Companion connection {@code companion}. Server thread. */

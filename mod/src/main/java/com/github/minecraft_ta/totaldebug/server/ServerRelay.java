@@ -72,6 +72,11 @@ public final class ServerRelay {
         });
     }
 
+    /** The number of {@code player}'s newest Companion connection that reached the server, or 0 before any did. */
+    public int companion(ServerPlayer player) {
+        return this.companions.getOrDefault(player.getUUID(), 0);
+    }
+
     /** Forgets what {@code player}'s client was carrying. */
     public void removePlayer(ServerPlayer player) {
         this.assemblers.remove(player.getUUID());

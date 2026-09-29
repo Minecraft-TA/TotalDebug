@@ -42,7 +42,7 @@ class PackResourcesTest {
         assertEquals(List.of("vanilla", "mod/testmod", "file/Faithful"), assets.stream().map(PackResources.Source::id).toList());
         assertEquals(List.of(faithful), assets.getLast().files());
 
-        PackResources.Joined joined = PackResources.join(assets, PackResources.data(null, index, GameLocations.of(this.directory, false)));
+        PackResources.Joined joined = PackResources.join(assets, PackResources.data(null, false, index, GameLocations.of(this.directory, false)));
         assertEquals("Faithful", joined.from().get(TEXTURE), "the highest pack wins");
         assertEquals(List.of(mod), joined.hidden().get(TEXTURE));
         assertEquals(mod, joined.from().get(RECIPE), "a resource pack's data is not read by the game");
@@ -55,9 +55,8 @@ class PackResourcesTest {
     @Test
     void aGameWithoutAWorldListsNoDataAndAnUnreadablePackAddsNothing() throws Exception {
         CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
-        PackStackPayload menu = new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack("mod/testmod", "Mod resources", "")),
-                List.of());
-        assertEquals(List.of(), PackResources.data(menu, index, GameLocations.of(this.directory, false)), "at the menu or on a server the game has no data of its own");
+        assertEquals(List.of(), PackResources.data(null, true, index, GameLocations.of(this.directory, false)),
+                "at the menu or on a server the game has no data of its own, and no server names datapacks");
 
         PackResources.Joined joined = PackResources.join(List.of(
                 new PackResources.Source("file/Gone", "Gone", List.of(this.directory.resolve("resourcepacks/Gone.zip"))),
@@ -70,14 +69,15 @@ class PackResourcesTest {
         CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
         Path faithful = pack(this.directory.resolve("resourcepacks/Faithful"), TEXTURE);
         Path datapack = pack(this.directory.resolve("saves/World/datapacks/TotalDebug"), RECIPE);
-        PackStackPayload stack = new PackStackPayload(34, 48,
+        PackStackPayload resourcePacks = new PackStackPayload(34,
                 List.of(new PackStackPayload.Pack("file/Faithful", "Faithful", faithful.toString()),
-                        new PackStackPayload.Pack("mod/testmod", "Mod resources", "")),
+                        new PackStackPayload.Pack("mod/testmod", "Mod resources", "")));
+        PackStackPayload datapacks = new PackStackPayload(48,
                 List.of(new PackStackPayload.Pack("mod/testmod", "Mod resources", ""),
                         new PackStackPayload.Pack("file/TotalDebug", "TotalDebug", datapack.toString())));
 
-        PackResources.Joined joined = PackResources.join(PackResources.assets(stack, index, this.directory),
-                PackResources.data(stack, index, GameLocations.of(this.directory, false)));
+        PackResources.Joined joined = PackResources.join(PackResources.assets(resourcePacks, index, this.directory),
+                PackResources.data(datapacks, true, index, GameLocations.of(this.directory, false)));
         String mod = index.mod("testmod").orElseThrow().title();
         assertEquals(mod, joined.from().get(TEXTURE), "the game put the mod above Faithful");
         assertEquals(List.of("Faithful"), joined.hidden().get(TEXTURE));
@@ -104,13 +104,13 @@ class PackResourcesTest {
                 PackResources.resourcePacks(null, this.directory).stream().map(ListedPack::id).toList(),
                 "enabled ones with the highest first, then those in resourcepacks/ that are not");
 
-        PackStackPayload stack = new PackStackPayload(34, 48, List.of(
+        PackStackPayload stack = new PackStackPayload(34, List.of(
                 new PackStackPayload.Pack("vanilla", "Minecraft", "", PackStackPayload.REQUIRED),
                 new PackStackPayload.Pack("mod_resources", "Mod Resources", "", PackStackPayload.REQUIRED),
                 new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN),
                 new PackStackPayload.Pack("mod/other,more", "Other", "", PackStackPayload.HIDDEN),
-                new PackStackPayload.Pack("file/Unused", "Unused", "")), List.of(),
-                List.of(new PackStackPayload.Pack("programmer_art", "Programmer Art", "", PackStackPayload.INCOMPATIBLE)), List.of());
+                new PackStackPayload.Pack("file/Unused", "Unused", "")),
+                List.of(new PackStackPayload.Pack("programmer_art", "Programmer Art", "", PackStackPayload.INCOMPATIBLE)));
         List<ListedPack> running = PackResources.resourcePacks(stack, this.directory);
         assertEquals(List.of("file/Unused", "mod_resources", "vanilla", "programmer_art", "file/Faithful"),
                 running.stream().map(ListedPack::id).toList(),
@@ -142,7 +142,7 @@ class PackResourcesTest {
         Path world = Files.createDirectories(this.directory.resolve("saves/World"));
         Files.writeString(world.resolve("level.dat"), "not nbt");
 
-        assertThrows(IOException.class, () -> PackResources.data(null, index, GameLocations.of(this.directory, false)));
+        assertThrows(IOException.class, () -> PackResources.data(null, false, index, GameLocations.of(this.directory, false)));
     }
 
     @Test
@@ -155,7 +155,7 @@ class PackResourcesTest {
         pack(world.resolve("datapacks/Added"), RECIPE);
 
         assertEquals(List.of("vanilla", "file/Added", "mod/testmod"),
-                PackResources.data(null, index, GameLocations.of(this.directory, false)).stream().map(PackResources.Source::id).toList(),
+                PackResources.data(null, false, index, GameLocations.of(this.directory, false)).stream().map(PackResources.Source::id).toList(),
                 "the game adds Minecraft's data at the bottom and the mods' at the top");
     }
 
@@ -169,7 +169,7 @@ class PackResourcesTest {
         Path tweaks = pack(world.resolve("datapacks/Tweaks"), RECIPE);
         Path added = pack(world.resolve("datapacks/Added"), "data/testmod/recipe/cog.json");
 
-        List<PackResources.Source> sources = PackResources.data(null, index, GameLocations.of(this.directory, false));
+        List<PackResources.Source> sources = PackResources.data(null, false, index, GameLocations.of(this.directory, false));
         assertEquals(List.of("file/Tweaks", "file/Added"), sources.subList(sources.size() - 2, sources.size()).stream()
                 .map(PackResources.Source::id).toList(),
                 "the world's own pack is above the mods, and a new one in its folder above that, as the game enables it on load");

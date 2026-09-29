@@ -20,13 +20,13 @@ Companion changes and reads a Minecraft instance in several situations: with no 
 
 A world held while the game plays another, or while no game runs, is open in another program, such as a world editor.
 
-The game tells what it plays, and the packs in effect there (`PACK_STACK`), on the events that change them; it does not poll:
+The game tells what it plays, and the packs in effect there, on the events that change them; it does not poll. The game client names its resource packs (`PACK_STACK`), and the world's server its datapacks (`DATAPACKS`):
 
 | Told | When |
 |---|---|
 | `PLAYING` | The player joins a world or server (`LoggingIn`) or leaves it (`LoggingOut`), so leaving and rejoining the same server is a change too |
 | Resource packs | A client resource reload applies; a new selection, from the pack screen or from Companion, takes effect only through one |
-| The singleplayer world's datapacks | The server's tags arrive after its data loaded or reloaded, as `/reload` and `/datapack` do |
+| The singleplayer world's datapacks | The world's server names them when Companion asks, once the game plays the world, and again each time its data loaded, as `/reload` and `/datapack` do |
 | Packs the game could enable | The pack screen closes, and after each reload or pack selection Companion asks for |
 | Both, again | After `PLAYING`, and when Companion connects |
 

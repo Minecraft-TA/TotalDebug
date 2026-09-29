@@ -9,10 +9,12 @@ import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
+import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -113,10 +115,10 @@ class PackSelectionsTest {
     void theConnectedGameSelectsThePacksAndTheChangeIsRecordedOnceItDid() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record, true);
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(
                 new PackStackPayload.Pack("vanilla", "Minecraft", "", PackStackPayload.REQUIRED),
                 new PackStackPayload.Pack("mod_resources", "Mod Resources", "", PackStackPayload.REQUIRED),
-                new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN)), List.of()));
+                new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN))), 48));
         List<SetPacksPayload> sent = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
             if (SentMessage.of(message).message() instanceof SetPacksMessage packs) sent.add(packs.payload());
@@ -155,7 +157,7 @@ class PackSelectionsTest {
             return true;
         });
         edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(), List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+        edits.packs().datapacks(new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
 
         selections(record, edits).set(SetPacksPayload.Side.DATA, world, List.of("vanilla", "file/Tweaks"));
 
@@ -165,14 +167,24 @@ class PackSelectionsTest {
     }
 
     @Test
-    void anotherWorldPlayedDropsThePacksTheGameNamedBefore() {
+    void anotherWorldPlayedDropsTheDatapacksItsServerNamedBefore() {
         ResourceEdits edits = edits(ChangeRecord.inMemory(), true);
-        edits.location().connected(message -> true);
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(), List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+        List<String> asked = new CopyOnWriteArrayList<>();
+        edits.location().connected(message -> {
+            SentMessage out = SentMessage.of(message);
+            if (out.message() instanceof DatapacksRequestMessage) asked.add(out.world());
+            return true;
+        });
+        PackStackPayload resourcePacks = new PackStackPayload(34, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", "")));
+        edits.packs().named(new ClientPacksPayload(resourcePacks, 48));
+        edits.packs().datapacks(new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
 
-        edits.location().playing(new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString()));
+        PlayingPayload other = new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString());
+        edits.location().playing(other);
 
-        assertNull(edits.packs().packStack(), "the packs named were the previous world's; the game names them again");
+        assertNull(edits.packs().datapacks(), "the datapacks named were the previous world's server's");
+        assertEquals(resourcePacks, edits.packs().resourcePacks(), "the resource packs are the game client's, whatever it plays");
+        assertEquals(List.of(other.identity()), asked, "the new world's server is asked for its datapacks");
     }
 
     private ResourceEdits edits(ChangeRecord record, boolean gameRunning) {

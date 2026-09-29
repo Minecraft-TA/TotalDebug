@@ -68,7 +68,7 @@ The same relay serves the integrated server. A singleplayer game talks to its ow
 | Run and stop a script, script access | Own payloads | Relay; the server checks each script's references |
 | Select datapacks (`SET_PACKS` data) | Client code, integrated only | Server handler; checks the world it names |
 | Reload data (`RELOAD` data) | Client code, integrated only | Server handler; checks the world it names |
-| The world's datapacks (`PACK_STACK` data half) | Client code, integrated only | Server reports them for its world |
+| The world's datapacks (`DATAPACKS`, once the data half of `PACK_STACK`) | Client code, integrated only | Server reports them for its world |
 | Read and set game rules (#75) | Client code, integrated only | Server handler and server report |
 | Resource packs, assets, key bindings, options | Client | Client (unchanged) |
 
@@ -107,7 +107,7 @@ A stack, each layer at most about 500 lines, each merged before the next opens:
 | 3. World operations | Datapack selection, data reload, datapack report and game rules move to the server part, for the integrated server | Next version: server-reported datapacks | Singleplayer behaviour unchanged; no client class calls `getSingleplayerServer()` |
 | 4. Remote servers | The permission policy and configuration; `GameState` answers for a remote server's world; the World page for a server | Next version if the report needs the server's identity | Owner, operator and non-operator cases; a server without TotalDebug |
 
-Layer 3 lands as two PRs. The first makes the data reload and the datapack selection server operations: `RELOAD` of the world's data and `SET_PACKS` of its datapacks travel through the relay, whose envelope names the world, so the payloads lose their own world fields, and the server enables only the owner of a singleplayer world to change them until layer 4 decides who else may (`WorldDatapacks`). `RELAY_FAILED` names the message it refuses, since a reload's and a script run's correlations can be the same number. The second has the server report its world's datapacks and adds the check that no client class calls `getSingleplayerServer()` but to name the world it plays. Game rules (#75) are not part of it; they can join as another server operation once wanted.
+Layer 3 lands as two PRs. The first makes the data reload and the datapack selection server operations: `RELOAD` of the world's data and `SET_PACKS` of its datapacks travel through the relay, whose envelope names the world, so the payloads lose their own world fields, and the server enables only the owner of a singleplayer world to change them until layer 4 decides who else may (`WorldDatapacks`). `RELAY_FAILED` names the message it refuses, since a reload's and a script run's correlations can be the same number. The second has the server report its world's datapacks (`DATAPACKS`): when Companion asks with `DATAPACKS_REQUEST` once the game plays the world, and after each time its data loaded, to each player's newest Companion. The game client names only its resource packs, and its version's datapack format for a datapack Companion creates while no world is open. `ModPartsTest` checks that no client class calls `getSingleplayerServer()` but to name the world it plays. Game rules (#75) are not part of it; they can join as another server operation once wanted.
 
 Between layers 2 and 3, the class manifest handshake was replaced by the per-run link check described under [Server scripts](#server-scripts), with the numbered Companion connections.
 

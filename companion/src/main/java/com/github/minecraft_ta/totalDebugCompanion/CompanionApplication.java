@@ -34,6 +34,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationServi
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
@@ -224,7 +225,13 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 @Override
                 public void packStack(PackStackMessage message) {
                     ProjectScope scope = current;
-                    if (scope != null) scope.packs().packStack(message.payload());
+                    if (scope != null) scope.packs().named(message.payload());
+                }
+
+                @Override
+                public void datapacks(DatapacksMessage message) {
+                    ProjectScope scope = current;
+                    if (scope != null) scope.packs().datapacks(message.payload());
                 }
 
                 @Override

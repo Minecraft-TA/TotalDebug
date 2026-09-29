@@ -1,24 +1,24 @@
 package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
-import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 
 /** The game names its enabled packs. */
 public final class PackStackMessage extends AbstractMessage {
-    private PackStackPayload payload;
+    private ClientPacksPayload payload;
 
     public PackStackMessage() {
     }
 
-    public PackStackMessage(PackStackPayload payload) {
+    public PackStackMessage(ClientPacksPayload payload) {
         this.payload = payload;
     }
 
     @Override
     public void read(ByteBufferInputStream input) {
-        this.payload = PackStackPayload.read(input);
+        this.payload = ClientPacksPayload.read(input);
     }
 
     @Override
@@ -26,7 +26,7 @@ public final class PackStackMessage extends AbstractMessage {
         this.payload.write(output);
     }
 
-    public PackStackPayload payload() {
+    public ClientPacksPayload payload() {
         return this.payload;
     }
 }

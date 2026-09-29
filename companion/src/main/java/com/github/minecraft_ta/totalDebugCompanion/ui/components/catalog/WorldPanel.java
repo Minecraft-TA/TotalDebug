@@ -142,7 +142,7 @@ public final class WorldPanel extends JPanel {
         // The game saves the world while it runs, so the page reads it whenever it is shown.
         // A change of the game's datapacks, or one Companion wrote, is read again at once.
         this.loader = new PageLoader<>(() -> {
-            PackStackPayload stack = edits.packs().packStack();
+            PackStackPayload stack = edits.packs().datapacks();
             return () -> read(edits.location().read(), stack);
         }, this::show, failure -> show(new Loaded(null, List.of(), null, "The world could not be read: " + failure.getMessage())))
                 .whenShown(this).follow(edits.packs()::addStackListener).follow(edits.record()::addListener);

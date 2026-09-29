@@ -14,7 +14,6 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
-import net.neoforged.neoforge.event.TagsUpdatedEvent;
 
 /**
  * The client's lifecycle: its setup, its resource reloads, joining and leaving a world, and the moments its packs
@@ -50,16 +49,6 @@ public final class ClientLifecycleEvents {
     static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         TotalDebugClient.current().ifPresent(TotalDebugClient::left);
         TotalDebug.get().tickTasks().clear(Side.CLIENT);
-    }
-
-    /**
-     * The server's tags arrived after its data loaded or reloaded, as {@code /reload} and {@code /datapack} do. In
-     * singleplayer the server fires this event too, on its own thread; only the client's copy counts.
-     */
-    @SubscribeEvent
-    static void onTagsUpdated(TagsUpdatedEvent event) {
-        if (event.getUpdateCause() != TagsUpdatedEvent.UpdateCause.CLIENT_PACKET_RECEIVED) return;
-        TotalDebugClient.current().ifPresent(TotalDebugClient::packsChanged);
     }
 
     /**
