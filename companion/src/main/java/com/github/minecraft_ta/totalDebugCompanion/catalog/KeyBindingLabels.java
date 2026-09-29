@@ -62,8 +62,9 @@ public final class KeyBindingLabels implements ChangeLabels {
                     .filter(clash -> clash.overlap() != KeyBindings.Overlap.SEPARATE_CONTEXTS).map(clash -> clash.other().name()).toList();
             String before = key(bindings, KeyBindings.Assignment.decode(change.original()));
             rows.add(new Row(change, binding == null ? name : binding.name(), mod, key(bindings, current), before,
-                    sharing.isEmpty() ? "" : "Shares its key with " + names(sharing), new NavigationTarget.KeyBindings(name),
-                    new Actions("Show in Key Bindings", "Revert to " + before, "", name)));
+                    // The Key bindings page lists the bindings the catalog describes.
+                    sharing.isEmpty() ? "" : "Shares its key with " + names(sharing), binding == null ? null : new NavigationTarget.KeyBindings(name),
+                    new Actions("Show in Key Bindings", before.length() > 24 ? "Revert" : "Revert to " + before, "", name)));
         }
         rows.sort(Comparator.comparing(Row::name));
         return new Rows(rows, problems);

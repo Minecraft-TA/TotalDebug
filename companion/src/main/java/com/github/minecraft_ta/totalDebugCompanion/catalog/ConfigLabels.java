@@ -67,8 +67,8 @@ public final class ConfigLabels implements ChangeLabels {
                 Effect pending = this.settings.pending(target.file(), target.setting());
                 rows.add(new Row(change, target.setting(), where(index, target), literal,
                         change.original(), pending == null ? "" : Character.toUpperCase(pending.description().charAt(0)) + pending.description().substring(1),
-                        new NavigationTarget.ModPage(target.modId(), ModTab.CONFIGURATION, target.fileName()),
-                        new Actions("Show in Configuration", "Revert to " + change.original(), "", described.name())));
+                        opens(target), new Actions("Show in Configuration",
+                        change.original().length() > 24 ? "Revert" : "Revert to " + change.original(), "", described.name())));
             }
         }
         rows.sort(Comparator.comparing((Row row) -> row.where().toLowerCase(Locale.ROOT)).thenComparing(Row::name));
@@ -111,15 +111,28 @@ public final class ConfigLabels implements ChangeLabels {
         return file == null ? PackCatalog.ConfigType.COMMON : file.type();
     }
 
+    /**
+     * The Configuration tab on the setting's file; for a world's server configuration, only where that tab shows that
+     * world's copy, the current world's.
+     */
+    private NavigationTarget opens(ChangeRecord.Setting target) {
+        Path world = world(target);
+        if (world != null && !world.toAbsolutePath().normalize().equals(this.settings.location().read().currentWorld())) return null;
+        return new NavigationTarget.ModPage(target.modId(), ModTab.CONFIGURATION, target.fileName());
+    }
+
+    /** The world whose {@code serverconfig} holds the setting's file, or null. */
+    private static Path world(ChangeRecord.Setting target) {
+        Path serverconfig = target.file().getParent();
+        return serverconfig != null && serverconfig.getFileName() != null && serverconfig.getFileName().toString().equals("serverconfig")
+                ? serverconfig.getParent() : null;
+    }
+
     /** The mod and file of a setting, and the world a server configuration file is in. */
     private String where(CatalogIndex index, ChangeRecord.Setting target) {
         String where = modName(index, target.modId()) + ", " + target.fileName();
-        Path serverconfig = target.file().getParent();
-        if (serverconfig != null && serverconfig.getFileName() != null && serverconfig.getFileName().toString().equals("serverconfig")
-                && serverconfig.getParent() != null) {
-            where += ", " + serverconfig.getParent().getFileName();
-        }
-        return where;
+        Path world = world(target);
+        return world == null || world.getFileName() == null ? where : where + ", " + world.getFileName();
     }
 
     private static String modName(CatalogIndex index, String modId) {

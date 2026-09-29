@@ -94,6 +94,14 @@ public final class ChangesPanel extends JPanel {
                 }
             });
             ContextMenus.installTable(this.table, this::menu);
+            this.table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openChange");
+            this.table.getActionMap().put("openChange", new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent event) {
+                    List<ChangeLabels.Row> selected = selected();
+                    if (selected.size() == 1) open(selected.getFirst());
+                }
+            });
             this.table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "revertChanges");
             this.table.getActionMap().put("revertChanges", new AbstractAction() {
                 @Override
@@ -120,9 +128,12 @@ public final class ChangesPanel extends JPanel {
             JPopupMenu menu = new JPopupMenu();
             ChangeLabels.Row clicked = this.model.shown.get(row);
             if (selected.size() <= 1 && clicked.opens() != null) {
-                menu.add(ContextMenus.action(clicked.actions().open(), null, null, () -> open(clicked)));
+                menu.add(ContextMenus.action(clicked.actions().open(), null, "ENTER", () -> open(clicked)));
             }
             List<ChangeLabels.Row> reverted = selected.isEmpty() ? List.of(clicked) : selected;
+            // Each row as its name and its value now, one per line.
+            String copied = String.join("\n", reverted.stream().map(change -> change.name() + ": " + change.now()).toList());
+            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction(reverted.size() > 1 ? "Copy " + reverted.size() + " Changes" : "Copy Change", copied)));
             menu.add(ContextMenus.action(reverted.size() > 1 ? "Revert " + reverted.size() : reverted.getFirst().actions().revert(), null,
                     "DELETE", () -> revertAsked(reverted)));
             return menu;
