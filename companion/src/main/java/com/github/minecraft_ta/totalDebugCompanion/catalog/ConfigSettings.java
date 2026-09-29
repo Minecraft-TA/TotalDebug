@@ -16,7 +16,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,9 +25,11 @@ import java.util.function.Consumer;
 
 /**
  * Mods' configuration settings as a category of the change pipeline (see {@code docs/CHANGE_PIPELINE.md}): always written
- * to their file, which NeoForge's config watcher applies in a running game, one setting in place or a file's whole text.
- * A setting's value is its TOML literal as the file writes it, such as {@code 5} or {@code "a"}. {@link ConfigChanges}
- * tells when the game uses a written value.
+ * to their file, which NeoForge's config watcher applies in a running game. A setting's value is its TOML literal as the
+ * file writes it, such as {@code 5} or {@code "a"}; two literals of the same value are the same. A setting is changed in
+ * place through the pipeline; a file saved as text is written whole, checked against the text it was edited from, with
+ * each setting it changed recorded. Each write, and when the game uses it ({@link ConfigChanges}), runs as one task of
+ * the project's write queue.
  */
 public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting, ConfigSettings.Value> {
     /** A mod's configuration file, where it is written. */
@@ -63,11 +64,8 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
         }
     }
 
-    /**
-     * A setting's new literal; with {@code text}, the whole text of its file saved at once, and {@code base}, the text it
-     * was edited from, or null to replace whatever the file holds.
-     */
-    public record Value(String literal, String text, String base) {
+    /** A setting's new literal. */
+    public record Value(String literal) {
         public Value {
             Objects.requireNonNull(literal, "literal");
         }
@@ -77,22 +75,19 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
     public record Changed(Target target, String before, String after, Effect effect) {
     }
 
-    /** What a write did, and what to tell of it. */
-    public record Saved(List<Changed> changed, String message) {
+    /** What a write did, and what to tell of it; {@code replaced} is the text a file saved as text held before, or null. */
+    public record Saved(List<Changed> changed, String message, String replaced) {
     }
 
     private final ConfigChanges changes;
     private final ChangePipeline pipeline;
+    /** What {@link #readFile} read last, which the write right after it checks again; only in the write queue. */
+    private Map<ChangeRecord.Setting, String> read = Map.of();
 
     /** Writes through {@code pipeline}, and tells with {@code changes} when the game uses each value. */
     public ConfigSettings(ConfigChanges changes, ChangePipeline pipeline) {
         this.changes = Objects.requireNonNull(changes, "changes");
         this.pipeline = Objects.requireNonNull(pipeline, "pipeline");
-    }
-
-    /** When the game uses what was written, and which edits the running game still waits for. */
-    public ConfigChanges changes() {
-        return this.changes;
     }
 
     public GameLocation location() {
@@ -108,12 +103,16 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
      * made, or whatever it holds where {@code expected} is null.
      */
     public CompletableFuture<Saved> set(Target target, String expected, String literal) {
-        return this.pipeline.change(this, List.of(new ChangePipeline.Edit<>(target.recorded(), expected, new Value(literal, null, null))))
-                .thenApply(outcome -> {
-                    ChangePipeline.Applied<ChangeRecord.Setting> applied = outcome.applied().getFirst();
-                    Changed changed = changed(target, applied.before(), applied.now());
-                    return new Saved(List.of(changed), target.setting().name() + " saved, " + changed.effect().description());
-                });
+        return this.changes.write(() -> {
+            try {
+                ChangePipeline.Applied<ChangeRecord.Setting> applied = this.pipeline.write(this,
+                        List.of(new ChangePipeline.Edit<>(target.recorded(), expected, new Value(literal)))).applied().getFirst();
+                Changed changed = changed(target, applied.before(), applied.now());
+                return new Saved(List.of(changed), target.setting().name() + " saved, " + changed.effect().description(), null);
+            } catch (IOException exception) {
+                throw new CompletionException(exception);
+            }
+        });
     }
 
     /**
@@ -123,31 +122,25 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
      */
     public CompletableFuture<Saved> saveText(FileTarget target, List<PackCatalog.ConfigSetting> settings, String base, String after,
                                              boolean overwrite) {
-        List<ConfigEdit.TextChange> changes = ConfigEdit.changes(base, after, settings);
         String fileName = target.fileName().substring(target.fileName().lastIndexOf('/') + 1);
-        if (changes.isEmpty()) {
-            // A text that changes no setting, such as its comments, is a file write the change record does not keep.
-            return this.changes.write(() -> {
-                try {
-                    writeText(target.file(), after, overwrite ? null : base);
-                    return new Saved(List.of(), fileName + " saved");
-                } catch (IOException exception) {
-                    throw new CompletionException(exception);
+        return this.changes.write(() -> {
+            try {
+                // The text as a whole is what the edit was made against, and what is written, comments too.
+                String current = Files.readString(target.file(), StandardCharsets.UTF_8);
+                if (!overwrite && !current.equals(base)) throw new ConflictException(target.file());
+                // Against what the file holds now: a setting it already holds is not changed, and one overwritten is.
+                List<ConfigEdit.TextChange> textChanges = ConfigEdit.changes(current, after, settings);
+                ConfigEdit.writeInPlace(target.file(), after);
+                List<Changed> changed = new ArrayList<>();
+                for (ConfigEdit.TextChange change : textChanges) {
+                    Target setting = new Target(target.modId(), target.fileName(), target.file(), target.type(), change.setting());
+                    this.pipeline.record().changed(setting.recorded(), change.before(), change.after());
+                    changed.add(changed(setting, change.before(), change.after()));
                 }
-            });
-        }
-        Map<ChangeRecord.Setting, Target> targets = new LinkedHashMap<>();
-        List<ChangePipeline.Edit<ChangeRecord.Setting, Value>> edits = new ArrayList<>();
-        for (ConfigEdit.TextChange change : changes) {
-            Target setting = new Target(target.modId(), target.fileName(), target.file(), target.type(), change.setting());
-            targets.put(setting.recorded(), setting);
-            // The whole text is checked against the file instead, so a setting of it expects nothing on its own.
-            edits.add(new ChangePipeline.Edit<>(setting.recorded(), null, new Value(change.after(), after, overwrite ? null : base)));
-        }
-        return this.pipeline.change(this, edits).thenApply(outcome -> {
-            List<Changed> changed = outcome.applied().stream()
-                    .map(applied -> changed(targets.get(applied.target()), applied.before(), applied.now())).toList();
-            return new Saved(changed, textMessage(fileName, changed));
+                return new Saved(changed, textMessage(fileName, changed), current);
+            } catch (IOException exception) {
+                throw new CompletionException(exception);
+            }
         });
     }
 
@@ -207,6 +200,12 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
         return value.literal();
     }
 
+    /** Two literals of the same value, such as a list the game wrote again with other spacing, are the same. */
+    @Override
+    public boolean same(String first, String second) {
+        return ConfigEdit.sameValue(first, second);
+    }
+
     @Override
     public Map<ChangeRecord.Setting, String> readFile(Collection<ChangeRecord.Setting> targets) throws IOException {
         Map<Path, Map<String, String>> files = new HashMap<>();
@@ -220,34 +219,20 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
             String literal = literals.get(target.setting());
             if (literal != null) values.put(target, literal);
         }
+        this.read = values;
         return values;
     }
 
     /**
-     * Writes each file's settings: a file saved as text at once, after checking it still holds the text it was edited
-     * from; otherwise each setting in place, reading the file again first so edits made meanwhile are kept.
+     * Writes each setting in place, reading its file again first so edits made meanwhile are kept; a setting that changed
+     * since {@link #readFile} checked it, such as by the game, is left alone.
      */
     @Override
     public void writeFile(List<Write<ChangeRecord.Setting, Value>> writes, Consumer<ChangeRecord.Setting> landed) throws IOException {
-        Map<Path, List<Write<ChangeRecord.Setting, Value>>> byFile = new LinkedHashMap<>();
-        for (Write<ChangeRecord.Setting, Value> write : writes) byFile.computeIfAbsent(write.target().file(), file -> new ArrayList<>()).add(write);
-        for (Map.Entry<Path, List<Write<ChangeRecord.Setting, Value>>> file : byFile.entrySet()) {
-            Value whole = file.getValue().getFirst().value();
-            if (whole.text() != null) {
-                writeText(file.getKey(), whole.text(), whole.base());
-                file.getValue().forEach(write -> landed.accept(write.target()));
-                continue;
-            }
-            for (Write<ChangeRecord.Setting, Value> write : file.getValue()) {
-                ConfigEdit.write(file.getKey(), write.target().setting(), write.value().literal());
-                landed.accept(write.target());
-            }
+        for (Write<ChangeRecord.Setting, Value> write : writes) {
+            ConfigEdit.write(write.target().file(), write.target().setting(), write.value().literal(), this.read.get(write.target()),
+                    changedSince(write.target()));
+            landed.accept(write.target());
         }
-    }
-
-    /** Writes {@code text} into {@code file}, when it still holds {@code base}, or whatever it holds where that is null. */
-    private static void writeText(Path file, String text, String base) throws IOException {
-        if (base != null && !Files.readString(file, StandardCharsets.UTF_8).equals(base)) throw new ConflictException(file);
-        ConfigEdit.writeInPlace(file, text);
     }
 }

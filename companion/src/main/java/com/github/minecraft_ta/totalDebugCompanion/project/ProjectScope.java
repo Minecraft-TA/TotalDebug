@@ -58,7 +58,6 @@ public final class ProjectScope implements AutoCloseable {
     /** What Companion changed in the pack, kept with the instance. */
     public ChangeRecord changes() { return changes; }
     private final ConfigChanges configChanges;
-    public ConfigChanges configChanges() { return configChanges; }
     private final ConfigSettings configSettings;
     public ConfigSettings configSettings() { return configSettings; }
     private final ChangePipeline pipeline;

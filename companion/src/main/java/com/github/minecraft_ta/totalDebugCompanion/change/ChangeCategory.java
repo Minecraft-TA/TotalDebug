@@ -60,6 +60,14 @@ public interface ChangeCategory<T extends ChangeRecord.Target, V> {
      */
     Access access(GameState game, T target);
 
+    /**
+     * Whether two values, as text, are the same value, such as two ways a file writes one; by default when they are the
+     * same text.
+     */
+    default boolean same(String first, String second) {
+        return first.equals(second);
+    }
+
     /** {@code value} as text, as the record keeps it and the game reads it. */
     String text(V value);
 

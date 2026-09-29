@@ -166,11 +166,11 @@ public final class ChangePipeline {
         for (Edit<T, V> edit : change) {
             String now = category.text(edit.value());
             String before = held.get(edit.target());
-            if (now.equals(before)) {
+            if (before != null && category.same(now, before)) {
                 applied.add(new Applied<>(edit.target(), before, now));
                 continue;
             }
-            if (before != null && edit.expected() != null && !before.equals(edit.expected())) {
+            if (before != null && edit.expected() != null && !category.same(before, edit.expected())) {
                 throw new Stale(category.changedSince(edit.target()));
             }
             writes.add(new ChangeCategory.Write<>(edit.target(), edit.value()));

@@ -62,13 +62,13 @@ public final class PackConfigurationPanel extends JPanel {
     private String unavailable = "";
     private String status = "";
 
-    public PackConfigurationPanel(PackCatalogService catalog, ConfigSettings changes,
+    public PackConfigurationPanel(PackCatalogService catalog, ConfigSettings configSettings,
                                  Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
-        this.location = changes.location();
+        this.location = configSettings.location();
         this.navigator = Objects.requireNonNull(navigator, "navigator");
-        this.writer = new ConfigWriter(changes, this::setStatus, this::load);
+        this.writer = new ConfigWriter(configSettings, this::setStatus, this::load);
 
         this.body = new BrowserBody("Filter settings", BrowserBody.scroll(this.table), this.table, this::applyFilter);
         this.modifiedOnly.setToolTipText("Only settings that differ from their default");

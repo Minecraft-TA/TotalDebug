@@ -98,11 +98,11 @@ final class ConfigPanel extends JPanel {
     private Object shownSource;
 
     /** {@code modId} is the mod whose files are shown. */
-    ConfigPanel(String modId, ConfigSettings changes, Consumer<NavigationTarget> navigator) {
+    ConfigPanel(String modId, ConfigSettings configSettings, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
-        this.location = changes.location();
-        this.writer = new ConfigWriter(changes, this::setStatus, this::load);
+        this.location = configSettings.location();
+        this.writer = new ConfigWriter(configSettings, this::setStatus, this::load);
         this.textEditor = new ConfigTextEditor(this.writer, this::setStatus, this::load);
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.values = new PageLoader<>(this::prepareValues, read -> show(read.file(), read.values(),

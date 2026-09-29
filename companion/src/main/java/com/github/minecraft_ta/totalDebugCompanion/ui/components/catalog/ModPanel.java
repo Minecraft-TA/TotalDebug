@@ -97,10 +97,10 @@ public final class ModPanel extends JPanel {
 
     /**
      * {@code workspace} is the game directory, where server configurations of each world are found, and
-     * {@code changes} tracks configuration edits the running game has not applied yet.
+     * {@code configSettings} writes configuration edits and tracks those the running game has not applied yet.
      */
     public ModPanel(String modId, PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources,
-                    ItemIconService icons, Path workspace, ConfigSettings changes, KeyBindingControl keyControl,
+                    ItemIconService icons, Path workspace, ConfigSettings configSettings, KeyBindingControl keyControl,
                     Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
@@ -119,7 +119,7 @@ public final class ModPanel extends JPanel {
             this.resources.setMessage("Resources could not be read: " + failure.getMessage());
             setTab(ModTab.RESOURCES, 1);
         });
-        this.configs = new ConfigPanel(modId, changes, navigator);
+        this.configs = new ConfigPanel(modId, configSettings, navigator);
         this.keyBindings = new KeyBindingsPanel(catalog, keyControl, modId, navigator);
         this.content = new ContentBrowser(this.listIcons, this::iconOf, navigator, null);
 

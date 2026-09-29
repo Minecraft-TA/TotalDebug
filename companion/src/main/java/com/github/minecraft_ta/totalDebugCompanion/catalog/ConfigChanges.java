@@ -70,10 +70,6 @@ public final class ConfigChanges {
         return this.location;
     }
 
-    public ChangeRecord record() {
-        return this.record;
-    }
-
     /** Runs {@code write} after the project's earlier writes; refused once the project closes. */
     public <T> CompletableFuture<T> write(Supplier<T> write) {
         try {

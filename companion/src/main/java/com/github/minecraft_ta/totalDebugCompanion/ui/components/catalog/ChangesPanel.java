@@ -143,16 +143,16 @@ public final class ChangesPanel extends JPanel {
     private String problem = "";
     private String status = "";
 
-    public ChangesPanel(PackCatalogService catalog, ConfigSettings configChanges, KeyBindingControl keyControl,
+    public ChangesPanel(PackCatalogService catalog, ConfigSettings configSettings, KeyBindingControl keyControl,
                         ResourceEdits resourceEdits, PackSelections packSelections, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
-        this.record = configChanges.record();
+        this.record = configSettings.record();
         this.keyControl = Objects.requireNonNull(keyControl, "keyControl");
         this.resourceEdits = Objects.requireNonNull(resourceEdits, "resourceEdits");
         this.packSelections = Objects.requireNonNull(packSelections, "packSelections");
         this.navigator = Objects.requireNonNull(navigator, "navigator");
-        this.writer = new ConfigWriter(configChanges, this::setStatus, this::load);
+        this.writer = new ConfigWriter(configSettings, this::setStatus, this::load);
 
         this.filter.putClientProperty("JTextField.placeholderText", "Filter changes");
         this.filter.getDocument().addDocumentListener(new DocumentListener() {

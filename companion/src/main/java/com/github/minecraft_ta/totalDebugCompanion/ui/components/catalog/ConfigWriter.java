@@ -161,7 +161,9 @@ final class ConfigWriter {
                 this.status.accept(cause.getMessage());
                 return;
             }
-            saved.accept(step);
+            // An overwritten text is undone to what the file held, not to the text the edit was opened from.
+            saved.accept(step instanceof TextStep text && result.replaced() != null
+                    ? new TextStep(text.target(), text.settings(), result.replaced(), text.after()) : step);
             this.status.accept(result.message());
             this.written.run();
         }));

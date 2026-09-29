@@ -29,10 +29,10 @@ public final class ConfigFilePanel extends JPanel {
     private final PageLoader<String> loader;
 
     /** {@code owner} is the mod configuration {@code file} holds, such as a world's copy of a server configuration. */
-    public ConfigFilePanel(Path file, ConfigSources.Owner owner, ConfigSettings changes) {
+    public ConfigFilePanel(Path file, ConfigSources.Owner owner, ConfigSettings configSettings) {
         super(new BorderLayout());
         this.file = Objects.requireNonNull(file, "file");
-        ConfigWriter writer = new ConfigWriter(changes, this::setStatus, this::load);
+        ConfigWriter writer = new ConfigWriter(configSettings, this::setStatus, this::load);
         this.editor = new ConfigTextEditor(writer, this::setStatus, this::load);
         this.editor.setDocument(new ConfigTextEditor.Document(new ConfigSettings.FileTarget(owner.mod().id(),
                 owner.file().fileName(), file, owner.file().type()), owner.file().settings()));

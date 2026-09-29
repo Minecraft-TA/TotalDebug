@@ -91,6 +91,33 @@ class ConfigSettingsTest {
         assertEquals(0, record.size());
     }
 
+    @Test
+    void aSavedTextIsWrittenWholeEvenWhereTheFileAlreadyHoldsItsSettings() throws Exception {
+        String base = "[widgets]\n\tspeed = 4\n";
+        Path file = file("[widgets]\n\tspeed = 8\n");
+        ChangeRecord record = ChangeRecord.inMemory();
+        ConfigSettings settings = ConfigSettingsFixture.of(GameLocations.of(this.directory, false), record);
+        String edited = "[widgets]\n\t# Faster\n\tspeed = 8\n";
+
+        assertInstanceOf(ConfigSettings.ConflictException.class, assertThrows(ExecutionException.class, () ->
+                settings.saveText(fileTarget(file), List.of(SPEED), base, edited, false).get(5, TimeUnit.SECONDS)).getCause(),
+                "the file changed since the text was opened, even to what the text holds");
+        ConfigSettings.Saved saved = settings.saveText(fileTarget(file), List.of(SPEED), base, edited, true).get(5, TimeUnit.SECONDS);
+        assertEquals(edited, Files.readString(file), "the comment is written");
+        assertEquals("testmod-common.toml saved", saved.message(), "no setting changed against what the file held");
+        assertEquals(0, record.size());
+    }
+
+    @Test
+    void aValueTheGameWroteAgainWithOtherSpacingIsTheSameValue() throws Exception {
+        PackCatalog.ConfigSetting names = new PackCatalog.ConfigSetting("widgets.names", "", "[]", "", List.of(), PackCatalog.Restart.NONE);
+        Path file = file("[widgets]\n\tnames = [\"a\", \"b\"]\n");
+        ConfigSettings settings = ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory());
+
+        settings.set(target(file, names), "[\"a\",\"b\"]", "[\"c\"]").get(5, TimeUnit.SECONDS);
+        assertEquals("[widgets]\n\tnames = [\"c\"]\n", Files.readString(file), "not refused as changed in its file");
+    }
+
     private Path file(String text) throws Exception {
         Path file = Files.createDirectories(this.directory.resolve("config")).resolve("testmod-common.toml");
         Files.writeString(file, text);
