@@ -30,19 +30,19 @@ class GamePacksTest {
         packs.named(new ClientPacksPayload(stack("vanilla"), 48));
         assertEquals(List.of(1, 1), told(), "the resource packs, and the version's datapack format");
         packs.named(new ClientPacksPayload(stack("vanilla"), 48));
-        assertEquals(List.of(1, 1), told(), "the same packs named again, as after a reload that changed none");
+        assertEquals(List.of(2, 1), told(), "the game names them after each reload, which may change their files");
         packs.named(new ClientPacksPayload(stack("vanilla", "file/Faithful"), 48));
-        assertEquals(List.of(2, 1), told(), "another resource pack leaves the datapacks alone");
+        assertEquals(List.of(3, 1), told(), "another resource pack leaves the datapacks alone");
 
         PlayingPayload world = new PlayingPayload.Singleplayer(this.directory.resolve("saves/Test").toString());
         location.playing(world);
-        assertEquals(List.of(2, 2), told(), "another world has other datapacks; the resource packs stay");
+        assertEquals(List.of(3, 2), told(), "another world has other datapacks; the resource packs stay");
         packs.datapacks(world.identity(), stack("vanilla", "mod_data"), "");
         packs.datapacks(world.identity(), stack("vanilla", "mod_data"), "");
-        assertEquals(List.of(2, 4), told(), "the server names them after each data load, which may change their files");
+        assertEquals(List.of(3, 4), told(), "the server names them after each data load, which may change their files");
 
         location.disconnected();
-        assertEquals(List.of(3, 5), told(), "without the game, the files stand for both");
+        assertEquals(List.of(4, 5), told(), "without the game, the files stand for both");
     }
 
     @Test

@@ -18,6 +18,10 @@ import java.util.function.Supplier;
 /**
  * Publishes the pack catalog belonging to the current runtime inventory. A catalog already written for the same
  * inventory and language is reused; otherwise the game captures it once and writes it next to the inventory.
+ *
+ * <p>After a resource reload the catalog is captured again, quietly: Companion keeps showing the catalog it was told,
+ * and hears of the new one only when it differs, as it does when a pack changes names or tints. Most reloads change
+ * neither, so Companion reads and indexes nothing.
  */
 public final class PackCatalogPublisher implements AutoCloseable {
     /** Starts a capture on the client thread and completes with its result. */
@@ -39,6 +43,8 @@ public final class PackCatalogPublisher implements AutoCloseable {
     private PreparedFilePayload state;
     private long generation;
     private boolean stale;
+    /** The catalog Companion was told of last, or null before any. */
+    private PackCatalog told;
 
     public PackCatalogPublisher(Path file, Supplier<String> language, CaptureStarter captures,
                                 Consumer<PreparedFilePayload> send) {
@@ -76,43 +82,58 @@ public final class PackCatalogPublisher implements AutoCloseable {
         long current = ++this.generation;
         Map<String, String> modules = Map.copyOf(moduleByModId);
         boolean reuse = !this.stale;
+        // A catalog captured again for the inventory Companion has one of changes it only where the new one differs.
+        boolean quietly = this.told != null && this.told.inventoryId().equals(inventoryId);
         this.stale = false;
-        this.worker.execute(() -> prepare(current, inventoryId, language, modules, reuse));
+        this.worker.execute(() -> prepare(current, inventoryId, language, modules, reuse, quietly));
     }
 
     private void prepare(long generation, String inventoryId, String language, Map<String, String> modules,
-                         boolean reuse) {
+                         boolean reuse, boolean quietly) {
         if (reuse && Files.isRegularFile(this.file)) {
             try {
                 // Read in full: a file whose header matches but whose body is damaged is captured again.
                 PackCatalog saved = PackCatalog.read(this.file);
                 if (saved.inventoryId().equals(inventoryId) && saved.language().equals(language)) {
-                    publish(generation, ready(inventoryId));
+                    publish(generation, ready(inventoryId), saved);
                     return;
                 }
             } catch (IOException | RuntimeException exception) {
                 TotalDebug.LOGGER.info("Recapturing the pack catalog: {}", exception.getMessage());
             }
         }
-        publish(generation, PreparedFilePayload.preparing(PreparedFilePayload.Kind.PACK_CATALOG, inventoryId, ""));
+        if (!quietly) publish(generation, PreparedFilePayload.preparing(PreparedFilePayload.Kind.PACK_CATALOG, inventoryId, ""), null);
+        long started = System.nanoTime();
         this.captures.start(inventoryId, language, modules).whenCompleteAsync((catalog, failure) -> {
             // A newer request owns the file and the announced state; a superseded capture leaves both alone.
             if (!isCurrent(generation)) {
                 return;
             }
             if (failure == null) {
+                if (quietly && catalog.equals(told())) {
+                    TotalDebug.LOGGER.info("Pack catalog unchanged after {} ms; Companion keeps the one it has",
+                            (System.nanoTime() - started) / 1_000_000);
+                    return;
+                }
                 try {
                     catalog.write(this.file);
-                    publish(generation, ready(inventoryId));
+                    publish(generation, ready(inventoryId), catalog);
+                    TotalDebug.LOGGER.info("Pack catalog {} after {} ms", quietly ? "changed" : "published",
+                            (System.nanoTime() - started) / 1_000_000);
                     return;
                 } catch (IOException | RuntimeException exception) {
                     failure = exception;
                 }
             }
+            if (quietly) {
+                // Companion keeps the catalog it has, which only lacks what the reload changed.
+                TotalDebug.LOGGER.error("Unable to capture the pack catalog again; Companion keeps the one it has", failure);
+                return;
+            }
             TotalDebug.LOGGER.error("Unable to publish the pack catalog", failure);
             String detail = failure.getMessage();
             publish(generation, PreparedFilePayload.failed(PreparedFilePayload.Kind.PACK_CATALOG, inventoryId,
-                    detail == null || detail.isBlank() ? "Pack catalog capture failed" : detail));
+                    detail == null || detail.isBlank() ? "Pack catalog capture failed" : detail), null);
         }, this.worker);
     }
 
@@ -124,12 +145,18 @@ public final class PackCatalogPublisher implements AutoCloseable {
         return generation == this.generation;
     }
 
-    private synchronized void publish(long generation, PreparedFilePayload message) {
+    /** Tells {@code message}, and with a ready one the {@code catalog} it names. */
+    private synchronized void publish(long generation, PreparedFilePayload message, PackCatalog catalog) {
         if (generation != this.generation) {
             return;
         }
         this.state = message;
+        if (catalog != null) this.told = catalog;
         this.send.accept(message);
+    }
+
+    private synchronized PackCatalog told() {
+        return this.told;
     }
 
     @Override

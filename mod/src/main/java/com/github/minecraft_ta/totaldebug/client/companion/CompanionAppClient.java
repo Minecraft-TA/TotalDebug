@@ -129,10 +129,10 @@ public final class CompanionAppClient implements AutoCloseable {
     private volatile IntConsumer sessionClosedHandler = number -> { };
     private volatile Runnable sessionOpenedHandler = () -> { };
     private volatile BiConsumer<String, Map<String, String>> packCatalogHandler = (inventoryId, modules) -> { };
-    private volatile Consumer<ChangeMessage> changeHandler = message -> send(new ChangeResultMessage(
-            ChangeResultPayload.refused(message.payload().requestId(), "The game is not ready to change anything yet")));
-    private volatile Consumer<ReloadMessage> reloadHandler = message -> send(new ReloadResultMessage(
-            new ReloadResultPayload(message.payload().requestId(), 0, List.of(), "The game is not ready to reload resources yet")));
+    private volatile ObjIntConsumer<ChangeMessage> changeHandler = (message, companion) -> sendChangeResult(companion,
+            new ChangeResultMessage(ChangeResultPayload.refused(message.payload().requestId(), "The game is not ready to change anything yet")));
+    private volatile ObjIntConsumer<ReloadMessage> reloadHandler = (message, companion) -> sendReloadResult(companion,
+            new ReloadResultMessage(new ReloadResultPayload(message.payload().requestId(), 0, List.of(), "The game is not ready to reload resources yet")));
     private volatile RuntimeInventoryPublisher.PublishedInventory publishedInventory;
     private volatile Consumer<CompanionStartupProgress> progressListener = progress -> { };
     private volatile boolean closing;
@@ -278,22 +278,27 @@ public final class CompanionAppClient implements AutoCloseable {
         }
     }
 
-    /** Receives Companion's changes of values the game keeps, such as key bindings; runs on the connection thread. */
-    public void setChangeHandler(Consumer<ChangeMessage> handler) {
+    /**
+     * Receives Companion's changes of values the game keeps, such as key bindings, with its connection's number; runs on
+     * the connection thread.
+     */
+    public void setChangeHandler(ObjIntConsumer<ChangeMessage> handler) {
         this.changeHandler = Objects.requireNonNull(handler, "handler");
     }
 
-    public void sendChangeResult(ChangeResultMessage message) {
-        send(message);
+    /** Answers a change of Companion connection {@code companion}, and no connection opened since. */
+    public void sendChangeResult(int companion, ChangeResultMessage message) {
+        send(companion, message);
     }
 
-    /** Receives Companion's requests to reload resources; runs on the connection thread. */
-    public void setReloadHandler(Consumer<ReloadMessage> handler) {
+    /** Receives Companion's requests to reload resources, with its connection's number; runs on the connection thread. */
+    public void setReloadHandler(ObjIntConsumer<ReloadMessage> handler) {
         this.reloadHandler = Objects.requireNonNull(handler, "handler");
     }
 
-    public void sendReloadResult(ReloadResultMessage message) {
-        send(message);
+    /** Answers a reload of Companion connection {@code companion}, and no connection opened since. */
+    public void sendReloadResult(int companion, ReloadResultMessage message) {
+        send(companion, message);
     }
 
     public void sendPackStack(PackStackMessage message) {
@@ -417,14 +422,14 @@ public final class CompanionAppClient implements AutoCloseable {
                 failSession(attempt, "Companion sent a change before authentication", null);
                 return;
             }
-            this.changeHandler.accept(message);
+            this.changeHandler.accept(message, attempt.number);
         });
         transport.getMessageBus().listenAlways(ReloadMessage.class, message -> {
             if (!attempt.authenticated()) {
                 failSession(attempt, "Companion sent a reload request before authentication", null);
                 return;
             }
-            this.reloadHandler.accept(message);
+            this.reloadHandler.accept(message, attempt.number);
         });
         transport.getMessageBus().listenAlways(StopScriptMessage.class, message -> {
             if (!attempt.authenticated()) {

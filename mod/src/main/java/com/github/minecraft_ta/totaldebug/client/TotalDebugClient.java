@@ -90,7 +90,7 @@ public final class TotalDebugClient {
                 companionApp::sendPreparedFile
         );
         this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
-        companionApp.setSessionOpenedHandler(() -> Minecraft.getInstance().execute(this::tellPlaying));
+        companionApp.setSessionOpenedHandler(() -> Minecraft.getInstance().execute(this::tellSession));
         companionApp.setPackCatalogHandler((inventoryId, modules) -> {
             // Icons are drawn from the resource snapshot, which must follow the current packs even when the
             // saved catalog is reused.
@@ -99,10 +99,10 @@ public final class TotalDebugClient {
         });
         ChangeTable changes = new ChangeTable(Map.of(KeyBindingEdits.CATEGORY, new KeyBindingEdits(),
                 ResourcePackEdits.CATEGORY, new ResourcePackEdits()), Minecraft.getInstance());
-        companionApp.setChangeHandler(message -> Minecraft.getInstance().execute(() -> changes.apply(message.payload())
-                .thenAccept(result -> companionApp.sendChangeResult(new ChangeResultMessage(result)))));
-        companionApp.setReloadHandler(message -> Minecraft.getInstance().execute(() ->
-                ResourceReloads.reload(message.payload(), this::answerReload)));
+        companionApp.setChangeHandler((message, companion) -> Minecraft.getInstance().execute(() -> changes.apply(message.payload())
+                .thenAccept(result -> companionApp.sendChangeResult(companion, new ChangeResultMessage(result)))));
+        companionApp.setReloadHandler((message, companion) -> Minecraft.getInstance().execute(() ->
+                ResourceReloads.reload(message.payload(), result -> answerReload(companion, result))));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(Selection subject) {
@@ -172,13 +172,14 @@ public final class TotalDebugClient {
 
     /**
      * A client resource reload finished, such as after a language or resource pack change. The catalog holds
-     * translated names and the snapshot the winning resources, so both are brought up to date; a new resource pack
-     * selection takes effect only through a reload, so the packs are told here. Client thread only.
+     * translated names and the snapshot the winning resources, so both are brought up to date; Companion hears of them
+     * only where they differ. The packs are told after every reload, also unchanged: the reload read the packs' files
+     * again, which may have changed though the packs did not. Client thread only.
      */
     public void resourcesReloaded() {
         this.catalogs.recapture();
         this.companionApp.announceInventory();
-        this.packStacks.publish();
+        this.packStacks.republish();
     }
 
     /**
@@ -207,23 +208,24 @@ public final class TotalDebugClient {
     private void play(PlayingPayload playing) {
         if (playing.equals(this.playing)) return;
         this.playing = playing;
-        tellPlaying();
+        // The resource packs are the game client's, whatever it plays.
+        this.companionApp.sendPlaying(new PlayingMessage(this.playing));
     }
 
-    /** Tells Companion what the game plays, then the packs, which Companion reads for what it plays. Client thread only. */
-    private void tellPlaying() {
+    /** Tells a newly connected Companion what the game plays and its packs. Client thread only. */
+    private void tellSession() {
         this.companionApp.sendPlaying(new PlayingMessage(this.playing));
         this.packStacks.republish();
     }
 
     /**
-     * Answers a reload on the client thread, after telling the packs: the reload rescanned the pack folders and may have
-     * changed what is enabled.
+     * Answers a reload of Companion connection {@code companion} on the client thread, after telling the packs: the reload
+     * rescanned the pack folders and may have changed what is enabled.
      */
-    private void answerReload(ReloadResultPayload result) {
+    private void answerReload(int companion, ReloadResultPayload result) {
         Minecraft.getInstance().execute(() -> {
             this.packStacks.publish();
-            this.companionApp.sendReloadResult(new ReloadResultMessage(result));
+            this.companionApp.sendReloadResult(companion, new ReloadResultMessage(result));
         });
     }
 

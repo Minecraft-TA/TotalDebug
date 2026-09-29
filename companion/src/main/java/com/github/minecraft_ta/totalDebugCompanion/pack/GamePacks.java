@@ -29,10 +29,10 @@ import java.util.zip.ZipFile;
  * it plays names, each in its order; without them, what {@code options.txt} and a world's {@code level.dat} enable. It
  * answers which pack's copy of a file the game uses, for the views and the edits that show whether a copy is used.
  *
- * <p>Each side tells its own listeners, only when its packs may differ: the resource packs when the game client names
- * others; the datapacks whenever the world's server names them, since it does after each data load, which may change
- * the packs' files though not their order, and when the game goes to another world; and a side whose file Companion
- * wrote. A disconnect changes both, since the files take over from the game.
+ * <p>Each side tells its own listeners, only when its packs may differ: the resource packs whenever the game client
+ * names them, and the datapacks whenever the world's server does, since each names them after a load of its resources,
+ * which may change the packs' files though not their order; the datapacks also when the game goes to another world; and
+ * a side whose file Companion wrote. A disconnect changes both, since the files take over from the game.
  */
 public final class GamePacks {
     private final GameLocation location;
@@ -100,15 +100,13 @@ public final class GamePacks {
 
     /** Takes the resource packs the game client names, and its version's datapack format. */
     public void named(ClientPacksPayload packs) {
-        boolean resources;
         boolean format;
         synchronized (this) {
-            resources = !Objects.equals(packs.resourcePacks(), this.resourcePacks);
             format = packs.dataFormat() != this.dataFormat;
             this.resourcePacks = packs.resourcePacks();
             this.dataFormat = packs.dataFormat();
         }
-        if (resources) tell(ChangeRecord.PackSide.RESOURCES);
+        tell(ChangeRecord.PackSide.RESOURCES);
         // The version's format stands for the datapacks' until the world's server names them.
         if (format) tell(ChangeRecord.PackSide.DATA);
     }
