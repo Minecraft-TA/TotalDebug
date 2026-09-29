@@ -3,14 +3,19 @@ package com.github.minecraft_ta.totaldebug.client.inspection;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.google.gson.JsonObject;
+import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackResources;
+import net.minecraft.server.packs.repository.KnownPack;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
+import net.neoforged.fml.ModList;
+import net.neoforged.fml.loading.FMLLoader;
+import net.neoforged.neoforgespi.language.IModFileInfo;
 import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 
 import java.io.ByteArrayInputStream;
@@ -18,7 +23,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.attribute.FileTime;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -37,10 +45,12 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Keeps one immutable archive of the active pack stack's winning models and textures, plus every contributing atlas
+ * Keeps immutable archives of the active pack stack's winning models and textures, plus every contributing atlas
  * definition, so Companion can draw item icons without Minecraft. Layer {@code n} holds the n-th contribution of an
- * additive atlas definition; ordinary resources only use layer 0. A new archive is captured when the pack stack
- * changes. Older archives are removed once no renderer holds them open.
+ * additive atlas definition; ordinary resources only use layer 0. An archive is named by what it holds
+ * ({@link IconArchiveKey}): packs whose files did not change since use the one captured for them, also in a later run,
+ * and only other packs capture a new one. The most recent few are kept, so enabling a pack and disabling it again uses
+ * the archive before; older ones are removed once no renderer holds them open.
  *
  * <p>Fluid appearances come from mod code rather than resources, so the snapshot also records each fluid's still
  * texture, tint and light properties in {@value #FLUID_APPEARANCES}, the format Companion's renderer reads.</p>
@@ -51,6 +61,11 @@ public final class ResourceSnapshots {
     private static final long MAX_ARCHIVE_BYTES = 512L * 1024 * 1024;
     private static final long MAX_RETAINED_BYTES = 1536L * 1024 * 1024;
     private static final long RETRY_NANOS = 10_000_000_000L;
+    /** How many archives are kept, the most recently used first. */
+    private static final int KEPT = 4;
+    /** What a key holds besides the packs: the archive's layout, and the game whose resources it reads. */
+    private static final String VERSION = "icon archive 1, Minecraft " + SharedConstants.getCurrentVersion().getName()
+            + ", NeoForge " + FMLLoader.versionInfo().neoForgeVersion();
     static final String FLUID_APPEARANCES = "totaldebug/fluid-appearances.json";
 
     private final Path directory;
@@ -59,7 +74,6 @@ public final class ResourceSnapshots {
             .daemon()
             .name("TotalDebug resource snapshot")
             .unstarted(task));
-    private List<PackResources> packs = List.of();
     private CompletableFuture<Path> pending;
     private long attemptedAt;
 
@@ -68,30 +82,79 @@ public final class ResourceSnapshots {
         this.publish = Objects.requireNonNull(publish, "publish");
     }
 
-    /** Publishes the current snapshot, capturing it first when the pack stack changed. Client thread only. */
+    /**
+     * Publishes the archive of the current packs: the one kept for their key, or one captured now. The key is taken on
+     * the snapshot thread, which may walk the packs' folders. A capture that failed is not tried again for ten seconds.
+     * Client thread only.
+     */
     public synchronized void prepare() {
+        if (this.pending != null && this.pending.isCompletedExceptionally() && System.nanoTime() - this.attemptedAt < RETRY_NANOS) {
+            return;
+        }
         ResourceManager manager = Minecraft.getInstance().getResourceManager();
         List<PackResources> current = manager.listPacks().toList();
-        boolean retry = this.pending != null && this.pending.isCompletedExceptionally()
-                && System.nanoTime() - this.attemptedAt > RETRY_NANOS;
-        if (this.pending == null || !current.equals(this.packs) || retry) {
-            this.packs = current;
-            this.attemptedAt = System.nanoTime();
-            byte[] fluids = fluidAppearances();
-            this.pending = CompletableFuture.supplyAsync(() -> {
-                try {
-                    return capture(manager, current, fluids);
-                } catch (IOException exception) {
-                    throw new IllegalStateException("Unable to prepare item icons: " + exception.getMessage(), exception);
+        List<IconArchiveKey.Part> parts = parts(current);
+        byte[] fluids = fluidAppearances();
+        this.attemptedAt = System.nanoTime();
+        this.pending = CompletableFuture.supplyAsync(() -> {
+            try {
+                long started = System.nanoTime();
+                Optional<String> key = IconArchiveKey.of(VERSION, parts, fluids, Instant.now());
+                Optional<Path> kept = key.map(name -> this.directory.resolve(name + ".zip")).filter(Files::isRegularFile);
+                if (kept.isPresent()) {
+                    used(kept.get());
+                    TotalDebug.LOGGER.info("Item icon archive unchanged; key taken in {} ms", (System.nanoTime() - started) / 1_000_000);
+                    return kept.get();
                 }
-            }, this.worker);
-            this.pending.whenComplete((ready, failure) -> {
-                if (failure != null) {
-                    TotalDebug.LOGGER.warn("Unable to capture resources for Companion item icons", failure);
-                }
-            });
-        }
+                Path archive = capture(manager, current, fluids, key.orElseGet(() -> UUID.randomUUID().toString()));
+                TotalDebug.LOGGER.info("Item icon archive captured in {} ms, {} KB{}", (System.nanoTime() - started) / 1_000_000,
+                        Files.size(archive) / 1024, key.isPresent() ? "" : "; a pack's files could not be told, so it is not kept by key");
+                return archive;
+            } catch (IOException exception) {
+                throw new IllegalStateException("Unable to prepare item icons: " + exception.getMessage(), exception);
+            }
+        }, this.worker);
+        this.pending.whenComplete((ready, failure) -> {
+            if (failure != null) {
+                TotalDebug.LOGGER.warn("Unable to capture resources for Companion item icons", failure);
+            }
+        });
         this.pending.thenAccept(this.publish);
+    }
+
+    /**
+     * Where the resources of {@code packs} come from: a {@code file/} pack's folder or zip, a {@code mod/} pack's mod
+     * file, every mod file for the mods' pack; nothing for the game's own packs, whose files a version does not change.
+     * The files of any other pack are not known. Client thread only.
+     */
+    private static List<IconArchiveKey.Part> parts(List<PackResources> packs) {
+        Path folder = Minecraft.getInstance().getResourcePackDirectory();
+        List<IconArchiveKey.Part> parts = new ArrayList<>();
+        for (PackResources pack : packs) {
+            String id = pack.packId();
+            if (pack.knownPackInfo().filter(KnownPack::isVanilla).isPresent()) {
+                parts.add(IconArchiveKey.Part.builtIn(id));
+            } else if (id.startsWith("file/")) {
+                parts.add(new IconArchiveKey.Part(id, List.of(folder.resolve(id.substring("file/".length())))));
+            } else if (id.startsWith("mod/")) {
+                IModFileInfo file = ModList.get().getModFileById(id.substring("mod/".length()).split(",")[0]);
+                parts.add(file == null ? IconArchiveKey.Part.unknown(id) : new IconArchiveKey.Part(id, List.of(file.getFile().getFilePath())));
+            } else if (id.equals("mod_resources")) {
+                parts.add(new IconArchiveKey.Part(id, ModList.get().getModFiles().stream().map(file -> file.getFile().getFilePath()).toList()));
+            } else {
+                parts.add(IconArchiveKey.Part.unknown(id));
+            }
+        }
+        return parts;
+    }
+
+    /** Marks {@code archive} as the most recently used, so it is kept and Companion restores it without a game. */
+    private static void used(Path archive) {
+        try {
+            Files.setLastModifiedTime(archive, FileTime.from(Instant.now()));
+        } catch (IOException unchanged) {
+            TotalDebug.LOGGER.debug("Icon archive {} keeps its time", archive, unchanged);
+        }
     }
 
     /** Reads every fluid's client appearance. Client thread only, since mod extensions are client state. */
@@ -124,13 +187,13 @@ public final class ResourceSnapshots {
         return root.toString().getBytes(StandardCharsets.UTF_8);
     }
 
-    private Path capture(ResourceManager manager, List<PackResources> expected, byte[] fluids) throws IOException {
+    private Path capture(ResourceManager manager, List<PackResources> expected, byte[] fluids, String name) throws IOException {
         Files.createDirectories(this.directory);
         trimArchives();
         if (retainedBytes() > MAX_RETAINED_BYTES) {
             throw new IOException("Older icon archives are still open; close Companion inspections and retry");
         }
-        Path output = this.directory.resolve(UUID.randomUUID() + ".zip");
+        Path output = this.directory.resolve(name + ".zip");
         AtomicFiles.replace(output, staged -> {
             try (var zip = new ZipOutputStream(Files.newOutputStream(staged))) {
                 zip.setLevel(1);
@@ -212,7 +275,10 @@ public final class ResourceSnapshots {
         }
     }
 
-    /** Keeps the newest archive; a renderer may still hold older ones open until it switches snapshots. */
+    /**
+     * Before a capture, keeps the most recently used archives, fewer than {@link #KEPT}, while they leave room for one
+     * more within {@link #MAX_RETAINED_BYTES}; a renderer may still hold an older one open until it switches snapshots.
+     */
     private void trimArchives() throws IOException {
         List<Path> archives;
         try (Stream<Path> files = Files.list(this.directory)) {
@@ -220,7 +286,14 @@ public final class ResourceSnapshots {
                     .sorted(Comparator.comparingLong(ResourceSnapshots::modified).reversed())
                     .toList();
         }
-        for (Path archive : archives.subList(Math.min(1, archives.size()), archives.size())) {
+        long kept = 0;
+        for (int index = 0; index < archives.size(); index++) {
+            Path archive = archives.get(index);
+            long size = Files.size(archive);
+            if (index < KEPT - 1 && kept + size <= MAX_RETAINED_BYTES - MAX_ARCHIVE_BYTES) {
+                kept += size;
+                continue;
+            }
             try {
                 Files.deleteIfExists(archive);
             } catch (IOException inUse) {
@@ -237,8 +310,9 @@ public final class ResourceSnapshots {
         }
     }
 
+    /** An archive named by its key, or, where a pack's files could not be told, by a random id. */
     private static boolean ownedArchive(Path path) {
-        return Files.isRegularFile(path) && path.getFileName().toString().matches("[0-9a-f-]{36}\\.zip");
+        return Files.isRegularFile(path) && path.getFileName().toString().matches("([0-9a-f]{64}|[0-9a-f-]{36})\\.zip");
     }
 
     @FunctionalInterface

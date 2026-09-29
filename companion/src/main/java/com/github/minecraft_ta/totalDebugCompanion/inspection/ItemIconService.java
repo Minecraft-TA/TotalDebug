@@ -44,7 +44,8 @@ public final class ItemIconService implements AutoCloseable {
     record Snapshot(Path archive, int layers) {
     }
 
-    private static final Pattern SNAPSHOT_NAME = Pattern.compile("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\\.zip");
+    /** An archive the game named by what it holds, or by a random id where it could not tell (ResourceSnapshots). */
+    private static final Pattern SNAPSHOT_NAME = Pattern.compile("([0-9a-f]{64}|[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12})\\.zip");
     private static final Pattern LAYER = Pattern.compile("layers/(\\d+)/");
 
     private record Key(String model, Map<Integer, Integer> tints, int size) {
