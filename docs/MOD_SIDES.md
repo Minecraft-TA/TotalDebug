@@ -39,7 +39,7 @@ server ──ToCompanion chunks──► client ──FROM_SERVER{ message }─�
 | `ToServer` (client → server, NeoForge) | That message's id and body, split into chunks, with the number of the Companion connection that sent it |
 | `ToCompanion` (server → client, NeoForge) | A Companion protocol message from the server, the same way, with the number of the Companion connection it answers |
 | `FROM_SERVER` (client → Companion) | The server's message, which Companion unwraps and hands to the same listeners as a message from the game |
-| `RELAY_FAILED` (client → Companion) | The correlation of a message the client could not deliver, and why |
+| `RELAY_FAILED` (client → Companion) | The protocol id and correlation of a message the client could not deliver, which together name the request, and why |
 
 - **The client relays; it does not interpret.** It checks only the envelope: the world must be the one the client last told Companion of in `PLAYING` (a script meant for a world or server the game left is refused), and the server must have TotalDebug. Otherwise it answers `RELAY_FAILED`, and Companion fails the request with that correlation. A new server feature needs a Companion message and a server handler, no NeoForge code and nothing in the client.
 - **The server speaks the Companion protocol.** It decodes and encodes the same message classes Companion does; `RelayedMessages` lists which travel to and from the server.
@@ -107,7 +107,7 @@ A stack, each layer at most about 500 lines, each merged before the next opens:
 | 3. World operations | Datapack selection, data reload, datapack report and game rules move to the server part, for the integrated server | Next version: server-reported datapacks | Singleplayer behaviour unchanged; no client class calls `getSingleplayerServer()` |
 | 4. Remote servers | The permission policy and configuration; `GameState` answers for a remote server's world; the World page for a server | Next version if the report needs the server's identity | Owner, operator and non-operator cases; a server without TotalDebug |
 
-The #75 rework lands before layer 3 and is moved there with the rest.
+Layer 3 lands as two PRs. The first makes the data reload and the datapack selection server operations: `RELOAD` of the world's data and `SET_PACKS` of its datapacks travel through the relay, whose envelope names the world, so the payloads lose their own world fields, and the server enables only the owner of a singleplayer world to change them until layer 4 decides who else may (`WorldDatapacks`). `RELAY_FAILED` names the message it refuses, since a reload's and a script run's correlations can be the same number. The second has the server report its world's datapacks and adds the check that no client class calls `getSingleplayerServer()` but to name the world it plays. Game rules (#75) are not part of it; they can join as another server operation once wanted.
 
 Between layers 2 and 3, the class manifest handshake was replaced by the per-run link check described under [Server scripts](#server-scripts), with the numbered Companion connections.
 

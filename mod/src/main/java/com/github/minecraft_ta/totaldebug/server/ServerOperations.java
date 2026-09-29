@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totaldebug.server;
 
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
+import com.github.minecraft_ta.totaldebug.server.world.WorldDatapacks;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
@@ -24,15 +27,18 @@ public final class ServerOperations {
 
     private final Map<Class<? extends AbstractMessage>, Operation> operations;
 
-    public ServerOperations(ServerScriptService scripts) {
+    public ServerOperations(ServerScriptService scripts, WorldDatapacks datapacks) {
         Objects.requireNonNull(scripts, "scripts");
+        Objects.requireNonNull(datapacks, "datapacks");
         this.operations = Map.of(
                 ServerScriptsRequestMessage.class, (player, companion, message) ->
                         scripts.sendAccess(player, companion, ((ServerScriptsRequestMessage) message).request()),
                 RunScriptMessage.class, (player, companion, message) -> scripts.runScript(player, companion, (RunScriptMessage) message),
                 StopScriptMessage.class, (player, companion, message) ->
                         scripts.stopScript(player, companion, ((StopScriptMessage) message).scriptId()),
-                CompanionLeftMessage.class, (player, companion, message) -> scripts.companionLeft(player, companion));
+                CompanionLeftMessage.class, (player, companion, message) -> scripts.companionLeft(player, companion),
+                ReloadMessage.class, (player, companion, message) -> datapacks.reload(player, companion, ((ReloadMessage) message).payload()),
+                SetPacksMessage.class, (player, companion, message) -> datapacks.select(player, companion, ((SetPacksMessage) message).payload()));
     }
 
     /** Runs {@code message}'s operation for {@code player}'s Companion connection {@code companion}. Server thread. */

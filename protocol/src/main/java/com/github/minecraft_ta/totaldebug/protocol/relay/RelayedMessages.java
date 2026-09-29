@@ -3,9 +3,12 @@ package com.github.minecraft_ta.totaldebug.protocol.relay;
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsRequestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
@@ -27,10 +30,13 @@ public final class RelayedMessages {
             CompanionProtocol.RUN_SCRIPT, new Kind(RunScriptMessage.class, RunScriptMessage::new),
             CompanionProtocol.STOP_SCRIPT, new Kind(StopScriptMessage.class, StopScriptMessage::new),
             CompanionProtocol.SERVER_SCRIPTS_REQUEST, new Kind(ServerScriptsRequestMessage.class, ServerScriptsRequestMessage::new),
-            CompanionProtocol.COMPANION_LEFT, new Kind(CompanionLeftMessage.class, CompanionLeftMessage::new));
+            CompanionProtocol.COMPANION_LEFT, new Kind(CompanionLeftMessage.class, CompanionLeftMessage::new),
+            CompanionProtocol.RELOAD, new Kind(ReloadMessage.class, ReloadMessage::new),
+            CompanionProtocol.SET_PACKS, new Kind(SetPacksMessage.class, SetPacksMessage::new));
     private static final Map<Short, Kind> FROM_SERVER = Map.of(
             CompanionProtocol.EXECUTION_RESULT, new Kind(ExecutionResultMessage.class, ExecutionResultMessage::new),
-            CompanionProtocol.SERVER_SCRIPTS, new Kind(ServerScriptsMessage.class, ServerScriptsMessage::new));
+            CompanionProtocol.SERVER_SCRIPTS, new Kind(ServerScriptsMessage.class, ServerScriptsMessage::new),
+            CompanionProtocol.RELOAD_RESULT, new Kind(ReloadResultMessage.class, ReloadResultMessage::new));
 
     private RelayedMessages() {
     }

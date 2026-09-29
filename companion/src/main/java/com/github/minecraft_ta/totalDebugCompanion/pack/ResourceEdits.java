@@ -620,8 +620,13 @@ public final class ResourceEdits {
      */
     public CompletableFuture<ReloadResultPayload> select(GameLocation.Connection send, SetPacksPayload.Side side, Path world,
                                                          List<String> enabled) {
-        return this.pipeline.reloads().ask(send, id -> new SetPacksMessage(new SetPacksPayload(id, side,
-                world == null ? "" : world.toAbsolutePath().normalize().toString(), enabled)));
+        Reloads reloads = this.pipeline.reloads();
+        if (side == SetPacksPayload.Side.RESOURCES) return reloads.ask(send, id -> new SetPacksMessage(new SetPacksPayload(id, side, enabled)));
+        try {
+            return reloads.askServer(send, reloads.identity(world), id -> new SetPacksMessage(new SetPacksPayload(id, side, enabled)));
+        } catch (IOException left) {
+            return CompletableFuture.failedFuture(left);
+        }
     }
 
     /** Asks the game to reload what {@code path} needs: the client's resources, or the data of {@code world}. */

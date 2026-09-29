@@ -1,33 +1,30 @@
 package com.github.minecraft_ta.totaldebug.client.resource;
 
-import net.minecraft.world.level.storage.LevelResource;
-import java.nio.file.Path;
 import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
+import com.github.minecraft_ta.totaldebug.resource.PackOrder;
+import com.github.minecraft_ta.totaldebug.resource.ReloadProblems;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.server.packs.resources.Resource;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
- * Reloads what Companion's edited resources need: the language, every client resource, or the singleplayer server's
- * data, as {@code /reload} does. The managed pack is enabled at the top of each stack first, so its files win; only
- * packs fixed at the top stay above it.
+ * Reloads what Companion's edited resources need in the game client: the language, or every client resource. The
+ * managed pack is enabled at the top of the resource packs first, so its files win; only packs fixed at the top stay
+ * above it. The world's data is reloaded by its server ({@code WorldDatapacks}).
  */
 public final class ResourceReloads {
     /** A resource reload that has not finished, and the folder packs selected when it started; client thread only. */
@@ -40,24 +37,16 @@ public final class ResourceReloads {
     /** Runs {@code request} and answers once every reload finished. Client thread only. */
     public static void reload(ReloadPayload request, Consumer<ReloadResultPayload> answer) {
         long started = System.nanoTime();
-        ReloadProblems problems = ReloadProblems.open(request.watched());
-        // Data and resources reload independently, so one failing does not keep the other from the game.
-        List<CompletableFuture<Void>> reloads = new ArrayList<>();
-        if (request.kinds().contains(ReloadPayload.Kind.DATA)) reloads.add(attempt(() -> reloadData(request.dataWorld(), request.managedDataPack())));
-        Set<ReloadPayload.Kind> kinds = request.kinds();
-        if (kinds.contains(ReloadPayload.Kind.RESOURCES) || kinds.contains(ReloadPayload.Kind.LANGUAGE)
-                || kinds.contains(ReloadPayload.Kind.TEXTURES)) {
-            reloads.add(attempt(() -> reloadResources(request.managedResourcePack(), kinds, request.watched())));
+        if (request.kinds().contains(ReloadPayload.Kind.DATA)) {
+            answer.accept(new ReloadResultPayload(request.requestId(), 0, List.of(), "The world's data is reloaded by its server"));
+            return;
         }
-        CompletableFuture.allOf(reloads.toArray(CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
+        ReloadProblems problems = ReloadProblems.open(request.watched());
+        attempt(() -> reloadResources(request.managedResourcePack(), request.kinds(), request.watched())).whenComplete((ignored, failure) -> {
             List<ReloadResultPayload.Problem> found = problems.problems();
             problems.close();
-            long millis = (System.nanoTime() - started) / 1_000_000;
-            List<String> errors = new ArrayList<>();
-            for (CompletableFuture<Void> reload : reloads) {
-                if (reload.isCompletedExceptionally()) errors.add(message(reload.exceptionNow()));
-            }
-            answer.accept(new ReloadResultPayload(request.requestId(), millis, found, String.join("; ", errors)));
+            answer.accept(new ReloadResultPayload(request.requestId(), (System.nanoTime() - started) / 1_000_000, found,
+                    failure == null ? "" : message(failure)));
         });
     }
 
@@ -69,8 +58,11 @@ public final class ResourceReloads {
      */
     public static void select(SetPacksPayload request, Consumer<ReloadResultPayload> answer) {
         long started = System.nanoTime();
-        attempt(() -> request.side() == SetPacksPayload.Side.RESOURCES ? selectResources(request.enabled())
-                : selectData(request.world(), request.enabled())).whenComplete((ignored, failure) -> answer.accept(new ReloadResultPayload(
+        if (request.side() != SetPacksPayload.Side.RESOURCES) {
+            answer.accept(new ReloadResultPayload(request.requestId(), 0, List.of(), "The world's datapacks are selected by its server"));
+            return;
+        }
+        attempt(() -> selectResources(request.enabled())).whenComplete((ignored, failure) -> answer.accept(new ReloadResultPayload(
                 request.requestId(), (System.nanoTime() - started) / 1_000_000, List.of(), failure == null ? "" : message(failure))));
     }
 
@@ -87,40 +79,6 @@ public final class ResourceReloads {
         saveOptions(minecraft);
         if (List.copyOf(packs.getSelectedIds()).equals(before)) return CompletableFuture.completedFuture(null);
         return reloadAll(minecraft);
-    }
-
-    private static CompletableFuture<Void> selectData(String world, List<String> enabled) {
-        IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
-        if (server == null) {
-            return CompletableFuture.failedFuture(new IllegalStateException("No singleplayer world is open"));
-        }
-        if (!plays(server, world)) return CompletableFuture.failedFuture(notPlayed(world));
-        return CompletableFuture.supplyAsync(() -> {
-            PackRepository packs = server.getPackRepository();
-            packs.reload();
-            List<String> refused = new ArrayList<>();
-            for (String id : enabled) {
-                Pack pack = packs.getPack(id);
-                if (pack == null) refused.add(id + " is not a datapack of the world");
-                else if (!pack.getRequestedFeatures().isSubsetOf(server.getWorldData().enabledFeatures())) {
-                    refused.add(id + " needs features the world does not have");
-                }
-            }
-            if (!refused.isEmpty()) throw new IllegalArgumentException(String.join("; ", refused));
-            return server.reloadResources(enabled);
-        }, server).thenCompose(reload -> reload);
-    }
-
-    /**
-     * Whether {@code server} runs the world {@code world} names. A request is made for the world Companion saw the game
-     * play, and the game may have gone to another since.
-     */
-    private static boolean plays(IntegratedServer server, String world) {
-        return server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().equals(Path.of(world).toAbsolutePath().normalize());
-    }
-
-    private static IllegalStateException notPlayed(String world) {
-        return new IllegalStateException("The game no longer plays the world " + Path.of(world).getFileName() + "; nothing was changed");
     }
 
     /** Saves the selected resource packs into {@code options.txt}, as {@code Options.updateResourcePacks} does. */
@@ -229,30 +187,6 @@ public final class ResourceReloads {
         return true;
     }
 
-    /** Reloads the singleplayer server's data with every pack the world does not disable, as {@code /reload} does. */
-    private static CompletableFuture<Void> reloadData(String world, String managedPack) {
-        IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
-        if (server == null) {
-            return CompletableFuture.failedFuture(new IllegalStateException(
-                    "Data is reloaded only in a singleplayer world, and none is open"));
-        }
-        if (!plays(server, world)) return CompletableFuture.failedFuture(notPlayed(world));
-        return CompletableFuture.supplyAsync(() -> {
-            PackRepository packs = server.getPackRepository();
-            packs.reload();
-            Collection<String> disabled = server.getWorldData().getDataConfiguration().dataPacks().getDisabled();
-            List<String> selected = new ArrayList<>(packs.getSelectedIds());
-            for (String id : packs.getAvailableIds()) {
-                if (!disabled.contains(id) && !selected.contains(id)) selected.add(id);
-            }
-            // Writing into the managed pack asks for it, even where the world had disabled it.
-            if (!managedPack.isEmpty() && packs.getAvailableIds().contains(managedPack)) {
-                placeOnTop(selected, managedPack, fixedAtTop(packs));
-            }
-            return server.reloadResources(selected);
-        }, server).thenCompose(reload -> reload);
-    }
-
     /**
      * Selects {@code id} above every pack the player orders, below packs fixed at the top such as a server's pack;
      * returns whether the selection changed.
@@ -263,28 +197,9 @@ public final class ResourceReloads {
         List<String> ordered = packs.getSelectedPacks().stream().filter(pack -> !pack.isFixedPosition()).map(Pack::getId).toList();
         if (!ordered.isEmpty() && ordered.getLast().equals(id)) return false;
         List<String> selected = new ArrayList<>(packs.getSelectedIds());
-        placeOnTop(selected, id, fixedAtTop(packs));
+        PackOrder.placeOnTop(selected, id, PackOrder.fixedAtTop(packs));
         packs.setSelected(selected);
         return true;
-    }
-
-    /**
-     * Moves {@code id} above every pack the player orders but below the packs fixed at the top, such as a server's pack.
-     * The repository keeps the order it is given, even for a fixed pack, so the order is made here.
-     */
-    static void placeOnTop(List<String> selected, String id, Predicate<String> fixedAtTop) {
-        selected.remove(id);
-        int index = selected.size();
-        while (index > 0 && fixedAtTop.test(selected.get(index - 1))) index--;
-        selected.add(index, id);
-    }
-
-    /** Whether a pack of {@code packs} keeps its place at the top, such as a server's pack; vanilla is fixed at the bottom. */
-    private static Predicate<String> fixedAtTop(PackRepository packs) {
-        return id -> {
-            Pack pack = packs.getPack(id);
-            return pack != null && pack.isFixedPosition() && pack.getDefaultPosition() == Pack.Position.TOP;
-        };
     }
 
     private static String message(Throwable failure) {
