@@ -45,7 +45,8 @@ public interface ChangeCategory<T extends ChangeRecord.Target, V> {
 
     /**
      * Writes {@code writes} into the file, in their order, telling {@code landed} each target once its value is in place,
-     * so a failure part way leaves those recorded. Blocking.
+     * so a failure part way leaves those recorded. Runs right after {@link #readFile} of the same change, in the write
+     * queue, so what that read is what the change was checked against. Blocking.
      */
     void writeFile(List<Write<T, V>> writes, Consumer<T> landed) throws IOException;
 }

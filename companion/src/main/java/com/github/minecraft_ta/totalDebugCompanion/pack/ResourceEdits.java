@@ -622,6 +622,12 @@ public final class ResourceEdits {
      * content a file held before Companion first changed it is kept among the originals, so the change can be reverted.
      */
     private final class PackFiles implements ChangeCategory<ChangeRecord.Resource, byte[]> {
+        /**
+         * The contents the pipeline's check read, which the write keeps as originals: read again, a program's save in
+         * between would be kept under another hash than the one recorded. The write queue only.
+         */
+        private final Map<ChangeRecord.Resource, byte[]> read = new HashMap<>();
+
         @Override
         public String id() {
             return "resource";
@@ -649,8 +655,13 @@ public final class ResourceEdits {
 
         @Override
         public Map<ChangeRecord.Resource, String> readFile(Collection<ChangeRecord.Resource> targets) throws IOException {
+            this.read.clear();
             Map<ChangeRecord.Resource, String> held = new HashMap<>();
-            for (ChangeRecord.Resource target : targets) held.put(target, ResourceOriginals.hash(content(target)));
+            for (ChangeRecord.Resource target : targets) {
+                byte[] content = content(target);
+                this.read.put(target, content);
+                held.put(target, ResourceOriginals.hash(content));
+            }
             return held;
         }
 
@@ -658,7 +669,7 @@ public final class ResourceEdits {
         public void writeFile(List<Write<ChangeRecord.Resource, byte[]>> writes, Consumer<ChangeRecord.Resource> landed) throws IOException {
             for (Write<ChangeRecord.Resource, byte[]> write : writes) {
                 Path file = write.target().location().resolve(write.target().path());
-                if (record.change(write.target()) == null) originals.keep(content(write.target()));
+                if (record.change(write.target()) == null) originals.keep(this.read.get(write.target()));
                 if (write.value() == null) Files.deleteIfExists(file);
                 else AtomicFiles.replace(file, staged -> Files.write(staged, write.value()));
                 lastWritten.put(write.target(), text(write.value()));
