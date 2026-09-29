@@ -53,9 +53,9 @@ public final class PackLabels implements ChangeLabels {
             }
             this.selections.record().observed(target, PackSelections.json(now), String::equals);
             if (PackSelections.json(now).equals(change.original())) continue;
-            // The World page shows the current world, so a row of another world opens nothing.
+            // The World page shows the world the game plays, a server's before a world played last, so only that one opens.
             NavigationTarget opens = resources ? new NavigationTarget.PackResources(ResourcesTab.PACKS, "")
-                    : Objects.equals(game.currentWorld(), target.location()) || game.plays(target.location()) ? new NavigationTarget.World(WorldTab.DATAPACKS) : null;
+                    : game.plays(target.location()) ? new NavigationTarget.World(WorldTab.DATAPACKS) : null;
             rows.add(new Row(change, name(change), "", highestFirst(now), highestFirst(PackSelections.parse(change.original())),
                     PackSelections.json(now).equals(change.current()) ? "" : "Changed outside Companion since", opens));
         }

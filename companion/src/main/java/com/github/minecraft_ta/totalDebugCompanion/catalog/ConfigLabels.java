@@ -120,11 +120,12 @@ public final class ConfigLabels implements ChangeLabels {
         return new NavigationTarget.ModPage(target.modId(), ModTab.CONFIGURATION, target.fileName());
     }
 
-    /** The world whose {@code serverconfig} holds the setting's file, or null. */
+    /** The world whose {@code serverconfig} holds the setting's file, in a folder of its own or not, or null. */
     private static Path world(ChangeRecord.Setting target) {
-        Path serverconfig = target.file().getParent();
-        return serverconfig != null && serverconfig.getFileName() != null && serverconfig.getFileName().toString().equals("serverconfig")
-                ? serverconfig.getParent() : null;
+        for (Path folder = target.file().getParent(); folder != null; folder = folder.getParent()) {
+            if (folder.getFileName() != null && folder.getFileName().toString().equals("serverconfig")) return folder.getParent();
+        }
+        return null;
     }
 
     /** The mod and file of a setting, and the world a server configuration file is in. */

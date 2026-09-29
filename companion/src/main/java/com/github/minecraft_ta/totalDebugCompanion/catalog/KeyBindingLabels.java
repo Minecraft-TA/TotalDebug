@@ -57,9 +57,10 @@ public final class KeyBindingLabels implements ChangeLabels {
             if (current.encode().equals(change.original())) continue;
             String mod = binding == null || index == null ? "" : index.mod(index.keyBindingOwner(binding.spec())).map(PackCatalog.Mod::name)
                     .orElse(index.keyBindingOwner(binding.spec()));
-            // Bindings whose contexts never conflict share a key harmlessly.
+            // Only a real collision shares the key: contexts that never conflict share it harmlessly, and a modifier overlap
+            // is another key.
             List<String> sharing = binding == null ? List.of() : bindings.clashes(binding).stream()
-                    .filter(clash -> clash.overlap() != KeyBindings.Overlap.SEPARATE_CONTEXTS).map(clash -> clash.other().name()).toList();
+                    .filter(clash -> clash.overlap() == KeyBindings.Overlap.COLLISION).map(clash -> clash.other().name()).toList();
             String before = key(bindings, KeyBindings.Assignment.decode(change.original()));
             rows.add(new Row(change, binding == null ? name : binding.name(), mod, key(bindings, current), before,
                     // The Key bindings page lists the bindings the catalog describes.
