@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.resource;
 
+import com.github.minecraft_ta.totaldebug.change.ChangeTable;
 import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
-import com.github.minecraft_ta.totaldebug.client.companion.ClientChanges;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -20,7 +20,7 @@ import java.util.concurrent.CompletableFuture;
  * parts of another pack or the packs fixed in place. Packs the game requires are added where it puts them. Client thread
  * only.
  */
-public final class ResourcePackEdits implements ClientChanges.Category {
+public final class ResourcePackEdits implements ChangeTable.Category {
     public static final String CATEGORY = "resourcePacks";
     public static final String TARGET = "resourcePacks";
 

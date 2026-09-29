@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.catalog;
 
-import com.github.minecraft_ta.totaldebug.client.companion.ClientChanges;
+import com.github.minecraft_ta.totaldebug.change.ChangeTable;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -14,7 +14,7 @@ import java.util.concurrent.CompletableFuture;
  * value written as there: the key, with {@code :} and the modifier when there is one, such as
  * {@code key.keyboard.g:CONTROL}. Client thread only.
  */
-public final class KeyBindingEdits implements ClientChanges.Category {
+public final class KeyBindingEdits implements ChangeTable.Category {
     public static final String CATEGORY = "keyBinding";
 
     @Override

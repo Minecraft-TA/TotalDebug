@@ -1,9 +1,9 @@
 package com.github.minecraft_ta.totaldebug.client;
 
+import com.github.minecraft_ta.totaldebug.change.ChangeTable;
 import com.github.minecraft_ta.totaldebug.client.catalog.KeyBindingEdits;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogCapture;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogPublisher;
-import com.github.minecraft_ta.totaldebug.client.companion.ClientChanges;
 import com.github.minecraft_ta.totaldebug.client.companion.ClientRelay;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionRequests;
@@ -97,7 +97,7 @@ public final class TotalDebugClient {
             this.snapshotRequested = true;
             this.catalogs.request(inventoryId, modules);
         });
-        ClientChanges changes = new ClientChanges(Map.of(KeyBindingEdits.CATEGORY, new KeyBindingEdits(),
+        ChangeTable changes = new ChangeTable(Map.of(KeyBindingEdits.CATEGORY, new KeyBindingEdits(),
                 ResourcePackEdits.CATEGORY, new ResourcePackEdits()), Minecraft.getInstance());
         companionApp.setChangeHandler(message -> Minecraft.getInstance().execute(() -> changes.apply(message.payload())
                 .thenAccept(result -> companionApp.sendChangeResult(new ChangeResultMessage(result)))));

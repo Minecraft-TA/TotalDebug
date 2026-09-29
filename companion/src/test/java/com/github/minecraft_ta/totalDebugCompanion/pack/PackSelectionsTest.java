@@ -16,11 +16,9 @@ import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.tth05.scnet.message.AbstractMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,7 +49,7 @@ class PackSelectionsTest {
         ChangeRecord record = ChangeRecord.inMemory();
         PackSelections selections = selections(record, edits(record, false));
 
-        PackSelections.Applied applied = selections.set(SetPacksPayload.Side.RESOURCES, null,
+        PackSelections.Applied applied = selections.set(ChangeRecord.PackSide.RESOURCES, null,
                 List.of("vanilla", "file/New", "mod_resources")).get(5, TimeUnit.SECONDS);
         assertEquals(ConfigChanges.Effect.GAME_STARTS, applied.effect());
         assertEquals("version:3955\nresourcePacks:[\"vanilla\",\"file/New\",\"mod_resources\"]\n"
@@ -72,7 +70,7 @@ class PackSelectionsTest {
         Files.writeString(options, "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
         ChangeRecord record = ChangeRecord.inMemory();
         PackSelections selections = selections(record, edits(record, false));
-        selections.set(SetPacksPayload.Side.RESOURCES, null, List.of("vanilla", "mod_resources", "file/A")).get(5, TimeUnit.SECONDS);
+        selections.set(ChangeRecord.PackSide.RESOURCES, null, List.of("vanilla", "mod_resources", "file/A")).get(5, TimeUnit.SECONDS);
         Files.writeString(options, "resourcePacks:[\"vanilla\",\"mod_resources\",\"file/B\"]\n");
 
         ChangeRecord.Change change = record.changes().getFirst();
@@ -86,7 +84,7 @@ class PackSelectionsTest {
     void aRunningGameWithoutAConnectionKeepsItsResourcePacks() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         PackSelections selections = selections(record, edits(record, true));
-        ExecutionException refused = assertThrows(ExecutionException.class, () -> selections.set(SetPacksPayload.Side.RESOURCES,
+        ExecutionException refused = assertThrows(ExecutionException.class, () -> selections.set(ChangeRecord.PackSide.RESOURCES,
                 null, List.of("vanilla")).get(5, TimeUnit.SECONDS));
         assertTrue(refused.getCause().getMessage().startsWith("The game is running but not connected"), refused.getCause().getMessage());
         assertFalse(Files.exists(this.directory.resolve("options.txt")));
@@ -101,7 +99,7 @@ class PackSelectionsTest {
         ChangeRecord record = ChangeRecord.inMemory();
         PackSelections selections = selections(record, edits(record, false));
 
-        PackSelections.Applied applied = selections.set(SetPacksPayload.Side.DATA, world,
+        PackSelections.Applied applied = selections.set(ChangeRecord.PackSide.DATA, world,
                 List.of("vanilla", "file/Fresh", "mod_data")).get(5, TimeUnit.SECONDS);
         assertEquals(ConfigChanges.Effect.WORLD_OPENS, applied.effect());
         CurrentWorld.Saved saved = CurrentWorld.read(GameLocations.of(this.directory, false).read(), world);
@@ -125,7 +123,7 @@ class PackSelectionsTest {
         List<AbstractMessage> sent = connected(edits);
         PackSelections selections = selections(record, edits);
 
-        CompletableFuture<PackSelections.Applied> applied = selections.set(SetPacksPayload.Side.RESOURCES, null,
+        CompletableFuture<PackSelections.Applied> applied = selections.set(ChangeRecord.PackSide.RESOURCES, null,
                 List.of("vanilla", "mod_resources", "programmer_art"));
         ChangePayload change = ((ChangeMessage) sent.getFirst()).payload();
         assertEquals(List.of(new ChangePayload.Edit("resourcePacks", "resourcePacks", null,
@@ -148,7 +146,7 @@ class PackSelectionsTest {
         PackSelections selections = selections(record, edits);
         String original = "[\"vanilla\",\"mod_resources\"]";
         String changed = "[\"vanilla\",\"mod_resources\",\"file/Faithful\"]";
-        record.changed(new ChangeRecord.PackSelection(SetPacksPayload.Side.RESOURCES, this.directory.resolve("options.txt")), original, changed);
+        record.changed(new ChangeRecord.PackSelection(ChangeRecord.PackSide.RESOURCES, this.directory.resolve("options.txt")), original, changed);
 
         CompletableFuture<PackSelections.Applied> reverted = selections.revert(record.changes().getFirst());
         ChangePayload change = ((ChangeMessage) sent.getFirst()).payload();
@@ -158,7 +156,7 @@ class PackSelectionsTest {
         assertEquals(ConfigChanges.Effect.NOW, reverted.get(5, TimeUnit.SECONDS).effect());
         assertEquals(0, record.size(), "back to the original, the change ends");
 
-        CompletableFuture<PackSelections.Applied> applied = selections.set(SetPacksPayload.Side.RESOURCES, null,
+        CompletableFuture<PackSelections.Applied> applied = selections.set(ChangeRecord.PackSide.RESOURCES, null,
                 List.of("vanilla", "mod_resources", "file/Broken"));
         change = ((ChangeMessage) sent.get(1)).payload();
         edits.pipeline().answered(new ChangeResultPayload(change.requestId(), List.of(new ChangeResultPayload.Applied(original, original)),
@@ -175,7 +173,7 @@ class PackSelectionsTest {
         ChangeRecord record = ChangeRecord.inMemory();
         PackSelections selections = selections(record, edits(record, false));
 
-        selections.set(SetPacksPayload.Side.RESOURCES, null, List.of("vanilla", "mod_resources", "mod/testmod")).get(5, TimeUnit.SECONDS);
+        selections.set(ChangeRecord.PackSide.RESOURCES, null, List.of("vanilla", "mod_resources", "mod/testmod")).get(5, TimeUnit.SECONDS);
         assertEquals(List.of("vanilla", "mod_resources", "mod/testmod"), PackResources.enabledInOptions(options),
                 "a mod that shows its resources as a pack of its own, as the pack screen lists it");
         assertTrue(Files.readString(options).contains("incompatibleResourcePacks:[\"mod/testmod\"]"),
@@ -195,7 +193,7 @@ class PackSelectionsTest {
         ChangeRecord record = ChangeRecord.inMemory();
         PackSelections selections = selections(record, edits(record, false));
 
-        selections.set(SetPacksPayload.Side.RESOURCES, null, List.of("vanilla", "mod_resources")).get(5, TimeUnit.SECONDS);
+        selections.set(ChangeRecord.PackSide.RESOURCES, null, List.of("vanilla", "mod_resources")).get(5, TimeUnit.SECONDS);
         ChangeRecord.Change change = record.changes().getFirst();
         assertEquals("[\"vanilla\",\"file/A\",\"mod_resources\"]", change.original(),
                 "the game adds the mods' resources on top, and names them so once it runs");
@@ -213,30 +211,54 @@ class PackSelectionsTest {
     }
 
     @Test
-    void aDatapackSelectionNamesTheWorldTheGamePlays() throws Exception {
+    void theWorldsServerSelectsItsDatapacksAsAChangeThroughTheRelay() throws Exception {
         Path world = this.directory.resolve("saves/Test");
         LevelDatFixture.write(world, LevelDatFixture.world("Test"));
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record, true);
-        List<SetPacksPayload> sent = new CopyOnWriteArrayList<>();
-        List<String> worlds = new CopyOnWriteArrayList<>();
+        List<SentMessage> sent = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
             SentMessage out = SentMessage.of(message);
-            if (out.message() instanceof SetPacksMessage packs) {
-                sent.add(packs.payload());
-                worlds.add(out.world());
-            }
+            if (out.message() instanceof ChangeMessage) sent.add(out);
             return true;
         });
         PlayingPayload playing = new PlayingPayload.Singleplayer(world.toString());
         edits.location().playing(playing);
-        edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+        edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(
+                new PackStackPayload.Pack("vanilla", "Minecraft", ""), new PackStackPayload.Pack("mod_data", "Mod Data", ""),
+                new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN))));
+        PackSelections selections = selections(record, edits);
 
-        selections(record, edits).set(SetPacksPayload.Side.DATA, world, List.of("vanilla", "file/Tweaks"));
+        CompletableFuture<PackSelections.Applied> applied = selections.set(ChangeRecord.PackSide.DATA, world,
+                List.of("vanilla", "mod_data", "mod/shown", "mod/testmod:data/testmod/datapacks/extra", "file/Tweaks"));
+        assertEquals(playing.identity(), sent.getFirst().world(), "the relay refuses it if the game plays another world by the time it arrives");
+        ChangePayload change = ((ChangeMessage) sent.getFirst().message()).payload();
+        assertEquals(List.of(new ChangePayload.Edit("datapacks", "datapacks", null,
+                "[\"vanilla\",\"mod_data\",\"mod/shown\",\"mod/testmod:data/testmod/datapacks/extra\",\"file/Tweaks\"]")), change.edits(),
+                "a mod's own datapack and one a mod adds are packs like any other");
+        assertFalse(applied.isDone(), "the server answers once its data reloaded");
 
-        assertEquals(new PlayingPayload.Singleplayer(world.toString()).identity(), worlds.getFirst(),
-                "the relay refuses it if the game plays another world by the time it arrives");
-        assertEquals(SetPacksPayload.Side.DATA, sent.getFirst().side(), "the world's server selects its datapacks");
+        String before = "[\"vanilla\",\"mod_data\"]";
+        String now = "[\"vanilla\",\"mod_data\",\"mod/shown\",\"mod/testmod:data/testmod/datapacks/extra\",\"file/Tweaks\"]";
+        edits.pipeline().answered(new ChangeResultPayload(change.requestId(), List.of(new ChangeResultPayload.Applied(before, now)), ""));
+        assertEquals(ConfigChanges.Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
+        ChangeRecord.Change recorded = record.changes().getFirst();
+        assertEquals(before, recorded.original());
+        assertFalse(selections.holds(recorded), "the server has not named its new datapacks yet");
+        edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(
+                new PackStackPayload.Pack("vanilla", "Minecraft", ""), new PackStackPayload.Pack("mod_data", "Mod Data", ""),
+                new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN),
+                new PackStackPayload.Pack("mod/shown", "Shown", ""),
+                new PackStackPayload.Pack("mod/testmod:data/testmod/datapacks/extra", "Extra", ""),
+                new PackStackPayload.Pack("file/Tweaks", "Tweaks", ""))));
+        assertTrue(selections.holds(recorded), "the hidden parts of the mods' pack are left out, as the server keeps them");
+
+        CompletableFuture<PackSelections.Applied> reverted = selections.revert(recorded);
+        change = ((ChangeMessage) sent.get(1).message()).payload();
+        assertEquals(now, change.edits().getFirst().expected(), "a revert expects what Companion last enabled");
+        edits.pipeline().relayFailed(change.requestId(), "The game went to another world before the server could answer");
+        ExecutionException failed = assertThrows(ExecutionException.class, () -> reverted.get(5, TimeUnit.SECONDS));
+        assertEquals("The game went to another world before the server could answer", failed.getCause().getMessage());
     }
 
     @Test
@@ -290,6 +312,6 @@ class PackSelectionsTest {
     }
 
     private PackSelections selections(ChangeRecord record, ResourceEdits edits) {
-        return new PackSelections(record, edits, Runnable::run);
+        return new PackSelections(edits);
     }
 }

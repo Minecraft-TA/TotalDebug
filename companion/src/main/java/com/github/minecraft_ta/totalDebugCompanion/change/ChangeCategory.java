@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
@@ -26,6 +27,14 @@ public interface ChangeCategory<T extends ChangeRecord.Target, V> {
 
     /** The target as the user names it. */
     String name(T target);
+
+    /**
+     * The world whose server owns {@code target}, whose change table the change reaches through the game client's relay;
+     * null where the game client owns it.
+     */
+    default Path world(T target) {
+        return null;
+    }
 
     /** The target as the game's change table names it; by default as the user does. */
     default String gameTarget(T target) {

@@ -66,7 +66,7 @@ The same relay serves the integrated server. A singleplayer game talks to its ow
 | Operation | Today | After A2 |
 |---|---|---|
 | Run and stop a script, script access | Own payloads | Relay; the server checks each script's references |
-| Select datapacks (`SET_PACKS` data) | Client code, integrated only | Server handler; checks the world it names |
+| Select datapacks (a `CHANGE` of `datapacks`, once `SET_PACKS` data) | Client code, integrated only | The server's change table; checks the world it names |
 | Reload data (`RELOAD` data) | Client code, integrated only | Server handler; checks the world it names |
 | The world's datapacks (`DATAPACKS`, once the data half of `PACK_STACK`) | Client code, integrated only | Server reports them for its world |
 | Read and set game rules (#75) | Client code, integrated only | Server handler and server report |

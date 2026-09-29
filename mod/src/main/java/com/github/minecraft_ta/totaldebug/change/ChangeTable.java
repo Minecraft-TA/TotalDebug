@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.client.companion;
+package com.github.minecraft_ta.totaldebug.change;
 
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
@@ -15,13 +15,14 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 /**
- * The values Companion changes in the running game, one handler for each category (see {@code docs/CHANGE_PIPELINE.md}).
- * A change is made whole or not at all: before any value is set, every edit's target must still hold the value the edit
- * expects, or already the new one, unless the edit replaces whatever it holds, and every new value must be one its
- * category can set. The answer waits for what makes the change take effect, such as the reload after a pack selection.
- * Client thread only.
+ * The values Companion changes in the game, one handler for each category (see {@code docs/CHANGE_PIPELINE.md}): the game
+ * client's, such as key bindings and resource packs, and the world's server's, such as its datapacks. A change is made
+ * whole or not at all: before any value is set, every edit's target must still hold the value the edit expects, or
+ * already the new one, unless the edit replaces whatever it holds, and every new value must be one its category can set.
+ * The answer waits for what makes the change take effect, such as the reload after a pack selection. On the thread that
+ * owns the values: the client's or the server's.
  */
-public final class ClientChanges {
+public final class ChangeTable {
     /** How the game reads and sets the values of one category, in the text form Companion writes them. */
     public interface Category {
         /** The value {@code target} has now; fails with {@link IllegalArgumentException} for a target the game lacks. */
@@ -46,12 +47,12 @@ public final class ClientChanges {
     }
 
     private final Map<String, Category> categories;
-    private final Executor client;
+    private final Executor thread;
 
-    /** {@code client} runs work on the client thread, where a change reads its values once it took effect. */
-    public ClientChanges(Map<String, Category> categories, Executor client) {
+    /** {@code thread} runs work on the thread that owns the values, where a change reads them once it took effect. */
+    public ChangeTable(Map<String, Category> categories, Executor thread) {
         this.categories = Map.copyOf(categories);
-        this.client = Objects.requireNonNull(client, "client");
+        this.thread = Objects.requireNonNull(thread, "thread");
     }
 
     /**
@@ -99,12 +100,12 @@ public final class ClientChanges {
         }
         // What this change set, read now: while it takes effect, another request may change the same values.
         List<ChangeResultPayload.Applied> applied = applied(change, handlers, before);
-        CompletableFuture<?>[] finished = new LinkedHashSet<>(handlers).stream().map(ClientChanges::finish).toArray(CompletableFuture[]::new);
+        CompletableFuture<?>[] finished = new LinkedHashSet<>(handlers).stream().map(ChangeTable::finish).toArray(CompletableFuture[]::new);
         return CompletableFuture.allOf(finished).handleAsync((ignored, failure) -> {
             if (failure == null) return new ChangeResultPayload(change.requestId(), applied, "");
             // The game may have undone the change, as a failed reload turns the packs off: what it holds after that.
             return new ChangeResultPayload(change.requestId(), applied(change, handlers, before), message(failure));
-        }, this.client);
+        }, this.thread);
     }
 
     private static List<ChangeResultPayload.Applied> applied(ChangePayload change, List<Category> handlers, List<String> before) {

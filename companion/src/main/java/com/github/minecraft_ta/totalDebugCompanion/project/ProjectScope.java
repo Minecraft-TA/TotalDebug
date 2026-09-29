@@ -96,7 +96,7 @@ public final class ProjectScope implements AutoCloseable {
         this.packs = new GamePacks(this.location);
         this.resources = new ResourceEdits(this.pipeline, this.packs, new ResourceOriginals(paths().originals()),
                 this.configChanges.writes(), state);
-        this.packSelections = new PackSelections(changes, this.resources, this.configChanges.writes());
+        this.packSelections = new PackSelections(this.resources);
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {

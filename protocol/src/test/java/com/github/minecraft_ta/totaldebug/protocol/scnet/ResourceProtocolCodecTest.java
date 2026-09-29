@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
@@ -54,14 +53,6 @@ class ResourceProtocolCodecTest {
         ReloadResultMessage readAnswer = new ReloadResultMessage();
         readAnswer.read(new ByteBufferInputStream(written(new ReloadResultMessage(answer))));
         assertEquals(answer, readAnswer.payload());
-    }
-
-    @Test
-    void aPackSelectionSurvivesTheWire() {
-        SetPacksPayload request = new SetPacksPayload(4, SetPacksPayload.Side.DATA, List.of("vanilla", "mod_data", "file/Tweaks"));
-        SetPacksMessage read = new SetPacksMessage();
-        read.read(new ByteBufferInputStream(written(new SetPacksMessage(request))));
-        assertEquals(request, read.payload());
     }
 
     @Test

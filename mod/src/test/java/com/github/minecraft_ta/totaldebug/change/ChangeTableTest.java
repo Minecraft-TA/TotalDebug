@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.client.companion;
+package com.github.minecraft_ta.totaldebug.change;
 
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
@@ -12,9 +12,9 @@ import java.util.concurrent.CompletableFuture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-class ClientChangesTest {
+class ChangeTableTest {
     /** Keys by name; a value starting with {@code bad} cannot be set. */
-    private static final class Keys implements ClientChanges.Category {
+    private static final class Keys implements ChangeTable.Category {
         final Map<String, String> values = new HashMap<>(Map.of("key.jump", "space", "key.sneak", "shift"));
         int saves;
         /** What makes a change take effect, as a pack selection's reload. */
@@ -47,7 +47,7 @@ class ClientChangesTest {
     }
 
     private final Keys keys = new Keys();
-    private final ClientChanges changes = new ClientChanges(Map.of("keyBinding", this.keys), Runnable::run);
+    private final ChangeTable changes = new ChangeTable(Map.of("keyBinding", this.keys), Runnable::run);
 
     @Test
     void aChangeSetsEveryValueAndSavesOnce() {

@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
-import com.github.minecraft_ta.totalDebugCompanion.change.Reloads;
 import com.github.minecraft_ta.totalDebugCompanion.game.Access;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
@@ -15,8 +14,6 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -611,21 +608,6 @@ public final class ResourceEdits {
             return new Saved(result.error().isEmpty() ? ConfigChanges.Effect.NOW : assets ? ConfigChanges.Effect.GAME_STARTS
                     : ConfigChanges.Effect.WORLD_OPENS, pack, problemsOf(result, path, alsoWatched), result.error());
         });
-    }
-
-    /**
-     * Asks the server of {@code world}, which the game on {@code send} must still play, to enable exactly {@code enabled},
-     * lowest first, among its datapacks, and reload its data; completes with its answer, or fails once that connection
-     * ended.
-     */
-    public CompletableFuture<ReloadResultPayload> select(GameLocation.Connection send, Path world, List<String> enabled) {
-        Reloads reloads = this.pipeline.reloads();
-        try {
-            return reloads.askServer(send, reloads.identity(world),
-                    id -> new SetPacksMessage(new SetPacksPayload(id, SetPacksPayload.Side.DATA, enabled)));
-        } catch (IOException left) {
-            return CompletableFuture.failedFuture(left);
-        }
     }
 
     /** Asks the game to reload what {@code path} needs: the client's resources, or the data of {@code world}. */

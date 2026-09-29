@@ -6,9 +6,14 @@ import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
+import com.github.tth05.scnet.message.AbstractMessage;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -88,10 +93,16 @@ public final class ChangePipeline {
         return this.reloads;
     }
 
-    /** Takes the game's answer to a change. */
+    /** Takes the answer of the game or the world's server to a change. */
     public void answered(ChangeResultPayload result) {
         CompletableFuture<ChangeResultPayload> request = this.waiting.remove(result.requestId());
         if (request != null) request.complete(result);
+    }
+
+    /** The game client could not carry change {@code requestId} to the world's server, for {@code reason}. */
+    public void relayFailed(int requestId, String reason) {
+        CompletableFuture<ChangeResultPayload> request = this.waiting.remove(requestId);
+        if (request != null) request.completeExceptionally(new IOException(reason));
     }
 
     private void gameDisconnected() {
@@ -209,7 +220,16 @@ public final class ChangePipeline {
         });
         List<ChangePayload.Edit> edits = change.stream().map(edit -> new ChangePayload.Edit(category.id(),
                 category.gameTarget(edit.target()), edit.expected(), category.text(edit.value()))).toList();
-        if (!connection.send(new ChangeMessage(new ChangePayload(id, edits)))) {
+        AbstractMessage message = new ChangeMessage(new ChangePayload(id, edits));
+        Path world = category.world(change.getFirst().target());
+        try {
+            // A change a world's server owns names the world, and the game client refuses it once it plays another.
+            if (world != null) message = new ToServerMessage(RelayedMessages.toServer(message, id, identity(world)));
+        } catch (IOException left) {
+            this.waiting.remove(id);
+            return CompletableFuture.failedFuture(left);
+        }
+        if (!connection.send(message)) {
             this.waiting.remove(id);
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));
         }
@@ -217,6 +237,16 @@ public final class ChangePipeline {
         CompletableFuture.delayedExecutor(category.answerWait().toMillis(), TimeUnit.MILLISECONDS).execute(() -> waited.completeExceptionally(
                 new IOException("The game has not answered yet; the change is recorded if the game makes it")));
         return waited;
+    }
+
+    /** {@code world} as {@code PLAYING} names it; fails when the game plays another world. */
+    private String identity(Path world) throws IOException {
+        PlayingPayload playing = this.location.playing();
+        if (playing instanceof PlayingPayload.Singleplayer singleplayer
+                && Path.of(singleplayer.world()).toAbsolutePath().normalize().equals(world.toAbsolutePath().normalize())) {
+            return playing.identity();
+        }
+        throw new IOException("The game went to another world before the change reached it");
     }
 
     private void recorded(Applied<?> applied) {

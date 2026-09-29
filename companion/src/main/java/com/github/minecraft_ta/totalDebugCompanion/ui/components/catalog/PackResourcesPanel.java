@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
@@ -13,7 +14,6 @@ import com.github.minecraft_ta.totalDebugCompanion.pack.PackResources;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 
 import javax.swing.JTabbedPane;
 import javax.swing.JPanel;
@@ -49,7 +49,7 @@ public final class PackResourcesPanel extends JPanel {
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.browser = new ResourceBrowser(navigator, category -> this.category = category);
         this.packs = new PacksPanel(PacksPanel.Side.RESOURCES, navigator);
-        this.packs.setApplier(enabled -> selections.set(SetPacksPayload.Side.RESOURCES, null, enabled),
+        this.packs.setApplier(enabled -> selections.set(ChangeRecord.PackSide.RESOURCES, null, enabled),
                 "Enables the checked resource packs in this order: in the connected game, which reloads its resources, otherwise in options.txt");
         this.tabs.addTab(ResourcesTab.FILES.title(), Icons.FOLDER, this.browser);
         this.tabs.addTab(ResourcesTab.PACKS.title(), Icons.RESOURCES_ROOT, this.packs);
