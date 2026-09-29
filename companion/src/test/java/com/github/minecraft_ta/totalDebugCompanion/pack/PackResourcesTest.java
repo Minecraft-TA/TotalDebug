@@ -5,8 +5,10 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -55,9 +57,12 @@ class PackResourcesTest {
     @Test
     void aGameWithoutAWorldListsNoDataAndAnUnreadablePackAddsNothing() throws Exception {
         CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
-        PackStackPayload menu = new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack("mod/testmod", "Mod resources", "")),
-                List.of());
-        assertEquals(List.of(), PackResources.data(menu, index, GameLocations.of(this.directory, false)), "at the menu or on a server the game has no data of its own");
+        GameLocation menu = GameLocations.of(this.directory, true);
+        menu.connected(message -> true);
+        menu.playing(new PlayingPayload.Menu());
+        assertEquals(List.of(), PackResources.data(null, index, menu), "at the menu the game has no data of its own");
+        menu.playing(new PlayingPayload.Multiplayer("example.test", false, true));
+        assertEquals(List.of(), PackResources.data(null, index, menu), "nor on a server, whose datapacks are not open to Companion");
 
         PackResources.Joined joined = PackResources.join(List.of(
                 new PackResources.Source("file/Gone", "Gone", List.of(this.directory.resolve("resourcepacks/Gone.zip"))),
@@ -70,14 +75,15 @@ class PackResourcesTest {
         CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
         Path faithful = pack(this.directory.resolve("resourcepacks/Faithful"), TEXTURE);
         Path datapack = pack(this.directory.resolve("saves/World/datapacks/TotalDebug"), RECIPE);
-        PackStackPayload stack = new PackStackPayload(34, 48,
+        PackStackPayload resourcePacks = new PackStackPayload(34,
                 List.of(new PackStackPayload.Pack("file/Faithful", "Faithful", faithful.toString()),
-                        new PackStackPayload.Pack("mod/testmod", "Mod resources", "")),
+                        new PackStackPayload.Pack("mod/testmod", "Mod resources", "")));
+        PackStackPayload datapacks = new PackStackPayload(48,
                 List.of(new PackStackPayload.Pack("mod/testmod", "Mod resources", ""),
                         new PackStackPayload.Pack("file/TotalDebug", "TotalDebug", datapack.toString())));
 
-        PackResources.Joined joined = PackResources.join(PackResources.assets(stack, index, this.directory),
-                PackResources.data(stack, index, GameLocations.of(this.directory, false)));
+        PackResources.Joined joined = PackResources.join(PackResources.assets(resourcePacks, index, this.directory),
+                PackResources.data(datapacks, index, GameLocations.of(this.directory, false)));
         String mod = index.mod("testmod").orElseThrow().title();
         assertEquals(mod, joined.from().get(TEXTURE), "the game put the mod above Faithful");
         assertEquals(List.of("Faithful"), joined.hidden().get(TEXTURE));
@@ -104,13 +110,13 @@ class PackResourcesTest {
                 PackResources.resourcePacks(null, this.directory).stream().map(ListedPack::id).toList(),
                 "enabled ones with the highest first, then those in resourcepacks/ that are not");
 
-        PackStackPayload stack = new PackStackPayload(34, 48, List.of(
+        PackStackPayload stack = new PackStackPayload(34, List.of(
                 new PackStackPayload.Pack("vanilla", "Minecraft", "", PackStackPayload.REQUIRED),
                 new PackStackPayload.Pack("mod_resources", "Mod Resources", "", PackStackPayload.REQUIRED),
                 new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN),
                 new PackStackPayload.Pack("mod/other,more", "Other", "", PackStackPayload.HIDDEN),
-                new PackStackPayload.Pack("file/Unused", "Unused", "")), List.of(),
-                List.of(new PackStackPayload.Pack("programmer_art", "Programmer Art", "", PackStackPayload.INCOMPATIBLE)), List.of());
+                new PackStackPayload.Pack("file/Unused", "Unused", "")),
+                List.of(new PackStackPayload.Pack("programmer_art", "Programmer Art", "", PackStackPayload.INCOMPATIBLE)));
         List<ListedPack> running = PackResources.resourcePacks(stack, this.directory);
         assertEquals(List.of("file/Unused", "mod_resources", "vanilla", "programmer_art", "file/Faithful"),
                 running.stream().map(ListedPack::id).toList(),
@@ -176,6 +182,22 @@ class PackResourcesTest {
         assertEquals(List.of(tweaks), sources.get(sources.size() - 2).files());
         assertEquals(List.of(added), sources.getLast().files());
         assertEquals("Tweaks", PackResources.join(List.of(), sources).from().get(RECIPE));
+    }
+
+    @Test
+    void anOpenWorldWhoseServerHasNotNamedItsDatapacksYetFollowsItsLevelDat() throws Exception {
+        CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
+        Path world = this.directory.resolve("saves/World");
+        Map<String, Object> data = LevelDatFixture.world("World");
+        data.put("DataPacks", Map.of("Enabled", List.of("vanilla", "mod_data", "file/Tweaks"), "Disabled", List.of()));
+        LevelDatFixture.write(world, data);
+        pack(world.resolve("datapacks/Tweaks"), RECIPE);
+        GameLocation location = GameLocations.of(this.directory, true);
+        location.connected(message -> true);
+        location.playing(new PlayingPayload.Singleplayer(world.toString()));
+
+        assertEquals("file/Tweaks", PackResources.data(null, index, location).getLast().id(),
+                "until the report arrives, or when asking for it failed, the world's datapacks are read from its files");
     }
 
     @Test

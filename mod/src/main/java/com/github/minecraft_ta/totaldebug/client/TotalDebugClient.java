@@ -182,8 +182,8 @@ public final class TotalDebugClient {
     }
 
     /**
-     * The packs in effect, or those the game found in its folders, may have changed: the singleplayer world's data packs
-     * after its data reloaded, or the packs the pack screen found. Client thread only.
+     * The resource packs the game found in its folders may have changed, as the pack screen rescans them. Client thread
+     * only.
      */
     public void packsChanged() {
         this.packStacks.publish();

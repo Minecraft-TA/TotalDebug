@@ -37,6 +37,7 @@ public final class TotalDebug {
     private final TickTaskScheduler tickTaskScheduler;
     private final TotalDebugNetwork network;
     private final ServerRelay serverRelay;
+    private final WorldDatapacks worldDatapacks;
     private final ServerScriptService serverScripts;
     private List<RuntimeSourceInventory.Source> runtimeSourceInputs;
 
@@ -54,7 +55,8 @@ public final class TotalDebug {
         this.tickTaskScheduler = new TickTaskScheduler();
         this.serverRelay = new ServerRelay();
         this.serverScripts = new ServerScriptService(this.tickTaskScheduler, this.serverRelay);
-        this.serverRelay.handle(new ServerOperations(this.serverScripts, new WorldDatapacks(this.serverRelay)));
+        this.worldDatapacks = new WorldDatapacks(this.serverRelay);
+        this.serverRelay.handle(new ServerOperations(this.serverScripts, this.worldDatapacks));
         this.network = new TotalDebugNetwork(Objects.requireNonNull(modEventBus, "modEventBus"));
         TotalDebugConfig.register(modContainer);
 
@@ -83,6 +85,10 @@ public final class TotalDebug {
     /** The server's end of the relay, through which Companion reaches it. */
     public ServerRelay serverRelay() {
         return this.serverRelay;
+    }
+
+    public WorldDatapacks worldDatapacks() {
+        return this.worldDatapacks;
     }
 
     public ServerScriptService serverScripts() {

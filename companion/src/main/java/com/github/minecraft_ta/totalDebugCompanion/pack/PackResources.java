@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -64,9 +65,9 @@ public final class PackResources {
     private PackResources() {
     }
 
-    /** The packs assets come from, lowest first. {@code stack} is what the running game named, or null. Blocking. */
-    public static List<Source> assets(PackStackPayload stack, CatalogIndex index, Path workspace) throws IOException {
-        if (stack != null) return stack.resourcePacks().stream().map(pack -> source(pack, index)).toList();
+    /** The packs assets come from, lowest first. {@code resourcePacks} are what the running game named, or null. Blocking. */
+    public static List<Source> assets(PackStackPayload resourcePacks, CatalogIndex index, Path workspace) throws IOException {
+        if (resourcePacks != null) return resourcePacks.enabled().stream().map(pack -> source(pack, index)).toList();
         List<String> enabled = new ArrayList<>(enabledInOptions(workspace.resolve("options.txt")));
         // Both are required: the game adds vanilla at the bottom and the mods' resources at the top when options.txt
         // does not list them.
@@ -87,15 +88,21 @@ public final class PackResources {
     }
 
     /**
-     * The packs data comes from, lowest first. {@code stack} is what the running game named, or null. A game at its menu
-     * or on a server names no datapacks, since no data of its own is loaded, so none are listed then. Without a game, the
-     * current world's {@code level.dat} names them; a pack the game builds in memory, such as one a mod generates, adds
-     * nothing Companion can read. Blocking.
+     * The packs data comes from, lowest first. {@code datapacks} are what the server of the world the game plays named,
+     * or null. A game at its menu or on a server has no data of its own loaded, so none are listed then. Without a game,
+     * and while the server of the singleplayer world the game plays has not named them yet, the current world's
+     * {@code level.dat} names them; a pack the game builds in memory, such as one a mod generates, adds nothing Companion
+     * can read. Blocking.
      */
-    public static List<Source> data(PackStackPayload stack, CatalogIndex index, GameLocation location) throws IOException {
-        if (stack != null) return stack.dataPacks().stream().map(pack -> source(pack, index)).toList();
+    public static List<Source> data(PackStackPayload datapacks, CatalogIndex index, GameLocation location) throws IOException {
+        if (datapacks != null) return datapacks.enabled().stream().map(pack -> source(pack, index)).toList();
+        GameState game = location.read();
+        if (game.game() instanceof GameState.Game.Connected connected
+                && (connected.playing() instanceof PlayingPayload.Menu || connected.playing() instanceof PlayingPayload.Multiplayer)) {
+            return List.of();
+        }
         // The game enables a new pack of the world's folder above the others when it loads the world.
-        List<ListedPack> listed = worldDatapacks(location.read());
+        List<ListedPack> listed = worldDatapacks(game);
         List<ListedPack> enabled = new ArrayList<>(listed.stream().filter(pack -> pack.state() == ListedPack.State.ENABLED).toList().reversed());
         enabled.addAll(listed.stream().filter(pack -> pack.state() == ListedPack.State.NEW).toList());
         List<Source> sources = new ArrayList<>();
@@ -151,7 +158,7 @@ public final class PackResources {
             }
             if (!ids.contains(MOD_RESOURCES)) enabled.put(MOD_RESOURCES, required(MOD_RESOURCES));
         } else {
-            for (PackStackPayload.Pack pack : stack.resourcePacks()) {
+            for (PackStackPayload.Pack pack : stack.enabled()) {
                 // The mods whose resources are not shown on their own are parts of the mods' pack, listed as that one pack.
                 if (!pack.is(PackStackPayload.HIDDEN)) enabled.putIfAbsent(pack.id(), pack);
             }
@@ -160,7 +167,7 @@ public final class PackResources {
             packs.add(new ListedPack(pack.id(), ListedPack.State.ENABLED, files.remove(pack.id()), pack.title(), rules(pack)));
         }
         if (stack != null) {
-            for (PackStackPayload.Pack pack : stack.otherResourcePacks()) {
+            for (PackStackPayload.Pack pack : stack.others()) {
                 packs.add(new ListedPack(pack.id(), ListedPack.State.DISABLED, files.remove(pack.id()), pack.title(), rules(pack)));
             }
         }
@@ -170,17 +177,17 @@ public final class PackResources {
 
     /**
      * The current world's datapacks as the game's pack screen lists them. While the connected game has the world open,
-     * as that game names them; otherwise as its {@code level.dat} saved them.
+     * as its server names them; otherwise as its {@code level.dat} saved them.
      */
-    public static List<ListedPack> worldDatapacks(PackStackPayload stack, CurrentWorld.Saved saved) throws IOException {
-        if (stack == null || !saved.open() || stack.dataPacks().isEmpty()) return saved.datapacks();
+    public static List<ListedPack> worldDatapacks(PackStackPayload datapacks, CurrentWorld.Saved saved) throws IOException {
+        if (datapacks == null || !saved.open() || datapacks.enabled().isEmpty()) return saved.datapacks();
         Map<String, Path> files = PackFolders.list(saved.directory().resolve("datapacks"));
         List<ListedPack> packs = new ArrayList<>();
-        for (PackStackPayload.Pack pack : stack.dataPacks().reversed()) {
+        for (PackStackPayload.Pack pack : datapacks.enabled().reversed()) {
             if (pack.is(PackStackPayload.HIDDEN)) continue;
             packs.add(new ListedPack(pack.id(), ListedPack.State.ENABLED, files.remove(pack.id()), pack.title(), rules(pack)));
         }
-        for (PackStackPayload.Pack pack : stack.otherDataPacks()) {
+        for (PackStackPayload.Pack pack : datapacks.others()) {
             packs.add(new ListedPack(pack.id(), ListedPack.State.DISABLED, files.remove(pack.id()), pack.title(), rules(pack)));
         }
         files.forEach((id, file) -> packs.add(new ListedPack(id, ListedPack.State.DISABLED, file)));

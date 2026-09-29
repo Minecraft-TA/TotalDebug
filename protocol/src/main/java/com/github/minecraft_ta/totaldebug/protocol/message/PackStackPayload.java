@@ -8,12 +8,12 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Protocol-29 payload describing the game's packs: the enabled ones, lowest first, so the last pack wins, and the others
- * it could enable, in the order its pack screen lists them. Data packs are empty while no singleplayer world is open.
- * {@code resourceFormat} and {@code dataFormat} are the pack formats of this Minecraft version.
+ * Protocol-38 payload describing a stack of packs: the enabled ones, lowest first, so the last pack wins, and the others
+ * that could be enabled, in the order the game's pack screen lists them. The game client names its resource packs this
+ * way ({@code PACK_STACK}), and the world's server its datapacks ({@code DATAPACKS}). {@code format} is the pack format
+ * of this Minecraft version for the stack's kind.
  */
-public record PackStackPayload(int resourceFormat, int dataFormat, List<Pack> resourcePacks, List<Pack> dataPacks,
-                               List<Pack> otherResourcePacks, List<Pack> otherDataPacks) {
+public record PackStackPayload(int format, List<Pack> enabled, List<Pack> others) {
     public static final int MAX_PACKS = 4_096;
 
     /** The game must keep the pack enabled, such as Minecraft's own resources. */
@@ -48,32 +48,24 @@ public record PackStackPayload(int resourceFormat, int dataFormat, List<Pack> re
     }
 
     public PackStackPayload {
-        resourcePacks = List.copyOf(resourcePacks);
-        dataPacks = List.copyOf(dataPacks);
-        otherResourcePacks = List.copyOf(otherResourcePacks);
-        otherDataPacks = List.copyOf(otherDataPacks);
-        for (List<Pack> packs : List.of(resourcePacks, dataPacks, otherResourcePacks, otherDataPacks)) {
-            if (packs.size() > MAX_PACKS) throw new IllegalArgumentException("Too many packs");
-        }
+        enabled = List.copyOf(enabled);
+        others = List.copyOf(others);
+        if (enabled.size() > MAX_PACKS || others.size() > MAX_PACKS) throw new IllegalArgumentException("Too many packs");
     }
 
-    /** The enabled packs only, as a game names them that lists no others. */
-    public PackStackPayload(int resourceFormat, int dataFormat, List<Pack> resourcePacks, List<Pack> dataPacks) {
-        this(resourceFormat, dataFormat, resourcePacks, dataPacks, List.of(), List.of());
+    /** The enabled packs only, as a stack that lists no others. */
+    public PackStackPayload(int format, List<Pack> enabled) {
+        this(format, enabled, List.of());
     }
 
     public static PackStackPayload read(ByteBufferInputStream input) {
-        return new PackStackPayload(input.readInt(), input.readInt(), readPacks(input), readPacks(input), readPacks(input),
-                readPacks(input));
+        return new PackStackPayload(input.readInt(), readPacks(input), readPacks(input));
     }
 
     public void write(ByteBufferOutputStream output) {
-        output.writeInt(this.resourceFormat);
-        output.writeInt(this.dataFormat);
-        writePacks(output, this.resourcePacks);
-        writePacks(output, this.dataPacks);
-        writePacks(output, this.otherResourcePacks);
-        writePacks(output, this.otherDataPacks);
+        output.writeInt(this.format);
+        writePacks(output, this.enabled);
+        writePacks(output, this.others);
     }
 
     private static List<Pack> readPacks(ByteBufferInputStream input) {

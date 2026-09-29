@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totaldebug.protocol.relay;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
@@ -32,11 +34,13 @@ public final class RelayedMessages {
             CompanionProtocol.SERVER_SCRIPTS_REQUEST, new Kind(ServerScriptsRequestMessage.class, ServerScriptsRequestMessage::new),
             CompanionProtocol.COMPANION_LEFT, new Kind(CompanionLeftMessage.class, CompanionLeftMessage::new),
             CompanionProtocol.RELOAD, new Kind(ReloadMessage.class, ReloadMessage::new),
-            CompanionProtocol.SET_PACKS, new Kind(SetPacksMessage.class, SetPacksMessage::new));
+            CompanionProtocol.SET_PACKS, new Kind(SetPacksMessage.class, SetPacksMessage::new),
+            CompanionProtocol.DATAPACKS_REQUEST, new Kind(DatapacksRequestMessage.class, DatapacksRequestMessage::new));
     private static final Map<Short, Kind> FROM_SERVER = Map.of(
             CompanionProtocol.EXECUTION_RESULT, new Kind(ExecutionResultMessage.class, ExecutionResultMessage::new),
             CompanionProtocol.SERVER_SCRIPTS, new Kind(ServerScriptsMessage.class, ServerScriptsMessage::new),
-            CompanionProtocol.RELOAD_RESULT, new Kind(ReloadResultMessage.class, ReloadResultMessage::new));
+            CompanionProtocol.RELOAD_RESULT, new Kind(ReloadResultMessage.class, ReloadResultMessage::new),
+            CompanionProtocol.DATAPACKS, new Kind(DatapacksMessage.class, DatapacksMessage::new));
 
     private RelayedMessages() {
     }

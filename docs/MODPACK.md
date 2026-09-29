@@ -49,7 +49,7 @@ Companion shows one world: the one the game has open, or the one played last whi
 Every resource of the pack, each file once, in the copy the game uses:
 
 - **Order:** assets follow the resource pack stack and data the datapack stack, lowest first, and the highest pack that supplies a path wins.
-  - With a game connected, both stacks are the ones it names (`PACK_STACK`), so data includes the current world's datapacks. A game at its menu or on a server has no data of its own, so none is listed then.
+  - With a game connected, the resource packs are the ones it names (`PACK_STACK`) and the datapacks the ones the current world's server names (`DATAPACKS`). A game at its menu or on a server has no data of its own, so none is listed then. Until the open singleplayer world's server names its datapacks, they follow its `level.dat`, as without a game.
   - Without one, assets follow `options.txt`, and data follows the current world's enabled datapacks in `level.dat`'s order, or Minecraft and the mods without a world. When `options.txt` leaves them out, vanilla goes at the bottom and the mods' resources at the top, as the game adds them.
   - The mods stack as NeoForge stacks them: one pack per mod file, in the order the game loaded the mods, which the catalog keeps. A file with several mods is one pack named by all of them.
 - **Unreadable packs:** a pack the game builds in memory, such as a mod's generated assets, a mod inside another mod's file, and the built-in Programmer Art and High Contrast packs add nothing Companion can read, so they are skipped.

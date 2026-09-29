@@ -45,6 +45,17 @@ class ModPartsTest {
         assertEquals(List.of(), found);
     }
 
+    @Test
+    void theClientLeavesTheIntegratedServerToItsServerPart() throws Exception {
+        List<String> found = new ArrayList<>();
+        classes().forEach((name, bytes) -> {
+            // Naming the world the game plays by its folder is the one thing the client reads there.
+            if (!name.startsWith(CLIENT_PART) || name.equals(CLIENT_PART + "world/Playing.class")) return;
+            if (new String(bytes, StandardCharsets.ISO_8859_1).contains("getSingleplayerServer")) found.add(name);
+        });
+        assertEquals(List.of(), found, "the world's data, datapacks and rules are its server's, reached through the relay");
+    }
+
     /** The mod's compiled classes by path, from the folder or jar that holds {@link TotalDebug}. */
     private static Map<String, byte[]> classes() throws IOException, URISyntaxException {
         URL self = TotalDebug.class.getResource("TotalDebug.class");

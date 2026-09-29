@@ -148,17 +148,18 @@ public final class PackSelections {
 
     /** The enabled packs, lowest first: as the connected game names them, or as the file keeps them. Blocking. */
     List<String> current(GameState game, ChangeRecord.PackSelection target) throws IOException {
-        PackStackPayload stack = this.edits.packs().packStack();
         if (target.side() == SetPacksPayload.Side.RESOURCES) {
+            PackStackPayload stack = this.edits.packs().resourcePacks();
             if (stack != null) {
                 // As options.txt keeps them: without the parts of another pack or the packs fixed in place.
-                return stack.resourcePacks().stream().filter(pack -> !pack.is(PackStackPayload.HIDDEN) && !pack.is(PackStackPayload.FIXED))
+                return stack.enabled().stream().filter(pack -> !pack.is(PackStackPayload.HIDDEN) && !pack.is(PackStackPayload.FIXED))
                         .map(PackStackPayload.Pack::id).toList();
             }
             return PackResources.enabledInOptions(options());
         }
-        if (stack != null && game.plays(target.location())) {
-            return stack.dataPacks().stream().filter(pack -> !pack.is(PackStackPayload.HIDDEN)).map(PackStackPayload.Pack::id).toList();
+        PackStackPayload datapacks = this.edits.packs().datapacks();
+        if (datapacks != null && game.plays(target.location())) {
+            return datapacks.enabled().stream().filter(pack -> !pack.is(PackStackPayload.HIDDEN)).map(PackStackPayload.Pack::id).toList();
         }
         NbtData.CompoundTag packs = dataPacks(LevelDat.read(LevelDat.file(target.location())).tag());
         return strings(packs, "Enabled");

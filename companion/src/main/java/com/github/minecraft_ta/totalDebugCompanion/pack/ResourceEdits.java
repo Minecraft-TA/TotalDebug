@@ -668,12 +668,10 @@ public final class ResourceEdits {
     private void preparePack(Path pack, boolean assets) throws IOException {
         Path meta = pack.resolve("pack.mcmeta");
         if (Files.isRegularFile(meta)) return;
-        PackStackPayload current = this.packs.packStack();
-        if (current == null) {
-            throw new IOException("Creating the TotalDebug pack needs the game connected, which names its pack format");
-        }
+        int format = this.packs.format(assets);
+        if (format == 0) throw new IOException("Creating the TotalDebug pack needs the game connected, which names its pack format");
         JsonObject description = new JsonObject();
-        description.addProperty("pack_format", assets ? current.resourceFormat() : current.dataFormat());
+        description.addProperty("pack_format", format);
         description.addProperty("description", "Changes made with TotalDebug Companion");
         JsonObject json = new JsonObject();
         json.add("pack", description);

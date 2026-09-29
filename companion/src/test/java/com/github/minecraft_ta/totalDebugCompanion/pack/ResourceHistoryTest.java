@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
+import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -118,9 +119,9 @@ class ResourceHistoryTest {
     private ResourceEdits edits(ChangeRecord record) {
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(directory, false), record,
                 new ResourceOriginals(directory.resolve("total-debug/originals")), Runnable::run, InstanceState.inMemory());
-        edits.packs().packStack(new PackStackPayload(34, 48,
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34,
                 List.of(new PackStackPayload.Pack("vanilla", "Default", ""),
-                        new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")), List.of()));
+                        new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), 48));
         return edits;
     }
 }

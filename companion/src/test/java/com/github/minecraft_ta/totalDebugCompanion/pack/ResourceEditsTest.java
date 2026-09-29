@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
+import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
@@ -43,9 +44,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceEditsTest {
     private static final String LANG = "assets/testmod/lang/en_us.json";
-    private static final PackStackPayload STACK = new PackStackPayload(34, 48,
+    private static final PackStackPayload STACK = new PackStackPayload(34,
             List.of(new PackStackPayload.Pack("vanilla", "Default", ""),
-                    new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")), List.of());
+                    new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")));
 
     @TempDir Path directory;
 
@@ -53,7 +54,7 @@ class ResourceEditsTest {
     void writesIntoTheManagedPackAndRevertsToNothing() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
 
         ResourceEdits.Saved saved = edits.save(LANG, bytes("{\"item.testmod.gear\":\"Cog\"}")).get(5, TimeUnit.SECONDS);
 
@@ -75,7 +76,7 @@ class ResourceEditsTest {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "version:3955\nresourcePacks:[\"vanilla\",\"file/glow\"]\nlang:en_us\n");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
 
         edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
         edits.save("assets/testmod/lang/de_de.json", bytes("{}")).get(5, TimeUnit.SECONDS);
@@ -93,7 +94,7 @@ class ResourceEditsTest {
     void aRevertLeavesAFileChangedOutsideCompanionAlone() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         Path file = this.directory.resolve("resourcepacks/TotalDebug").resolve(LANG);
         edits.save(LANG, bytes("{\"a\":\"saved\"}")).get(5, TimeUnit.SECONDS);
         Files.writeString(file, "{\"a\":\"by hand\"}");
@@ -113,7 +114,7 @@ class ResourceEditsTest {
     void editListenersHearOfASaveOnceTheOptionsEnableThePack() throws Exception {
         Path options = Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\"]\n");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         List<String> seen = new CopyOnWriteArrayList<>();
         edits.addEditListener(() -> {
             try {
@@ -132,7 +133,7 @@ class ResourceEditsTest {
     void revertingTwiceRevertsOnce() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         edits.save(LANG, bytes("{\"a\":\"saved\"}")).get(5, TimeUnit.SECONDS);
         ChangeRecord.Change change = record.changes().getFirst();
 
@@ -145,7 +146,7 @@ class ResourceEditsTest {
     void aFileRestoredOutsideCompanionEndsItsChange() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         edits.save(LANG, bytes("{\"a\":\"saved\"}")).get(5, TimeUnit.SECONDS);
         ChangeRecord.Change change = record.changes().getFirst();
 
@@ -161,7 +162,7 @@ class ResourceEditsTest {
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, true), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
 
         ResourceEdits.Saved saved = edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
         assertTrue(Files.isRegularFile(saved.pack().resolve(LANG)), "the file is saved");
@@ -173,7 +174,7 @@ class ResourceEditsTest {
     void revertingPutsBackWhatThePackHeldBefore() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         Path file = this.directory.resolve("resourcepacks/TotalDebug").resolve(LANG);
         Files.createDirectories(file.getParent());
         Files.writeString(file, "{\"a\":\"before\"}");
@@ -202,7 +203,7 @@ class ResourceEditsTest {
         Path newer = world("Newer");
         Files.setLastModifiedTime(older.resolve("level.dat"), FileTime.from(1_000, TimeUnit.SECONDS));
         ResourceEdits edits = edits(ChangeRecord.inMemory());
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
 
         ResourceEdits.Saved saved = edits.save("data/testmod/recipe/gear.json", bytes("{}")).get(5, TimeUnit.SECONDS);
 
@@ -227,7 +228,7 @@ class ResourceEditsTest {
             return true;
         });
         edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
 
         edits.save("data/testmod/recipe/gear.json", bytes("{}"));
         awaitSent(sent, 1);
@@ -248,7 +249,7 @@ class ResourceEditsTest {
             return true;
         });
         edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
 
         CompletableFuture<ResourceEdits.Saved> saved = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
         awaitSent(sent, 1);
@@ -296,7 +297,7 @@ class ResourceEditsTest {
             return true;
         });
         edits.location().playing(new PlayingPayload.Singleplayer(first.toString()));
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
 
         CompletableFuture<ResourceEdits.Saved> running = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
         awaitSent(sent, 1);
@@ -307,7 +308,7 @@ class ResourceEditsTest {
         assertNull(worlds.get(1), "the client's resources go to the game client itself");
 
         edits.location().playing(new PlayingPayload.Singleplayer(second.toString()));
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         assertTrue(waiting.get(5, TimeUnit.SECONDS).reloadFailure().contains("another world"),
                 "the first world's waiting data is not reloaded in the second");
         edits.pipeline().reloads().answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
@@ -329,18 +330,18 @@ class ResourceEditsTest {
         Path world = this.directory.resolve("saves/World");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
 
         edits.location().connected(message -> true);
 
-        assertEquals(STACK, edits.packs().packStack(), "they were named for the world the connection now plays");
+        assertEquals(STACK, edits.packs().resourcePacks(), "they were named for the world the connection now plays");
     }
 
     @Test
     void reloadsAskedForDuringAReloadRunTogetherAfterIt() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
             if (SentMessage.of(message).message() instanceof ReloadMessage reload) sent.add(reload.payload());
@@ -379,7 +380,7 @@ class ResourceEditsTest {
         try {
             ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), record,
                     new ResourceOriginals(this.directory.resolve("total-debug/originals")), queue, InstanceState.inMemory());
-            edits.packs().packStack(STACK);
+            edits.packs().named(new ClientPacksPayload(STACK, 48));
             List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
             edits.location().connected(message -> {
                 if (SentMessage.of(message).message() instanceof ReloadMessage reload) {
@@ -420,7 +421,7 @@ class ResourceEditsTest {
     void aSaveOverACopyWrittenSinceIsRefusedAndWritesNothing() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         String texture = "assets/testmod/textures/block/gear.png";
         Path pack = edits.save(texture, null, bytes("first")).get(5, TimeUnit.SECONDS).pack();
         String seen = ResourceOriginals.hash(bytes("first"));
@@ -450,8 +451,8 @@ class ResourceEditsTest {
 
         assertEquals("{\"animation\":{\"frametime\":1}}", new String(edits.packs().metadata(texture, managed, 1024).orElseThrow(),
                 StandardCharsets.UTF_8), "without the game's stack, the pack's own");
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""),
-                new PackStackPayload.Pack("file/Top", "Top", top.toString())), List.of()));
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""),
+                new PackStackPayload.Pack("file/Top", "Top", top.toString()))), 48));
         assertEquals("{\"animation\":{\"frametime\":9}}", new String(edits.packs().metadata(texture, managed, 1024).orElseThrow(),
                 StandardCharsets.UTF_8), "a pack above that supplies it wins, as in the game");
         assertThrows(IOException.class, () -> edits.packs().metadata(texture, managed, 8), "larger than an animation needs");
@@ -461,7 +462,7 @@ class ResourceEditsTest {
     void aRevertIntoATotalDebugPackWithoutMetadataSaysSo() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         Path pack = edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS).pack();
         Files.delete(pack.resolve("pack.mcmeta"));
 
@@ -490,9 +491,9 @@ class ResourceEditsTest {
         Path top = Files.createDirectories(this.directory.resolve("resourcepacks/Top"));
         Files.createDirectories(top.resolve(texture).getParent());
         Files.writeString(top.resolve(texture + ".mcmeta"), "{\"animation\":{}}");
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack("vanilla", "Default", ""),
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack("vanilla", "Default", ""),
                 new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""),
-                new PackStackPayload.Pack("file/Top", "Top", top.toString())), List.of()));
+                new PackStackPayload.Pack("file/Top", "Top", top.toString()))), 48));
 
         ResourceEdits.Saved saved = edits.save(texture, null, bytes("png"), Map.of(texture + ".mcmeta", bytes("{}")))
                 .get(5, TimeUnit.SECONDS);
@@ -504,7 +505,7 @@ class ResourceEditsTest {
     void aTexturesAnimationIsWrittenBesideItWhereThePackHasNone() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         String texture = "assets/testmod/textures/block/gear.png";
         byte[] animation = bytes("{\"animation\":{\"frametime\":2}}");
 
@@ -527,7 +528,7 @@ class ResourceEditsTest {
     @Test
     void anAnimationWrittenBesideATextureIsReloadedWithIt() throws Exception {
         ResourceEdits edits = edits(ChangeRecord.inMemory());
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
             if (SentMessage.of(message).message() instanceof ReloadMessage reload) {
@@ -553,7 +554,7 @@ class ResourceEditsTest {
         world("Newer");
         Files.setLastModifiedTime(older.resolve("level.dat"), FileTime.fromMillis(1_000));
         ResourceEdits edits = edits(ChangeRecord.inMemory());
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
         Path olderPack = older.resolve("datapacks/TotalDebug");
         String recipe = "data/testmod/recipe/gear.json";
 
@@ -572,7 +573,7 @@ class ResourceEditsTest {
     void aMalformedOptionsFileStillAcknowledgesTheSave() throws Exception {
         Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:{\"not\":\"a list\"}\n");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
-        edits.packs().packStack(STACK);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
 
         ResourceEdits.Saved saved = edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
         assertTrue(Files.isRegularFile(saved.pack().resolve(LANG)));
@@ -585,9 +586,9 @@ class ResourceEditsTest {
         Files.createDirectories(above.resolve("assets/testmod/lang"));
         Files.writeString(above.resolve(LANG), "{}");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(
                 new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""),
-                new PackStackPayload.Pack("file/Faithful", "Faithful", above.toString())), List.of()));
+                new PackStackPayload.Pack("file/Faithful", "Faithful", above.toString()))), 48));
 
         Path managed = this.directory.resolve("resourcepacks/TotalDebug");
         assertEquals("Faithful is above the TotalDebug resource pack and supplies this file too, so the game shows its copy",
@@ -634,8 +635,11 @@ class ResourceEditsTest {
         Path live = LevelDatFixture.datapack(world, "Live");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         edits.location().connected(message -> true);
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
-        edits.packs().packStack(STACK);
+        PlayingPayload playing = new PlayingPayload.Singleplayer(world.toString());
+        edits.location().playing(playing);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
+        // The world's server names the datapacks it uses: none of these.
+        edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Default", ""))));
         String recipe = "data/tweaks/recipe/gear.json";
 
         assertTrue(edits.packs().unusedBecause(recipe, added).isEmpty(), "a reload enables it, as /reload does");
@@ -676,7 +680,7 @@ class ResourceEditsTest {
         assertEquals("The MyPack resource pack is not enabled, so the game does not use this file", saved.unused(),
                 "saving writes the file but does not enable the player's pack");
         ResourceEdits named = edits(ChangeRecord.inMemory());
-        named.packs().packStack(STACK);
+        named.packs().named(new ClientPacksPayload(STACK, 48));
         assertTrue(named.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS).unused().isEmpty(),
                 "the managed pack is enabled when it is saved to");
     }

@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
@@ -66,6 +67,9 @@ public final class CompanionSession implements AutoCloseable {
         default void changeResult(ChangeResultMessage message) { }
 
         default void packStack(PackStackMessage message) { }
+
+        /** The server of the world the game plays named its datapacks. */
+        default void datapacks(DatapacksMessage message) { }
 
         default void reloadResult(ReloadResultMessage message) { }
 
@@ -276,6 +280,7 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageBus().listenAlways(InspectSubjectMessage.class, this.listener::inspectSubject);
         this.server.getMessageBus().listenAlways(ChangeResultMessage.class, this.listener::changeResult);
         this.server.getMessageBus().listenAlways(PackStackMessage.class, this.listener::packStack);
+        this.server.getMessageBus().listenAlways(DatapacksMessage.class, this.listener::datapacks);
         this.server.getMessageBus().listenAlways(ReloadResultMessage.class, this.listener::reloadResult);
         this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->
                 SwingUtilities.invokeLater(this.listener::focusWindow));

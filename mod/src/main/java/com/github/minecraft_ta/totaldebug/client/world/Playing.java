@@ -20,7 +20,7 @@ public final class Playing {
         Minecraft minecraft = Minecraft.getInstance();
         IntegratedServer server = minecraft.getSingleplayerServer();
         if (server != null) {
-            return new PlayingPayload.Singleplayer(server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().toString());
+            return PlayingPayload.Singleplayer.of(server.getWorldPath(LevelResource.ROOT));
         }
         ClientPacketListener connection = Objects.requireNonNull(minecraft.getConnection(), "connection");
         ServerData data = minecraft.getCurrentServer();

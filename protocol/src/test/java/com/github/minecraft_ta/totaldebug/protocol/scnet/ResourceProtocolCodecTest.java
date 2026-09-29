@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
@@ -19,15 +20,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ResourceProtocolCodecTest {
     @Test
     void thePackStackSurvivesTheWire() {
-        PackStackPayload stack = new PackStackPayload(34, 48,
+        PackStackPayload resources = new PackStackPayload(34,
                 List.of(new PackStackPayload.Pack("vanilla", "Default", ""),
                         new PackStackPayload.Pack("file/TotalDebug", "TotalDebug", "C:/game/resourcepacks/TotalDebug")),
-                List.of(new PackStackPayload.Pack("vanilla", "Default", "")),
-                List.of(new PackStackPayload.Pack("programmer_art", "Programmer Art", "", PackStackPayload.INCOMPATIBLE)),
-                List.of(new PackStackPayload.Pack("trade_rebalance", "Trade Rebalance", "", PackStackPayload.MISSING_FEATURES)));
+                List.of(new PackStackPayload.Pack("programmer_art", "Programmer Art", "", PackStackPayload.INCOMPATIBLE)));
+        ClientPacksPayload client = new ClientPacksPayload(resources, 48);
         PackStackMessage read = new PackStackMessage();
-        read.read(new ByteBufferInputStream(written(new PackStackMessage(stack))));
-        assertEquals(stack, read.payload());
+        read.read(new ByteBufferInputStream(written(new PackStackMessage(client))));
+        assertEquals(client, read.payload());
+
+        PackStackPayload datapacks = new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Default", "")),
+                List.of(new PackStackPayload.Pack("trade_rebalance", "Trade Rebalance", "", PackStackPayload.MISSING_FEATURES)));
+        DatapacksMessage readDatapacks = new DatapacksMessage();
+        readDatapacks.read(new ByteBufferInputStream(written(new DatapacksMessage("world C:/saves/World", datapacks))));
+        assertEquals("world C:/saves/World", readDatapacks.world());
+        assertEquals(datapacks, readDatapacks.payload());
     }
 
     @Test

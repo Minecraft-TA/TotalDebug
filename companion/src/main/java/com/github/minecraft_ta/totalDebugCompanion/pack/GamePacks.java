@@ -5,8 +5,12 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
+import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksRequestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,17 +22,20 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.zip.ZipFile;
 
 /**
- * The packs the game uses: the resource packs and the current world's datapacks the connected game names, in its order,
- * and, without them, what {@code options.txt} and a world's {@code level.dat} enable. It answers which pack's copy of a
- * file the game uses, for the views and the edits that show whether a copy is used.
+ * The packs the game uses: the resource packs the connected game client names, and the datapacks the server of the world
+ * it plays names, each in its order; without them, what {@code options.txt} and a world's {@code level.dat} enable. It
+ * answers which pack's copy of a file the game uses, for the views and the edits that show whether a copy is used.
  */
 public final class GamePacks {
     private final GameLocation location;
     private final Path workspace;
-    private volatile PackStackPayload stack;
-    /** What the game played when it named {@link #stack}, whose packs they are. */
-    private volatile PlayingPayload stackFor;
-    /** Run whenever the game names its packs again, such as after another world opened. */
+    private volatile PackStackPayload resourcePacks;
+    /** The datapack format of the connected game's version, or 0 while no game is connected. */
+    private volatile int dataFormat;
+    private volatile PackStackPayload datapacks;
+    /** What the game played when its server named {@link #datapacks}, whose datapacks they are. */
+    private volatile PlayingPayload datapacksFor;
+    /** Run whenever the game or its server names packs again, such as after another world opened. */
     private final List<Runnable> stackListeners = new CopyOnWriteArrayList<>();
 
     /** The packs of the game {@code location} tells of. */
@@ -38,8 +45,11 @@ public final class GamePacks {
         location.addListener(change -> {
             if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
             else if (change == GameLocation.Change.PLAYING) {
-                // The packs the game named belong to what it played; it names them again for what it plays now.
-                if (!Objects.equals(this.stackFor, location.playing())) this.stack = null;
+                // The datapacks the server named belong to the world it played; its next world's server is asked.
+                synchronized (this) {
+                    if (!Objects.equals(this.datapacksFor, location.playing())) this.datapacks = null;
+                }
+                askForDatapacks();
                 this.stackListeners.forEach(Runnable::run);
             }
         });
@@ -50,22 +60,69 @@ public final class GamePacks {
         return this.location;
     }
 
-    /** The game disconnected: the packs it named no longer hold. */
+    /** The game disconnected: the packs it and its server named no longer hold. */
     private void gameDisconnected() {
-        this.stack = null;
+        this.resourcePacks = null;
+        this.dataFormat = 0;
+        this.datapacks = null;
         this.stackListeners.forEach(Runnable::run);
     }
 
-    /** Takes the game's enabled packs. */
-    public void packStack(PackStackPayload stack) {
-        this.stackFor = this.location.playing();
-        this.stack = stack;
+    /**
+     * Asks the server of the singleplayer world the game plays to name its datapacks, through the game client. Only a
+     * world's owner is told so far; a server names none.
+     */
+    private void askForDatapacks() {
+        GameLocation.Connection connection = this.location.connection();
+        PlayingPayload playing = this.location.playing();
+        if (connection == null || !(playing instanceof PlayingPayload.Singleplayer)) return;
+        connection.send(new ToServerMessage(RelayedMessages.toServer(new DatapacksRequestMessage(), 0, playing.identity())));
+    }
+
+    /** Takes the resource packs the game client names, and its version's datapack format. */
+    public void named(ClientPacksPayload packs) {
+        this.resourcePacks = packs.resourcePacks();
+        this.dataFormat = packs.dataFormat();
         this.stackListeners.forEach(Runnable::run);
     }
 
-    /** The packs the running game named last, or null while no game is connected. */
-    public PackStackPayload packStack() {
-        return this.stack;
+    /** The resource packs the connected game named last, or null while no game is connected. */
+    public PackStackPayload resourcePacks() {
+        return this.resourcePacks;
+    }
+
+    /**
+     * Takes the datapacks the server of {@code world}, by its identity, names. A report of a world the game no longer
+     * plays, sent before it left, is dropped: it would stand for the datapacks of the world played now.
+     */
+    public void datapacks(String world, PackStackPayload packs) {
+        synchronized (this) {
+            PlayingPayload playing = this.location.playing();
+            if (playing == null || !playing.identity().equals(world)) return;
+            this.datapacksFor = playing;
+            this.datapacks = packs;
+        }
+        this.stackListeners.forEach(Runnable::run);
+    }
+
+    /** The datapacks the server of the world the game plays named last, or null until it named them. */
+    public PackStackPayload datapacks() {
+        return this.datapacks;
+    }
+
+    /**
+     * The pack format of {@code assets} or data packs: the one the world's server named, or the connected game's version's;
+     * 0 while no game is connected.
+     */
+    public int format(boolean assets) {
+        if (assets) return this.resourcePacks == null ? 0 : this.resourcePacks.format();
+        return this.datapacks != null ? this.datapacks.format() : this.dataFormat;
+    }
+
+    /** The enabled packs of {@code path}'s side as the game or its server named them, or null where they did not. */
+    private List<PackStackPayload.Pack> enabled(String path) {
+        PackStackPayload stack = path.startsWith("assets/") ? this.resourcePacks : this.datapacks;
+        return stack == null ? null : stack.enabled();
     }
 
     /**
@@ -84,11 +141,10 @@ public final class GamePacks {
      */
     public Optional<String> unusedBecause(String path, Path pack) {
         boolean assets = path.startsWith("assets/");
-        PackStackPayload current = this.stack;
-        // The game names the open world's datapacks only; another world's and a closed game's are read from their files.
+        List<PackStackPayload.Pack> packs = enabled(path);
+        // The server names the open world's datapacks only; another world's and a closed game's are read from their files.
         GameState game = this.location.read();
-        if (current == null || !assets && !game.plays(pack.getParent().getParent())) return disabledOnDisk(game, path, pack);
-        List<PackStackPayload.Pack> packs = assets ? current.resourcePacks() : current.dataPacks();
+        if (packs == null || !assets && !game.plays(pack.getParent().getParent())) return disabledOnDisk(game, path, pack);
         int position = position(packs, pack);
         if (position < 0) {
             // The managed pack is enabled by the reload after a save, and so is a datapack the world does not know yet, as
@@ -124,10 +180,9 @@ public final class GamePacks {
      * {@code pack} that supplies it too. Empty when none does, or the game has not named its packs. Blocking.
      */
     Optional<String> besideUnused(List<String> beside, Path pack) {
-        PackStackPayload current = this.stack;
-        if (current == null) return Optional.empty();
         for (String path : beside) {
-            List<PackStackPayload.Pack> packs = path.startsWith("assets/") ? current.resourcePacks() : current.dataPacks();
+            List<PackStackPayload.Pack> packs = enabled(path);
+            if (packs == null) continue;
             int position = position(packs, pack);
             if (position < 0) continue;
             String name = path.substring(path.lastIndexOf('/') + 1);
@@ -182,9 +237,8 @@ public final class GamePacks {
      */
     public Optional<byte[]> metadata(String path, Path pack, int limit) throws IOException {
         String name = path + ".mcmeta";
-        PackStackPayload current = this.stack;
-        if (current != null) {
-            List<PackStackPayload.Pack> packs = path.startsWith("assets/") ? current.resourcePacks() : current.dataPacks();
+        List<PackStackPayload.Pack> packs = enabled(path);
+        if (packs != null) {
             int position = position(packs, pack);
             for (int index = packs.size() - 1; position >= 0 && index > position; index--) {
                 String source = packs.get(index).source();

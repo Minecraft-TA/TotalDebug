@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
+import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -45,8 +46,7 @@ class TextureEditorTest {
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), record,
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
-                List.of()));
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), 48));
         BufferedImage gear = new BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB);
         for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) gear.setRGB(x, y, GRAY);
 
