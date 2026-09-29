@@ -202,7 +202,7 @@ class ConfigPanelTest {
         Path second = world("Second", 1_000);
         GameLocation location = GameLocations.of(this.directory, true);
         location.connected(message -> true);
-        location.playing(new PlayingPayload.Singleplayer(first.getParent().getParent().toString(), false));
+        location.playing(new PlayingPayload.Singleplayer(first.getParent().getParent().toString()));
         ConfigPanel[] panel = new ConfigPanel[1];
         SwingUtilities.invokeAndWait(() -> {
             panel[0] = new ConfigPanel("testmod", new ConfigChanges(location, ChangeRecord.inMemory()), target -> { });
@@ -211,7 +211,7 @@ class ConfigPanelTest {
         JComboBox<?> source = component(panel[0], JComboBox.class);
         awaitOnSwing(() -> source.getSelectedItem() != null && source.getSelectedItem().toString().equals("First"));
 
-        location.playing(new PlayingPayload.Singleplayer(second.getParent().getParent().toString(), false));
+        location.playing(new PlayingPayload.Singleplayer(second.getParent().getParent().toString()));
 
         awaitOnSwing(() -> source.getSelectedItem() != null && source.getSelectedItem().toString().equals("Second"));
     }

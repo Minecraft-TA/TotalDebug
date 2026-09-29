@@ -211,7 +211,7 @@ class ConfigChangesTest {
         assertEquals(ConfigChanges.Location.WORLD, changes.location(file));
         assertEquals(ConfigChanges.Effect.WORLD_OPENS, edit(changes, file, PackCatalog.Restart.WORLD, "1", "2"));
 
-        this.location.playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        this.location.playing(new PlayingPayload.Singleplayer(world.toString()));
         assertEquals(ConfigChanges.Effect.NOW, edit(changes, file, PackCatalog.Restart.NONE, "1", "2"));
         assertEquals(ConfigChanges.Effect.REJOIN, edit(changes, file, PackCatalog.Restart.WORLD, "2", "3"));
         changes.refresh();

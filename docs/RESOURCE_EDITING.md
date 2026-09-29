@@ -107,7 +107,7 @@ A selection is a target of its own, `PackSelection`: the side (resource packs, o
 
 | Message | Direction | Content |
 |---|---|---|
-| `PACK_STACK` | Game to Companion | Enabled resource packs and datapacks in order, with their files, and the pack formats; sent when the stack changes and after every handshake |
+| `PACK_STACK` | Game to Companion | Enabled resource packs and datapacks in order, with their files, and the pack formats; sent on the events that change the stack and after every handshake ([GAME_LOCATION.md](GAME_LOCATION.md)) |
 | `RELOAD` | Companion to game | Request id, what to reload (language, textures, resources, data), the managed pack and the edited paths |
 | `RELOAD_RESULT` | Game to Companion | Request id, duration, problems naming edited paths, or the error |
 | `SET_PACKS` | Companion to game | Request id, the side, and the enabled pack ids, lowest first; answered with `RELOAD_RESULT` once the reload the selection needs is done |

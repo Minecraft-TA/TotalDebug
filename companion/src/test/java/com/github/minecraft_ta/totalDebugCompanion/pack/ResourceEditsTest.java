@@ -219,7 +219,7 @@ class ResourceEditsTest {
             if (message instanceof ReloadMessage reload) sent.add(reload.payload());
             return true;
         });
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
         edits.packStack(STACK);
 
         edits.save("data/testmod/recipe/gear.json", bytes("{}"));
@@ -262,14 +262,14 @@ class ResourceEditsTest {
             if (message instanceof ReloadMessage reload) sent.add(reload.payload());
             return true;
         });
-        edits.location().playing(new PlayingPayload.Singleplayer(first.toString(), false));
+        edits.location().playing(new PlayingPayload.Singleplayer(first.toString()));
         edits.packStack(STACK);
 
         CompletableFuture<ResourceEdits.Saved> running = edits.save(LANG, bytes("{}"));
         awaitSent(sent, 1);
         CompletableFuture<ResourceEdits.Saved> model = edits.save("assets/testmod/models/block/gear.json", bytes("{}"));
         CompletableFuture<ResourceEdits.Saved> firstData = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
-        edits.location().playing(new PlayingPayload.Singleplayer(second.toString(), false));
+        edits.location().playing(new PlayingPayload.Singleplayer(second.toString()));
         edits.packStack(STACK);
         CompletableFuture<ResourceEdits.Saved> secondData = edits.save("data/testmod/recipe/wheel.json", bytes("{}"));
 
@@ -295,7 +295,7 @@ class ResourceEditsTest {
             if (message instanceof ReloadMessage reload) sent.add(reload.payload());
             return true;
         });
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
         edits.packStack(STACK);
 
         CompletableFuture<ResourceEdits.Saved> running = edits.save(LANG, bytes("{}"));
@@ -324,7 +324,7 @@ class ResourceEditsTest {
             if (message instanceof ReloadMessage reload) sent.add(reload.payload());
             return true;
         });
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
         edits.packStack(STACK);
 
         CompletableFuture<ResourceEdits.Saved> running = edits.save(LANG, bytes("{}"));
@@ -348,7 +348,7 @@ class ResourceEditsTest {
     void packsNamedBeforeTheConnectionWasEstablishedStayForTheWorldTheyBelongTo() {
         Path world = this.directory.resolve("saves/World");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
         edits.packStack(STACK);
 
         edits.location().connected(message -> true);
@@ -654,7 +654,7 @@ class ResourceEditsTest {
         Path live = LevelDatFixture.datapack(world, "Live");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         edits.location().connected(message -> true);
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
         edits.packStack(STACK);
         String recipe = "data/tweaks/recipe/gear.json";
 

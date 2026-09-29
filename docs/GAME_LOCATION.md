@@ -15,10 +15,22 @@ Companion changes and reads a Minecraft instance in several situations: with no 
 | A game runs in the instance | The game lock is held (`total-debug/game.lock`). A lock that cannot be checked counts as held. Companion checks it by taking it for a moment, so the game retries its lock for a second when it starts. | Nothing; blocking file check |
 | The game is connected | The authenticated session of the current project | Connection |
 | Which process the game is | The debug target the game announces | Connection |
-| What the game is playing | `PLAYING`, sent by the game whenever it changes and after it connects: its menu, a singleplayer world by its folder, or a server by its address | Connection |
+| What the game is playing | `PLAYING`, sent by the game when the player joins or leaves a world or server, and after it connects: its menu, a singleplayer world by its folder, or a server by its address | Connection |
 | A world is held | The world's `session.lock` is held. This says that some program has the world open, not which one. | Nothing; blocking file check |
 
 A world held while the game plays another, or while no game runs, is open in another program, such as a world editor.
+
+The game tells what it plays, and the packs in effect there (`PACK_STACK`), on the events that change them; it does not poll:
+
+| Told | When |
+|---|---|
+| `PLAYING` | The player joins a world or server (`LoggingIn`) or leaves it (`LoggingOut`), so leaving and rejoining the same server is a change too |
+| Resource packs | A client resource reload applies; a new selection, from the pack screen or from Companion, takes effect only through one |
+| The singleplayer world's datapacks | The server's tags arrive after its data loaded or reloaded, as `/reload` and `/datapack` do |
+| Packs the game could enable | The pack screen closes, and after each reload or pack selection Companion asks for |
+| Both, again | After `PLAYING`, and when Companion connects |
+
+Opening a world to LAN changes nothing Companion is told: it is the same world.
 
 ## States
 
@@ -30,8 +42,8 @@ The project's `GameLocation` combines these into one state:
 | Running, not connected | The world whose `session.lock` is held, if any | The game runs; Companion cannot talk to it |
 | Connected | Not told yet | Connected a moment ago; `PLAYING` has not arrived. A held world is taken as the one it has open, but not changed live |
 | Connected | Menu | No world is open |
-| Connected | Singleplayer: world folder, open to LAN or not | The integrated server runs that world of the instance |
-| Connected | Multiplayer: address, Realms or not, whether the server has TotalDebug, the player's permission level | The world is on another machine |
+| Connected | Singleplayer: world folder | The integrated server runs that world of the instance |
+| Connected | Multiplayer: address, Realms or not, whether the server has TotalDebug | The world is on another machine |
 
 Pushed facts (connection, process, playing) change the state at once and tell listeners; what the game tells before Companion takes its connection as established is kept for it. File facts are read when the state is read: the game lock at once, the worlds' locks by the queries that need them. A decision made in the project's write queue therefore sees the files as they are then. Reading the state is blocking; the Swing thread never reads it.
 
@@ -80,7 +92,7 @@ A world of the instance is never live while the game plays on a remote server: t
 - A live answer's connection sends only on the connection it was given for. Once that connection has ended its sends fail, so a message never goes to a game that connected since.
 - A category that waits for the game's answers listens to `GameLocation` to fail them when the game disconnects.
 - A page that shows something chosen by where the game is, such as the open world's copy of a server configuration, reads it again when `GameLocation` changes. A page where the user chose the world keeps that choice.
-- A live request for a world, such as a datapack selection or a data reload, names that world, and the game refuses it when it plays another by the time the request arrives: what the game plays is told once a second, so Companion can be a moment behind.
+- A live request for a world, such as a datapack selection or a data reload, names that world, and the game refuses it when it plays another by the time the request arrives: a request can be on its way while the player leaves.
 - What the game reports about a world, such as its datapacks, belongs to what it plays. Companion drops it when the game plays something else, and the game reports it again.
 - Reloads asked for together go to the game on one connection; asked for on an earlier connection, they fail rather than reach a game that connected since. Data asked for a world the game has left is dropped from the reload alone.
 
@@ -92,7 +104,7 @@ Where something runs, a script or a code-mode job, is `Side`: `CLIENT` or `SERVE
 
 The model already names what these need; each is its own item.
 
-- **Server changes on a remote server (A2, designed in [MOD_SIDES.md](MOD_SIDES.md)):** the multiplayer state carries whether the server has TotalDebug and the player's permission level. Live server-owned changes go through the relay to that server and need permission level 2, as `/gamerule` does. Until then a remote server's own world is refused with that requirement.
+- **Server changes on a remote server (A2, designed in [MOD_SIDES.md](MOD_SIDES.md)):** the multiplayer state carries whether the server has TotalDebug. Live server-owned changes go through the relay to that server and need permission level 2, as `/gamerule` does, which the server checks. Until then a remote server's own world is refused with that requirement.
 - **Direct server access (F2):** a dedicated server connects to Companion itself. Its game is then a server process, not a client: the game-owned rows are refused ("this instance has no client"), and its worlds are live through that connection.
 - **Server instances:** a project for a dedicated server's directory keeps its world at `level-name` from `server.properties` instead of `saves/`, and has no `options.txt`. The state is the same; where worlds are found is a property of the instance.
 - **The status bar** can name what the game plays, such as the singleplayer world or the server's address, from the same state.
