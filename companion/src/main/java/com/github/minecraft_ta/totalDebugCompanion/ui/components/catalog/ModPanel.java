@@ -157,8 +157,7 @@ public final class ModPanel extends JPanel {
 
     /** The mod's name as the catalog shown now has it, for the tab, which names hidden pages too. */
     public String title() {
-        return ModSummary.resolve(this.modId, PackCatalogService.shown(this.catalog.state()), this.sources.get())
-                .map(ModSummary::title).orElse(this.modId);
+        return ModSummary.title(this.modId, PackCatalogService.shown(this.catalog.state()), this.sources.get());
     }
 
     /** Selects the requested tab, and the kind on the Content tab, the file on the Configuration tab or the category on the Resources tab. */

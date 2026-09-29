@@ -125,7 +125,7 @@ public final class DefinitionDetails {
 
     /** The catalog's title for the definition, or its id when the catalog does not have it; looked up now. */
     public String title() {
-        return current().map(CatalogIndex.Entry::title).orElse(this.subject.id());
+        return current(PackCatalogService.shown(this.services.catalog().state())).map(CatalogIndex.Entry::title).orElse(this.subject.id());
     }
 
     /** Why the catalog cannot describe the definition, or empty when it does. */
@@ -143,13 +143,13 @@ public final class DefinitionDetails {
 
     /** The item drawn for the definition, when the catalog names one. */
     public Optional<CatalogIndex.ItemIcon> icon() {
+        // One catalog for the entry and its item, as a new one may arrive between two lookups.
         CatalogIndex index = PackCatalogService.shown(this.services.catalog().state());
-        return current().filter(entry -> !entry.iconItem().isEmpty()).flatMap(entry -> index.itemIcon(entry.iconItem()));
+        return current(index).filter(entry -> !entry.iconItem().isEmpty()).flatMap(entry -> index.itemIcon(entry.iconItem()));
     }
 
-    /** The definition as the catalog shown now has it, which may be newer than what the page read. */
-    private Optional<CatalogIndex.Entry> current() {
-        CatalogIndex index = PackCatalogService.shown(this.services.catalog().state());
+    /** The definition as {@code index}, the catalog shown now, has it, which may be newer than what the page read. */
+    private Optional<CatalogIndex.Entry> current(CatalogIndex index) {
         return index == null ? Optional.empty() : index.entry(this.subject);
     }
 

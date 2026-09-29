@@ -135,5 +135,12 @@ class ModResourcesTest {
         assertEquals("Other Mod", uncaptured.title());
         assertEquals(List.of(jar), uncaptured.files());
         assertTrue(ModSummary.resolve("missing", index, sources).isEmpty());
+
+        for (String id : List.of("testmod", "c")) {
+            assertEquals(ModSummary.resolve(id, index, sources).orElseThrow().title(), ModSummary.title(id, index, sources),
+                    "a tab's name, found without files, is the page's");
+        }
+        assertEquals("Other Mod", ModSummary.title("othermod", null, sources));
+        assertEquals("missing", ModSummary.title("missing", index, sources));
     }
 }
