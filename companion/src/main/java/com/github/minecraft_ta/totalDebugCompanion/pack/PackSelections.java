@@ -148,7 +148,7 @@ public final class PackSelections {
 
     /** The enabled packs, lowest first: as the connected game names them, or as the file keeps them. Blocking. */
     List<String> current(GameState game, ChangeRecord.PackSelection target) throws IOException {
-        PackStackPayload stack = this.edits.packStack();
+        PackStackPayload stack = this.edits.packs().packStack();
         if (target.side() == SetPacksPayload.Side.RESOURCES) {
             if (stack != null) {
                 // As options.txt keeps them: without the parts of another pack or the packs fixed in place.

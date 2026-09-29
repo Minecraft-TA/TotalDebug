@@ -66,9 +66,9 @@ public final class PackResourcesPanel extends JPanel {
             TabTitles.setUncounted(this.tabs, 0, ResourcesTab.FILES.title());
             this.browser.setResources(List.of());
             this.browser.setMessage("Resources could not be read: " + failure.getMessage());
-        }).follow(catalog::addListener).follow(edits::addStackListener).follow(edits::addEditListener);
+        }).follow(catalog::addListener).follow(edits.packs()::addStackListener).follow(edits::addEditListener);
         this.packLoader = new PageLoader<>(() -> {
-            PackStackPayload stack = this.edits.packStack();
+            PackStackPayload stack = this.edits.packs().packStack();
             return () -> PackResources.resourcePacks(stack, this.workspace);
         }, listed -> {
             this.packs.setPacks(listed, this.catalog.index().orElse(null));
@@ -77,7 +77,7 @@ public final class PackResourcesPanel extends JPanel {
             TabTitles.setUncounted(this.tabs, 1, ResourcesTab.PACKS.title());
             this.packs.showFailure("The resource packs could not be listed: " + failure.getMessage());
         })
-                .whenShown(this.packs).follow(edits::addStackListener).follow(catalog::addListener).follow(edits.record()::addListener);
+                .whenShown(this.packs).follow(edits.packs()::addStackListener).follow(catalog::addListener).follow(edits.record()::addListener);
         load();
     }
 
@@ -106,7 +106,7 @@ public final class PackResourcesPanel extends JPanel {
             this.browser.setMessage("The pack catalog is not captured yet.");
             return null;
         }
-        PackStackPayload stack = this.edits.packStack();
+        PackStackPayload stack = this.edits.packs().packStack();
         if (this.browser.rowCount() == 0) this.browser.setMessage("Reading the resources of every pack");
         return () -> {
             PackResources.Joined joined = PackResources.join(PackResources.assets(stack, index, this.workspace),

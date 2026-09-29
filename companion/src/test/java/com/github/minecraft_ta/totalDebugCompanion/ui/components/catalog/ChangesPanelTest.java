@@ -8,7 +8,9 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
+import com.github.minecraft_ta.totalDebugCompanion.pack.GamePacks;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEditsFixture;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
@@ -44,7 +46,7 @@ class ChangesPanelTest {
         ChangeRecord record = ChangeRecord.inMemory();
         record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", file, "widgets.speed"), "9", "12");
         ChangesPanel[] panel = new ChangesPanel[1];
-        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run), new ResourceOriginals(this.directory.resolve("originals")),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), record, new ResourceOriginals(this.directory.resolve("originals")),
                 Runnable::run, InstanceState.inMemory());
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(GameLocations.of(this.directory, false), record),
                 new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run)), edits,

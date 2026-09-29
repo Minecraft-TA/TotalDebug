@@ -223,7 +223,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 @Override
                 public void packStack(PackStackMessage message) {
                     ProjectScope scope = current;
-                    if (scope != null) scope.resources().packStack(message.payload());
+                    if (scope != null) scope.packs().packStack(message.payload());
                 }
 
                 @Override

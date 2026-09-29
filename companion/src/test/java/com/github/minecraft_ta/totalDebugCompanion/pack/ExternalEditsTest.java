@@ -140,10 +140,10 @@ class ExternalEditsTest {
     }
 
     private ResourceEdits edits(ChangeRecord record) {
-        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), record,
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
         return edits;
     }
