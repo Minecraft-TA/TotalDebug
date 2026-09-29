@@ -17,7 +17,8 @@ public final class DefinitionView implements IEditorPanel {
     public DefinitionView(EditorContext context, SubjectRef.Definition subject) {
         this.subject = subject;
         this.panel = SubjectPanel.definition(subject, new DefinitionDetails.Services(context.project().catalog(),
-                () -> context.project().sources(), context.itemIcons(), context.navigation()::navigate));
+                () -> context.project().sources(), context.itemIcons(), context.navigation()::navigate,
+                context.project().packs()::addResourcePackListener));
     }
 
     public SubjectRef.Definition subject() {

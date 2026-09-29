@@ -132,6 +132,12 @@ class PackCatalogPublisherTest {
         this.capture.completeExceptionally(new IllegalStateException("registry exploded"));
         assertNull(this.sent.poll(200, TimeUnit.MILLISECONDS), "the failure is logged; Companion keeps its catalog");
         assertEquals(catalog("inventory", "en_us"), PackCatalog.read(file));
+
+        this.capture = new CompletableFuture<>();
+        publisher.request("inventory", Map.of());
+        awaitCaptures(3);
+        this.capture.complete(catalog("inventory", "en_us", "Smooth Stone"));
+        assertEquals(PreparedFilePayload.State.READY, next().state(), "the next request, such as a reconnect, tries again");
     }
 
     @Test

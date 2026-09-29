@@ -130,8 +130,9 @@ public final class PackCatalogPublisher implements AutoCloseable {
                 }
             }
             if (checking) {
-                // Companion keeps the catalog it has, which only lacks what the reload changed.
+                // Companion keeps the catalog it has, which only lacks what the reload changed; the next request tries again.
                 TotalDebug.LOGGER.error("Unable to capture the pack catalog again; Companion keeps the one it has", failure);
+                retryLater(generation);
                 return;
             }
             TotalDebug.LOGGER.error("Unable to publish the pack catalog", failure);
@@ -157,6 +158,13 @@ public final class PackCatalogPublisher implements AutoCloseable {
         this.state = message;
         if (catalog != null) this.told = catalog;
         this.send.accept(message);
+    }
+
+    /** Lets the next request capture again, after capture {@code generation} failed quietly. */
+    private synchronized void retryLater(long generation) {
+        if (generation != this.generation) return;
+        this.inventoryId = null;
+        this.stale = true;
     }
 
     private synchronized PackCatalog told() {

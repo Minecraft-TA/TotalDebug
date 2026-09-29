@@ -61,6 +61,7 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -99,10 +100,12 @@ public final class ModPanel extends JPanel {
     /**
      * {@code workspace} is the game directory, where server configurations of each world are found, and
      * {@code configSettings} writes configuration edits and tracks those the running game has not applied yet.
+     * {@code resourcesRead} adds a listener for the game reading its resources again, which may have changed the mod's
+     * files, and returns its removal.
      */
     public ModPanel(String modId, PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources,
                     ItemIconService icons, Path workspace, ConfigSettings configSettings, KeyBindingControl keyControl,
-                    Consumer<NavigationTarget> navigator) {
+                    Consumer<NavigationTarget> navigator, Function<Runnable, Runnable> resourcesRead) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
@@ -119,7 +122,7 @@ public final class ModPanel extends JPanel {
             this.resources.setResources(List.of());
             this.resources.setMessage("Resources could not be read: " + failure.getMessage());
             setTab(ModTab.RESOURCES, 1);
-        });
+        }).waitsWhileHidden(this).follow(resourcesRead);
         this.configs = new ConfigPanel(modId, configSettings, navigator);
         this.keyBindings = new KeyBindingsPanel(catalog, keyControl, modId, navigator);
         this.content = new ContentBrowser(this.listIcons, this::iconOf, navigator, null);

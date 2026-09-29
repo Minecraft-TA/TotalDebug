@@ -52,6 +52,7 @@ import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -60,14 +61,18 @@ import java.util.function.Supplier;
  * the background. {@code changed} runs on the event thread whenever the catalog changes.
  */
 public final class DefinitionDetails {
-    /** What the details are read from, and where their links lead. */
+    /**
+     * What the details are read from, and where their links lead. {@code resourcesRead} adds a listener for the game
+     * reading its resources again, as after each reload, which may have changed a mod's files, and returns its removal.
+     */
     public record Services(PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources, ItemIconService icons,
-                           Consumer<NavigationTarget> navigator) {
+                           Consumer<NavigationTarget> navigator, Function<Runnable, Runnable> resourcesRead) {
         public Services {
             Objects.requireNonNull(catalog, "catalog");
             Objects.requireNonNull(sources, "sources");
             Objects.requireNonNull(icons, "icons");
             Objects.requireNonNull(navigator, "navigator");
+            Objects.requireNonNull(resourcesRead, "resourcesRead");
         }
     }
 
@@ -112,7 +117,7 @@ public final class DefinitionDetails {
             this.owned = List.of();
             this.matched = List.of();
             showExtras();
-        });
+        }).waitsWhileHidden(page).follow(services.resourcesRead());
         this.removeCatalogListener = ShownUpdates.follow(page, services.catalog()::addListener, this::reload);
         read();
         loadAppearance();
