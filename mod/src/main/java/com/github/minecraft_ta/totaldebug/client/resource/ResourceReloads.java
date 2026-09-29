@@ -85,6 +85,14 @@ public final class ResourceReloads {
                 "The game could not load the resources and turned off every resource pack; its log names the cause")));
     }
 
+    /**
+     * The player or Companion selected packs. Where only the required ones remain, a rollback of a reload before would
+     * look the same, so those reloads are no longer watched for one. Client thread only.
+     */
+    public static void selected() {
+        if (onlyRequired(Minecraft.getInstance().getResourcePackRepository())) pending.clear();
+    }
+
     /** Whether every selected pack is one the game requires, as after it turned the others off. */
     private static boolean onlyRequired(PackRepository packs) {
         return packs.getSelectedPacks().stream().allMatch(Pack::isRequired);

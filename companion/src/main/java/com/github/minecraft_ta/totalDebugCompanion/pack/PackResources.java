@@ -79,8 +79,13 @@ public final class PackResources {
                 case VANILLA -> sources.add(vanilla(index));
                 case MOD_RESOURCES -> sources.addAll(mods(index));
                 default -> {
-                    Path file = id.startsWith("file/") ? workspace.resolve("resourcepacks").resolve(id.substring("file/".length())) : null;
-                    sources.add(new Source(id, title(id), file != null && Files.exists(file) ? List.of(file) : List.of()));
+                    if (id.startsWith("mod/")) {
+                        // A mod that shows its resources as a pack of its own: its file, as when the game names it.
+                        sources.add(source(new PackStackPayload.Pack(id, title(id), ""), index));
+                    } else {
+                        Path file = id.startsWith("file/") ? workspace.resolve("resourcepacks").resolve(id.substring("file/".length())) : null;
+                        sources.add(new Source(id, title(id), file != null && Files.exists(file) ? List.of(file) : List.of()));
+                    }
                 }
             }
         }

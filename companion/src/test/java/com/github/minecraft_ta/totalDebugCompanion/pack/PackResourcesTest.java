@@ -201,6 +201,18 @@ class PackResourcesTest {
     }
 
     @Test
+    void withoutAGameAModsOwnResourcePackIsReadFromItsFile() throws Exception {
+        Path mod = CatalogFixtures.modJar(this.directory);
+        CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(mod));
+        Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\",\"mod/testmod\"]\n");
+
+        PackResources.Source own = PackResources.assets(null, index, this.directory).getLast();
+        assertEquals("mod/testmod", own.id());
+        assertEquals(index.resourceFiles("testmod"), own.files(), "as the connected game names it, the mod's file");
+        assertFalse(own.files().isEmpty());
+    }
+
+    @Test
     void optionsWithoutResourcePacksMeanTheGamesDefaults() throws Exception {
         assertEquals(List.of("vanilla", "mod_resources"), PackResources.enabledInOptions(this.directory.resolve("options.txt")));
         assertEquals("Faithful.zip", PackResources.title("file/Faithful.zip"));

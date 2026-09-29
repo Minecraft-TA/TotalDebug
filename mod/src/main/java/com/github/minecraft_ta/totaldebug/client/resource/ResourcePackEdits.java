@@ -60,6 +60,7 @@ public final class ResourcePackEdits implements ClientChanges.Category {
     public CompletableFuture<Void> finish() {
         Minecraft minecraft = Minecraft.getInstance();
         save(minecraft);
+        ResourceReloads.selected();
         boolean reload = this.selected;
         this.selected = false;
         if (reload) return ResourceReloads.reloadAll(minecraft);

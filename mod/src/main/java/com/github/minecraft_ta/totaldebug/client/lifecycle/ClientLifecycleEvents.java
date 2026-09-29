@@ -53,11 +53,12 @@ public final class ClientLifecycleEvents {
 
     /**
      * The Resource Packs screen rescans the pack folders while it is open. Closing it without changing the selection
-     * starts no resource reload, so the packs it found are told here.
+     * starts no resource reload, so the packs it found are told here. It selected the packs before it closes.
      */
     @SubscribeEvent
     static void onScreenClosing(ScreenEvent.Closing event) {
         if (!(event.getScreen() instanceof PackSelectionScreen)) return;
+        ResourceReloads.selected();
         TotalDebugClient.current().ifPresent(TotalDebugClient::packsChanged);
     }
 }
