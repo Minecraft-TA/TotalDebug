@@ -59,11 +59,11 @@ class GameStateTest {
     private static final Setup MENU_WORLD_HELD = new Setup("connected, at the menu, world held elsewhere", true, true,
             new PlayingPayload.Menu(), Set.of(WORLD));
     private static final Setup SINGLEPLAYER = new Setup("connected, playing the world", true, true,
-            new PlayingPayload.Singleplayer(WORLD.toString(), false), Set.of(WORLD));
+            new PlayingPayload.Singleplayer(WORLD.toString()), Set.of(WORLD));
     private static final Setup SINGLEPLAYER_OTHER = new Setup("connected, playing another world, world held elsewhere", true, true,
-            new PlayingPayload.Singleplayer(OTHER.toString(), true), Set.of(OTHER, WORLD));
+            new PlayingPayload.Singleplayer(OTHER.toString()), Set.of(OTHER, WORLD));
     private static final Setup MULTIPLAYER = new Setup("connected, on a server", true, true,
-            new PlayingPayload.Multiplayer("play.example.com", false, true, 2), Set.of());
+            new PlayingPayload.Multiplayer("play.example.com", false, true), Set.of());
 
     static Stream<Arguments> clientAccess() {
         return Stream.of(
@@ -145,7 +145,7 @@ class GameStateTest {
     void whatTheGameToldBeforeItsConnectionWasEstablishedCounts() {
         GameLocation location = new GameLocation(GAME, new Files(true, Set.of(WORLD), null));
         location.process(7);
-        location.playing(new PlayingPayload.Singleplayer(WORLD.toString(), false));
+        location.playing(new PlayingPayload.Singleplayer(WORLD.toString()));
         List<GameLocation.Change> heard = new ArrayList<>();
         location.addListener(heard::add);
 

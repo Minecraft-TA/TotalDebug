@@ -7,7 +7,6 @@ import com.github.minecraft_ta.totaldebug.tick.TickPhase;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 @EventBusSubscriber(modid = TotalDebug.MOD_ID, value = Dist.CLIENT)
@@ -24,11 +23,5 @@ final class ClientTickTaskEvents {
     static void onClientTickPost(ClientTickEvent.Post event) {
         TotalDebug.get().tickTasks().drain(Side.CLIENT, TickPhase.POST);
         TotalDebugClient.current().ifPresent(TotalDebugClient::onClientTick);
-    }
-
-    @SubscribeEvent
-    static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
-        TotalDebugClient.current().ifPresent(TotalDebugClient::onServerDisconnect);
-        TotalDebug.get().tickTasks().clear(Side.CLIENT);
     }
 }

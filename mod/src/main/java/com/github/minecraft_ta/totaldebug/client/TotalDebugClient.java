@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totaldebug.client;
 import com.github.minecraft_ta.totaldebug.client.catalog.KeyBindingEdits;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogCapture;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogPublisher;
-import com.github.minecraft_ta.totaldebug.client.companion.ChangePublisher;
 import com.github.minecraft_ta.totaldebug.client.companion.ClientRelay;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionRequests;
@@ -23,6 +22,7 @@ import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.storage.GameLock;
@@ -52,11 +52,10 @@ public final class TotalDebugClient {
     private final ResourceSnapshots resources;
     private final PackCatalogPublisher catalogs;
     private final PackStackPublisher packStacks;
-    private final ChangePublisher<PlayingPayload> playing;
     private final AtomicReference<PackCatalogCapture> catalogCapture = new AtomicReference<>();
     private volatile boolean snapshotRequested;
-    /** The world the game last told Companion it plays, which every world-bound request must name. */
-    private volatile String world = "";
+    /** What the game last told Companion it plays, whose world every world-bound request must name. Client thread writes. */
+    private volatile PlayingPayload playing = new PlayingPayload.Menu();
 
     private TotalDebugClient(Path gameDirectory) {
         Path totalDebugDirectory = gameDirectory
@@ -87,16 +86,7 @@ public final class TotalDebugClient {
                 companionApp::sendPackCatalog
         );
         this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
-        this.playing = new ChangePublisher<>(Playing::capture, playing -> {
-            this.world = playing.identity();
-            companionApp.sendPlaying(new PlayingMessage(playing));
-            // Companion drops the packs of what the game played before; they are named again for what it plays now.
-            this.packStacks.republish();
-        });
-        companionApp.setSessionOpenedHandler(() -> {
-            this.packStacks.republish();
-            this.playing.republish();
-        });
+        companionApp.setSessionOpenedHandler(() -> Minecraft.getInstance().execute(this::tellPlaying));
         companionApp.setPackCatalogHandler((inventoryId, modules) -> {
             // Icons are drawn from the resource snapshot, which must follow the current packs even when the
             // saved catalog is reused.
@@ -105,17 +95,15 @@ public final class TotalDebugClient {
         });
         companionApp.setKeyBindingHandler(message -> Minecraft.getInstance().execute(() ->
                 companionApp.sendKeyBindingResult(new KeyBindingResultMessage(KeyBindingEdits.apply(message.payload())))));
-        companionApp.setReloadHandler(message -> Minecraft.getInstance().execute(() -> ResourceReloads.reload(message.payload(),
-                result -> companionApp.sendReloadResult(new ReloadResultMessage(result)))));
-        companionApp.setPacksHandler(message -> Minecraft.getInstance().execute(() -> ResourceReloads.select(message.payload(),
-                result -> companionApp.sendReloadResult(new ReloadResultMessage(result)))));
+        companionApp.setReloadHandler(message -> Minecraft.getInstance().execute(() ->
+                ResourceReloads.reload(message.payload(), this::answerReload)));
+        companionApp.setPacksHandler(message -> Minecraft.getInstance().execute(() ->
+                ResourceReloads.select(message.payload(), this::answerReload)));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(Selection subject) {
-                // The subject names the world Companion was told of, so it is told now if that changed.
-                TotalDebugClient.this.playing.publish(Playing.capture());
                 TotalDebugClient.this.requests.inspect(new InspectSubjectPayload(
-                        TotalDebugClient.this.world,
+                        TotalDebugClient.this.playing.identity(),
                         subject.subject().format(),
                         subject.identity(),
                         subject.icon().map(ItemIcons.Icon::model).orElse(""),
@@ -131,9 +119,9 @@ public final class TotalDebugClient {
             }
         });
         this.codeViewInput = new CodeViewInput(this.codeView::inspectOrFocus, this.keptStacks);
-        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks(), () -> this.world,
+        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks(), () -> this.playing.identity(),
                 this.keptStacks);
-        ClientRelay relay = new ClientRelay(companionApp, () -> this.world);
+        ClientRelay relay = new ClientRelay(companionApp, () -> this.playing.identity());
         this.relay = relay;
         companionApp.setToServerHandler((message, companion) -> Minecraft.getInstance().execute(() -> relay.toServer(companion, message)));
         TotalDebug.get().network().setCompanionReceiver(relay::fromServer);
@@ -180,11 +168,56 @@ public final class TotalDebugClient {
 
     /**
      * A client resource reload finished, such as after a language or resource pack change. The catalog holds
-     * translated names and the snapshot the winning resources, so both are brought up to date.
+     * translated names and the snapshot the winning resources, so both are brought up to date; a new resource pack
+     * selection takes effect only through a reload, so the packs are told here. Client thread only.
      */
     public void resourcesReloaded() {
         this.catalogs.recapture();
         this.companionApp.announceInventory();
+        this.packStacks.publish();
+    }
+
+    /**
+     * The packs in effect, or those the game found in its folders, may have changed: the singleplayer world's data packs
+     * after its data reloaded, or the packs the pack screen found. Client thread only.
+     */
+    public void packsChanged() {
+        this.packStacks.publish();
+    }
+
+    /** The player joined a singleplayer world or a server. Client thread only. */
+    public void joined() {
+        play(Playing.joined());
+    }
+
+    /** The player is leaving the world or server: what ran there ends. Client thread only. */
+    public void left() {
+        this.relay.serverLeft();
+        play(new PlayingPayload.Menu());
+        this.scripts.onServerDisconnect();
+    }
+
+    private void play(PlayingPayload playing) {
+        if (playing.equals(this.playing)) return;
+        this.playing = playing;
+        tellPlaying();
+    }
+
+    /** Tells Companion what the game plays, then the packs, which Companion reads for what it plays. Client thread only. */
+    private void tellPlaying() {
+        this.companionApp.sendPlaying(new PlayingMessage(this.playing));
+        this.packStacks.republish();
+    }
+
+    /**
+     * Answers a reload or a pack selection on the client thread, after telling the packs: the request rescanned the
+     * pack folders and may have changed what is enabled.
+     */
+    private void answerReload(ReloadResultPayload result) {
+        Minecraft.getInstance().execute(() -> {
+            this.packStacks.publish();
+            this.companionApp.sendReloadResult(new ReloadResultMessage(result));
+        });
     }
 
 
@@ -197,13 +230,9 @@ public final class TotalDebugClient {
      * snapshot Companion draws its icons from. Client thread only.
      */
     public void onClientTick() {
-        // What the game plays is told first, and during a loading overlay too, since Companion reads the packs by it.
-        this.playing.tick();
         if (Minecraft.getInstance().getOverlay() != null) {
             return;
         }
-        this.packStacks.tick();
-        ResourceReloads.tick();
         PackCatalogCapture capture = this.catalogCapture.get();
         if (capture != null) {
             if (!capture.step() || !this.catalogCapture.compareAndSet(capture, null)) {
@@ -215,13 +244,5 @@ public final class TotalDebugClient {
             this.snapshotRequested = false;
             this.resources.prepare();
         }
-    }
-
-    public void onServerDisconnect() {
-        this.relay.serverLeft();
-        // A rejoin of the same server between two checks would otherwise look unchanged to Companion, which ends its
-        // runs there and asks the server again when what the game plays changes.
-        this.playing.publish(new PlayingPayload.Menu());
-        this.scripts.onServerDisconnect();
     }
 }

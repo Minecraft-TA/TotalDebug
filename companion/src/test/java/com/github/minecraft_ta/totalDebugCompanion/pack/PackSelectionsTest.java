@@ -148,7 +148,7 @@ class PackSelectionsTest {
             if (message instanceof SetPacksMessage packs) sent.add(packs.payload());
             return true;
         });
-        edits.location().playing(new PlayingPayload.Singleplayer(world.toString(), false));
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
         edits.packStack(new PackStackPayload(34, 48, List.of(), List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
 
         selections(record, edits).set(SetPacksPayload.Side.DATA, world, List.of("vanilla", "file/Tweaks"));
@@ -163,7 +163,7 @@ class PackSelectionsTest {
         edits.location().connected(message -> true);
         edits.packStack(new PackStackPayload(34, 48, List.of(), List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
 
-        edits.location().playing(new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString(), false));
+        edits.location().playing(new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString()));
 
         assertNull(edits.packStack(), "the packs named were the previous world's; the game names them again");
     }

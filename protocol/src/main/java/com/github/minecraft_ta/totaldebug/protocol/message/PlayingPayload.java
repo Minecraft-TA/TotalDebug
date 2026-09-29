@@ -7,19 +7,16 @@ import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import java.util.Objects;
 
 /**
- * Protocol-30 payload telling what the game plays: its menu, a singleplayer world of its instance, or a server. The game
- * sends it whenever that changes and after Companion connects. See {@code docs/GAME_LOCATION.md}.
+ * Protocol-34 payload telling what the game plays: its menu, a singleplayer world of its instance, or a server. The game
+ * sends it when the player joins or leaves one, and after Companion connects. See {@code docs/GAME_LOCATION.md}.
  */
 public sealed interface PlayingPayload {
     /** No world is open. */
     record Menu() implements PlayingPayload {
     }
 
-    /**
-     * A singleplayer world, run by the game's integrated server: {@code world} is its folder, absolute, and {@code lan}
-     * whether it is open to other players on the network.
-     */
-    record Singleplayer(String world, boolean lan) implements PlayingPayload {
+    /** A singleplayer world, run by the game's integrated server: {@code world} is its folder, absolute. */
+    record Singleplayer(String world) implements PlayingPayload {
         public Singleplayer {
             Objects.requireNonNull(world, "world");
             if (world.isBlank()) throw new IllegalArgumentException("A singleplayer world needs its folder");
@@ -27,13 +24,12 @@ public sealed interface PlayingPayload {
     }
 
     /**
-     * A server on another machine: the address the player joined, whether it is a Realm, whether the server has
-     * TotalDebug, which runs {@link Side#SERVER} code and changes, and the player's permission level there, 0 to 4.
+     * A server on another machine: the address the player joined, whether it is a Realm, and whether the server has
+     * TotalDebug, which runs {@link Side#SERVER} code and changes.
      */
-    record Multiplayer(String address, boolean realms, boolean totalDebug, int permission) implements PlayingPayload {
+    record Multiplayer(String address, boolean realms, boolean totalDebug) implements PlayingPayload {
         public Multiplayer {
             Objects.requireNonNull(address, "address");
-            if (permission < 0 || permission > 4) throw new IllegalArgumentException("Invalid permission level: " + permission);
         }
     }
 
@@ -53,8 +49,8 @@ public sealed interface PlayingPayload {
         byte kind = input.readByte();
         return switch (kind) {
             case 0 -> new Menu();
-            case 1 -> new Singleplayer(input.readString(), input.readBoolean());
-            case 2 -> new Multiplayer(input.readString(), input.readBoolean(), input.readBoolean(), input.readInt());
+            case 1 -> new Singleplayer(input.readString());
+            case 2 -> new Multiplayer(input.readString(), input.readBoolean(), input.readBoolean());
             default -> throw new IllegalArgumentException("Invalid playing kind: " + kind);
         };
     }
@@ -65,14 +61,12 @@ public sealed interface PlayingPayload {
             case Singleplayer singleplayer -> {
                 output.writeByte((byte) 1);
                 output.writeString(singleplayer.world());
-                output.writeBoolean(singleplayer.lan());
             }
             case Multiplayer multiplayer -> {
                 output.writeByte((byte) 2);
                 output.writeString(multiplayer.address());
                 output.writeBoolean(multiplayer.realms());
                 output.writeBoolean(multiplayer.totalDebug());
-                output.writeInt(multiplayer.permission());
             }
         }
     }

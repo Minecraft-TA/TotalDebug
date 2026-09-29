@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totaldebug.client.resource;
 
-import com.github.minecraft_ta.totaldebug.client.companion.ChangePublisher;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
@@ -21,26 +20,31 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Tells Companion which resource packs and singleplayer data packs are enabled, whenever that changes or Companion
- * connects again. Checked once a second on the client thread.
+ * Tells Companion which resource packs and singleplayer data packs are enabled, and which the game could enable, when an
+ * event may have changed them. Client thread only.
  */
 public final class PackStackPublisher {
     private final Path gameDirectory;
-    private final ChangePublisher<PackStackPayload> publisher;
+    private final Consumer<PackStackPayload> publish;
+    private PackStackPayload published;
 
     public PackStackPublisher(Path gameDirectory, Consumer<PackStackPayload> publish) {
         this.gameDirectory = Objects.requireNonNull(gameDirectory, "gameDirectory");
-        this.publisher = new ChangePublisher<>(this::capture, publish);
+        this.publish = Objects.requireNonNull(publish, "publish");
     }
 
-    /** Publishes the stacks again at the next check, such as for a newly connected Companion. */
+    /** Tells the stacks unless they are what Companion was told last. */
+    public void publish() {
+        PackStackPayload current = capture();
+        if (current.equals(this.published)) return;
+        this.published = current;
+        this.publish.accept(current);
+    }
+
+    /** Tells the stacks even when unchanged, such as for a newly connected Companion. */
     public void republish() {
-        this.publisher.republish();
-    }
-
-    /** Client thread only. */
-    public void tick() {
-        this.publisher.tick();
+        this.published = null;
+        publish();
     }
 
     private PackStackPayload capture() {

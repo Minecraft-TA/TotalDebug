@@ -47,7 +47,7 @@ server ──ToCompanion chunks──► client ──FROM_SERVER{ message }─�
 - **The sender is the player** whose client relayed the message. The server answers only that player's client, and forgets a player's transfers and sessions when they leave.
 - **Companion connections are numbered by the client**, which owns them, and whatever the client sends for a connection reaches only that one. The client stamps each chunk towards the server with the connection's number, the server stamps its answers with the number of the connection they answer, and the client drops an answer for an earlier connection. A restarted Companion counts its run ids from the beginning again, so nothing of an earlier connection may reach it. Numbers only grow: the client drops a message of an earlier connection still queued, and the server ignores a lower number than one it saw. The server keeps one Companion per player: a message from a newer connection ends the runs of the one before, and so does `COMPANION_LEFT`, the one relayed message the client writes itself when Companion's connection closes.
 - **One world identity.** `PLAYING` names the world: its folder in singleplayer, its address on a server. Every world-bound message names the world that way: an inspected subject, a script run (every server run, and every run with a target) and the question whether the server runs scripts. The client compares it with what it last told Companion, so both ends agree by construction; inspecting publishes `PLAYING` first. A subject stays valid when the player rejoins the same world, since its position or UUID names the same thing; a run checks the subject's registry id before it starts.
-- **Server runs end with the server.** When `PLAYING` no longer names the server Companion asked, Companion fails its runs there. Leaving a server is published at once, so a rejoin between two checks is still a change. Companion counts a result only from the side its run went to.
+- **Server runs end with the server.** When `PLAYING` no longer names the server Companion asked, Companion fails its runs there. The game tells leaving and joining as they happen, so leaving and rejoining the same server is a change too. Companion counts a result only from the side its run went to.
 - **One server operation table** maps each server-bound message to its handler, so the check is made in one place. Layer 4 adds each operation's permission to it.
 
 ## Server scripts
@@ -83,7 +83,7 @@ The same relay serves the integrated server. A singleplayer game talks to its ow
 | Anyone else | With the permission level the server's configuration sets, by default the operator level (`getOperatorUserPermissionLevel()`, usually 2). The same level `/datapack`, `/reload` and `/gamerule` require. |
 
 - The server's configuration gains a switch for world changes beside the existing one for scripts, both off-able by the server owner. `ServerScriptPolicy` becomes the policy for both.
-- `PLAYING` already carries the player's permission level, so Companion can answer "you need operator permission on this server" before sending anything. The server checks again; its answer is the one that counts.
+- Companion asks the server whether the player may change its world, as it asks whether it runs scripts (`SERVER_SCRIPTS`), and can then answer "you need operator permission on this server" before sending a change. The server checks each change again; its answer is the one that counts.
 
 ## Companion
 

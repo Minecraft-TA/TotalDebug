@@ -160,11 +160,11 @@ public final class ResourceReloads {
     }
 
     /**
-     * Fails a resource reload the game rolled back. When a reload fails, Minecraft turns off every resource pack, reloads
-     * again and never completes the reload it was asked for; the folder packs it had selected, the managed pack or the
-     * player's own, are then gone. Client thread only, on ticks without a loading overlay.
+     * Fails a resource reload the game rolled back, as the next reload applies. When a reload fails, Minecraft turns off
+     * every resource pack, reloads again and never completes the reload it was asked for; the folder packs it had
+     * selected, the managed pack or the player's own, are then gone. Client thread only, from the reload listener.
      */
-    public static void tick() {
+    public static void reloaded() {
         CompletableFuture<Void> pending = pendingResources;
         if (pending == null) return;
         if (pending.isDone()) {
