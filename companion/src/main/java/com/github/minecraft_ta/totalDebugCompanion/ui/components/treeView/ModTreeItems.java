@@ -60,7 +60,7 @@ final class ModTreeItems {
      */
     record Snapshot(PackCatalogService.State state, RuntimeSourceCatalog sources, int changes, boolean logs) {
         CatalogIndex index() {
-            return this.state instanceof PackCatalogService.Ready ready ? ready.index() : null;
+            return PackCatalogService.shown(this.state);
         }
     }
 

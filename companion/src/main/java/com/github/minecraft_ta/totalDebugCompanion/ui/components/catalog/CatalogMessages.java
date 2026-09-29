@@ -7,8 +7,9 @@ public final class CatalogMessages {
     private CatalogMessages() {
     }
 
-    /** Empty while the catalog is ready. */
+    /** Empty while the catalog is ready, or captured again with the one before still shown. */
     public static String unavailable(PackCatalogService.State state) {
+        if (PackCatalogService.shown(state) != null) return "";
         return switch (state) {
             case PackCatalogService.Ready ignored -> "";
             case PackCatalogService.None ignored -> "Connect Minecraft once to capture blocks, items and entity types";
@@ -18,8 +19,9 @@ public final class CatalogMessages {
         };
     }
 
-    /** A short state for the Mods tree root; empty while the catalog is ready. */
+    /** A short state for the Mods tree root; empty while the catalog is ready, or captured again with the one before shown. */
     public static String status(PackCatalogService.State state) {
+        if (PackCatalogService.shown(state) != null) return "";
         return switch (state) {
             case PackCatalogService.Ready ignored -> "";
             case PackCatalogService.None ignored -> "not captured";

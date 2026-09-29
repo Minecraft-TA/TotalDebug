@@ -41,6 +41,35 @@ class PackCatalogServiceTest {
     }
 
     @Test
+    void aCatalogCapturedAgainStaysShownUntilTheNewOneIsReady() throws Exception {
+        InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
+        Path jar = CatalogFixtures.modJar(this.directory);
+        inventory(paths, CatalogFixtures.INVENTORY, jar);
+        CatalogFixtures.catalog(jar).write(paths.catalog());
+        PackCatalogService service = new PackCatalogService(paths);
+        service.restore();
+        SwingUtilities.invokeAndWait(() -> { });
+        CatalogIndex shown = service.index().orElseThrow();
+        AtomicInteger changes = new AtomicInteger();
+        service.addListener(changes::incrementAndGet);
+
+        // As after every resource reload: Minecraft captures the catalog again.
+        service.capturing();
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(shown, service.index().orElseThrow(), "the catalog before stays shown, so the pages do not empty");
+        assertEquals(0, changes.get(), "nothing the pages show changed yet");
+
+        service.accept(CatalogFixtures.INVENTORY, paths.catalog(), Runnable::run);
+        SwingUtilities.invokeAndWait(() -> { });
+        assertInstanceOf(PackCatalogService.Ready.class, service.state());
+        assertEquals(1, changes.get(), "the reload may have changed a pack's files, so the pages read again");
+
+        service.capturing();
+        service.inventoryAnnounced("inventory-9");
+        assertInstanceOf(PackCatalogService.Stale.class, service.state(), "another runtime's catalog is not shown while its own is captured");
+    }
+
+    @Test
     void aCatalogOfAnotherRuntimeIsStale() throws Exception {
         InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
         Path jar = CatalogFixtures.modJar(this.directory);

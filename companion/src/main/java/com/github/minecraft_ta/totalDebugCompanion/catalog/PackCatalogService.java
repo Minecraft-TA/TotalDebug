@@ -27,7 +27,11 @@ public final class PackCatalogService {
     public record None() implements State {
     }
 
-    public record Capturing() implements State {
+    /**
+     * Minecraft captures the catalog again, such as after a resource reload; {@code previous} is the catalog shown until
+     * then, or null.
+     */
+    public record Capturing(CatalogIndex previous) implements State {
     }
 
     public record Ready(CatalogIndex index) implements State {
@@ -52,8 +56,9 @@ public final class PackCatalogService {
         return this.state;
     }
 
+    /** The catalog to show: the one ready, or while Minecraft captures it again, the one before. */
     public Optional<CatalogIndex> index() {
-        return state() instanceof Ready ready ? Optional.of(ready.index()) : Optional.empty();
+        return Optional.ofNullable(shown(state()));
     }
 
     /** Listeners run on the Swing thread after the state changed. */
@@ -89,8 +94,21 @@ public final class PackCatalogService {
         apply(started, loaded);
     }
 
+    /**
+     * Minecraft captures the catalog; the one shown stays until the new one is ready, so the pages do not empty in
+     * between, and nothing they show changes until then. Taken as one step with the state it replaces, so the newest
+     * catalog ready stays shown.
+     */
     public void capturing() {
-        set(new Capturing());
+        boolean shownBefore;
+        synchronized (this) {
+            this.generation++;
+            CatalogIndex shown = shown(this.state);
+            shownBefore = shown != null;
+            this.state = new Capturing(shown);
+        }
+        // Pages that show the catalog go on showing it; only one without a catalog says it is being captured.
+        if (!shownBefore) SwingUtilities.invokeLater(() -> this.listeners.forEach(Runnable::run));
     }
 
     /**
@@ -138,7 +156,8 @@ public final class PackCatalogService {
     /** A different runtime inventory makes the shown catalog outdated until its own catalog arrives. */
     public void inventoryAnnounced(String inventoryId) {
         synchronized (this) {
-            if (!(this.state instanceof Ready ready) || ready.index().catalog().inventoryId().equals(inventoryId)) {
+            CatalogIndex shown = shown(this.state);
+            if (shown == null || shown.catalog().inventoryId().equals(inventoryId)) {
                 return;
             }
         }
@@ -153,6 +172,10 @@ public final class PackCatalogService {
         apply(current, state);
     }
 
+    /**
+     * Takes {@code state} and tells the listeners. A catalog ready again is told even when its content is the same: the
+     * reload that captured it may have changed the files of a pack the pages list.
+     */
     private void apply(long expectedGeneration, State state) {
         synchronized (this) {
             if (this.generation != expectedGeneration) {
@@ -161,5 +184,14 @@ public final class PackCatalogService {
             this.state = state;
         }
         SwingUtilities.invokeLater(() -> this.listeners.forEach(Runnable::run));
+    }
+
+    /** The catalog {@code state} shows: the one ready, or while Minecraft captures it again, the one before; or null. */
+    public static CatalogIndex shown(State state) {
+        return switch (state) {
+            case Ready ready -> ready.index();
+            case Capturing capturing -> capturing.previous();
+            default -> null;
+        };
     }
 }

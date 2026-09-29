@@ -187,7 +187,7 @@ public final class ModPanel extends JPanel {
     void rebuild() {
         if (this.disposed) return;
         PackCatalogService.State state = this.catalog.state();
-        this.index = state instanceof PackCatalogService.Ready ready ? ready.index() : null;
+        this.index = PackCatalogService.shown(state);
         this.summary = ModSummary.resolve(this.modId, this.index, this.sources.get()).orElse(null);
         this.listIcons.clear();
         if (this.summary == null) {

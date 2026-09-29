@@ -183,7 +183,7 @@ public final class DefinitionDetails {
 
     private void read() {
         this.state = this.services.catalog().state();
-        this.index = this.state instanceof PackCatalogService.Ready ready ? ready.index() : null;
+        this.index = PackCatalogService.shown(this.state);
         this.entry = this.index == null ? null : this.index.entry(this.subject).orElse(null);
     }
 

@@ -263,6 +263,11 @@ public final class ResourceBrowser extends JPanel {
         return selected == null ? this.pendingCategory : selected.key();
     }
 
+    /** The list of resources, for tests. */
+    JList<ModResources.Resource> resourceList() {
+        return this.list;
+    }
+
     public int rowCount() {
         return this.shown.size();
     }
@@ -284,14 +289,18 @@ public final class ResourceBrowser extends JPanel {
             if (!text.isEmpty() && !this.lowercasePaths.get(index).contains(text)) continue;
             matching.add(resource);
         }
+        // Read before the layout changes: asking a list for its rows while it has no fixed row size makes it render every
+        // row to measure it, which for every resource of a pack takes seconds on the Swing thread.
+        ModResources.Resource selected = this.list.getSelectedValue();
+        int firstVisible = this.list.getFirstVisibleIndex();
         this.list.setLayoutOrientation(textures ? JList.HORIZONTAL_WRAP : JList.VERTICAL);
         this.list.setVisibleRowCount(textures ? -1 : 8);
         // Fixed sizes keep the list from rendering every row to measure it. A vertical list paints each row at its own
-        // width anyway, so a width of one only makes it follow the view's width instead of the widest row's.
+        // width anyway, so a width of one only makes it follow the view's width instead of the widest row's. Without a
+        // resource to measure a row on, the height the list has stays.
         this.list.setFixedCellWidth(textures ? CELL_WIDTH : 1);
-        this.list.setFixedCellHeight(textures ? CELL_HEIGHT : rowHeight());
-        ModResources.Resource selected = this.list.getSelectedValue();
-        int firstVisible = this.list.getFirstVisibleIndex();
+        int height = textures ? CELL_HEIGHT : rowHeight();
+        if (height > 0) this.list.setFixedCellHeight(height);
         this.shown.show(matching);
         // A refresh keeps the selected resource, and otherwise the rows in view, where they are still listed.
         int kept = selected == null ? -1 : indexOf(matching, selected.path());
