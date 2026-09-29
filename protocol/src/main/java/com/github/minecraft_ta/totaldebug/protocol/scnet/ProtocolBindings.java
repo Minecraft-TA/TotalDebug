@@ -21,7 +21,6 @@ public final class ProtocolBindings {
         processor.registerOutgoing(CompanionProtocol.INSPECT_SUBJECT, InspectSubjectMessage.class);
         processor.registerOutgoing(CompanionProtocol.PACK_STACK, PackStackMessage.class);
         processor.registerIncoming(CompanionProtocol.RELOAD, ReloadMessage.class, ReloadMessage::new);
-        processor.registerIncoming(CompanionProtocol.SET_PACKS, SetPacksMessage.class, SetPacksMessage::new);
         processor.registerOutgoing(CompanionProtocol.RELOAD_RESULT, ReloadResultMessage.class);
         processor.registerOutgoing(CompanionProtocol.PLAYING, PlayingMessage.class);
         processor.registerIncoming(CompanionProtocol.TO_SERVER, ToServerMessage.class, ToServerMessage::new);
@@ -45,7 +44,6 @@ public final class ProtocolBindings {
         processor.registerIncoming(CompanionProtocol.INSPECT_SUBJECT, InspectSubjectMessage.class, InspectSubjectMessage::new);
         processor.registerIncoming(CompanionProtocol.PACK_STACK, PackStackMessage.class, PackStackMessage::new);
         processor.registerOutgoing(CompanionProtocol.RELOAD, ReloadMessage.class);
-        processor.registerOutgoing(CompanionProtocol.SET_PACKS, SetPacksMessage.class);
         processor.registerIncoming(CompanionProtocol.RELOAD_RESULT, ReloadResultMessage.class, ReloadResultMessage::new);
         processor.registerIncoming(CompanionProtocol.PLAYING, PlayingMessage.class, PlayingMessage::new);
         processor.registerOutgoing(CompanionProtocol.TO_SERVER, ToServerMessage.class);

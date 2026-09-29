@@ -68,7 +68,7 @@ public final class Reloads {
             if (this.next == null) this.next = new Batch(connection, world, identity);
             Batch batch = this.next;
             batch.kinds.add(kind);
-            batch.watched.add(path);
+            if (path != null) batch.watched.add(path);
             if (!managedPack.isEmpty()) batch.managedPack = managedPack;
             sendIfIdle();
             return batch.result;
@@ -138,7 +138,10 @@ public final class Reloads {
         this.data.sendIfIdle();
     }
 
-    /** Reloads the client's resources of {@code kind} for {@code path}, enabling {@code managedPack} on top first, or none. */
+    /**
+     * Reloads the client's resources of {@code kind} for {@code path}, or for no one file, enabling {@code managedPack} on
+     * top first, or none.
+     */
     public synchronized CompletableFuture<ReloadResultPayload> resources(GameLocation.Connection connection, ReloadPayload.Kind kind,
                                                                          String path, String managedPack) {
         return this.resources.add(connection, null, null, kind, path, managedPack);

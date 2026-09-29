@@ -207,7 +207,7 @@ public final class ChangePipeline {
             return new Outcome<>(applied, true);
         });
         List<ChangePayload.Edit> edits = change.stream().map(edit -> new ChangePayload.Edit(category.id(),
-                category.name(edit.target()), Objects.requireNonNullElse(edit.expected(), ""), category.text(edit.value()))).toList();
+                category.gameTarget(edit.target()), edit.expected(), category.text(edit.value()))).toList();
         if (!connection.send(new ChangeMessage(new ChangePayload(id, edits)))) {
             this.waiting.remove(id);
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));

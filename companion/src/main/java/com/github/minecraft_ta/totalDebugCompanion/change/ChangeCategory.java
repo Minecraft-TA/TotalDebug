@@ -23,8 +23,13 @@ public interface ChangeCategory<T extends ChangeRecord.Target, V> {
     /** The name the game's change table knows the category by, such as {@code keyBinding}. */
     String id();
 
-    /** The target as the game and the user name it. */
+    /** The target as the user names it. */
     String name(T target);
+
+    /** The target as the game's change table names it; by default as the user does. */
+    default String gameTarget(T target) {
+        return name(target);
+    }
 
     /** Why a change of {@code target} was refused when its value changed since the change was made against it. */
     default String changedSince(T target) {

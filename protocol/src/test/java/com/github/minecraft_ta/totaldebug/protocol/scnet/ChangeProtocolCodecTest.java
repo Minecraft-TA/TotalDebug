@@ -19,7 +19,8 @@ class ChangeProtocolCodecTest {
     void aChangeAndItsAnswerSurviveTheWire() {
         ChangePayload change = new ChangePayload(7, List.of(
                 new ChangePayload.Edit("keyBinding", "key.jump", "key.keyboard.space", "key.keyboard.g:CONTROL"),
-                new ChangePayload.Edit("keyBinding", "key.sneak", "key.keyboard.g:CONTROL", "key.keyboard.unknown")));
+                new ChangePayload.Edit("keyBinding", "key.sneak", "key.keyboard.g:CONTROL", "key.keyboard.unknown"),
+                new ChangePayload.Edit("resourcePacks", "resourcePacks", null, "[\"vanilla\"]")));
         ChangeMessage readChange = new ChangeMessage();
         readChange.read(new ByteBufferInputStream(written(new ChangeMessage(change))));
         assertEquals(change, readChange.payload());

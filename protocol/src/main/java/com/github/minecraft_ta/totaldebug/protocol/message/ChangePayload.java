@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Protocol-36 payload asking the game to change values it keeps, as one change (see {@code docs/CHANGE_PIPELINE.md}).
+ * Protocol-39 payload asking the game to change values it keeps, as one change (see {@code docs/CHANGE_PIPELINE.md}).
  * The game checks that every edit's target still has the value the edit expects before it sets any, and answers with a
  * {@link ChangeResultPayload} of the same request id.
  */
@@ -17,14 +17,13 @@ public record ChangePayload(int requestId, List<Edit> edits) {
 
     /**
      * One value of a change: {@code category} names the game's handler, such as {@code keyBinding}, {@code target} what
-     * it changes in the category's words, {@code expected} the value the edit was made against and {@code value} the new
-     * one, both as the category writes values.
+     * it changes in the category's words, {@code expected} the value the edit was made against, or null where it replaces
+     * whatever the target holds, and {@code value} the new one, both as the category writes values.
      */
     public record Edit(String category, String target, String expected, String value) {
         public Edit {
             Objects.requireNonNull(category, "category");
             Objects.requireNonNull(target, "target");
-            Objects.requireNonNull(expected, "expected");
             Objects.requireNonNull(value, "value");
         }
     }
@@ -40,7 +39,10 @@ public record ChangePayload(int requestId, List<Edit> edits) {
         if (count < 1 || count > MAX_EDITS) throw new IllegalArgumentException("Invalid edit count: " + count);
         List<Edit> edits = new ArrayList<>(count);
         for (int index = 0; index < count; index++) {
-            edits.add(new Edit(input.readString(), input.readString(), input.readString(), input.readString()));
+            String category = input.readString();
+            String target = input.readString();
+            String expected = input.readBoolean() ? input.readString() : null;
+            edits.add(new Edit(category, target, expected, input.readString()));
         }
         return new ChangePayload(requestId, edits);
     }
@@ -51,7 +53,8 @@ public record ChangePayload(int requestId, List<Edit> edits) {
         for (Edit edit : this.edits) {
             output.writeString(edit.category());
             output.writeString(edit.target());
-            output.writeString(edit.expected());
+            output.writeBoolean(edit.expected() != null);
+            if (edit.expected() != null) output.writeString(edit.expected());
             output.writeString(edit.value());
         }
     }

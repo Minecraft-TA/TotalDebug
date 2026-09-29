@@ -13,7 +13,8 @@ import java.util.Set;
 /**
  * The values Companion changes in the running game, one handler for each category (see {@code docs/CHANGE_PIPELINE.md}).
  * A change is made whole or not at all: before any value is set, every edit's target must still hold the value the edit
- * expects, and every new value must be one its category can set. Client thread only.
+ * expects, or already the new one, unless the edit replaces whatever it holds, and every new value must be one its
+ * category can set. Client thread only.
  */
 public final class ClientChanges {
     /** How the game reads and sets the values of one category, in the text form Companion writes them. */
@@ -29,6 +30,11 @@ public final class ClientChanges {
 
         /** Runs once after a change set values of this category, such as to save them. */
         void finish();
+
+        /** {@code target} as the user names it, in a refusal. */
+        default String name(String target) {
+            return target;
+        }
     }
 
     private final Map<String, Category> categories;
@@ -50,8 +56,9 @@ public final class ClientChanges {
                     throw new IllegalArgumentException(edit.target() + " is changed twice in one change");
                 }
                 String current = category.read(edit.target());
-                if (!current.equals(edit.expected())) {
-                    throw new IllegalArgumentException(edit.target() + " changed in the game since Companion read it");
+                // A target already holding the new value, such as one reverted in the game meanwhile, is only answered.
+                if (edit.expected() != null && !current.equals(edit.expected()) && !current.equals(edit.value())) {
+                    throw new IllegalArgumentException(category.name(edit.target()) + " changed in the game since Companion read it");
                 }
                 category.check(edit.target(), edit.value());
                 handlers.add(category);

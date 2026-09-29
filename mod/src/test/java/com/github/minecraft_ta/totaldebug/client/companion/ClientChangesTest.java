@@ -33,6 +33,10 @@ class ClientChangesTest {
         @Override public void finish() {
             this.saves++;
         }
+
+        @Override public String name(String target) {
+            return target.equals("key.sneak") ? "Sneak" : target;
+        }
     }
 
     private final Keys keys = new Keys();
@@ -60,6 +64,17 @@ class ClientChangesTest {
 
         assertEquals(Map.of("key.jump", "space", "key.sneak", "shift"), this.keys.values, "nothing was set");
         assertEquals(0, this.keys.saves);
+    }
+
+    @Test
+    void aTargetAlreadyHoldingItsNewValueIsAnsweredAsItIs() {
+        ChangeResultPayload result = apply(edit("key.jump", "g", "space"));
+
+        assertEquals(new ChangeResultPayload(1, List.of(new ChangeResultPayload.Applied("space", "space")), ""), result,
+                "such as a revert of a value the player put back in the game");
+        assertRefused("Sneak changed in the game since Companion read it", apply(edit("key.sneak", "g", "h")));
+        assertEquals(new ChangeResultPayload(1, List.of(new ChangeResultPayload.Applied("shift", "h")), ""), apply(edit("key.sneak", null, "h")),
+                "an edit made against no value replaces whatever the target holds");
     }
 
     private void assertRefused(String reason, ChangeResultPayload result) {

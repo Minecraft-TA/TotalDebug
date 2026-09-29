@@ -1,0 +1,128 @@
+package com.github.minecraft_ta.totalDebugCompanion.pack;
+
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
+import com.github.minecraft_ta.totalDebugCompanion.game.Access;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
+import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
+
+/**
+ * The resource pack selection as a category of the change pipeline: the connected game client enables and orders the
+ * packs, and a closed game's {@code options.txt} is written. Its value is the enabled packs, lowest first, as
+ * {@code options.txt} keeps them: without the parts of the mods' pack, which come and go with it.
+ */
+final class ResourcePackSelection implements ChangeCategory<ChangeRecord.PackSelection, List<String>> {
+    /** The one target the game client's change table knows, the selection itself. */
+    static final String GAME_TARGET = "resourcePacks";
+
+    private final Path options;
+
+    ResourcePackSelection(Path options) {
+        this.options = options;
+    }
+
+    /** The one target of the category. */
+    ChangeRecord.PackSelection target() {
+        return new ChangeRecord.PackSelection(SetPacksPayload.Side.RESOURCES, this.options);
+    }
+
+    @Override
+    public String id() {
+        return "resourcePacks";
+    }
+
+    @Override
+    public String name(ChangeRecord.PackSelection target) {
+        return "The resource packs";
+    }
+
+    @Override
+    public String gameTarget(ChangeRecord.PackSelection target) {
+        return GAME_TARGET;
+    }
+
+    @Override
+    public String changedSince(ChangeRecord.PackSelection target) {
+        return "The resource packs changed outside Companion since, and reverting would replace that";
+    }
+
+    @Override
+    public Access access(GameState game, ChangeRecord.PackSelection target) {
+        return game.client("change its resource packs");
+    }
+
+    @Override
+    public String text(List<String> enabled) {
+        return PackSelections.json(enabled.stream().filter(id -> !id.startsWith("mod/")).toList());
+    }
+
+    @Override
+    public Map<ChangeRecord.PackSelection, String> readFile(Collection<ChangeRecord.PackSelection> targets) throws IOException {
+        return Map.of(target(), PackSelections.json(PackResources.enabledInOptions(this.options)));
+    }
+
+    /**
+     * Writes the selection as {@code options.txt}'s resource packs. A pack enabled here is also listed as incompatible,
+     * which the game drops again for a compatible pack, so it keeps a pack made for another version instead of removing it.
+     */
+    @Override
+    public void writeFile(List<Write<ChangeRecord.PackSelection, List<String>>> writes, Consumer<ChangeRecord.PackSelection> landed)
+            throws IOException {
+        for (Write<ChangeRecord.PackSelection, List<String>> write : writes) {
+            List<String> previous = PackResources.enabledInOptions(this.options);
+            List<String> enabled = write.value();
+            List<String> lines = Files.isRegularFile(this.options)
+                    ? new ArrayList<>(Files.readAllLines(this.options, StandardCharsets.UTF_8)) : new ArrayList<>();
+            Set<String> incompatible = new LinkedHashSet<>(listed(lines, "incompatibleResourcePacks:"));
+            incompatible.retainAll(enabled);
+            for (String id : enabled) {
+                if (!previous.contains(id) && id.startsWith("file/")) incompatible.add(id);
+            }
+            put(lines, "resourcePacks:", enabled.stream().filter(id -> !id.startsWith("mod/")).toList());
+            put(lines, "incompatibleResourcePacks:", List.copyOf(incompatible));
+            AtomicFiles.writeString(this.options, String.join("\n", lines) + "\n");
+            landed.accept(write.target());
+        }
+    }
+
+    /** The ids of an {@code options.txt} line such as {@code resourcePacks:["vanilla"]}, or none without it. */
+    private static List<String> listed(List<String> lines, String prefix) throws IOException {
+        for (String line : lines) {
+            if (!line.startsWith(prefix)) continue;
+            try {
+                List<String> ids = new ArrayList<>();
+                for (JsonElement id : JsonParser.parseString(line.substring(prefix.length())).getAsJsonArray()) ids.add(id.getAsString());
+                return ids;
+            } catch (RuntimeException invalid) {
+                throw new IOException("options.txt lists " + prefix + " in a form that cannot be read: " + invalid.getMessage(), invalid);
+            }
+        }
+        return List.of();
+    }
+
+    private static void put(List<String> lines, String prefix, List<String> ids) {
+        String line = prefix + PackSelections.json(ids);
+        for (int index = 0; index < lines.size(); index++) {
+            if (lines.get(index).startsWith(prefix)) {
+                lines.set(index, line);
+                return;
+            }
+        }
+        lines.add(line);
+    }
+}

@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totaldebug.client.resource;
 import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.resource.PackOrder;
 import com.github.minecraft_ta.totaldebug.resource.ReloadProblems;
 import net.minecraft.client.Minecraft;
@@ -48,49 +47,6 @@ public final class ResourceReloads {
             answer.accept(new ReloadResultPayload(request.requestId(), (System.nanoTime() - started) / 1_000_000, found,
                     failure == null ? "" : message(failure)));
         });
-    }
-
-    /**
-     * Enables exactly the packs {@code request} names, lowest first, as the game's pack screen or {@code /datapack} does,
-     * then answers once the reload that needs is done. Packs the game requires are added where it puts them; a pack it
-     * does not know, or a datapack that requests features the world does not have, fails the request unchanged. Client
-     * thread only.
-     */
-    public static void select(SetPacksPayload request, Consumer<ReloadResultPayload> answer) {
-        long started = System.nanoTime();
-        if (request.side() != SetPacksPayload.Side.RESOURCES) {
-            answer.accept(new ReloadResultPayload(request.requestId(), 0, List.of(), "The world's datapacks are selected by its server"));
-            return;
-        }
-        attempt(() -> selectResources(request.enabled())).whenComplete((ignored, failure) -> answer.accept(new ReloadResultPayload(
-                request.requestId(), (System.nanoTime() - started) / 1_000_000, List.of(), failure == null ? "" : message(failure))));
-    }
-
-    private static CompletableFuture<Void> selectResources(List<String> enabled) {
-        Minecraft minecraft = Minecraft.getInstance();
-        PackRepository packs = minecraft.getResourcePackRepository();
-        packs.reload();
-        List<String> unknown = enabled.stream().filter(id -> packs.getPack(id) == null).toList();
-        if (!unknown.isEmpty()) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("The game has no resource pack " + String.join(", ", unknown)));
-        }
-        List<String> before = List.copyOf(packs.getSelectedIds());
-        packs.setSelected(enabled);
-        saveOptions(minecraft);
-        if (List.copyOf(packs.getSelectedIds()).equals(before)) return CompletableFuture.completedFuture(null);
-        return reloadAll(minecraft);
-    }
-
-    /** Saves the selected resource packs into {@code options.txt}, as {@code Options.updateResourcePacks} does. */
-    private static void saveOptions(Minecraft minecraft) {
-        minecraft.options.resourcePacks.clear();
-        minecraft.options.incompatibleResourcePacks.clear();
-        for (Pack pack : minecraft.getResourcePackRepository().getSelectedPacks()) {
-            if (pack.isFixedPosition() || pack.isHidden()) continue;
-            minecraft.options.resourcePacks.add(pack.getId());
-            if (!pack.getCompatibility().isCompatible()) minecraft.options.incompatibleResourcePacks.add(pack.getId());
-        }
-        minecraft.options.save();
     }
 
     /** Reloads every client resource, failing when the game turns the folder packs off after a failed reload. */
@@ -144,7 +100,7 @@ public final class ResourceReloads {
         Minecraft minecraft = Minecraft.getInstance();
         boolean enabled = !managedPack.isEmpty() && enableOnTop(minecraft.getResourcePackRepository(), managedPack);
         // As Options.updateResourcePacks saves them, which would also start a reload of its own.
-        if (enabled) saveOptions(minecraft);
+        if (enabled) ResourcePackEdits.save(minecraft);
         if (!kinds.contains(ReloadPayload.Kind.RESOURCES) && !enabled && quickly(managedPack, kinds, watched)) {
             // A full reload tells the catalog through its reload listener; these quick ones do not.
             TotalDebugClient.current().ifPresent(TotalDebugClient::resourcesReloaded);
