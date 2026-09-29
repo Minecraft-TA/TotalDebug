@@ -12,15 +12,23 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -81,6 +89,22 @@ class RelayedMessagesTest {
         assertEquals(-3, assertInstanceOf(ServerScriptsRequestMessage.class, RelayedMessages.decodeToServer(relayed)).request());
         assertEquals(0, left.body().length);
         assertInstanceOf(CompanionLeftMessage.class, RelayedMessages.decodeToServer(left));
+    }
+
+    @Test
+    void theWorldsDataIsReloadedAndSelectedOnItsServerAndAnswersComeBack() {
+        ReloadPayload reload = new ReloadPayload(5, EnumSet.of(ReloadPayload.Kind.DATA), "", "file/TotalDebug",
+                List.of("data/testmod/recipe/gear.json"));
+        SetPacksPayload select = new SetPacksPayload(6, SetPacksPayload.Side.DATA, List.of("vanilla", "file/TotalDebug"));
+        ReloadResultPayload answer = new ReloadResultPayload(5, 300, List.of(), "");
+
+        RelayedMessage relayed = RelayedMessages.toServer(new ReloadMessage(reload), 5, "world C:/saves/New World");
+        assertEquals("world C:/saves/New World", relayed.world(), "the envelope names the world the data belongs to");
+        assertEquals(reload, assertInstanceOf(ReloadMessage.class, RelayedMessages.decodeToServer(relayed)).payload());
+        assertEquals(select, assertInstanceOf(SetPacksMessage.class,
+                RelayedMessages.decodeToServer(RelayedMessages.toServer(new SetPacksMessage(select), 6, ""))).payload());
+        assertEquals(answer, assertInstanceOf(ReloadResultMessage.class,
+                RelayedMessages.decodeFromServer(RelayedMessages.fromServer(new ReloadResultMessage(answer)))).payload());
     }
 
     @Test

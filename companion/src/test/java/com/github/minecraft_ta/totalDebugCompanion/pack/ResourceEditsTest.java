@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -216,8 +217,13 @@ class ResourceEditsTest {
         LevelDatFixture.write(world, LevelDatFixture.world("World"));
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        List<String> worlds = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
-            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
+            SentMessage out = SentMessage.of(message);
+            if (out.message() instanceof ReloadMessage reload) {
+                sent.add(reload.payload());
+                worlds.add(out.world());
+            }
             return true;
         });
         edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
@@ -227,8 +233,29 @@ class ResourceEditsTest {
         awaitSent(sent, 1);
 
         assertEquals(Set.of(ReloadPayload.Kind.DATA), sent.getFirst().kinds());
-        assertEquals(world.toAbsolutePath().normalize().toString(), sent.getFirst().dataWorld(),
+        assertEquals(new PlayingPayload.Singleplayer(world.toString()).identity(), worlds.getFirst(),
                 "the game refuses to reload it once it plays another world");
+    }
+
+    @Test
+    void aDataReloadTheGameClientCouldNotCarryFailsWithItsReason() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        LevelDatFixture.write(world, LevelDatFixture.world("World"));
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        edits.location().connected(message -> {
+            if (SentMessage.of(message).message() instanceof ReloadMessage reload) sent.add(reload.payload());
+            return true;
+        });
+        edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
+        edits.packs().packStack(STACK);
+
+        CompletableFuture<ResourceEdits.Saved> saved = edits.save("data/testmod/recipe/gear.json", bytes("{}"));
+        awaitSent(sent, 1);
+        edits.pipeline().reloads().relayFailed(sent.getFirst().requestId(), "The server does not have TotalDebug");
+
+        assertEquals("The server does not have TotalDebug", saved.get(5, TimeUnit.SECONDS).reloadFailure(),
+                "the save does not wait for an answer that cannot come");
     }
 
     @Test
@@ -259,8 +286,13 @@ class ResourceEditsTest {
         LevelDatFixture.write(second, LevelDatFixture.world("Second"));
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        List<String> worlds = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
-            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
+            SentMessage out = SentMessage.of(message);
+            if (out.message() instanceof ReloadMessage reload) {
+                sent.add(reload.payload());
+                worlds.add(out.world());
+            }
             return true;
         });
         edits.location().playing(new PlayingPayload.Singleplayer(first.toString()));
@@ -272,7 +304,7 @@ class ResourceEditsTest {
         CompletableFuture<ResourceEdits.Saved> language = edits.save(LANG, bytes("{}"));
         awaitSent(sent, 2);
         assertEquals(Set.of(ReloadPayload.Kind.LANGUAGE), sent.get(1).kinds(), "the client's resources do not wait for the data");
-        assertEquals("", sent.get(1).dataWorld());
+        assertNull(worlds.get(1), "the client's resources go to the game client itself");
 
         edits.location().playing(new PlayingPayload.Singleplayer(second.toString()));
         edits.packs().packStack(STACK);
@@ -287,7 +319,7 @@ class ResourceEditsTest {
 
         CompletableFuture<ResourceEdits.Saved> later = edits.save("data/testmod/recipe/axle.json", bytes("{}"));
         awaitSent(sent, 3);
-        assertEquals(second.toAbsolutePath().normalize().toString(), sent.get(2).dataWorld());
+        assertEquals(new PlayingPayload.Singleplayer(second.toString()).identity(), worlds.get(2));
         edits.pipeline().reloads().answered(new ReloadResultPayload(sent.get(2).requestId(), 10, List.of(), ""));
         assertEquals(ConfigChanges.Effect.NOW, later.get(5, TimeUnit.SECONDS).effect(), "later reloads are not held up");
     }
@@ -311,7 +343,7 @@ class ResourceEditsTest {
         edits.packs().packStack(STACK);
         List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
-            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
+            if (SentMessage.of(message).message() instanceof ReloadMessage reload) sent.add(reload.payload());
             return true;
         });
 
@@ -350,7 +382,7 @@ class ResourceEditsTest {
             edits.packs().packStack(STACK);
             List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
             edits.location().connected(message -> {
-                if (message instanceof ReloadMessage reload) {
+                if (SentMessage.of(message).message() instanceof ReloadMessage reload) {
                     sent.add(reload.payload());
                     edits.pipeline().reloads().answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(), ""));
                 }
@@ -498,7 +530,7 @@ class ResourceEditsTest {
         edits.packs().packStack(STACK);
         List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
-            if (message instanceof ReloadMessage reload) {
+            if (SentMessage.of(message).message() instanceof ReloadMessage reload) {
                 sent.add(reload.payload());
                 edits.pipeline().reloads().answered(new ReloadResultPayload(reload.payload().requestId(), 10, List.of(new ReloadResultPayload.Problem(
                         "assets/testmod/textures/block/gear.png.mcmeta", "Bad section")), ""));
@@ -701,7 +733,7 @@ class ResourceEditsTest {
 
         List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
-            if (message instanceof ReloadMessage reload) sent.add(reload.payload());
+            if (SentMessage.of(message).message() instanceof ReloadMessage reload) sent.add(reload.payload());
             return true;
         });
         CompletableFuture<ResourceEdits.Saved> saved = edits.save(LANG, bytes("{}"));

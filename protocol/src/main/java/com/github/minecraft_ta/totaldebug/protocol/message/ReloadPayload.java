@@ -10,15 +10,15 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Protocol-30 payload asking the game to reload what edited resources need. {@code managedResourcePack} and
- * {@code managedDataPack} are the id of the pack Companion manages, such as {@code file/TotalDebug}, among the resource
- * packs and the datapacks, which the game enables at the top of that stack before the reload; empty where no edit of the
- * reload went into it. {@code dataWorld} is the folder of the world whose data was edited, as {@code PLAYING} names it,
- * and empty without {@link Kind#DATA}; the game refuses to reload the data of a world it no longer plays.
- * {@code watched} are the edited resource paths whose problems the answer reports.
+ * Protocol-37 payload asking for a reload of what edited resources need: the client's resources from the game client, or
+ * the world's data, {@link Kind#DATA} alone, from its server through the relay, whose envelope names the world.
+ * {@code managedResourcePack} and {@code managedDataPack} are the id of the pack Companion manages, such as
+ * {@code file/TotalDebug}, among the resource packs and the datapacks, which is enabled at the top of that stack before
+ * the reload; empty where no edit of the reload went into it. {@code watched} are the edited resource paths whose
+ * problems the answer reports.
  */
 public record ReloadPayload(int requestId, Set<Kind> kinds, String managedResourcePack, String managedDataPack,
-                            String dataWorld, List<String> watched) {
+                            List<String> watched) {
     public static final int MAX_WATCHED = 1_024;
 
     /** What to reload. */
@@ -38,9 +38,11 @@ public record ReloadPayload(int requestId, Set<Kind> kinds, String managedResour
         if (kinds.isEmpty()) throw new IllegalArgumentException("Nothing to reload");
         Objects.requireNonNull(managedResourcePack, "managedResourcePack");
         Objects.requireNonNull(managedDataPack, "managedDataPack");
-        Objects.requireNonNull(dataWorld, "dataWorld");
-        if (dataWorld.isEmpty() == kinds.contains(Kind.DATA)) {
-            throw new IllegalArgumentException("A data reload names its world, and a reload without data none");
+        if (kinds.contains(Kind.DATA) && (kinds.size() > 1 || !managedResourcePack.isEmpty())) {
+            throw new IllegalArgumentException("The world's data reloads on its server, apart from the client's resources");
+        }
+        if (!kinds.contains(Kind.DATA) && !managedDataPack.isEmpty()) {
+            throw new IllegalArgumentException("Only a data reload enables the managed datapack");
         }
         watched = List.copyOf(watched);
         if (watched.size() > MAX_WATCHED) throw new IllegalArgumentException("Too many watched paths");
@@ -55,12 +57,11 @@ public record ReloadPayload(int requestId, Set<Kind> kinds, String managedResour
         }
         String managedResourcePack = input.readString();
         String managedDataPack = input.readString();
-        String dataWorld = input.readString();
         int count = input.readInt();
         if (count < 0 || count > MAX_WATCHED) throw new IllegalArgumentException("Invalid watched path count: " + count);
         List<String> watched = new ArrayList<>(count);
         for (int index = 0; index < count; index++) watched.add(input.readString());
-        return new ReloadPayload(requestId, kinds, managedResourcePack, managedDataPack, dataWorld, watched);
+        return new ReloadPayload(requestId, kinds, managedResourcePack, managedDataPack, watched);
     }
 
     public void write(ByteBufferOutputStream output) {
@@ -70,7 +71,6 @@ public record ReloadPayload(int requestId, Set<Kind> kinds, String managedResour
         output.writeInt(mask);
         output.writeString(this.managedResourcePack);
         output.writeString(this.managedDataPack);
-        output.writeString(this.dataWorld);
         output.writeInt(this.watched.size());
         for (String path : this.watched) output.writeString(path);
     }

@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.client.resource;
+package com.github.minecraft_ta.totaldebug.resource;
 
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import org.apache.logging.log4j.Level;
@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Every thread's log is watched while the collector is open, since reloads run on worker threads. Collectors of reloads
  * that run at once, such as of the client's resources and a world's data, each watch under a name of their own.
  */
-final class ReloadProblems extends AbstractAppender implements AutoCloseable {
+public final class ReloadProblems extends AbstractAppender implements AutoCloseable {
     private static final int MAX_PROBLEMS = 64;
     private static final AtomicInteger COLLECTORS = new AtomicInteger();
 
@@ -38,7 +38,7 @@ final class ReloadProblems extends AbstractAppender implements AutoCloseable {
     }
 
     /** Starts collecting problems about {@code paths}; closing stops it. */
-    static ReloadProblems open(List<String> paths) {
+    public static ReloadProblems open(List<String> paths) {
         Map<String, List<String>> names = new LinkedHashMap<>();
         for (String path : paths) {
             for (String name : names(path)) names.computeIfAbsent(name, ignored -> new ArrayList<>()).add(path);
@@ -107,7 +107,7 @@ final class ReloadProblems extends AbstractAppender implements AutoCloseable {
         return false;
     }
 
-    List<ReloadResultPayload.Problem> problems() {
+    public List<ReloadResultPayload.Problem> problems() {
         synchronized (this.problems) {
             return new ArrayList<>(this.problems);
         }

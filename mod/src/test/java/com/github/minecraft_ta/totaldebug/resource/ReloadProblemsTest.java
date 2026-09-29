@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.client.resource;
+package com.github.minecraft_ta.totaldebug.resource;
 
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import org.apache.logging.log4j.Level;

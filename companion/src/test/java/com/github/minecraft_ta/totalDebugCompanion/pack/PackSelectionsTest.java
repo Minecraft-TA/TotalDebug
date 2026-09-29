@@ -119,7 +119,7 @@ class PackSelectionsTest {
                 new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN)), List.of()));
         List<SetPacksPayload> sent = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
-            if (message instanceof SetPacksMessage packs) sent.add(packs.payload());
+            if (SentMessage.of(message).message() instanceof SetPacksMessage packs) sent.add(packs.payload());
             return true;
         });
         PackSelections selections = selections(record, edits);
@@ -145,8 +145,13 @@ class PackSelectionsTest {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record, true);
         List<SetPacksPayload> sent = new CopyOnWriteArrayList<>();
+        List<String> worlds = new CopyOnWriteArrayList<>();
         edits.location().connected(message -> {
-            if (message instanceof SetPacksMessage packs) sent.add(packs.payload());
+            SentMessage out = SentMessage.of(message);
+            if (out.message() instanceof SetPacksMessage packs) {
+                sent.add(packs.payload());
+                worlds.add(out.world());
+            }
             return true;
         });
         edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
@@ -154,8 +159,9 @@ class PackSelectionsTest {
 
         selections(record, edits).set(SetPacksPayload.Side.DATA, world, List.of("vanilla", "file/Tweaks"));
 
-        assertEquals(world.toAbsolutePath().normalize().toString(), sent.getFirst().world(),
-                "the game refuses it if it plays another world by the time it arrives");
+        assertEquals(new PlayingPayload.Singleplayer(world.toString()).identity(), worlds.getFirst(),
+                "the relay refuses it if the game plays another world by the time it arrives");
+        assertEquals(SetPacksPayload.Side.DATA, sent.getFirst().side(), "the world's server selects its datapacks");
     }
 
     @Test

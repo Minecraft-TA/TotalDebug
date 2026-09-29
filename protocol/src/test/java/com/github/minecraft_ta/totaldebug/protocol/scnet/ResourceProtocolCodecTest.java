@@ -32,11 +32,15 @@ class ResourceProtocolCodecTest {
 
     @Test
     void aReloadAndItsAnswerSurviveTheWire() {
-        ReloadPayload request = new ReloadPayload(3, EnumSet.of(ReloadPayload.Kind.LANGUAGE, ReloadPayload.Kind.DATA, ReloadPayload.Kind.TEXTURES),
-                "file/TotalDebug", "", "C:/game/saves/World", List.of("assets/testmod/lang/en_us.json"));
+        ReloadPayload request = new ReloadPayload(3, EnumSet.of(ReloadPayload.Kind.LANGUAGE, ReloadPayload.Kind.TEXTURES),
+                "file/TotalDebug", "", List.of("assets/testmod/lang/en_us.json"));
         ReloadMessage readRequest = new ReloadMessage();
         readRequest.read(new ByteBufferInputStream(written(new ReloadMessage(request))));
         assertEquals(request, readRequest.payload());
+        ReloadPayload data = new ReloadPayload(4, EnumSet.of(ReloadPayload.Kind.DATA), "", "file/TotalDebug",
+                List.of("data/testmod/recipe/gear.json"));
+        readRequest.read(new ByteBufferInputStream(written(new ReloadMessage(data))));
+        assertEquals(data, readRequest.payload());
 
         ReloadResultPayload answer = new ReloadResultPayload(3, 1_250, List.of(new ReloadResultPayload.Problem(
                 "assets/testmod/models/block/slab.json", "Unable to parse testmod:block/slab")), "");
@@ -47,23 +51,20 @@ class ResourceProtocolCodecTest {
 
     @Test
     void aPackSelectionSurvivesTheWire() {
-        SetPacksPayload request = new SetPacksPayload(4, SetPacksPayload.Side.DATA, "C:/game/saves/World", List.of("vanilla", "mod_data", "file/Tweaks"));
+        SetPacksPayload request = new SetPacksPayload(4, SetPacksPayload.Side.DATA, List.of("vanilla", "mod_data", "file/Tweaks"));
         SetPacksMessage read = new SetPacksMessage();
         read.read(new ByteBufferInputStream(written(new SetPacksMessage(request))));
         assertEquals(request, read.payload());
     }
 
     @Test
-    void aDatapackSelectionNamesItsWorldAndAResourcePackSelectionNone() {
-        assertThrows(IllegalArgumentException.class, () -> new SetPacksPayload(1, SetPacksPayload.Side.DATA, "", List.of()));
-        assertThrows(IllegalArgumentException.class, () -> new SetPacksPayload(1, SetPacksPayload.Side.RESOURCES, "C:/game/saves/World", List.of()));
-    }
-
-    @Test
-    void aDataReloadNamesItsWorldAndAReloadWithoutDataNone() {
-        assertThrows(IllegalArgumentException.class, () -> new ReloadPayload(1, EnumSet.of(ReloadPayload.Kind.DATA), "", "", "", List.of()));
-        assertThrows(IllegalArgumentException.class, () -> new ReloadPayload(1, EnumSet.of(ReloadPayload.Kind.LANGUAGE), "", "",
-                "C:/game/saves/World", List.of()));
+    void theWorldsDataReloadsApartFromTheClientsResources() {
+        assertThrows(IllegalArgumentException.class, () -> new ReloadPayload(1,
+                EnumSet.of(ReloadPayload.Kind.DATA, ReloadPayload.Kind.LANGUAGE), "", "", List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ReloadPayload(1, EnumSet.of(ReloadPayload.Kind.DATA),
+                "file/TotalDebug", "", List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new ReloadPayload(1, EnumSet.of(ReloadPayload.Kind.LANGUAGE),
+                "", "file/TotalDebug", List.of()));
     }
 
     private static ByteBuffer written(AbstractMessage message) {

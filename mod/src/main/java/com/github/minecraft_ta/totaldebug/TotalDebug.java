@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totaldebug.runtime.PreparedRuntimeSources;
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceMaterializer;
 import com.github.minecraft_ta.totaldebug.server.ServerOperations;
+import com.github.minecraft_ta.totaldebug.server.world.WorldDatapacks;
 import com.github.minecraft_ta.totaldebug.server.ServerRelay;
 import com.github.minecraft_ta.totaldebug.server.script.ServerScriptService;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
@@ -53,7 +54,7 @@ public final class TotalDebug {
         this.tickTaskScheduler = new TickTaskScheduler();
         this.serverRelay = new ServerRelay();
         this.serverScripts = new ServerScriptService(this.tickTaskScheduler, this.serverRelay);
-        this.serverRelay.handle(new ServerOperations(this.serverScripts));
+        this.serverRelay.handle(new ServerOperations(this.serverScripts, new WorldDatapacks(this.serverRelay)));
         this.network = new TotalDebugNetwork(Objects.requireNonNull(modEventBus, "modEventBus"));
         TotalDebugConfig.register(modContainer);
 

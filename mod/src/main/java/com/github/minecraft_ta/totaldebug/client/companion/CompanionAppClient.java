@@ -317,7 +317,7 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private volatile ObjIntConsumer<RelayedMessage> toServerHandler = (message, companion) -> sendRelayFailed(
-            companion, message.correlation(), "The game's relay to the server is not ready");
+            companion, message, "The game's relay to the server is not ready");
 
     /** Receives the messages Companion addressed to the server with its connection's number; runs on the connection thread. */
     public void setToServerHandler(ObjIntConsumer<RelayedMessage> handler) {
@@ -330,8 +330,8 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     /** Tells Companion connection {@code companion} a message it sent for the server could not be carried, and why. */
-    public void sendRelayFailed(int companion, int correlation, String reason) {
-        send(companion, new RelayFailedMessage(correlation, reason));
+    public void sendRelayFailed(int companion, RelayedMessage message, String reason) {
+        send(companion, new RelayFailedMessage(message.correlation(), message.messageId(), reason));
     }
 
     /** The number of the authenticated Companion connection, or 0 when none is. */

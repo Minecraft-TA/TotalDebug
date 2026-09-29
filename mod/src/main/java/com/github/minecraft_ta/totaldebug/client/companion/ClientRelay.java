@@ -38,16 +38,16 @@ public final class ClientRelay {
     public void toServer(int companion, RelayedMessage message) {
         if (companion != this.companionApp.companionConnection()) return;
         if (!message.world().isEmpty() && !message.world().equals(this.world.get())) {
-            this.companionApp.sendRelayFailed(companion, message.correlation(), "The game left the world this was meant for");
+            this.companionApp.sendRelayFailed(companion, message, "The game left the world this was meant for");
             return;
         }
         ClientPacketListener connection = Minecraft.getInstance().getConnection();
         if (connection == null) {
-            this.companionApp.sendRelayFailed(companion, message.correlation(), "Join a world to reach its server");
+            this.companionApp.sendRelayFailed(companion, message, "Join a world to reach its server");
             return;
         }
         if (!connection.hasChannel(ToServerPayload.TYPE)) {
-            this.companionApp.sendRelayFailed(companion, message.correlation(), "The server does not have TotalDebug");
+            this.companionApp.sendRelayFailed(companion, message, "The server does not have TotalDebug");
             return;
         }
         send(companion, message);

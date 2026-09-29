@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
+import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsRequestMessage;
@@ -251,10 +252,19 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
                 @Override
                 public void relayFailed(RelayFailedMessage message) {
-                    if (message.correlation() < 0) {
-                        if (message.correlation() == serverScriptsRequest) scriptCompiler.serverAccess("", message.reason());
-                    } else if (executionRuns != null) {
-                        executionRuns.relayFailed(message.correlation(), message.reason());
+                    // The refused message and its correlation name the request together.
+                    switch (message.messageId()) {
+                        case CompanionProtocol.SERVER_SCRIPTS_REQUEST -> {
+                            if (message.correlation() == serverScriptsRequest) scriptCompiler.serverAccess("", message.reason());
+                        }
+                        case CompanionProtocol.RUN_SCRIPT, CompanionProtocol.STOP_SCRIPT -> {
+                            if (executionRuns != null) executionRuns.relayFailed(message.correlation(), message.reason());
+                        }
+                        case CompanionProtocol.RELOAD, CompanionProtocol.SET_PACKS -> {
+                            ProjectScope scope = current;
+                            if (scope != null) scope.pipeline().reloads().relayFailed(message.correlation(), message.reason());
+                        }
+                        default -> { }
                     }
                 }
 
