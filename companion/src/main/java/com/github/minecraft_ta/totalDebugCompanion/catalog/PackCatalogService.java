@@ -98,9 +98,21 @@ public final class PackCatalogService {
         apply(started, loaded);
     }
 
-    /** Minecraft captures the catalog; the one shown stays until the new one is ready. */
+    /**
+     * Minecraft captures the catalog; the one shown stays until the new one is ready, so the pages do not empty in
+     * between, and nothing they show changes until then. Taken as one step with the state it replaces, so the newest
+     * catalog ready stays shown.
+     */
     public void capturing() {
-        set(new Capturing(index().orElse(null)));
+        boolean shownBefore;
+        synchronized (this) {
+            this.generation++;
+            CatalogIndex shown = shown(this.state);
+            shownBefore = shown != null;
+            this.state = new Capturing(shown);
+        }
+        // Pages that show the catalog go on showing it; only one without a catalog says it is being captured.
+        if (!shownBefore) SwingUtilities.invokeLater(() -> this.listeners.forEach(Runnable::run));
     }
 
     /**
@@ -148,7 +160,8 @@ public final class PackCatalogService {
     /** A different runtime inventory makes the shown catalog outdated until its own catalog arrives. */
     public void inventoryAnnounced(String inventoryId) {
         synchronized (this) {
-            if (!(this.state instanceof Ready ready) || ready.index().catalog().inventoryId().equals(inventoryId)) {
+            CatalogIndex shown = shown(this.state);
+            if (shown == null || shown.catalog().inventoryId().equals(inventoryId)) {
                 return;
             }
         }
@@ -164,23 +177,17 @@ public final class PackCatalogService {
     }
 
     /**
-     * Takes {@code state} and tells the listeners, unless what they show stays the same: a capture that keeps showing
-     * the catalog before, or a catalog captured again with the same content, as after most resource reloads. Every page
-     * that shows the catalog reads it again when told, so telling them of nothing new costs each of them a read.
+     * Takes {@code state} and tells the listeners. A catalog ready again is told even when its content is the same: the
+     * reload that captured it may have changed the files of a pack the pages list.
      */
     private void apply(long expectedGeneration, State state) {
-        boolean same;
         synchronized (this) {
             if (this.generation != expectedGeneration) {
                 return;
             }
-            CatalogIndex before = shown(this.state);
-            same = before != null && (state instanceof Capturing capturing && capturing.previous() == before
-                    || state instanceof Ready ready && ready.index().catalog().equals(before.catalog()));
-            // The same content keeps the index the pages already hold.
-            this.state = same && state instanceof Ready ? new Ready(before) : state;
+            this.state = state;
         }
-        if (!same) SwingUtilities.invokeLater(() -> this.listeners.forEach(Runnable::run));
+        SwingUtilities.invokeLater(() -> this.listeners.forEach(Runnable::run));
     }
 
     private static CatalogIndex shown(State state) {
