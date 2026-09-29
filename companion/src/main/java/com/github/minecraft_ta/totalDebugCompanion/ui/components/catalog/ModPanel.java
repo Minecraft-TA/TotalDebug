@@ -177,6 +177,7 @@ public final class ModPanel extends JPanel {
         String section = switch (tab) {
             case CONTENT -> this.content.selectedKind();
             case RESOURCES -> this.resources.selectedCategory();
+            case CONFIGURATION -> this.configs.selectedFileName();
             default -> "";
         };
         return new NavigationTarget.ModPage(this.modId, tab, section);

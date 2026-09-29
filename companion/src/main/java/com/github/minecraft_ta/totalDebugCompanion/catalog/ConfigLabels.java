@@ -67,7 +67,7 @@ public final class ConfigLabels implements ChangeLabels {
                 Effect pending = this.settings.pending(target.file(), target.setting());
                 rows.add(new Row(change, target.setting(), where(index, target), literal,
                         change.original(), pending == null ? "" : Character.toUpperCase(pending.description().charAt(0)) + pending.description().substring(1),
-                        opens(target), new Actions("Show in Configuration",
+                        opens(index, target), new Actions("Show in Configuration",
                         change.original().length() > 24 ? "Revert" : "Revert to " + change.original(), "", described.name())));
             }
         }
@@ -112,12 +112,11 @@ public final class ConfigLabels implements ChangeLabels {
     }
 
     /**
-     * The Configuration tab on the setting's file; for a world's server configuration, only where that tab shows that
-     * world's copy, the current world's.
+     * The Configuration tab on the setting's file, which that tab lists from the catalog. A world's server configuration
+     * opens nothing: the tab picks which world's copy it shows by rules of its own, so it could show another world's.
      */
-    private NavigationTarget opens(ChangeRecord.Setting target) {
-        Path world = world(target);
-        if (world != null && !world.toAbsolutePath().normalize().equals(this.settings.location().read().currentWorld())) return null;
+    private static NavigationTarget opens(CatalogIndex index, ChangeRecord.Setting target) {
+        if (world(target) != null || file(index, target) == null) return null;
         return new NavigationTarget.ModPage(target.modId(), ModTab.CONFIGURATION, target.fileName());
     }
 

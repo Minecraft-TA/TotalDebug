@@ -301,6 +301,12 @@ final class ConfigPanel extends JPanel {
         return file.fileName().substring(file.fileName().lastIndexOf('/') + 1);
     }
 
+    /** The name of the selected configuration file, or empty, for navigation history. */
+    String selectedFileName() {
+        PackCatalog.ConfigFile file = selectedFile();
+        return file == null ? "" : file.fileName();
+    }
+
     private PackCatalog.ConfigFile selectedFile() {
         return this.fileList.getSelectedValue() instanceof PackCatalog.ConfigFile file ? file : null;
     }
