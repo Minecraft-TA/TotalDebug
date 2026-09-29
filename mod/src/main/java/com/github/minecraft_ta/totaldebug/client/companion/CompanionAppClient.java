@@ -292,7 +292,6 @@ public final class CompanionAppClient implements AutoCloseable {
         this.reloadHandler = Objects.requireNonNull(handler, "handler");
     }
 
-    /** Receives Companion's requests to enable and order packs; runs on the connection thread. */
     public void sendReloadResult(ReloadResultMessage message) {
         send(message);
     }

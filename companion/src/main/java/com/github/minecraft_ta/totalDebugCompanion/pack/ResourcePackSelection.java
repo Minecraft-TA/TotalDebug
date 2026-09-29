@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
 import com.github.minecraft_ta.totalDebugCompanion.game.Access;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -13,8 +12,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,8 +24,9 @@ import java.util.function.Consumer;
 
 /**
  * The resource pack selection as a category of the change pipeline: the connected game client enables and orders the
- * packs, and a closed game's {@code options.txt} is written. Its value is the enabled packs, lowest first, as
- * {@code options.txt} keeps them: without the parts of the mods' pack, which come and go with it.
+ * packs and reloads its resources, and a closed game's {@code options.txt} is written. Its value is the enabled packs,
+ * lowest first, as the game keeps them: without the parts of the mods' pack, which come and go with it, and with the
+ * packs it requires, which it adds where {@code options.txt} leaves them out.
  */
 final class ResourcePackSelection implements ChangeCategory<ChangeRecord.PackSelection, List<String>> {
     /** The one target the game client's change table knows, the selection itself. */
@@ -34,11 +36,6 @@ final class ResourcePackSelection implements ChangeCategory<ChangeRecord.PackSel
 
     ResourcePackSelection(Path options) {
         this.options = options;
-    }
-
-    /** The one target of the category. */
-    ChangeRecord.PackSelection target() {
-        return new ChangeRecord.PackSelection(SetPacksPayload.Side.RESOURCES, this.options);
     }
 
     @Override
@@ -56,6 +53,12 @@ final class ResourcePackSelection implements ChangeCategory<ChangeRecord.PackSel
         return GAME_TARGET;
     }
 
+    /** The game answers once its resources reloaded with the new selection. */
+    @Override
+    public Duration answerWait() {
+        return Duration.ofMinutes(10);
+    }
+
     @Override
     public String changedSince(ChangeRecord.PackSelection target) {
         return "The resource packs changed outside Companion since, and reverting would replace that";
@@ -68,12 +71,27 @@ final class ResourcePackSelection implements ChangeCategory<ChangeRecord.PackSel
 
     @Override
     public String text(List<String> enabled) {
-        return PackSelections.json(enabled.stream().filter(id -> !id.startsWith("mod/")).toList());
+        return PackSelections.json(asTheGameKeepsIt(enabled));
     }
 
     @Override
     public Map<ChangeRecord.PackSelection, String> readFile(Collection<ChangeRecord.PackSelection> targets) throws IOException {
-        return Map.of(target(), PackSelections.json(PackResources.enabledInOptions(this.options)));
+        String value = text(PackResources.enabledInOptions(this.options));
+        Map<ChangeRecord.PackSelection, String> values = new HashMap<>();
+        for (ChangeRecord.PackSelection target : targets) values.put(target, value);
+        return values;
+    }
+
+    /**
+     * {@code enabled} as the game keeps the selection: without the parts of the mods' pack, and with Minecraft's pack at
+     * the bottom and the mods' resources at the top where it leaves them out, as the game adds them when it reads
+     * {@code options.txt}.
+     */
+    static List<String> asTheGameKeepsIt(List<String> enabled) {
+        List<String> ids = new ArrayList<>(enabled.stream().filter(id -> !id.startsWith("mod/")).toList());
+        if (!ids.contains(PackResources.VANILLA)) ids.addFirst(PackResources.VANILLA);
+        if (!ids.contains(PackResources.MOD_RESOURCES)) ids.add(PackResources.MOD_RESOURCES);
+        return ids;
     }
 
     /**

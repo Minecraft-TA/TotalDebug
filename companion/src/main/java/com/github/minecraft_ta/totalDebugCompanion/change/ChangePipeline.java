@@ -32,8 +32,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * change of several files is written in order, and a failure part way leaves what was written recorded.
  */
 public final class ChangePipeline {
-    private static final long ANSWER_SECONDS = 5;
-
     /**
      * One value of a change: {@code expected} is the value, as text, the change was made against, or null where the user
      * chose to replace whatever the target holds; {@code value} is the new one.
@@ -192,9 +190,11 @@ public final class ChangePipeline {
         int id = this.requests.incrementAndGet();
         CompletableFuture<ChangeResultPayload> answer = new CompletableFuture<>();
         this.waiting.put(id, answer);
-        // The change is recorded when the game answers, however late; the caller only waits a while for it.
+        // The change is recorded when the game answers, however late; the caller only waits a while for it. Values the game
+        // answers with an error are recorded as they are now, then the error fails the change: it was made, but did not
+        // take effect.
         CompletableFuture<Outcome<T>> made = answer.thenApply(result -> {
-            if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
+            if (result.applied().isEmpty()) throw new CompletionException(new IOException(result.error()));
             if (result.applied().size() != change.size()) {
                 throw new CompletionException(new IOException("The game answered for another number of values"));
             }
@@ -204,6 +204,7 @@ public final class ChangePipeline {
                 applied.add(new Applied<>(change.get(index).target(), value.before(), value.now()));
             }
             applied.forEach(this::recorded);
+            if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
             return new Outcome<>(applied, true);
         });
         List<ChangePayload.Edit> edits = change.stream().map(edit -> new ChangePayload.Edit(category.id(),
@@ -213,7 +214,7 @@ public final class ChangePipeline {
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));
         }
         CompletableFuture<Outcome<T>> waited = made.copy();
-        CompletableFuture.delayedExecutor(ANSWER_SECONDS, TimeUnit.SECONDS).execute(() -> waited.completeExceptionally(
+        CompletableFuture.delayedExecutor(category.answerWait().toMillis(), TimeUnit.MILLISECONDS).execute(() -> waited.completeExceptionally(
                 new IOException("The game has not answered yet; the change is recorded if the game makes it")));
         return waited;
     }

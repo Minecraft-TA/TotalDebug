@@ -50,7 +50,7 @@ public final class ResourceReloads {
     }
 
     /** Reloads every client resource, failing when the game turns the folder packs off after a failed reload. */
-    private static CompletableFuture<Void> reloadAll(Minecraft minecraft) {
+    static CompletableFuture<Void> reloadAll(Minecraft minecraft) {
         CompletableFuture<Void> reload = new CompletableFuture<>();
         minecraft.reloadResourcePacks().whenComplete((ignored, failure) -> {
             if (failure == null) reload.complete(null);

@@ -9,7 +9,6 @@ import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
 import com.google.gson.JsonArray;
@@ -91,20 +90,12 @@ public final class PackSelections {
     }
 
     /**
-     * Changes the resource packs through the pipeline. The connected game uses its new selection once its resources
-     * reloaded, which the change asks for in the client's reload queue; a closed game when it next starts.
+     * Changes the resource packs through the pipeline: the connected game answers once its resources reloaded with them, a
+     * closed game uses them when it next starts.
      */
     private CompletableFuture<Applied> resourcePacks(ChangePipeline.Edit<ChangeRecord.PackSelection, List<String>> edit) {
-        return this.pipeline.change(this.resourcePacks, List.of(edit)).thenCompose(outcome -> {
-            if (!outcome.live()) return CompletableFuture.completedFuture(new Applied(ConfigChanges.Effect.GAME_STARTS));
-            if (outcome.applied().stream().allMatch(value -> value.before().equals(value.now()))) {
-                return CompletableFuture.completedFuture(new Applied(ConfigChanges.Effect.NOW));
-            }
-            return this.pipeline.reloads().resources(this.location.connection(), ReloadPayload.Kind.RESOURCES, null, "").thenApply(result -> {
-                if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
-                return new Applied(ConfigChanges.Effect.NOW);
-            });
-        });
+        return this.pipeline.change(this.resourcePacks, List.of(edit)).thenApply(outcome ->
+                new Applied(outcome.live() ? ConfigChanges.Effect.NOW : ConfigChanges.Effect.GAME_STARTS));
     }
 
     /** Whether the selection is still what Companion last enabled for {@code change}. Blocking. */
@@ -174,7 +165,7 @@ public final class PackSelections {
                 return stack.enabled().stream().filter(pack -> !pack.is(PackStackPayload.HIDDEN) && !pack.is(PackStackPayload.FIXED))
                         .map(PackStackPayload.Pack::id).toList();
             }
-            return PackResources.enabledInOptions(options());
+            return ResourcePackSelection.asTheGameKeepsIt(PackResources.enabledInOptions(options()));
         }
         PackStackPayload datapacks = this.edits.packs().datapacks();
         if (datapacks != null && game.plays(target.location())) {

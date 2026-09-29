@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.resource;
 
+import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
 import com.github.minecraft_ta.totaldebug.client.companion.ClientChanges;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -10,17 +11,21 @@ import net.minecraft.server.packs.repository.PackRepository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * Enables and orders the resource packs the way the pack screen does: the selection changes and {@code options.txt} is
- * saved; the reload that makes the game use it follows as Companion asks for it. The one target is
- * {@value #TARGET}, and its value the enabled packs, lowest first, as a JSON array of their ids, as {@code options.txt}
- * keeps them: without the parts of another pack or the packs fixed in place. Packs the game requires are added where it
- * puts them. Client thread only.
+ * Enables and orders the resource packs the way the pack screen does: the selection changes, {@code options.txt} is saved
+ * and the client's resources reload, and the change is answered once they did. The one target is {@value #TARGET}, and
+ * its value the enabled packs, lowest first, as a JSON array of their ids, as {@code options.txt} keeps them: without the
+ * parts of another pack or the packs fixed in place. Packs the game requires are added where it puts them. Client thread
+ * only.
  */
 public final class ResourcePackEdits implements ClientChanges.Category {
     public static final String CATEGORY = "resourcePacks";
     public static final String TARGET = "resourcePacks";
+
+    /** Whether the change being made selected other packs than before, which then need a reload. */
+    private boolean selected;
 
     @Override
     public String read(String target) {
@@ -44,12 +49,22 @@ public final class ResourcePackEdits implements ClientChanges.Category {
 
     @Override
     public void set(String target, String value) {
-        Minecraft.getInstance().getResourcePackRepository().setSelected(ids(value));
+        PackRepository packs = Minecraft.getInstance().getResourcePackRepository();
+        List<String> before = List.copyOf(packs.getSelectedIds());
+        packs.setSelected(ids(value));
+        this.selected |= !List.copyOf(packs.getSelectedIds()).equals(before);
     }
 
+    /** Saves the selection and reloads the resources it changed; the packs found in the folders are told either way. */
     @Override
-    public void finish() {
-        save(Minecraft.getInstance());
+    public CompletableFuture<Void> finish() {
+        Minecraft minecraft = Minecraft.getInstance();
+        save(minecraft);
+        boolean reload = this.selected;
+        this.selected = false;
+        if (reload) return ResourceReloads.reloadAll(minecraft);
+        TotalDebugClient.current().ifPresent(TotalDebugClient::packsChanged);
+        return CompletableFuture.completedFuture(null);
     }
 
     @Override

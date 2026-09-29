@@ -37,8 +37,8 @@ import java.util.Set;
  * one a mod builds in memory or a mod inside another mod's file, adds nothing.
  */
 public final class PackResources {
-    private static final String VANILLA = "vanilla";
-    private static final String MOD_RESOURCES = "mod_resources";
+    static final String VANILLA = "vanilla";
+    static final String MOD_RESOURCES = "mod_resources";
     private static final String MOD_DATA = "mod_data";
 
     /** A pack as the game stacks it: its id, the title shown, and the files it reads from, none when Companion cannot read them. */

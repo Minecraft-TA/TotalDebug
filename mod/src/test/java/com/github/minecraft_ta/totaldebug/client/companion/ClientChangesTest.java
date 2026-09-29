@@ -7,14 +7,18 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ClientChangesTest {
     /** Keys by name; a value starting with {@code bad} cannot be set. */
     private static final class Keys implements ClientChanges.Category {
         final Map<String, String> values = new HashMap<>(Map.of("key.jump", "space", "key.sneak", "shift"));
         int saves;
+        /** What makes a change take effect, as a pack selection's reload. */
+        CompletableFuture<Void> taking = CompletableFuture.completedFuture(null);
 
         @Override public String read(String target) {
             String value = this.values.get(target);
@@ -30,8 +34,9 @@ class ClientChangesTest {
             this.values.put(target, value);
         }
 
-        @Override public void finish() {
+        @Override public CompletableFuture<Void> finish() {
             this.saves++;
+            return this.taking;
         }
 
         @Override public String name(String target) {
@@ -40,7 +45,7 @@ class ClientChangesTest {
     }
 
     private final Keys keys = new Keys();
-    private final ClientChanges changes = new ClientChanges(Map.of("keyBinding", this.keys));
+    private final ClientChanges changes = new ClientChanges(Map.of("keyBinding", this.keys), Runnable::run);
 
     @Test
     void aChangeSetsEveryValueAndSavesOnce() {
@@ -60,7 +65,7 @@ class ClientChangesTest {
         assertRefused("key.nothing is not a key binding of this game", apply(edit("key.jump", "space", "g"), edit("key.nothing", "", "g")));
         assertRefused("key.jump is changed twice in one change", apply(edit("key.jump", "space", "g"), edit("key.jump", "space", "h")));
         assertRefused("The game cannot change gameRule",
-                this.changes.apply(new ChangePayload(1, List.of(new ChangePayload.Edit("gameRule", "doDaylightCycle", "true", "false")))));
+                this.changes.apply(new ChangePayload(1, List.of(new ChangePayload.Edit("gameRule", "doDaylightCycle", "true", "false")))).join());
 
         assertEquals(Map.of("key.jump", "space", "key.sneak", "shift"), this.keys.values, "nothing was set");
         assertEquals(0, this.keys.saves);
@@ -77,12 +82,24 @@ class ClientChangesTest {
                 "an edit made against no value replaces whatever the target holds");
     }
 
+    @Test
+    void theAnswerWaitsForTheChangeToTakeEffectAndNamesWhyItDidNot() {
+        this.keys.taking = new CompletableFuture<>();
+        CompletableFuture<ChangeResultPayload> answer = this.changes.apply(new ChangePayload(1, List.of(edit("key.jump", "space", "g"))));
+        assertFalse(answer.isDone(), "a pack selection is answered once the game reloaded");
+
+        this.keys.values.put("key.jump", "space");
+        this.keys.taking.completeExceptionally(new IllegalStateException("The game could not load the resources"));
+        assertEquals(new ChangeResultPayload(1, List.of(new ChangeResultPayload.Applied("space", "space")),
+                "The game could not load the resources"), answer.join(), "the values it holds after the failure, and why");
+    }
+
     private void assertRefused(String reason, ChangeResultPayload result) {
         assertEquals(ChangeResultPayload.refused(1, reason), result);
     }
 
     private ChangeResultPayload apply(ChangePayload.Edit... edits) {
-        return this.changes.apply(new ChangePayload(1, List.of(edits)));
+        return this.changes.apply(new ChangePayload(1, List.of(edits))).join();
     }
 
     private static ChangePayload.Edit edit(String target, String expected, String value) {

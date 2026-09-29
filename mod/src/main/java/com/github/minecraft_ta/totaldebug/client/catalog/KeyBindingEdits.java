@@ -6,6 +6,8 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.client.settings.KeyModifier;
 
+import java.util.concurrent.CompletableFuture;
+
 /**
  * Puts key bindings on keys the way the controls screen does: the key and modifier change, the key lookup is rebuilt
  * and {@code options.txt} is saved. A binding is named as in {@code options.txt}, such as {@code key.jump}, and its
@@ -35,9 +37,10 @@ public final class KeyBindingEdits implements ClientChanges.Category {
     }
 
     @Override
-    public void finish() {
+    public CompletableFuture<Void> finish() {
         KeyMapping.resetMapping();
         Minecraft.getInstance().options.save();
+        return CompletableFuture.completedFuture(null);
     }
 
     private static KeyMapping mapping(String name) {

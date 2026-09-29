@@ -90,7 +90,7 @@ The game's own rules for a selection hold in every mode, so Companion never writ
 
 | Pack list | Game connected | Game running, not connected | Game closed |
 |---|---|---|---|
-| Resource packs | The mod selects the packs as the pack screen does (`PackRepository.setSelected`, then saves `options.txt` as `Options.updateResourcePacks` does); Companion then asks the client to reload its resources | Refused: the game writes `options.txt` when it closes, over Companion's | `resourcePacks` in `options.txt`, lowest first. A pack Companion enables is also listed in `incompatibleResourcePacks`, which the game drops again for a pack that is compatible, so it keeps a pack of another format that its pack screen would have asked about |
+| Resource packs | The mod selects the packs as the pack screen does (`PackRepository.setSelected`, then saves `options.txt` as `Options.updateResourcePacks` does), reloads the client's resources, and answers the change once they reloaded | Refused: the game writes `options.txt` when it closes, over Companion's | `resourcePacks` in `options.txt`, lowest first. A pack Companion enables is also listed in `incompatibleResourcePacks`, which the game drops again for a pack that is compatible, so it keeps a pack of another format that its pack screen would have asked about |
 | Datapacks of the world the game has open | The server reloads with the new selection, as `/datapack enable` and `disable` do (`MinecraftServer.reloadResources`); the game saves it into `level.dat` | Refused: the open world's server writes `level.dat` | Not possible: a world is only open while its game runs |
 | Datapacks of a world no game has open | Written into its `level.dat` | Written into its `level.dat` | Written into its `level.dat` |
 

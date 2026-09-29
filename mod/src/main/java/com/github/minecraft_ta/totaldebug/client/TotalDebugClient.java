@@ -98,9 +98,9 @@ public final class TotalDebugClient {
             this.catalogs.request(inventoryId, modules);
         });
         ClientChanges changes = new ClientChanges(Map.of(KeyBindingEdits.CATEGORY, new KeyBindingEdits(),
-                ResourcePackEdits.CATEGORY, new ResourcePackEdits()));
-        companionApp.setChangeHandler(message -> Minecraft.getInstance().execute(() ->
-                companionApp.sendChangeResult(new ChangeResultMessage(changes.apply(message.payload())))));
+                ResourcePackEdits.CATEGORY, new ResourcePackEdits()), Minecraft.getInstance());
+        companionApp.setChangeHandler(message -> Minecraft.getInstance().execute(() -> changes.apply(message.payload())
+                .thenAccept(result -> companionApp.sendChangeResult(new ChangeResultMessage(result)))));
         companionApp.setReloadHandler(message -> Minecraft.getInstance().execute(() ->
                 ResourceReloads.reload(message.payload(), this::answerReload)));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {

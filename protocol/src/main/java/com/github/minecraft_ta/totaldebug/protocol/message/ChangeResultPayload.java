@@ -8,8 +8,10 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Protocol-36 payload answering a {@link ChangePayload}: for each edit, in its order, the value before and the value now
- * in effect; or, with no values, why the game changed nothing in {@code error}, which is empty on success.
+ * Protocol-39 payload answering a {@link ChangePayload}: for each edit, in its order, the value before and the value now
+ * in effect; or, with no values, why the game changed nothing in {@code error}, which is empty on success. With both, the
+ * game made the change, but what makes it take effect failed, such as the reload after a pack selection; the values are
+ * then the ones the game holds after that.
  */
 public record ChangeResultPayload(int requestId, List<Applied> applied, String error) {
     /** An edit the game made: the target's value before it and the value it has now. */
@@ -24,7 +26,7 @@ public record ChangeResultPayload(int requestId, List<Applied> applied, String e
         applied = List.copyOf(applied);
         Objects.requireNonNull(error, "error");
         if (applied.size() > ChangePayload.MAX_EDITS) throw new IllegalArgumentException("Invalid edit count: " + applied.size());
-        if (error.isEmpty() == applied.isEmpty()) throw new IllegalArgumentException("A result holds either the values or an error");
+        if (error.isEmpty() && applied.isEmpty()) throw new IllegalArgumentException("A result holds the values, an error, or both");
     }
 
     public static ChangeResultPayload refused(int requestId, String error) {
