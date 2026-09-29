@@ -104,6 +104,8 @@ public final class WorldPanel extends JPanel {
     private CurrentWorld.Saved saved;
     /** The server's world shown instead of a world of the instance, or null. */
     private ServerWorld server;
+    /** Where the shown datapacks are changed: the world's folder, or the place the change record keeps a server's world. */
+    private Path shownWorld;
     /** The world's datapacks: as the connected game names them while it has the world open, or as level.dat saved them. */
     private List<ListedPack> datapackList = List.of();
     private WorldTab requested;
@@ -200,6 +202,10 @@ public final class WorldPanel extends JPanel {
         this.saved = loaded.saved();
         this.server = loaded.server();
         this.datapackList = loaded.datapacks();
+        Path world = this.server != null ? this.server.world() : this.saved != null ? this.saved.directory() : null;
+        // Changes staged for another world, such as the server played before, would otherwise be applied to this one.
+        if (!Objects.equals(world, this.shownWorld)) this.datapacks.discardChanges();
+        this.shownWorld = world;
         this.readings.read(this.server != null ? new WorldReadings.Summary(this.server.world(), 0, this.datapackList.size())
                 : WorldReadings.Summary.of(this.saved));
         if (this.server != null) {
