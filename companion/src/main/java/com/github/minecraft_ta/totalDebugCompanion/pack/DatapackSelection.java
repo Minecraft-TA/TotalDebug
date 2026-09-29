@@ -30,6 +30,7 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
     /** The one target the server's change table knows, the selection of the world it runs. */
     static final String GAME_TARGET = "datapacks";
 
+
     @Override
     public String id() {
         return "datapacks";
@@ -37,7 +38,7 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
 
     @Override
     public String name(ChangeRecord.PackSelection target) {
-        return "The datapacks of " + target.location().getFileName();
+        return "The datapacks of " + GameState.worldName(target.location());
     }
 
     @Override
@@ -61,6 +62,7 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
         return name(target) + " changed outside Companion since, and reverting would replace that";
     }
 
+    /** As the world's state says; the server decides whether the player may change its world, and says why not. */
     @Override
     public Access access(GameState game, ChangeRecord.PackSelection target) {
         return game.world(target.location(), "change its datapacks");

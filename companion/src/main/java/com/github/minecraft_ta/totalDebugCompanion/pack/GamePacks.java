@@ -33,6 +33,8 @@ public final class GamePacks {
     /** The datapack format of the connected game's version, or 0 while no game is connected. */
     private volatile int dataFormat;
     private volatile PackStackPayload datapacks;
+    /** Why the world's server does not let the player change the world it plays, or empty; told with its datapacks. */
+    private volatile String worldRefusal = "";
     /** What the game played when its server named {@link #datapacks}, whose datapacks they are. */
     private volatile PlayingPayload datapacksFor;
     /** Run whenever the game or its server names packs again, such as after another world opened. */
@@ -47,7 +49,10 @@ public final class GamePacks {
             else if (change == GameLocation.Change.PLAYING) {
                 // The datapacks the server named belong to the world it played; its next world's server is asked.
                 synchronized (this) {
-                    if (!Objects.equals(this.datapacksFor, location.playing())) this.datapacks = null;
+                    if (!Objects.equals(this.datapacksFor, location.playing())) {
+                        this.datapacks = null;
+                        this.worldRefusal = "";
+                    }
                 }
                 askForDatapacks();
                 this.stackListeners.forEach(Runnable::run);
@@ -65,17 +70,20 @@ public final class GamePacks {
         this.resourcePacks = null;
         this.dataFormat = 0;
         this.datapacks = null;
+        this.worldRefusal = "";
         this.stackListeners.forEach(Runnable::run);
     }
 
     /**
-     * Asks the server of the singleplayer world the game plays to name its datapacks, through the game client. Only a
-     * world's owner is told so far; a server names none.
+     * Asks the server of the world the game plays to name its datapacks, through the game client: a singleplayer world's,
+     * or a server's that has TotalDebug.
      */
     private void askForDatapacks() {
         GameLocation.Connection connection = this.location.connection();
         PlayingPayload playing = this.location.playing();
-        if (connection == null || !(playing instanceof PlayingPayload.Singleplayer)) return;
+        boolean named = playing instanceof PlayingPayload.Singleplayer
+                || playing instanceof PlayingPayload.Multiplayer server && server.totalDebug();
+        if (connection == null || !named) return;
         connection.send(new ToServerMessage(RelayedMessages.toServer(new DatapacksRequestMessage(), 0, playing.identity())));
     }
 
@@ -92,17 +100,31 @@ public final class GamePacks {
     }
 
     /**
-     * Takes the datapacks the server of {@code world}, by its identity, names. A report of a world the game no longer
-     * plays, sent before it left, is dropped: it would stand for the datapacks of the world played now.
+     * Takes the datapacks the server of {@code world}, by its identity, names, or {@code refusal}, why it does not let the
+     * player change the world, which leaves them unnamed. A server names its world by no identity, as the game client
+     * names it by the address it joined. A report of a world the game no longer plays, sent before it left, is dropped: it
+     * would stand for the datapacks of the world played now.
      */
-    public void datapacks(String world, PackStackPayload packs) {
+    public void datapacks(String world, PackStackPayload packs, String refusal) {
         synchronized (this) {
             PlayingPayload playing = this.location.playing();
-            if (playing == null || !playing.identity().equals(world)) return;
+            // A report names a singleplayer world by its folder, and a server's by none; the menu plays neither.
+            boolean current = world.isEmpty() ? playing instanceof PlayingPayload.Multiplayer
+                    : playing != null && playing.identity().equals(world);
+            if (!current) return;
             this.datapacksFor = playing;
-            this.datapacks = packs;
+            this.datapacks = refusal.isEmpty() ? packs : null;
+            this.worldRefusal = refusal;
         }
         this.stackListeners.forEach(Runnable::run);
+    }
+
+    /**
+     * Why the server of the world the game plays does not let the player change it, or empty, as it last said; the server
+     * decides each change itself.
+     */
+    public String worldRefusal() {
+        return this.worldRefusal;
     }
 
     /** The datapacks the server of the world the game plays named last, or null until it named them. */

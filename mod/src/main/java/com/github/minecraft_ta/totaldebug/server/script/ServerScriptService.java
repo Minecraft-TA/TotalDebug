@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totaldebug.server.script;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
@@ -11,6 +10,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
 import com.github.minecraft_ta.totaldebug.script.ScriptRunner;
+import com.github.minecraft_ta.totaldebug.server.ServerPolicy;
 import com.github.minecraft_ta.totaldebug.server.ServerRelay;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import net.minecraft.server.MinecraftServer;
@@ -49,7 +49,7 @@ public final class ServerScriptService {
     public void sendAccess(ServerPlayer player, int companion, int request) {
         MinecraftServer server = Objects.requireNonNull(player.getServer(), "player server");
         endEarlierCompanion(player, companion);
-        ServerScriptPolicy.Decision decision = policyDecision(server, player);
+        ServerPolicy.Decision decision = policyDecision(server, player);
         this.relay.send(server, player, companion, decision.allowed() ? ServerScriptsMessage.allowed(request)
                 : new ServerScriptsMessage(request, decision.rejectionReason()));
     }
@@ -66,7 +66,7 @@ public final class ServerScriptService {
             sendCompilationFailure(server, player, companion, payload.scriptId(), exception.getMessage());
             return;
         }
-        ServerScriptPolicy.Decision decision = policyDecision(server, player);
+        ServerPolicy.Decision decision = policyDecision(server, player);
         if (!decision.allowed()) {
             sendCompilationFailure(server, player, companion, payload.scriptId(), decision.rejectionReason());
             return;
@@ -127,12 +127,8 @@ public final class ServerScriptService {
         this.runners.clear();
     }
 
-    private static ServerScriptPolicy.Decision policyDecision(MinecraftServer server, ServerPlayer player) {
-        ServerScriptPolicy policy = new ServerScriptPolicy(
-                TotalDebugConfig.SERVER.enableScripts.get(),
-                TotalDebugConfig.SERVER.enableScriptsOnlyForOp.get()
-        );
-        return policy.evaluate(player.hasPermissions(server.getOperatorUserPermissionLevel()));
+    private static ServerPolicy.Decision policyDecision(MinecraftServer server, ServerPlayer player) {
+        return ServerPolicy.scripts().evaluate(player.hasPermissions(server.getOperatorUserPermissionLevel()));
     }
 
     /** A player has one Companion: a message from a newer connection ends the runs of the one before. */

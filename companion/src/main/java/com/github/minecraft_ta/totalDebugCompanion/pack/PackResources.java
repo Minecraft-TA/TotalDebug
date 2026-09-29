@@ -100,12 +100,13 @@ public final class PackResources {
      * can read. Blocking.
      */
     public static List<Source> data(PackStackPayload datapacks, CatalogIndex index, GameLocation location) throws IOException {
-        if (datapacks != null) return datapacks.enabled().stream().map(pack -> source(pack, index)).toList();
         GameState game = location.read();
+        // A server's datapacks are on the server, which names them by its own files.
         if (game.game() instanceof GameState.Game.Connected connected
                 && (connected.playing() instanceof PlayingPayload.Menu || connected.playing() instanceof PlayingPayload.Multiplayer)) {
             return List.of();
         }
+        if (datapacks != null) return datapacks.enabled().stream().map(pack -> source(pack, index)).toList();
         // The game enables a new pack of the world's folder above the others when it loads the world.
         List<ListedPack> listed = worldDatapacks(game);
         List<ListedPack> enabled = new ArrayList<>(listed.stream().filter(pack -> pack.state() == ListedPack.State.ENABLED).toList().reversed());

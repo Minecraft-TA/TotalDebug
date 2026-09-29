@@ -231,7 +231,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 @Override
                 public void datapacks(DatapacksMessage message) {
                     ProjectScope scope = current;
-                    if (scope != null) scope.packs().datapacks(message.world(), message.payload());
+                    if (scope != null) scope.packs().datapacks(message.world(), message.payload(), message.refusal());
                 }
 
                 @Override

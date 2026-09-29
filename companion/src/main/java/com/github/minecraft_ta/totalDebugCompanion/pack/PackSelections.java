@@ -34,7 +34,7 @@ public final class PackSelections {
     private final ResourceEdits edits;
     private final ChangePipeline pipeline;
     private final ResourcePackSelection resourcePacks;
-    private final DatapackSelection datapacks = new DatapackSelection();
+    private final DatapackSelection datapacks;
 
     /** {@code edits} names the packs its game uses, and changes go through its pipeline. */
     public PackSelections(ResourceEdits edits) {
@@ -42,6 +42,7 @@ public final class PackSelections {
         this.location = edits.location();
         this.pipeline = edits.pipeline();
         this.resourcePacks = new ResourcePackSelection(options());
+        this.datapacks = new DatapackSelection();
     }
 
     /** The record's target for the resource packs, or for {@code world}'s datapacks. */

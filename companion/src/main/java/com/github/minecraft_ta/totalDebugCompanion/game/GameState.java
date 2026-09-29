@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totalDebugCompanion.game;
 
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
@@ -28,6 +30,9 @@ public final class GameState {
             }
         }
     }
+
+    /** The folder of the instance under which the change record keeps the worlds of servers. */
+    private static final String SERVER_WORLDS = "total-debug/servers";
 
     private final Path workspace;
     private final GameLocation.Files files;
@@ -75,6 +80,7 @@ public final class GameState {
      */
     public Access world(Path world, String purpose) {
         Path normalized = normalize(world);
+        if (isServerWorld(normalized)) return serverWorld(normalized, purpose);
         if (this.game instanceof Game.Connected connected && plays(normalized)) return new Access.Live(connected.connection());
         if (!this.files.held(normalized)) return new Access.Files();
         String name = normalized.getFileName().toString();
@@ -87,11 +93,75 @@ public final class GameState {
         });
     }
 
-    /** Whether the connected game plays {@code world} in singleplayer. */
+    /**
+     * How a change of the world of a server, which is on the server rather than in the instance, can be made: live through
+     * the relay while the connected game plays on it and the server has TotalDebug, and never in files.
+     */
+    private Access serverWorld(Path world, String purpose) {
+        Optional<PlayingPayload.Multiplayer> server = server().filter(playing -> serverWorld(playing).equals(world));
+        if (server.isEmpty()) {
+            return new Access.Refused("The world of " + world.getFileName() + " is on its server; join it in the game to " + purpose);
+        }
+        if (!server.get().totalDebug()) {
+            return new Access.Refused("The server " + server.get().address() + " does not have TotalDebug, which Companion needs to " + purpose);
+        }
+        return new Access.Live(((Game.Connected) this.game).connection());
+    }
+
+    /**
+     * Where the change record keeps the world of {@code server}: a place under the instance's {@code total-debug} folder
+     * named after the address the game joined, since the world itself is on the server.
+     */
+    public Path serverWorld(PlayingPayload.Multiplayer server) {
+        return this.workspace.resolve(SERVER_WORLDS).resolve(encode(server.address())).toAbsolutePath().normalize();
+    }
+
+    /**
+     * How the user names a world: a folder's name, or for the place the change record keeps a server's world, the address
+     * of the server.
+     */
+    public static String worldName(Path world) {
+        Path parent = world.getParent();
+        boolean server = parent != null && parent.getFileName() != null && parent.getFileName().toString().equals("servers")
+                && parent.getParent() != null && parent.getParent().getFileName() != null
+                && parent.getParent().getFileName().toString().equals("total-debug");
+        String name = world.getFileName().toString();
+        return server ? URLDecoder.decode(name, StandardCharsets.UTF_8) : name;
+    }
+
+    /**
+     * {@code address} as a file name that names only it: every character but letters, digits, {@code .} and {@code -} as
+     * {@code %} and the hexadecimal of its UTF-8 bytes, so no two addresses share the change record's place.
+     */
+    private static String encode(String address) {
+        StringBuilder name = new StringBuilder();
+        for (byte value : address.getBytes(StandardCharsets.UTF_8)) {
+            char c = (char) (value & 0xFF);
+            if (c < 0x80 && (Character.isLetterOrDigit(c) || c == '.' || c == '-')) name.append(c);
+            else name.append('%').append(String.format("%02X", value & 0xFF));
+        }
+        return name.isEmpty() ? "%" : name.toString();
+    }
+
+    /** Whether {@code world} is where the change record keeps the world of a server. */
+    public boolean isServerWorld(Path world) {
+        return normalize(world).startsWith(this.workspace.resolve(SERVER_WORLDS).toAbsolutePath().normalize());
+    }
+
+    /** Whether the connected game plays {@code world}: in singleplayer, or as the world of the server it plays on. */
     public boolean plays(Path world) {
-        return this.game instanceof Game.Connected connected
-                && connected.playing() instanceof PlayingPayload.Singleplayer singleplayer
-                && normalize(Path.of(singleplayer.world())).equals(normalize(world));
+        Path normalized = normalize(world);
+        if (!(this.game instanceof Game.Connected connected)) return false;
+        return switch (connected.playing()) {
+            case PlayingPayload.Singleplayer singleplayer -> normalize(Path.of(singleplayer.world())).equals(normalized);
+            case PlayingPayload.Multiplayer server -> serverWorld(server).equals(normalized);
+            case null, default -> false;
+        };
+    }
+
+    /** {@code world} as {@code PLAYING} names it, while the connected game plays it; the relay checks a request by it. */
+    public Optional<String> identity(Path world) {
+        return plays(world) ? Optional.of(((Game.Connected) this.game).playing().identity()) : Optional.empty();
     }
 
     /**

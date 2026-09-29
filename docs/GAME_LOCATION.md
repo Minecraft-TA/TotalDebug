@@ -26,7 +26,7 @@ The game tells what it plays, and the packs in effect there, on the events that 
 |---|---|
 | `PLAYING` | The player joins a world or server (`LoggingIn`) or leaves it (`LoggingOut`), so leaving and rejoining the same server is a change too |
 | Resource packs | A client resource reload applies; a new selection, from the pack screen or from Companion, takes effect only through one |
-| The singleplayer world's datapacks | The world's server names them when Companion asks, once the game plays the world, and again each time its data loaded, as `/reload` and `/datapack` do |
+| The world's datapacks | The world's server names them when Companion asks, once the game plays the world, and again each time its data loaded, as `/reload` and `/datapack` do, and when the player's permission changes; a server that does not let the player change its world says why instead. A singleplayer world's server names the world by its folder; a remote server by none, as the game client names it by the address it joined |
 | Packs the game could enable | The pack screen closes, and after each reload or pack selection Companion asks for |
 | Both, again | After `PLAYING`, and when Companion connects |
 
@@ -104,7 +104,7 @@ Where something runs, a script or a code-mode job, is `Side`: `CLIENT` or `SERVE
 
 The model already names what these need; each is its own item.
 
-- **Server changes on a remote server (A2, designed in [MOD_SIDES.md](MOD_SIDES.md)):** the multiplayer state carries whether the server has TotalDebug. Live server-owned changes go through the relay to that server and need permission level 2, as `/gamerule` does, which the server checks. Until then a remote server's own world is refused with that requirement.
+- **Server changes on a remote server (A2 layer 4, [MOD_SIDES.md](MOD_SIDES.md#who-may-change-a-servers-world)):** the multiplayer state carries whether the server has TotalDebug. Live server-owned changes go through the relay to that server, as the server's configuration allows, by default with the permission level `/datapack` requires; the server checks each change. The change record keeps the server's world under `total-debug/servers/<address>` of the instance, which is live while the game plays on that server and refused otherwise, never files; without TotalDebug on the server, it is refused with that requirement.
 - **Direct server access (F2):** a dedicated server connects to Companion itself. Its game is then a server process, not a client: the game-owned rows are refused ("this instance has no client"), and its worlds are live through that connection.
 - **Server instances:** a project for a dedicated server's directory keeps its world at `level-name` from `server.properties` instead of `saves/`, and has no `options.txt`. The state is the same; where worlds are found is a property of the instance.
 - **The status bar** can name what the game plays, such as the singleplayer world or the server's address, from the same state.

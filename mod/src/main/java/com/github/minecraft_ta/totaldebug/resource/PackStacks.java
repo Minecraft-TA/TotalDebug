@@ -53,4 +53,13 @@ public final class PackStacks {
         }
         return packs;
     }
+
+    /** {@code stack} without the files of its packs, for a player who plays it from another machine. */
+    public static PackStackPayload withoutSources(PackStackPayload stack) {
+        return new PackStackPayload(stack.format(), withoutSources(stack.enabled()), withoutSources(stack.others()));
+    }
+
+    private static List<PackStackPayload.Pack> withoutSources(List<PackStackPayload.Pack> packs) {
+        return packs.stream().map(pack -> new PackStackPayload.Pack(pack.id(), pack.title(), "", pack.flags())).toList();
+    }
 }

@@ -6,7 +6,7 @@ Design for item A2 of the roadmap: the mod's common, client and server parts, wi
 
 Today the mod does server work in two ways:
 
-- **Scripts** go the right way: Companion → client → server as NeoForge payloads (`RunServerScriptPayload`, `StopServerScriptPayload`, `ServerSourceRequestPayload`), with results coming back as `ForwardedCompanionPayload`. That already works on remote servers, under `ServerScriptPolicy`.
+- **Scripts** go the right way: Companion → client → server as NeoForge payloads (`RunServerScriptPayload`, `StopServerScriptPayload`, `ServerSourceRequestPayload`), with results coming back as `ForwardedCompanionPayload`. That already works on remote servers, under the server's script policy.
 - **Everything added since** reaches from client code straight into the integrated server with `getSingleplayerServer()`: selecting datapacks and reloading data (`ResourceReloads`), naming the world's datapacks (`PackStackPublisher`) and, in #75, game rules (`GameRuleControl`). None of it works on a remote server, and each feature that follows copies the shortcut.
 
 Each script operation also has its own payload type, so every new server feature needs NeoForge networking code on both sides.
@@ -80,10 +80,10 @@ The same relay serves the integrated server. A singleplayer game talks to its ow
 | Player | May change the world |
 |---|---|
 | The owner of a singleplayer world, open to LAN or not | Always, as today: it is their world, and Companion writes its `level.dat` when it is closed anyway |
-| Anyone else | With the permission level the server's configuration sets, by default the operator level (`getOperatorUserPermissionLevel()`, usually 2). The same level `/datapack`, `/reload` and `/gamerule` require. |
+| Anyone else | As the server's configuration sets it, by default with operator permission: the level `/datapack`, `/reload` and `/gamerule` require (`Commands.LEVEL_GAMEMASTERS`, 2), whatever level the server gives new operators. |
 
 - The server's configuration gains a switch for world changes beside the existing one for scripts, both off-able by the server owner. `ServerScriptPolicy` becomes the policy for both.
-- Companion asks the server whether the player may change its world, as it asks whether it runs scripts (`SERVER_SCRIPTS`), and can then answer "you need operator permission on this server" before sending a change. The server checks each change again; its answer is the one that counts.
+- Companion asks the server whether the player may change its world, as it asks whether it runs scripts (`SERVER_SCRIPTS`), and can then answer "you need operator permission on this server" before sending a change. The server checks each change again; its answer is the one that counts. The server tells again when the player's permission changes, such as by `/op`.
 
 ## Companion
 
@@ -109,10 +109,22 @@ A stack, each layer at most about 500 lines, each merged before the next opens:
 
 Layer 3 lands as two PRs. The first makes the data reload and the datapack selection server operations: `RELOAD` of the world's data and `SET_PACKS` of its datapacks travel through the relay, whose envelope names the world, so the payloads lose their own world fields, and the server enables only the owner of a singleplayer world to change them until layer 4 decides who else may (`WorldDatapacks`). `RELAY_FAILED` names the message it refuses, since a reload's and a script run's correlations can be the same number. The second has the server report its world's datapacks (`DATAPACKS`): when Companion asks with `DATAPACKS_REQUEST` once the game plays the world, and after each time its data loaded, to each player's newest Companion. The game client names only its resource packs, and its version's datapack format for a datapack Companion creates while no world is open. `ModPartsTest` checks that no client class calls `getSingleplayerServer()` but to name the world it plays. Game rules (#75) are not part of it; they can join as another server operation once wanted.
 
+Layer 4 lands as two PRs. The first holds the rules and the live changes:
+- `ServerScriptPolicy` becomes `ServerPolicy`, with a switch and an operator setting for world changes beside the scripts' (`enableWorldChanges`, `enableWorldChangesOnlyForOp` in the `world` section of the server configuration, both on by default).
+- `WorldDatapacks` lets the owner of a singleplayer world, and anyone else the policy allows, reload, change and read the datapacks.
+- The answer to `DATAPACKS_REQUEST` says whether the player may change the world: `DATAPACKS` carries a refusal, and the datapacks then go unnamed, as `/datapack list` leaves them. Companion asks a server that has TotalDebug too.
+- The server names its world by its folder to the singleplayer owner only; to anyone else it names none, and Companion takes that for the server the game plays, which it names by the address it joined.
+- In Companion, the change record keeps a server's world under `total-debug/servers/<address>` of the instance (`GameState.serverWorld`). `GameState.world` answers for it: live through the relay while the game plays on that server and it has TotalDebug, refused otherwise, never files. The datapack category refuses with the server's reason before a change is sent. The server checks each change again.
+- Protocol 41.
+
+The second is the World page for a server.
+
 Between layers 2 and 3, the class manifest handshake was replaced by the per-run link check described under [Server scripts](#server-scripts), with the numbered Companion connections.
 
-## Open decisions
+## Decided
 
-1. **Default for other players on a server:** operator level (as proposed), or off until the server owner turns it on.
-2. **The World page on a server:** the server's world, live (as proposed), or the local world played last with the server's world elsewhere.
-3. **Remote file writes** (a resource saved into a server's datapack): a later step as proposed, or part of layer 4.
+On 2026-09-29, as proposed:
+
+1. **Other players on a server** may change its world at the operator level by default; the server's configuration can turn world changes off, or open them to every player.
+2. **The World page on a server** shows the server's world, live.
+3. **Remote file writes** (a resource saved into a server's datapack) are a later step, not part of layer 4.

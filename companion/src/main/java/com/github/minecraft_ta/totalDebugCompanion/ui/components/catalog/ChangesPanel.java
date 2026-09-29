@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
@@ -548,7 +549,7 @@ public final class ChangesPanel extends JPanel {
         for (ChangeRecord.Change change : packChanges) {
             ChangeRecord.PackSelection target = (ChangeRecord.PackSelection) change.target();
             String name = target.side() == ChangeRecord.PackSide.RESOURCES ? "Resource packs"
-                    : "Datapacks of " + target.location().getFileName();
+                    : "Datapacks of " + GameState.worldName(target.location());
             packs.add(new PackChange(change, name, highestFirst(PackSelections.parse(change.current())),
                     this.packSelections.holds(change)));
         }

@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.server.world;
 import com.github.minecraft_ta.totaldebug.change.ChangeTable;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
@@ -12,9 +13,12 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.resource.PackOrder;
 import com.github.minecraft_ta.totaldebug.resource.PackStacks;
 import com.github.minecraft_ta.totaldebug.resource.ReloadProblems;
+import com.github.minecraft_ta.totaldebug.server.ServerPolicy;
 import com.github.minecraft_ta.totaldebug.server.ServerRelay;
 import net.minecraft.SharedConstants;
+import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.PackType;
@@ -36,8 +40,8 @@ import java.util.stream.Stream;
  * The world's datapacks as Companion changes them (see {@code docs/MOD_SIDES.md}): the server reloads its data, as
  * {@code /reload} does, or makes a change of its datapacks, as {@code /datapack} does ({@link DatapackEdits}), and
  * answers through the relay. It names them too, in place of the game client: when Companion asks, and after each time the data loaded.
- * Only the player whose singleplayer world it is may change or read them so far; who else may on a server is decided with
- * the permissions of a later layer.
+ * The owner of a singleplayer world may always change and read them; anyone else as the server's configuration allows
+ * ({@link ServerPolicy#worldChanges}), by default an operator.
  */
 public final class WorldDatapacks {
     private final ServerRelay relay;
@@ -88,9 +92,10 @@ public final class WorldDatapacks {
      */
     public void change(ServerPlayer player, int companion, ChangePayload change) {
         MinecraftServer server = player.server;
-        if (!server.isSingleplayerOwner(player.getGameProfile())) {
+        ServerPolicy.Decision decision = decision(player);
+        if (!decision.allowed()) {
             this.relay.send(server, player, companion, new ChangeResultMessage(ChangeResultPayload.refused(change.requestId(),
-                    "Companion changes the datapacks of a singleplayer world for its owner only; a server's are not open to it yet")));
+                    decision.rejectionReason())));
             return;
         }
         new ChangeTable(Map.of(DatapackEdits.CATEGORY, new DatapackEdits(server)), server).apply(change)
@@ -98,16 +103,37 @@ public final class WorldDatapacks {
     }
 
     /**
-     * Names the world's datapacks to {@code player}'s Companion connection {@code companion}. Only the owner of a
-     * singleplayer world is told so far; to anyone else the world names none, as before. Server thread.
+     * Names the world's datapacks to {@code player}'s Companion connection {@code companion}, or why the player may not
+     * change them, which leaves them unnamed as {@code /datapack list} does. The owner of a singleplayer world is told the
+     * world by its folder, as the game client names it; anyone else plays it as a server, whose world the game client
+     * names by the address it joined, which the server does not know, so the world goes unnamed. Server thread.
      */
     public void report(ServerPlayer player, int companion) {
         MinecraftServer server = player.server;
-        if (!server.isSingleplayerOwner(player.getGameProfile())) return;
-        String world = PlayingPayload.Singleplayer.of(server.getWorldPath(LevelResource.ROOT)).identity();
-        this.relay.send(server, player, companion, new DatapacksMessage(world, PackStacks.of(server.getPackRepository(),
-                SharedConstants.getCurrentVersion().getPackVersion(PackType.SERVER_DATA), server.getWorldPath(LevelResource.DATAPACK_DIR),
-                server.getWorldData().enabledFeatures())));
+        String world = server.isSingleplayerOwner(player.getGameProfile())
+                ? PlayingPayload.Singleplayer.of(server.getWorldPath(LevelResource.ROOT)).identity() : "";
+        int format = SharedConstants.getCurrentVersion().getPackVersion(PackType.SERVER_DATA);
+        ServerPolicy.Decision decision = decision(player);
+        if (!decision.allowed()) {
+            this.relay.send(server, player, companion, DatapacksMessage.refused(world, format, decision.rejectionReason()));
+            return;
+        }
+        PackStackPayload packs = PackStacks.of(server.getPackRepository(), format, server.getWorldPath(LevelResource.DATAPACK_DIR),
+                server.getWorldData().enabledFeatures());
+        // The files are the server's, which a player on another machine cannot read, and whose paths are not theirs to see.
+        this.relay.send(server, player, companion, new DatapacksMessage(world, world.isEmpty() ? PackStacks.withoutSources(packs) : packs));
+    }
+
+    /**
+     * {@code player}'s permission changes, such as when they are made an operator: names the datapacks again, or why they
+     * may not change them, once the new level holds, which is after the event. Server thread.
+     */
+    public void permissionChanged(ServerPlayer player) {
+        MinecraftServer server = player.server;
+        server.tell(new TickTask(server.getTickCount(), () -> {
+            int companion = this.relay.companion(player);
+            if (companion != 0 && !player.hasDisconnected()) report(player, companion);
+        }));
     }
 
     /** The world's data loaded again: names the datapacks to those of {@code players} whose Companion reached the server. */
@@ -118,11 +144,27 @@ public final class WorldDatapacks {
         });
     }
 
-    /** Refuses a change of the world's datapacks by anyone but the owner of a singleplayer world, and says so. */
+    /**
+     * Whether {@code player} may change the world: always the owner of a singleplayer world, open to LAN or not; anyone
+     * else as the server's configuration allows.
+     */
+    private static ServerPolicy.Decision decision(ServerPlayer player) {
+        MinecraftServer server = player.server;
+        boolean owner = server.isSingleplayerOwner(player.getGameProfile());
+        // The level /datapack and /reload require, whatever level the server gives new operators.
+        return decision(owner, player.hasPermissions(Commands.LEVEL_GAMEMASTERS), owner ? null : ServerPolicy.worldChanges());
+    }
+
+    /** Whether the owner of a singleplayer world, or another player with or without operator permission, may change it. */
+    static ServerPolicy.Decision decision(boolean owner, boolean operator, ServerPolicy policy) {
+        return owner ? ServerPolicy.Decision.accepted() : policy.evaluate(operator);
+    }
+
+    /** Refuses a data reload by a player who may not change the world, and says why. */
     private boolean refused(ServerPlayer player, int companion, int requestId) {
-        if (player.server.isSingleplayerOwner(player.getGameProfile())) return false;
-        answer(player, companion, new ReloadResultPayload(requestId, 0, List.of(),
-                "Companion changes the datapacks of a singleplayer world for its owner only; a server's are not open to it yet"));
+        ServerPolicy.Decision decision = decision(player);
+        if (decision.allowed()) return false;
+        answer(player, companion, new ReloadResultPayload(requestId, 0, List.of(), decision.rejectionReason()));
         return true;
     }
 

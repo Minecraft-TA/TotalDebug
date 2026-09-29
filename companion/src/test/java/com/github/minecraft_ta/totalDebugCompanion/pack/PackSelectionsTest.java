@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
@@ -33,6 +34,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -226,7 +229,7 @@ class PackSelectionsTest {
         edits.location().playing(playing);
         edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(
                 new PackStackPayload.Pack("vanilla", "Minecraft", ""), new PackStackPayload.Pack("mod_data", "Mod Data", ""),
-                new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN))));
+                new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN))), "");
         PackSelections selections = selections(record, edits);
 
         CompletableFuture<PackSelections.Applied> applied = selections.set(ChangeRecord.PackSide.DATA, world,
@@ -250,7 +253,7 @@ class PackSelectionsTest {
                 new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN),
                 new PackStackPayload.Pack("mod/shown", "Shown", ""),
                 new PackStackPayload.Pack("mod/testmod:data/testmod/datapacks/extra", "Extra", ""),
-                new PackStackPayload.Pack("file/Tweaks", "Tweaks", ""))));
+                new PackStackPayload.Pack("file/Tweaks", "Tweaks", ""))), "");
         assertTrue(selections.holds(recorded), "the hidden parts of the mods' pack are left out, as the server keeps them");
 
         CompletableFuture<PackSelections.Applied> reverted = selections.revert(recorded);
@@ -274,7 +277,7 @@ class PackSelectionsTest {
         edits.packs().named(new ClientPacksPayload(resourcePacks, 48));
         PlayingPayload played = new PlayingPayload.Singleplayer(this.directory.resolve("saves/World").toString());
         edits.location().playing(played);
-        edits.packs().datapacks(played.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+        edits.packs().datapacks(played.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))), "");
         asked.clear();
 
         PlayingPayload other = new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString());
@@ -294,16 +297,78 @@ class PackSelectionsTest {
         PackStackPayload report = new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", "")));
 
         edits.location().playing(new PlayingPayload.Menu());
-        edits.packs().datapacks(left.identity(), report);
+        edits.packs().datapacks(left.identity(), report, "");
         assertNull(edits.packs().datapacks(), "its server sent it before the game left, so it arrived after PLAYING(Menu)");
+        edits.packs().datapacks("", report, "");
+        assertNull(edits.packs().datapacks(), "nor does a server's report, which names no world, count in the menu");
 
         PlayingPayload other = new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString());
         edits.location().playing(other);
-        edits.packs().datapacks(left.identity(), report);
+        edits.packs().datapacks(left.identity(), report, "");
         assertNull(edits.packs().datapacks(), "nor does it stand for the datapacks of the world played next");
 
-        edits.packs().datapacks(other.identity(), report);
+        edits.packs().datapacks(other.identity(), report, "");
         assertEquals(report, edits.packs().datapacks());
+    }
+
+    @Test
+    void aServersWorldIsChangedLiveThroughTheRelayByTheAddressTheGameJoined() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record, true);
+        List<SentMessage> sent = new CopyOnWriteArrayList<>();
+        edits.location().connected(message -> {
+            sent.add(SentMessage.of(message));
+            return true;
+        });
+        PlayingPayload.Multiplayer server = new PlayingPayload.Multiplayer("play.example.net:25565", false, true);
+        edits.location().playing(server);
+        assertTrue(sent.getFirst().message() instanceof DatapacksRequestMessage, "a server with TotalDebug is asked for its datapacks");
+        assertEquals(server.identity(), sent.getFirst().world());
+        edits.packs().datapacks("", new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))), "");
+        assertNotNull(edits.packs().datapacks(), "the server names its world by no folder, as the game client names it by its address");
+        Path world = edits.location().read().serverWorld(server);
+        PackSelections selections = selections(record, edits);
+
+        CompletableFuture<PackSelections.Applied> applied = selections.set(ChangeRecord.PackSide.DATA, world, List.of("vanilla", "file/Tweaks"));
+        SentMessage change = sent.get(1);
+        assertEquals(server.identity(), change.world(), "the relay refuses it once the game plays elsewhere");
+        ChangePayload payload = ((ChangeMessage) change.message()).payload();
+        edits.pipeline().answered(new ChangeResultPayload(payload.requestId(), List.of(new ChangeResultPayload.Applied(
+                "[\"vanilla\"]", "[\"vanilla\",\"file/Tweaks\"]")), ""));
+        assertEquals(ConfigChanges.Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(world, ((ChangeRecord.PackSelection) record.changes().getFirst().target()).location(), "recorded for the server's world, and revertible there");
+    }
+
+    @Test
+    void aServersWorldIsRefusedWithWhatItNeeds() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record, true);
+        List<AbstractMessage> sent = connected(edits);
+        PackSelections selections = selections(record, edits);
+        PlayingPayload.Multiplayer vanilla = new PlayingPayload.Multiplayer("vanilla.example.net", false, false);
+        edits.location().playing(vanilla);
+        Path vanillaWorld = edits.location().read().serverWorld(vanilla);
+        assertEquals("The server vanilla.example.net does not have TotalDebug, which Companion needs to change its datapacks",
+                refusal(selections.set(ChangeRecord.PackSide.DATA, vanillaWorld, List.of("vanilla"))));
+
+        PlayingPayload.Multiplayer modded = new PlayingPayload.Multiplayer("modded.example.net:25565", false, true);
+        edits.location().playing(modded);
+        edits.packs().datapacks("", new PackStackPayload(48, List.of()), "You need operator permission on this server to change its world");
+        assertEquals("You need operator permission on this server to change its world", edits.packs().worldRefusal(),
+                "shown, while the server decides each change itself, as the player may be made an operator meanwhile");
+        Path moddedWorld = edits.location().read().serverWorld(modded);
+        assertEquals("modded.example.net:25565", GameState.worldName(moddedWorld));
+        assertNotEquals(moddedWorld, edits.location().read().serverWorld(new PlayingPayload.Multiplayer("modded.example.net_25565", false, true)),
+                "no two addresses share the change record's place");
+        assertEquals("The world of vanilla.example.net is on its server; join it in the game to change its datapacks",
+                refusal(selections.set(ChangeRecord.PackSide.DATA, vanillaWorld, List.of("vanilla"))), "never files: the world is not here");
+        assertFalse(sent.stream().anyMatch(message -> SentMessage.of(message).message() instanceof ChangeMessage));
+        assertEquals(0, record.size());
+    }
+
+    private static String refusal(CompletableFuture<?> change) {
+        ExecutionException refused = assertThrows(ExecutionException.class, () -> change.get(5, TimeUnit.SECONDS));
+        return refused.getCause().getMessage();
     }
 
     private ResourceEdits edits(ChangeRecord record, boolean gameRunning) {

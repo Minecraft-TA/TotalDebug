@@ -56,6 +56,8 @@ public final class TotalDebugConfig {
     public static final class Server {
         public final ModConfigSpec.BooleanValue enableScripts;
         public final ModConfigSpec.BooleanValue enableScriptsOnlyForOp;
+        public final ModConfigSpec.BooleanValue enableWorldChanges;
+        public final ModConfigSpec.BooleanValue enableWorldChangesOnlyForOp;
 
         private Server(ModConfigSpec.Builder builder) {
             builder.push("scripts");
@@ -65,6 +67,14 @@ public final class TotalDebugConfig {
             this.enableScriptsOnlyForOp = builder
                     .comment("Require server operator permission for players that execute TotalDebug scripts.")
                     .define("enableScriptsOnlyForOp", true);
+            builder.pop();
+            builder.push("world");
+            this.enableWorldChanges = builder
+                    .comment("Allow Companion to change the world, such as its datapacks, for players other than the owner of a singleplayer world.")
+                    .define("enableWorldChanges", true);
+            this.enableWorldChangesOnlyForOp = builder
+                    .comment("Require server operator permission for players that change the world from Companion.")
+                    .define("enableWorldChangesOnlyForOp", true);
             builder.pop();
         }
     }
