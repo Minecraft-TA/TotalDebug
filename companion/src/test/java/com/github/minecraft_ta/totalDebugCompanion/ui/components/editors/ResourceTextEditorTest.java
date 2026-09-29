@@ -3,7 +3,9 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totalDebugCompanion.pack.GamePacks;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
+import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEditsFixture;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
@@ -32,10 +34,10 @@ class ResourceTextEditorTest {
     @Test
     void aRevertElsewhereShowsTheOpenedFileAgain() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), record,
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
         String saved = "{\"a\":\"saved\"}";
         String inJar = "{\"a\":\"jar\"}";
@@ -58,10 +60,10 @@ class ResourceTextEditorTest {
     @Test
     void aDeletedFileOfTheManagedPackStaysAsUnsavedText() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
-        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), record,
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
         String added = "{\"a\":\"added\"}";
         Path pack = edits.save(LANG, added.getBytes(StandardCharsets.UTF_8)).get(5, TimeUnit.SECONDS).pack();
@@ -82,10 +84,10 @@ class ResourceTextEditorTest {
 
     @Test
     void aSaveRightAfterChoosingAnotherPackGoesIntoThatPack() throws Exception {
-        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
         Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
@@ -123,11 +125,11 @@ class ResourceTextEditorTest {
 
     @Test
     void theWarningThatTheGameDoesNotUseTheCopyEndsWhenItDoes() throws Exception {
-        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         PackStackPayload.Pack managed = new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "");
-        edits.packStack(new PackStackPayload(34, 48, List.of(managed), List.of()));
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(managed), List.of()));
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
         Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
         edits.setWorkingPack(LANG, mine);
@@ -139,7 +141,7 @@ class ResourceTextEditorTest {
         try {
             awaitOnSwing(() -> editor[0].noticeText().contains("not enabled"));
             // The player enables the pack in the game.
-            edits.packStack(new PackStackPayload(34, 48, List.of(managed,
+            edits.packs().packStack(new PackStackPayload(34, 48, List.of(managed,
                     new PackStackPayload.Pack("file/MyPack", "MyPack", mine.toString())), List.of()));
             awaitOnSwing(() -> editor[0].noticeText().isEmpty());
         } finally {
@@ -149,10 +151,10 @@ class ResourceTextEditorTest {
 
     @Test
     void aSaveOverTextAnotherTabSavedSinceAsksFirst() throws Exception {
-        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
         String inJar = "{\"a\":\"jar\"}";
         ResourceTextEditor[] tabs = new ResourceTextEditor[2];
@@ -202,10 +204,10 @@ class ResourceTextEditorTest {
 
     @Test
     void aTabWhoseChangesAnotherTabSavedSavesItsNextChangeWithoutAsking() throws Exception {
-        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
         String inJar = "{\"a\":\"jar\"}";
         ResourceTextEditor[] tabs = new ResourceTextEditor[2];
@@ -249,10 +251,10 @@ class ResourceTextEditorTest {
 
     @Test
     void changesCarriedToAnotherPackAreSavedThereWithoutAsking() throws Exception {
-        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
-        edits.packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")),
                 List.of()));
         edits.save(LANG, "{}".getBytes(StandardCharsets.UTF_8)).get(5, TimeUnit.SECONDS);
         Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
@@ -282,7 +284,7 @@ class ResourceTextEditorTest {
 
     @Test
     void aMinifiedLanguageFileIsReformattedAsOneEditThatUndoTakesBack() throws Exception {
-        ResourceEdits edits = new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
                 InstanceState.inMemory());
         StringBuilder minified = new StringBuilder("{");

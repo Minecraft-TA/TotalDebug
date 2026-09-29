@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationState;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.pack.GamePacks;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
@@ -63,6 +64,9 @@ public final class ProjectScope implements AutoCloseable {
     private final KeyBindingControl keyBindings;
     /** Puts the instance's key bindings on keys, in the running game or in options.txt. */
     public KeyBindingControl keyBindings() { return keyBindings; }
+    private final GamePacks packs;
+    /** The packs the game uses, as it names them or its files enable them. */
+    public GamePacks packs() { return packs; }
     private final ResourceEdits resources;
     private final WorldReadings world = new WorldReadings();
     /** What was last read of the current world, which the World page and the Project tree follow. */
@@ -89,7 +93,8 @@ public final class ProjectScope implements AutoCloseable {
         this.configChanges = new ConfigChanges(this.location, changes);
         this.pipeline = new ChangePipeline(this.location, changes, this.configChanges.writes());
         this.keyBindings = new KeyBindingControl(this.pipeline);
-        this.resources = new ResourceEdits(this.pipeline, new ResourceOriginals(paths().originals()),
+        this.packs = new GamePacks(this.location);
+        this.resources = new ResourceEdits(this.pipeline, this.packs, new ResourceOriginals(paths().originals()),
                 this.configChanges.writes(), state);
         this.packSelections = new PackSelections(changes, this.resources, this.configChanges.writes());
     }

@@ -113,7 +113,7 @@ class PackSelectionsTest {
     void theConnectedGameSelectsThePacksAndTheChangeIsRecordedOnceItDid() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record, true);
-        edits.packStack(new PackStackPayload(34, 48, List.of(
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(
                 new PackStackPayload.Pack("vanilla", "Minecraft", "", PackStackPayload.REQUIRED),
                 new PackStackPayload.Pack("mod_resources", "Mod Resources", "", PackStackPayload.REQUIRED),
                 new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN)), List.of()));
@@ -150,7 +150,7 @@ class PackSelectionsTest {
             return true;
         });
         edits.location().playing(new PlayingPayload.Singleplayer(world.toString()));
-        edits.packStack(new PackStackPayload(34, 48, List.of(), List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(), List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
 
         selections(record, edits).set(SetPacksPayload.Side.DATA, world, List.of("vanilla", "file/Tweaks"));
 
@@ -162,15 +162,15 @@ class PackSelectionsTest {
     void anotherWorldPlayedDropsThePacksTheGameNamedBefore() {
         ResourceEdits edits = edits(ChangeRecord.inMemory(), true);
         edits.location().connected(message -> true);
-        edits.packStack(new PackStackPayload(34, 48, List.of(), List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
+        edits.packs().packStack(new PackStackPayload(34, 48, List.of(), List.of(new PackStackPayload.Pack("vanilla", "Minecraft", ""))));
 
         edits.location().playing(new PlayingPayload.Singleplayer(this.directory.resolve("saves/Other").toString()));
 
-        assertNull(edits.packStack(), "the packs named were the previous world's; the game names them again");
+        assertNull(edits.packs().packStack(), "the packs named were the previous world's; the game names them again");
     }
 
     private ResourceEdits edits(ChangeRecord record, boolean gameRunning) {
-        return new ResourceEdits(new ChangePipeline(GameLocations.of(this.directory, gameRunning), record, Runnable::run),
+        return ResourceEditsFixture.edits(GameLocations.of(this.directory, gameRunning), record,
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, InstanceState.inMemory());
     }
 

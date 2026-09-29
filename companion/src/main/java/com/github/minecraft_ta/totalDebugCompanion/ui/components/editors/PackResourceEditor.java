@@ -245,7 +245,7 @@ abstract class PackResourceEditor<V> extends JPanel {
         // A revert on the Changes page changes what the game uses.
         this.stopListening = this.edits.record().addListener(() -> SwingUtilities.invokeLater(this::recordChanged));
         // Another world opening changes the current world's datapack a data file is shown from and saved into.
-        this.stopFollowingPacks = this.edits.addStackListener(() -> SwingUtilities.invokeLater(this::packsChanged));
+        this.stopFollowingPacks = this.edits.packs().addStackListener(() -> SwingUtilities.invokeLater(this::packsChanged));
         // A working pack chosen in another tab is where this one saves too.
         this.stopFollowingWorkingPack = this.edits.addWorkingPackListener(side -> {
             if (side.equals(ResourceEdits.side(this.path))) SwingUtilities.invokeLater(this::targetChanged);
@@ -337,7 +337,7 @@ abstract class PackResourceEditor<V> extends JPanel {
                 Optional<byte[]> copy = this.edits.managed(pack, this.path);
                 return new Found<>(pack, recorded, copy.isPresent() ? decode(copy.get(), pack) : null,
                         ResourceOriginals.hash(copy.orElse(null)),
-                        this.edits.unusedBecause(this.path, pack).orElse(null),
+                        this.edits.packs().unusedBecause(this.path, pack).orElse(null),
                         this.opened != null ? List.of() : this.edits.packs(this.path));
             } catch (Exception exception) {
                 throw new CompletionException(exception);

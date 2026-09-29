@@ -436,7 +436,7 @@ final class TextureEditor extends PackResourceEditor<TextureEditor.Texture> {
         BufferedImage image = pixels(bytes);
         try {
             // As when a texture opens: a file larger than an animation needs is not read.
-            var metadata = edits().metadata(path(), pack, 1024 * 1024);
+            var metadata = edits().packs().metadata(path(), pack, 1024 * 1024);
             if (metadata.isEmpty()) return new Texture(image, null, "");
             TextureAnimation animation = TextureAnimation.read(metadata.get(), image.getWidth(), image.getHeight()).orElse(null);
             if (animation != null && animation.frames().stream().noneMatch(frame -> animation.contains(frame.index()))) {

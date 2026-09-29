@@ -75,7 +75,7 @@ class ResourceHistoryTest {
     void theRecordedOriginalMustMatchTheBytesKeptWhenAnExternalWriteInterleaves() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ChangePipeline pipeline = new ChangePipeline(GameLocations.of(directory, false), record, Runnable::run);
-        ResourceEdits edits = new ResourceEdits(pipeline,
+        ResourceEdits edits = new ResourceEdits(pipeline, new GamePacks(pipeline.location()),
                 new ResourceOriginals(directory.resolve("total-debug/originals")), Runnable::run, InstanceState.inMemory());
         Path pack = directory.resolve("resourcepacks/TotalDebug");
         Path file = pack.resolve(LANG);
@@ -116,10 +116,9 @@ class ResourceHistoryTest {
     }
 
     private ResourceEdits edits(ChangeRecord record) {
-        ResourceEdits edits = new ResourceEdits(
-                new ChangePipeline(GameLocations.of(directory, false), record, Runnable::run),
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(directory, false), record,
                 new ResourceOriginals(directory.resolve("total-debug/originals")), Runnable::run, InstanceState.inMemory());
-        edits.packStack(new PackStackPayload(34, 48,
+        edits.packs().packStack(new PackStackPayload(34, 48,
                 List.of(new PackStackPayload.Pack("vanilla", "Default", ""),
                         new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", "")), List.of()));
         return edits;
