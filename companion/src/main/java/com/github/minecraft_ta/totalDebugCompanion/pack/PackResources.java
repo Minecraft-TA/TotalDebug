@@ -37,8 +37,8 @@ import java.util.Set;
  * one a mod builds in memory or a mod inside another mod's file, adds nothing.
  */
 public final class PackResources {
-    private static final String VANILLA = "vanilla";
-    private static final String MOD_RESOURCES = "mod_resources";
+    static final String VANILLA = "vanilla";
+    static final String MOD_RESOURCES = "mod_resources";
     private static final String MOD_DATA = "mod_data";
 
     /** A pack as the game stacks it: its id, the title shown, and the files it reads from, none when Companion cannot read them. */
@@ -79,8 +79,13 @@ public final class PackResources {
                 case VANILLA -> sources.add(vanilla(index));
                 case MOD_RESOURCES -> sources.addAll(mods(index));
                 default -> {
-                    Path file = id.startsWith("file/") ? workspace.resolve("resourcepacks").resolve(id.substring("file/".length())) : null;
-                    sources.add(new Source(id, title(id), file != null && Files.exists(file) ? List.of(file) : List.of()));
+                    if (id.startsWith("mod/")) {
+                        // A mod that shows its resources as a pack of its own: its file, as when the game names it.
+                        sources.add(source(new PackStackPayload.Pack(id, title(id), ""), index));
+                    } else {
+                        Path file = id.startsWith("file/") ? workspace.resolve("resourcepacks").resolve(id.substring("file/".length())) : null;
+                        sources.add(new Source(id, title(id), file != null && Files.exists(file) ? List.of(file) : List.of()));
+                    }
                 }
             }
         }

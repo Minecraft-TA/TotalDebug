@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totaldebug.client.resource;
 import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.resource.PackOrder;
 import com.github.minecraft_ta.totaldebug.resource.ReloadProblems;
 import net.minecraft.client.Minecraft;
@@ -19,7 +18,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 /**
  * Reloads what Companion's edited resources need in the game client: the language, or every client resource. The
@@ -27,9 +25,11 @@ import java.util.stream.Collectors;
  * above it. The world's data is reloaded by its server ({@code WorldDatapacks}).
  */
 public final class ResourceReloads {
-    /** A resource reload that has not finished, and the folder packs selected when it started; client thread only. */
-    private static CompletableFuture<Void> pendingResources;
-    private static Set<String> pendingPacks = Set.of();
+    /**
+     * The resource reloads that have not finished and started with a pack the game could turn off, as a pack change and
+     * an edit's reload can overlap; client thread only.
+     */
+    private static final List<CompletableFuture<Void>> pending = new ArrayList<>();
 
     private ResourceReloads() {
     }
@@ -50,62 +50,14 @@ public final class ResourceReloads {
         });
     }
 
-    /**
-     * Enables exactly the packs {@code request} names, lowest first, as the game's pack screen or {@code /datapack} does,
-     * then answers once the reload that needs is done. Packs the game requires are added where it puts them; a pack it
-     * does not know, or a datapack that requests features the world does not have, fails the request unchanged. Client
-     * thread only.
-     */
-    public static void select(SetPacksPayload request, Consumer<ReloadResultPayload> answer) {
-        long started = System.nanoTime();
-        if (request.side() != SetPacksPayload.Side.RESOURCES) {
-            answer.accept(new ReloadResultPayload(request.requestId(), 0, List.of(), "The world's datapacks are selected by its server"));
-            return;
-        }
-        attempt(() -> selectResources(request.enabled())).whenComplete((ignored, failure) -> answer.accept(new ReloadResultPayload(
-                request.requestId(), (System.nanoTime() - started) / 1_000_000, List.of(), failure == null ? "" : message(failure))));
-    }
-
-    private static CompletableFuture<Void> selectResources(List<String> enabled) {
-        Minecraft minecraft = Minecraft.getInstance();
-        PackRepository packs = minecraft.getResourcePackRepository();
-        packs.reload();
-        List<String> unknown = enabled.stream().filter(id -> packs.getPack(id) == null).toList();
-        if (!unknown.isEmpty()) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("The game has no resource pack " + String.join(", ", unknown)));
-        }
-        List<String> before = List.copyOf(packs.getSelectedIds());
-        packs.setSelected(enabled);
-        saveOptions(minecraft);
-        if (List.copyOf(packs.getSelectedIds()).equals(before)) return CompletableFuture.completedFuture(null);
-        return reloadAll(minecraft);
-    }
-
-    /** Saves the selected resource packs into {@code options.txt}, as {@code Options.updateResourcePacks} does. */
-    private static void saveOptions(Minecraft minecraft) {
-        minecraft.options.resourcePacks.clear();
-        minecraft.options.incompatibleResourcePacks.clear();
-        for (Pack pack : minecraft.getResourcePackRepository().getSelectedPacks()) {
-            if (pack.isFixedPosition() || pack.isHidden()) continue;
-            minecraft.options.resourcePacks.add(pack.getId());
-            if (!pack.getCompatibility().isCompatible()) minecraft.options.incompatibleResourcePacks.add(pack.getId());
-        }
-        minecraft.options.save();
-    }
-
     /** Reloads every client resource, failing when the game turns the folder packs off after a failed reload. */
-    private static CompletableFuture<Void> reloadAll(Minecraft minecraft) {
+    static CompletableFuture<Void> reloadAll(Minecraft minecraft) {
         CompletableFuture<Void> reload = new CompletableFuture<>();
         minecraft.reloadResourcePacks().whenComplete((ignored, failure) -> {
             if (failure == null) reload.complete(null);
             else reload.completeExceptionally(failure);
         });
-        Set<String> folderPacks = minecraft.getResourcePackRepository().getSelectedIds().stream()
-                .filter(id -> id.startsWith("file/")).collect(Collectors.toSet());
-        if (!folderPacks.isEmpty()) {
-            pendingResources = reload;
-            pendingPacks = folderPacks;
-        }
+        if (!onlyRequired(minecraft.getResourcePackRepository())) pending.add(reload);
         return reload;
     }
 
@@ -118,21 +70,32 @@ public final class ResourceReloads {
     }
 
     /**
-     * Fails a resource reload the game rolled back, as the next reload applies. When a reload fails, Minecraft turns off
-     * every resource pack, reloads again and never completes the reload it was asked for; the folder packs it had
-     * selected, the managed pack or the player's own, are then gone. Client thread only, from the reload listener.
+     * Fails the resource reloads the game rolled back, as the next reload applies. When a reload fails while a pack it
+     * may turn off is selected, Minecraft selects only the packs it requires, reloads again and never completes the
+     * reload it was asked for ({@code Minecraft.clearResourcePacksOnError}). A pack deselected while a reload ran, which
+     * Minecraft reloads for once that one finished, leaves the others selected and is no rollback. Client thread only,
+     * from the reload listener.
      */
     public static void reloaded() {
-        CompletableFuture<Void> pending = pendingResources;
-        if (pending == null) return;
-        if (pending.isDone()) {
-            pendingResources = null;
-            return;
-        }
-        if (Minecraft.getInstance().getResourcePackRepository().getSelectedIds().containsAll(pendingPacks)) return;
-        pendingResources = null;
-        pending.completeExceptionally(new IllegalStateException(
-                "The game could not load the resources and turned off every resource pack; its log names the cause"));
+        pending.removeIf(CompletableFuture::isDone);
+        if (!onlyRequired(Minecraft.getInstance().getResourcePackRepository())) return;
+        List<CompletableFuture<Void>> rolledBack = List.copyOf(pending);
+        pending.clear();
+        rolledBack.forEach(reload -> reload.completeExceptionally(new IllegalStateException(
+                "The game could not load the resources and turned off every resource pack; its log names the cause")));
+    }
+
+    /**
+     * The player or Companion selected packs. Where only the required ones remain, a rollback of a reload before would
+     * look the same, so those reloads are no longer watched for one. Client thread only.
+     */
+    public static void selected() {
+        if (onlyRequired(Minecraft.getInstance().getResourcePackRepository())) pending.clear();
+    }
+
+    /** Whether every selected pack is one the game requires, as after it turned the others off. */
+    private static boolean onlyRequired(PackRepository packs) {
+        return packs.getSelectedPacks().stream().allMatch(Pack::isRequired);
     }
 
     /**
@@ -144,7 +107,7 @@ public final class ResourceReloads {
         Minecraft minecraft = Minecraft.getInstance();
         boolean enabled = !managedPack.isEmpty() && enableOnTop(minecraft.getResourcePackRepository(), managedPack);
         // As Options.updateResourcePacks saves them, which would also start a reload of its own.
-        if (enabled) saveOptions(minecraft);
+        if (enabled) ResourcePackEdits.save(minecraft);
         if (!kinds.contains(ReloadPayload.Kind.RESOURCES) && !enabled && quickly(managedPack, kinds, watched)) {
             // A full reload tells the catalog through its reload listener; these quick ones do not.
             TotalDebugClient.current().ifPresent(TotalDebugClient::resourcesReloaded);

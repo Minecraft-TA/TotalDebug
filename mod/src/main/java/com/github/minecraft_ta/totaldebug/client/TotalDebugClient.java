@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totaldebug.client.input.Selection;
 import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.client.resource.PackStackPublisher;
 import com.github.minecraft_ta.totaldebug.client.world.Playing;
+import com.github.minecraft_ta.totaldebug.client.resource.ResourcePackEdits;
 import com.github.minecraft_ta.totaldebug.client.resource.ResourceReloads;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
@@ -96,13 +97,12 @@ public final class TotalDebugClient {
             this.snapshotRequested = true;
             this.catalogs.request(inventoryId, modules);
         });
-        ClientChanges changes = new ClientChanges(Map.of(KeyBindingEdits.CATEGORY, new KeyBindingEdits()));
-        companionApp.setChangeHandler(message -> Minecraft.getInstance().execute(() ->
-                companionApp.sendChangeResult(new ChangeResultMessage(changes.apply(message.payload())))));
+        ClientChanges changes = new ClientChanges(Map.of(KeyBindingEdits.CATEGORY, new KeyBindingEdits(),
+                ResourcePackEdits.CATEGORY, new ResourcePackEdits()), Minecraft.getInstance());
+        companionApp.setChangeHandler(message -> Minecraft.getInstance().execute(() -> changes.apply(message.payload())
+                .thenAccept(result -> companionApp.sendChangeResult(new ChangeResultMessage(result)))));
         companionApp.setReloadHandler(message -> Minecraft.getInstance().execute(() ->
                 ResourceReloads.reload(message.payload(), this::answerReload)));
-        companionApp.setPacksHandler(message -> Minecraft.getInstance().execute(() ->
-                ResourceReloads.select(message.payload(), this::answerReload)));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(Selection subject) {
@@ -217,8 +217,8 @@ public final class TotalDebugClient {
     }
 
     /**
-     * Answers a reload or a pack selection on the client thread, after telling the packs: the request rescanned the
-     * pack folders and may have changed what is enabled.
+     * Answers a reload on the client thread, after telling the packs: the reload rescanned the pack folders and may have
+     * changed what is enabled.
      */
     private void answerReload(ReloadResultPayload result) {
         Minecraft.getInstance().execute(() -> {

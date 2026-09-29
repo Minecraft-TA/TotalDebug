@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.pack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDat;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.Access;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
@@ -10,14 +11,11 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
-import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -34,7 +32,8 @@ import java.util.function.Supplier;
 /**
  * Enables and orders the resource packs or a world's datapacks, by the rules of {@code docs/RESOURCE_EDITING.md}: in the
  * connected game, which reloads what that needs, or in {@code options.txt} or the world's {@code level.dat} where no game
- * would write them over. Each change is recorded as a {@link ChangeRecord.PackSelection} and can be reverted.
+ * would write them over. Each change is recorded as a {@link ChangeRecord.PackSelection} and can be reverted. The resource
+ * packs are a category of the change pipeline ({@link ResourcePackSelection}).
  */
 public final class PackSelections {
     /** Where a selection was written, and when the game uses it. */
@@ -46,6 +45,8 @@ public final class PackSelections {
     private final ChangeRecord record;
     private final ResourceEdits edits;
     private final Executor writes;
+    private final ChangePipeline pipeline;
+    private final ResourcePackSelection resourcePacks;
 
     /** {@code edits} talks to the connected game of its location, and {@code writes} is the project's write queue. */
     public PackSelections(ChangeRecord record, ResourceEdits edits, Executor writes) {
@@ -54,6 +55,8 @@ public final class PackSelections {
         this.record = Objects.requireNonNull(record, "record");
         this.edits = Objects.requireNonNull(edits, "edits");
         this.writes = Objects.requireNonNull(writes, "writes");
+        this.pipeline = edits.pipeline();
+        this.resourcePacks = new ResourcePackSelection(options());
     }
 
     /** The record's target for the resource packs, or for {@code world}'s datapacks. */
@@ -67,6 +70,8 @@ public final class PackSelections {
      */
     public CompletableFuture<Applied> set(SetPacksPayload.Side side, Path world, List<String> enabled) {
         ChangeRecord.PackSelection target = target(side, world);
+        // Enabling what the view shows replaces whatever the game or the file holds, as the game's pack screen does.
+        if (side == SetPacksPayload.Side.RESOURCES) return resourcePacks(new ChangePipeline.Edit<>(target, null, List.copyOf(enabled)));
         return apply(target, List.copyOf(enabled), null);
     }
 
@@ -78,14 +83,28 @@ public final class PackSelections {
         if (!(change.target() instanceof ChangeRecord.PackSelection target)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Not a pack selection"));
         }
+        if (target.side() == SetPacksPayload.Side.RESOURCES) {
+            return resourcePacks(new ChangePipeline.Edit<>(target, change.current(), parse(change.original())));
+        }
         return apply(target, parse(change.original()), change);
+    }
+
+    /**
+     * Changes the resource packs through the pipeline: the connected game answers once its resources reloaded with them, a
+     * closed game uses them when it next starts.
+     */
+    private CompletableFuture<Applied> resourcePacks(ChangePipeline.Edit<ChangeRecord.PackSelection, List<String>> edit) {
+        return this.pipeline.change(this.resourcePacks, List.of(edit)).thenApply(outcome ->
+                new Applied(outcome.live() ? ConfigChanges.Effect.NOW : ConfigChanges.Effect.GAME_STARTS));
     }
 
     /** Whether the selection is still what Companion last enabled for {@code change}. Blocking. */
     public boolean holds(ChangeRecord.Change change) {
         if (!(change.target() instanceof ChangeRecord.PackSelection target)) return true;
         try {
-            return comparable(current(this.location.read(), target)).equals(comparable(parse(change.current())));
+            List<String> current = current(this.location.read(), target);
+            List<String> recorded = parse(change.current());
+            return target.side() == SetPacksPayload.Side.RESOURCES ? current.equals(recorded) : comparable(current).equals(comparable(recorded));
         } catch (IOException unreadable) {
             return true;
         }
@@ -108,8 +127,7 @@ public final class PackSelections {
                     throw new IOException(label(target) + " changed outside Companion since, and reverting would replace that");
                 }
                 if (live == null) {
-                    if (target.side() == SetPacksPayload.Side.RESOURCES) writeOptions(previous, enabled);
-                    else writeLevel(target.location(), enabled);
+                    writeLevel(target.location(), enabled);
                     this.record.changed(target, json(previous), json(enabled));
                 }
                 return new Read(previous, live);
@@ -118,12 +136,8 @@ public final class PackSelections {
             }
         });
         return before.thenCompose(read -> {
-            if (read.live() == null) {
-                return CompletableFuture.completedFuture(new Applied(target.side() == SetPacksPayload.Side.RESOURCES
-                        ? ConfigChanges.Effect.GAME_STARTS : ConfigChanges.Effect.WORLD_OPENS));
-            }
-            return this.edits.select(read.live(), target.side(),
-                    target.side() == SetPacksPayload.Side.DATA ? target.location() : null, enabled).thenApply(result -> {
+            if (read.live() == null) return CompletableFuture.completedFuture(new Applied(ConfigChanges.Effect.WORLD_OPENS));
+            return this.edits.select(read.live(), target.location(), enabled).thenApply(result -> {
                 if (!result.error().isEmpty()) throw new CompletionException(new IOException(result.error()));
                 this.record.changed(target, json(read.previous()), json(enabled));
                 return new Applied(ConfigChanges.Effect.NOW);
@@ -132,14 +146,12 @@ public final class PackSelections {
     }
 
     /**
-     * The connection of the game that applies the selection, or null where the files are written; fails where a running
-     * game would write it over: a game running without a connection, or a world open in a game Companion is not
-     * connected to or in another program. Blocking.
+     * The connection of the game that applies a datapack selection, or null where {@code level.dat} is written; fails
+     * where a running game would write it over: the world open in a game Companion is not connected to or in another
+     * program. Blocking.
      */
     private static GameLocation.Connection live(GameState game, ChangeRecord.PackSelection target) throws IOException {
-        Access access = target.side() == SetPacksPayload.Side.RESOURCES ? game.client("change its resource packs")
-                : game.world(target.location(), "change its datapacks");
-        return switch (access) {
+        return switch (game.world(target.location(), "change its datapacks")) {
             case Access.Live live -> live.connection();
             case Access.Files ignored -> null;
             case Access.Refused refused -> throw new IOException(refused.reason());
@@ -155,7 +167,7 @@ public final class PackSelections {
                 return stack.enabled().stream().filter(pack -> !pack.is(PackStackPayload.HIDDEN) && !pack.is(PackStackPayload.FIXED))
                         .map(PackStackPayload.Pack::id).toList();
             }
-            return PackResources.enabledInOptions(options());
+            return ResourcePackSelection.asTheGameKeepsIt(PackResources.enabledInOptions(options()));
         }
         PackStackPayload datapacks = this.edits.packs().datapacks();
         if (datapacks != null && game.plays(target.location())) {
@@ -163,24 +175,6 @@ public final class PackSelections {
         }
         NbtData.CompoundTag packs = dataPacks(LevelDat.read(LevelDat.file(target.location())).tag());
         return strings(packs, "Enabled");
-    }
-
-    /**
-     * Writes {@code enabled} as {@code options.txt}'s resource packs. A pack enabled here is also listed as incompatible,
-     * which the game drops again for a compatible pack, so it keeps a pack made for another version instead of removing it.
-     */
-    private void writeOptions(List<String> previous, List<String> enabled) throws IOException {
-        Path options = options();
-        List<String> lines = Files.isRegularFile(options) ? new ArrayList<>(Files.readAllLines(options, StandardCharsets.UTF_8)) : new ArrayList<>();
-        Set<String> incompatible = new LinkedHashSet<>(listed(lines, "incompatibleResourcePacks:"));
-        incompatible.retainAll(enabled);
-        for (String id : enabled) {
-            if (!previous.contains(id) && id.startsWith("file/")) incompatible.add(id);
-        }
-        List<String> written = enabled.stream().filter(id -> !id.startsWith("mod/")).toList();
-        put(lines, "resourcePacks:", written);
-        put(lines, "incompatibleResourcePacks:", List.copyOf(incompatible));
-        AtomicFiles.writeString(options, String.join("\n", lines) + "\n");
     }
 
     /**
@@ -222,35 +216,9 @@ public final class PackSelections {
         return new NbtData.ListTag(values.stream().<NbtData.Tag>map(NbtData.StringTag::new).toList());
     }
 
-    /** The ids of an {@code options.txt} line such as {@code resourcePacks:["vanilla"]}, or none without it. */
-    private static List<String> listed(List<String> lines, String prefix) throws IOException {
-        for (String line : lines) {
-            if (!line.startsWith(prefix)) continue;
-            try {
-                List<String> ids = new ArrayList<>();
-                for (JsonElement id : JsonParser.parseString(line.substring(prefix.length())).getAsJsonArray()) ids.add(id.getAsString());
-                return ids;
-            } catch (RuntimeException invalid) {
-                throw new IOException("options.txt lists " + prefix + " in a form that cannot be read: " + invalid.getMessage(), invalid);
-            }
-        }
-        return List.of();
-    }
-
-    private static void put(List<String> lines, String prefix, List<String> ids) {
-        String line = prefix + json(ids);
-        for (int index = 0; index < lines.size(); index++) {
-            if (lines.get(index).startsWith(prefix)) {
-                lines.set(index, line);
-                return;
-            }
-        }
-        lines.add(line);
-    }
-
     /**
-     * The ids a comparison of two selections looks at: the parts of the mods' pack come and go with it, and the game
-     * keeps them in {@code level.dat} but not in {@code options.txt}.
+     * The ids a comparison of two datapack selections looks at: the parts of the mods' pack come and go with it, and the
+     * game keeps them in {@code level.dat}.
      */
     private static List<String> comparable(List<String> ids) {
         return ids.stream().filter(id -> !id.startsWith("mod/")).toList();
@@ -274,8 +242,7 @@ public final class PackSelections {
     }
 
     private static String label(ChangeRecord.PackSelection target) {
-        return target.side() == SetPacksPayload.Side.RESOURCES ? "The resource packs"
-                : "The datapacks of " + target.location().getFileName();
+        return "The datapacks of " + target.location().getFileName();
     }
 
     private <T> CompletableFuture<T> write(Supplier<T> write) {

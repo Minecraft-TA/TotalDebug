@@ -19,7 +19,8 @@ class ChangeProtocolCodecTest {
     void aChangeAndItsAnswerSurviveTheWire() {
         ChangePayload change = new ChangePayload(7, List.of(
                 new ChangePayload.Edit("keyBinding", "key.jump", "key.keyboard.space", "key.keyboard.g:CONTROL"),
-                new ChangePayload.Edit("keyBinding", "key.sneak", "key.keyboard.g:CONTROL", "key.keyboard.unknown")));
+                new ChangePayload.Edit("keyBinding", "key.sneak", "key.keyboard.g:CONTROL", "key.keyboard.unknown"),
+                new ChangePayload.Edit("resourcePacks", "resourcePacks", null, "[\"vanilla\"]")));
         ChangeMessage readChange = new ChangeMessage();
         readChange.read(new ByteBufferInputStream(written(new ChangeMessage(change))));
         assertEquals(change, readChange.payload());
@@ -37,13 +38,17 @@ class ChangeProtocolCodecTest {
     }
 
     @Test
-    void aChangeHoldsAtLeastOneEditAndAnAnswerEitherValuesOrAnError() {
+    void aChangeHoldsAtLeastOneEditAndAnAnswerValuesOrAnError() {
         assertThrows(IllegalArgumentException.class, () -> new ChangePayload(1, List.of()));
         assertThrows(IllegalArgumentException.class, () -> new ChangePayload(1,
                 Collections.nCopies(ChangePayload.MAX_EDITS + 1, new ChangePayload.Edit("keyBinding", "key.jump", "", ""))));
         assertThrows(IllegalArgumentException.class, () -> new ChangeResultPayload(1, List.of(), ""));
-        assertThrows(IllegalArgumentException.class, () -> new ChangeResultPayload(1,
-                List.of(new ChangeResultPayload.Applied("a", "b")), "refused"));
+
+        ChangeResultPayload failedToTakeEffect = new ChangeResultPayload(1, List.of(new ChangeResultPayload.Applied("a", "a")),
+                "The game could not load the resources");
+        ChangeResultMessage read = new ChangeResultMessage();
+        read.read(new ByteBufferInputStream(written(new ChangeResultMessage(failedToTakeEffect))));
+        assertEquals(failedToTakeEffect, read.payload(), "the values the game holds after the failure, and why");
     }
 
     private static ByteBuffer written(AbstractMessage message) {

@@ -315,7 +315,8 @@ public final class ChangesPanel extends JPanel {
                 setForeground(selected ? table.getSelectionForeground()
                         : column == 0 ? ThemeColors.text() : ThemeColors.secondaryText());
                 Tooltip tooltip = Tooltip.of(change.name()).fact("Enabled", change.enabled())
-                        .fact("Before", highestFirst(PackSelections.parse(change.change().original())))
+                        .fact("Before", highestFirst((ChangeRecord.PackSelection) change.change().target(),
+                                PackSelections.parse(change.change().original())))
                         .fact("Changed", ago(change.change().lastChanged()));
                 if (!change.held()) tooltip.text("Changed outside Companion since");
                 setToolTipText(tooltip.html());
@@ -357,8 +358,10 @@ public final class ChangesPanel extends JPanel {
     }
 
     /** Pack ids, lowest first, as the pack screen lists them: the highest first. */
-    private static String highestFirst(List<String> ids) {
-        List<String> shown = ids.reversed().stream().filter(id -> !id.startsWith("mod/")).toList();
+    private static String highestFirst(ChangeRecord.PackSelection target, List<String> ids) {
+        // A world's level.dat keeps the hidden parts of the mods' pack too; a mod's own resource pack is shown.
+        List<String> shown = ids.reversed().stream()
+                .filter(id -> target.side() == SetPacksPayload.Side.RESOURCES || !id.startsWith("mod/")).toList();
         return shown.isEmpty() ? "None" : String.join(", ", shown);
     }
 
@@ -550,7 +553,7 @@ public final class ChangesPanel extends JPanel {
             ChangeRecord.PackSelection target = (ChangeRecord.PackSelection) change.target();
             String name = target.side() == SetPacksPayload.Side.RESOURCES ? "Resource packs"
                     : "Datapacks of " + target.location().getFileName();
-            packs.add(new PackChange(change, name, highestFirst(PackSelections.parse(change.current())),
+            packs.add(new PackChange(change, name, highestFirst(target, PackSelections.parse(change.current())),
                     this.packSelections.holds(change)));
         }
         return new Loaded(rows, targets, changes, sections, keys, bindings, resources, packs, problems);

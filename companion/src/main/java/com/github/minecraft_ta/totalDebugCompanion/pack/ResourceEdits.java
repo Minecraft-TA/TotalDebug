@@ -614,16 +614,15 @@ public final class ResourceEdits {
     }
 
     /**
-     * Asks the game on {@code send} to enable exactly {@code enabled}, lowest first, among the resource packs or the
-     * datapacks of {@code world}, which it must still play, and reload what that needs; completes with its answer, or fails
-     * once that connection ended. {@code world} is null for resource packs.
+     * Asks the server of {@code world}, which the game on {@code send} must still play, to enable exactly {@code enabled},
+     * lowest first, among its datapacks, and reload its data; completes with its answer, or fails once that connection
+     * ended.
      */
-    public CompletableFuture<ReloadResultPayload> select(GameLocation.Connection send, SetPacksPayload.Side side, Path world,
-                                                         List<String> enabled) {
+    public CompletableFuture<ReloadResultPayload> select(GameLocation.Connection send, Path world, List<String> enabled) {
         Reloads reloads = this.pipeline.reloads();
-        if (side == SetPacksPayload.Side.RESOURCES) return reloads.ask(send, id -> new SetPacksMessage(new SetPacksPayload(id, side, enabled)));
         try {
-            return reloads.askServer(send, reloads.identity(world), id -> new SetPacksMessage(new SetPacksPayload(id, side, enabled)));
+            return reloads.askServer(send, reloads.identity(world),
+                    id -> new SetPacksMessage(new SetPacksPayload(id, SetPacksPayload.Side.DATA, enabled)));
         } catch (IOException left) {
             return CompletableFuture.failedFuture(left);
         }

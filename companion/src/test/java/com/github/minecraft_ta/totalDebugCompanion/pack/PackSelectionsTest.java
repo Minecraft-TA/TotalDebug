@@ -9,19 +9,26 @@ import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
+import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksRequestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
+import com.github.tth05.scnet.message.AbstractMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
@@ -112,32 +119,97 @@ class PackSelectionsTest {
     }
 
     @Test
-    void theConnectedGameSelectsThePacksAndTheChangeIsRecordedOnceItDid() throws Exception {
+    void theConnectedGameSelectsTheResourcePacksAsAChangeAnsweredOnceItReloaded() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record, true);
-        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(
-                new PackStackPayload.Pack("vanilla", "Minecraft", "", PackStackPayload.REQUIRED),
-                new PackStackPayload.Pack("mod_resources", "Mod Resources", "", PackStackPayload.REQUIRED),
-                new PackStackPayload.Pack("mod/testmod", "Test Mod", "", PackStackPayload.HIDDEN))), 48));
-        List<SetPacksPayload> sent = new CopyOnWriteArrayList<>();
-        edits.location().connected(message -> {
-            if (SentMessage.of(message).message() instanceof SetPacksMessage packs) sent.add(packs.payload());
-            return true;
-        });
+        List<AbstractMessage> sent = connected(edits);
         PackSelections selections = selections(record, edits);
 
         CompletableFuture<PackSelections.Applied> applied = selections.set(SetPacksPayload.Side.RESOURCES, null,
                 List.of("vanilla", "mod_resources", "programmer_art"));
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        while (sent.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10);
-        assertEquals(List.of("vanilla", "mod_resources", "programmer_art"), sent.getFirst().enabled());
-        assertEquals(0, record.size(), "recorded once the game did it");
+        ChangePayload change = ((ChangeMessage) sent.getFirst()).payload();
+        assertEquals(List.of(new ChangePayload.Edit("resourcePacks", "resourcePacks", null,
+                "[\"vanilla\",\"mod_resources\",\"programmer_art\"]")), change.edits(), "the view's selection replaces the game's");
+        assertFalse(applied.isDone(), "the game answers once its resources reloaded");
 
-        edits.pipeline().reloads().answered(new ReloadResultPayload(sent.getFirst().requestId(), 900, List.of(), ""));
+        edits.pipeline().answered(new ChangeResultPayload(change.requestId(), List.of(new ChangeResultPayload.Applied(
+                "[\"vanilla\",\"mod_resources\"]", "[\"vanilla\",\"mod_resources\",\"programmer_art\"]")), ""));
         assertEquals(ConfigChanges.Effect.NOW, applied.get(5, TimeUnit.SECONDS).effect());
-        assertEquals("[\"vanilla\",\"mod_resources\"]", record.changes().getFirst().original(),
-                "as options.txt keeps it: without the parts of the mods' pack");
+        assertEquals("[\"vanilla\",\"mod_resources\"]", record.changes().getFirst().original(), "recorded as the game answered");
+        assertEquals(1, sent.size(), "the game reloads what the selection needs itself");
         assertFalse(Files.exists(this.directory.resolve("options.txt")), "the game saves options.txt itself");
+    }
+
+    @Test
+    void aRevertTheGameMadeMeanwhileEndsTheChangeAndAFailedReloadIsRecordedAsTheGameLeftIt() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record, true);
+        List<AbstractMessage> sent = connected(edits);
+        PackSelections selections = selections(record, edits);
+        String original = "[\"vanilla\",\"mod_resources\"]";
+        String changed = "[\"vanilla\",\"mod_resources\",\"file/Faithful\"]";
+        record.changed(new ChangeRecord.PackSelection(SetPacksPayload.Side.RESOURCES, this.directory.resolve("options.txt")), original, changed);
+
+        CompletableFuture<PackSelections.Applied> reverted = selections.revert(record.changes().getFirst());
+        ChangePayload change = ((ChangeMessage) sent.getFirst()).payload();
+        assertEquals(changed, change.edits().getFirst().expected(), "a revert expects what Companion last enabled");
+        assertEquals(original, change.edits().getFirst().value());
+        edits.pipeline().answered(new ChangeResultPayload(change.requestId(), List.of(new ChangeResultPayload.Applied(original, original)), ""));
+        assertEquals(ConfigChanges.Effect.NOW, reverted.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(0, record.size(), "back to the original, the change ends");
+
+        CompletableFuture<PackSelections.Applied> applied = selections.set(SetPacksPayload.Side.RESOURCES, null,
+                List.of("vanilla", "mod_resources", "file/Broken"));
+        change = ((ChangeMessage) sent.get(1)).payload();
+        edits.pipeline().answered(new ChangeResultPayload(change.requestId(), List.of(new ChangeResultPayload.Applied(original, original)),
+                "The game could not load the resources and turned off every resource pack; its log names the cause"));
+        ExecutionException failed = assertThrows(ExecutionException.class, () -> applied.get(5, TimeUnit.SECONDS));
+        assertTrue(failed.getCause().getMessage().startsWith("The game could not load the resources"), failed.getCause().getMessage());
+        assertEquals(0, record.size(), "the game turned the packs off again, so nothing it holds is Companion's change");
+    }
+
+    @Test
+    void aModsOwnResourcePackIsEnabledLikeAnyOther() throws Exception {
+        Path options = this.directory.resolve("options.txt");
+        Files.writeString(options, "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
+        ChangeRecord record = ChangeRecord.inMemory();
+        PackSelections selections = selections(record, edits(record, false));
+
+        selections.set(SetPacksPayload.Side.RESOURCES, null, List.of("vanilla", "mod_resources", "mod/testmod")).get(5, TimeUnit.SECONDS);
+        assertEquals(List.of("vanilla", "mod_resources", "mod/testmod"), PackResources.enabledInOptions(options),
+                "a mod that shows its resources as a pack of its own, as the pack screen lists it");
+        assertTrue(Files.readString(options).contains("incompatibleResourcePacks:[\"mod/testmod\"]"),
+                "kept even when made for another format, as a folder pack is");
+        assertTrue(selections.holds(record.changes().getFirst()));
+        Files.writeString(options, "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
+        assertFalse(selections.holds(record.changes().getFirst()), "the game turned it off since");
+        Files.writeString(options, "resourcePacks:[\"vanilla\",\"mod_resources\",\"mod/testmod\"]\n");
+        selections.revert(record.changes().getFirst()).get(5, TimeUnit.SECONDS);
+        assertEquals(0, record.size());
+    }
+
+    @Test
+    void optionsLeavingOutTheRequiredPacksAreReadAsTheGameReadsThem() throws Exception {
+        Path options = this.directory.resolve("options.txt");
+        Files.writeString(options, "resourcePacks:[\"vanilla\",\"file/A\"]\n");
+        ChangeRecord record = ChangeRecord.inMemory();
+        PackSelections selections = selections(record, edits(record, false));
+
+        selections.set(SetPacksPayload.Side.RESOURCES, null, List.of("vanilla", "mod_resources")).get(5, TimeUnit.SECONDS);
+        ChangeRecord.Change change = record.changes().getFirst();
+        assertEquals("[\"vanilla\",\"file/A\",\"mod_resources\"]", change.original(),
+                "the game adds the mods' resources on top, and names them so once it runs");
+        assertTrue(selections.holds(change));
+    }
+
+    /** Connects the game of {@code edits}, keeping what Companion sends it. */
+    private static List<AbstractMessage> connected(ResourceEdits edits) {
+        List<AbstractMessage> sent = new CopyOnWriteArrayList<>();
+        edits.location().connected(message -> {
+            sent.add(message);
+            return true;
+        });
+        return sent;
     }
 
     @Test

@@ -29,7 +29,7 @@ import java.util.function.IntFunction;
  * each owner: the client's resources, reloaded by the game client on the connection they were asked on, and a world's
  * data, reloaded by its server through the relay, for that world. Reloads asked for while one of the same queue runs, or
  * while a write is still queued, run together as one more reload after it. Each is answered with {@code RELOAD_RESULT},
- * which also answers the requests sent with {@link #ask} and {@link #askServer}, such as a pack selection.
+ * which also answers the requests sent with {@link #askServer}, such as a datapack selection.
  */
 public final class Reloads {
     private static final long RELOAD_MINUTES = 10;
@@ -176,7 +176,7 @@ public final class Reloads {
      * Sends the request {@code request} makes of an id to the game on {@code connection}, which answers it with a
      * {@code RELOAD_RESULT} of that id; completes with the answer, or fails once that connection ended.
      */
-    public CompletableFuture<ReloadResultPayload> ask(GameLocation.Connection connection, IntFunction<AbstractMessage> request) {
+    private CompletableFuture<ReloadResultPayload> ask(GameLocation.Connection connection, IntFunction<AbstractMessage> request) {
         return send(connection, request);
     }
 
@@ -211,7 +211,7 @@ public final class Reloads {
         if (request != null) request.completeExceptionally(new IOException(reason));
     }
 
-    /** Takes the answer to a reload or another request sent with {@link #ask} or {@link #askServer}. */
+    /** Takes the answer to a reload or another request sent with {@link #askServer}. */
     public void answered(ReloadResultPayload result) {
         CompletableFuture<ReloadResultPayload> request = this.waiting.remove(result.requestId());
         if (request != null) request.complete(result);
