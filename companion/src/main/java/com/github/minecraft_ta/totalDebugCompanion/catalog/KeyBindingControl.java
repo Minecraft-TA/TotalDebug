@@ -42,6 +42,11 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
         this.options = pipeline.location().workspace().resolve("options.txt");
     }
 
+    /** The change record the bindings' changes are entered in. */
+    public ChangeRecord record() {
+        return this.pipeline.record();
+    }
+
     /** The game's {@code options.txt}, where the keys are saved. */
     public Path options() {
         return this.options;

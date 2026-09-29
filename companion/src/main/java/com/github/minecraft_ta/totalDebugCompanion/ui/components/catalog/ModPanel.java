@@ -158,9 +158,10 @@ public final class ModPanel extends JPanel {
         return this.summary == null ? this.modId : this.summary.title();
     }
 
-    /** Selects the requested tab, and the kind on the Content tab or the category on the Resources tab. */
+    /** Selects the requested tab, and the kind on the Content tab, the file on the Configuration tab or the category on the Resources tab. */
     public void show(NavigationTarget.ModPage page) {
         if (page.tab() == ModTab.CONTENT) this.content.select(page.section());
+        if (page.tab() == ModTab.CONFIGURATION && !page.section().isEmpty()) this.configs.select(page.section());
         if (page.tab() == ModTab.RESOURCES) this.resources.selectCategory(page.section());
         Component content = this.tabContent.get(page.tab());
         int index = this.tabs.indexOfComponent(content);
@@ -176,6 +177,7 @@ public final class ModPanel extends JPanel {
         String section = switch (tab) {
             case CONTENT -> this.content.selectedKind();
             case RESOURCES -> this.resources.selectedCategory();
+            case CONFIGURATION -> this.configs.selectedFileName();
             default -> "";
         };
         return new NavigationTarget.ModPage(this.modId, tab, section);

@@ -2,7 +2,7 @@
 
 Design for item A3 of the [roadmap](ROADMAP.md): one path for every change Companion makes to the pack, the running game or a world. It builds on [GAME_LOCATION.md](GAME_LOCATION.md), which answers where the game is and whether a change is live, written to a file or refused, and on [MOD_SIDES.md](MOD_SIDES.md), which carries changes the server owns. A category then only says how to read and write its values; the pipeline does the rest, the same way for every category.
 
-Built so far: layers 1 to 5 of the [order of work](#order-of-work): the pipeline with key bindings, resources, pack order and configuration on it, and its reload queues.
+Built: every layer of the [order of work](#order-of-work): the pipeline with key bindings, resources, pack order and configuration on it, its reload queues, and the Changes page through the categories' labels.
 
 ## Before the pipeline
 
@@ -112,7 +112,10 @@ A stack, each layer at most about 500 lines and reviewed on its own. The first t
    - `ConfigWriter` keeps only the view's undo history and status. Ctrl+Z is a change back that expects the value it wrote.
    - `ConfigChanges` no longer records; it tells when the game uses a value and keeps a rejoin or restart pending.
    - `Effect` is the pipeline's.
-6. **The Changes page** through the categories' labels, without knowing the kinds.
+6. **The Changes page** through the categories' labels, without knowing the kinds. Built as `ChangeLabels`, decided on 2026-09-29 as uniform rows with a tab per category:
+   - Each category names its tab and its rows: the name, where the target is, its value now and before in the category's words, a notice (a setting the game still waits to use, a key shared with another binding, a change made outside Companion since), and where the row opens. It reverts its own changes through the pipeline.
+   - The page shows one table per tab and names no category: Open, Revert and Revert All work the same for every row.
+   - Settings are no longer edited on the Changes page; opening a row goes to the mod's configuration, where they are edited.
 
 Each layer stands on its own; nothing outside these categories waits for the whole stack.
 

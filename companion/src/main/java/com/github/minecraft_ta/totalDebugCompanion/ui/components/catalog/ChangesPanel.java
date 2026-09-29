@@ -1,32 +1,20 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
-import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
-import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigEdit;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
-import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
+import com.github.minecraft_ta.totalDebugCompanion.change.ChangeLabels;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
-import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
-import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
-import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
-import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
@@ -48,111 +36,163 @@ import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.IOException;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
- * Every change Companion made to the pack that is still in effect, with the value it replaced: configuration settings
- * under their mod and file, key bindings and resources in the packs Companion manages. A change is reverted from its
- * row, with the others selected, or all at once. A change the pack no longer holds, because its original value was
- * written back elsewhere, leaves the record when it is read.
+ * What Companion changed in the pack, as its change record keeps it: a tab for each category that has changes, whose
+ * rows the category names ({@link ChangeLabels}), with the value now and before. A row opens where it is changed, and
+ * Revert puts back what it replaced, through the category. A change whose target holds its original value again, such
+ * as one written back elsewhere, leaves the record when it is read. The page names no category itself.
  */
 public final class ChangesPanel extends JPanel {
     private static final String TABS_CARD = "tabs";
     private static final String MESSAGE_CARD = "message";
+    private static final String[] COLUMNS = {"Name", "Where", "Now", "Before", "Changed"};
 
-    /** The mod and file a section row stands for; {@code file} is null for a mod row. */
-    private record Section(String modId, String modName, String fileName, Path file) {
+    /** What a read found: each category's rows, and what could not be read. */
+    private record Loaded(Map<ChangeLabels, List<ChangeLabels.Row>> rows, List<String> problems, CatalogIndex index) {
     }
 
-    /** A changed key binding: the key it has now and the one it had before Companion changed it. */
-    private record KeyChange(String name, String action, KeyBindings.Assignment current, KeyBindings.Assignment original,
-                             String mod) {
-    }
+    /** One category's tab: its table of rows. */
+    private final class Category {
+        final ChangeLabels labels;
+        final RowsModel model = new RowsModel();
+        final JTable table = new JTable(this.model);
+        final JScrollPane scroll = new JScrollPane(this.table);
 
-    /** A changed resource: its path inside its root, the pack that holds it, and whether that pack still has what was written. */
-    private record ResourceChange(ChangeRecord.Change change, String name, String pack, boolean held) {
-        ChangeRecord.Resource target() {
-            return (ChangeRecord.Resource) this.change.target();
+        Category(ChangeLabels labels) {
+            this.labels = labels;
+            this.scroll.setBorder(BorderFactory.createEmptyBorder());
+            this.table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+            Tables.configure(this.table);
+            this.table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+                @Override
+                public Component getTableCellRendererComponent(JTable table, Object value, boolean selected, boolean focused,
+                                                               int row, int column) {
+                    super.getTableCellRendererComponent(table, value, selected, false, row, column);
+                    ChangeLabels.Row shown = Category.this.model.shown.get(row);
+                    setBorder(UiMetrics.cellPadding());
+                    setForeground(selected ? table.getSelectionForeground() : column == 0 && !shown.notice().isEmpty() ? ThemeColors.warning()
+                            : column == 0 ? ThemeColors.text() : ThemeColors.secondaryText());
+                    setToolTipText(tooltip(shown));
+                    return this;
+                }
+            });
+            ContextMenus.installTable(this.table, this::menu);
+            this.table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openChange");
+            this.table.getActionMap().put("openChange", new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent event) {
+                    List<ChangeLabels.Row> selected = selected();
+                    if (selected.size() == 1) open(selected.getFirst());
+                }
+            });
+            this.table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "revertChanges");
+            this.table.getActionMap().put("revertChanges", new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent event) {
+                    List<ChangeLabels.Row> selected = selected();
+                    if (!selected.isEmpty()) revertAsked(selected);
+                }
+            });
+            this.table.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent event) {
+                    int row = Category.this.table.rowAtPoint(event.getPoint());
+                    if (row >= 0 && event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
+                        open(Category.this.model.shown.get(row));
+                    }
+                }
+            });
+            TypeToFilter.install(this.table, ChangesPanel.this.filter);
         }
-    }
 
-    /**
-     * A changed pack selection: which packs, the enabled ones now with the highest first, and whether they are still
-     * what Companion enabled.
-     */
-    private record PackChange(ChangeRecord.Change change, String name, String enabled, boolean held) {
-    }
+        private JPopupMenu menu(int row) {
+            if (row < 0) return null;
+            List<ChangeLabels.Row> selected = selected();
+            JPopupMenu menu = new JPopupMenu();
+            ChangeLabels.Row clicked = this.model.shown.get(row);
+            if (selected.size() <= 1 && clicked.opens() != null) {
+                menu.add(ContextMenus.action(clicked.actions().open(), null, "ENTER", () -> open(clicked)));
+            }
+            List<ChangeLabels.Row> reverted = selected.isEmpty() ? List.of(clicked) : selected;
+            // Each row as its name and its value now, one per line.
+            String copied = String.join("\n", reverted.stream().map(change -> change.name() + ": " + change.now()).toList());
+            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction(reverted.size() > 1 ? "Copy " + reverted.size() + " Changes" : "Copy Change", copied)));
+            menu.add(ContextMenus.action(reverted.size() > 1 ? "Revert " + reverted.size() : reverted.getFirst().actions().revert(), null,
+                    "DELETE", () -> revertAsked(reverted)));
+            return menu;
+        }
 
-    private record Loaded(List<ConfigSettingsTable.Row> rows, Map<String, ConfigSettings.Target> targets,
-                          Map<String, ChangeRecord.Change> changes, Map<String, Section> sections, List<KeyChange> keys,
-                          KeyBindings bindings, List<ResourceChange> resources, List<PackChange> packs, List<String> problems) {
+        /** Reverts {@code rows}, after asking where reverting one cannot be undone, such as a file being deleted. */
+        private void revertAsked(List<ChangeLabels.Row> rows) {
+            List<String> confirms = rows.stream().map(row -> row.actions().confirm()).filter(confirm -> !confirm.isEmpty()).toList();
+            if (!confirms.isEmpty()) {
+                String question = confirms.size() == 1 ? confirms.getFirst() : confirms.size() + " of these are deleted and cannot be brought back. Revert them?";
+                int answer = JOptionPane.showConfirmDialog(ChangesPanel.this, question, rows.size() > 1 ? "Revert " + rows.size() : rows.getFirst().actions().revert(),
+                        JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+                if (answer != JOptionPane.OK_OPTION) return;
+            }
+            report(revert(rows));
+        }
+
+        /** Selects the shown rows of {@code targets}. */
+        void select(Set<ChangeRecord.Target> targets) {
+            this.table.clearSelection();
+            for (int row = 0; row < this.model.shown.size(); row++) {
+                if (targets.contains(this.model.shown.get(row).change().target())) this.table.addRowSelectionInterval(row, row);
+            }
+        }
+
+        private List<ChangeLabels.Row> selected() {
+            List<ChangeLabels.Row> rows = new ArrayList<>();
+            for (int row : this.table.getSelectedRows()) rows.add(this.model.shown.get(row));
+            return rows;
+        }
+
+        CompletableFuture<String> revert(List<ChangeLabels.Row> rows) {
+            return this.labels.revert(rows.stream().map(ChangeLabels.Row::change).toList(), ChangesPanel.this.index);
+        }
     }
 
     private final PackCatalogService catalog;
     private final ChangeRecord record;
-    private final KeyBindingControl keyControl;
-    private final ResourceEdits resourceEdits;
-    private final PackSelections packSelections;
+    private final List<Category> categories = new ArrayList<>();
     private final Consumer<NavigationTarget> navigator;
-    private final ConfigWriter writer;
     private final PageLoader<Loaded> loader;
     private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
     private final JButton revertAll = new JButton("Revert All");
     private final JLabel notice = new JLabel();
-    private final ConfigSettingsTable table = new ConfigSettingsTable();
-    private final KeyChangesModel keyModel = new KeyChangesModel();
-    private final JTable keyTable = new JTable(this.keyModel);
-    private final JScrollPane settingsScroll = new JScrollPane(this.table);
-    private final JScrollPane keysScroll = new JScrollPane(this.keyTable);
-    private final ResourceChangesModel resourceModel = new ResourceChangesModel();
-    private final JTable resourceTable = new JTable(this.resourceModel);
-    private final JScrollPane resourcesScroll = new JScrollPane(this.resourceTable);
-    private final PackChangesModel packModel = new PackChangesModel();
-    private final JTable packTable = new JTable(this.packModel);
-    private final JScrollPane packsScroll = new JScrollPane(this.packTable);
     private final JTabbedPane tabs = new JTabbedPane();
     private final JLabel message = new JLabel();
     private final JPanel cards = new JPanel(new CardLayout());
-    private Map<String, ConfigSettings.Target> targets = Map.of();
-    private Map<String, ChangeRecord.Change> changes = Map.of();
-    private Map<String, Section> sections = Map.of();
-    private List<KeyChange> keys = List.of();
-    private List<ResourceChange> resources = List.of();
-    private List<PackChange> packs = List.of();
-    private KeyBindings bindings;
+    private CatalogIndex index;
     private String problem = "";
     private String status = "";
 
-    public ChangesPanel(PackCatalogService catalog, ConfigSettings configSettings, KeyBindingControl keyControl,
-                        ResourceEdits resourceEdits, PackSelections packSelections, Consumer<NavigationTarget> navigator) {
+    /** Lists the changes {@code record} keeps through {@code categories}, which name and revert them. */
+    public ChangesPanel(PackCatalogService catalog, ChangeRecord record, List<ChangeLabels> categories, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
-        this.record = configSettings.record();
-        this.keyControl = Objects.requireNonNull(keyControl, "keyControl");
-        this.resourceEdits = Objects.requireNonNull(resourceEdits, "resourceEdits");
-        this.packSelections = Objects.requireNonNull(packSelections, "packSelections");
+        this.record = Objects.requireNonNull(record, "record");
         this.navigator = Objects.requireNonNull(navigator, "navigator");
-        this.writer = new ConfigWriter(configSettings, this::setStatus, this::load);
 
         this.filter.putClientProperty("JTextField.placeholderText", "Filter changes");
         this.filter.getDocument().addDocumentListener(new DocumentListener() {
@@ -160,7 +200,7 @@ public final class ChangesPanel extends JPanel {
             @Override public void removeUpdate(DocumentEvent event) { applyFilter(); }
             @Override public void changedUpdate(DocumentEvent event) { applyFilter(); }
         });
-        this.revertAll.setToolTipText("Write every original value back");
+        this.revertAll.setToolTipText(Tooltip.of("Revert All").text("Puts back what every change replaced").html());
         this.revertAll.addActionListener(event -> revertAll());
         JPanel bar = new JPanel(new BorderLayout(10, 0));
         bar.setBorder(UiMetrics.barPadding());
@@ -174,543 +214,105 @@ public final class ChangesPanel extends JPanel {
         top.add(this.notice, BorderLayout.SOUTH);
         add(top, BorderLayout.NORTH);
 
-        this.settingsScroll.setBorder(BorderFactory.createEmptyBorder());
-        this.keysScroll.setBorder(BorderFactory.createEmptyBorder());
-        this.resourcesScroll.setBorder(BorderFactory.createEmptyBorder());
-        this.packsScroll.setBorder(BorderFactory.createEmptyBorder());
-        configureKeyTable();
-        configureResourceTable();
-        configurePackTable();
+        for (ChangeLabels labels : categories) this.categories.add(new Category(labels));
         this.cards.add(this.tabs, TABS_CARD);
         this.message.setVerticalAlignment(JLabel.TOP);
         this.message.setBorder(UiMetrics.messagePadding());
         this.cards.add(this.message, MESSAGE_CARD);
         add(this.cards, BorderLayout.CENTER);
 
-        this.table.setEditing(this::edit, this::setStatus, row -> {
-            ConfigSettings.Target target = this.targets.get(row.path());
-            return target == null ? null : this.writer.pending(target.file(), target.setting().path());
-        }, row -> {
-            ChangeRecord.Change change = this.changes.get(row.path());
-            return change == null ? null : change.original();
-        });
-        this.table.setSectionTooltip(this::sectionTooltip);
-        this.table.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent event) {
-                int row = ChangesPanel.this.table.rowAtPoint(event.getPoint());
-                if (row >= 0 && event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
-                    open(ChangesPanel.this.table.row(row));
-                }
-            }
-        });
-        this.writer.bindUndo(this.table);
-        TypeToFilter.install(this.table, this.filter);
-        TypeToFilter.install(this.keyTable, this.filter);
-        TypeToFilter.install(this.resourceTable, this.filter);
-        TypeToFilter.install(this.packTable, this.filter);
         this.loader = new PageLoader<>(this::prepareLoad, this::show,
-                failure -> setStatus("Could not read the changed files: " + failure.getMessage()))
+                failure -> setStatus("Could not read the changes: " + failure.getMessage()))
                 .whenShown(this).follow(this.record::addListener);
         load();
     }
 
-    private void configureKeyTable() {
-        this.keyTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        Tables.configure(this.keyTable);
-        KeyCaps caps = new KeyCaps();
-        this.keyTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
-            @Override
-            public Component getTableCellRendererComponent(JTable table, Object value, boolean selected, boolean focused,
-                                                           int row, int column) {
-                KeyChange change = ChangesPanel.this.keyModel.shown.get(row);
-                Color background = selected ? table.getSelectionBackground() : table.getBackground();
-                Color foreground = selected ? table.getSelectionForeground() : ThemeColors.text();
-                if (column == 1) {
-                    caps.configure(ChangesPanel.this.bindings.caps(change.current()),
-                            null, change.current().unbound() ? "Not bound" : "was " + ChangesPanel.this.bindings.display(change.original()),
-                            table.getFont(), foreground, background);
-                    return caps;
-                }
-                super.getTableCellRendererComponent(table, value, selected, false, row, column);
-                setBorder(UiMetrics.cellPadding());
-                setForeground(column == 0 || selected ? foreground : ThemeColors.secondaryText());
-                return this;
-            }
-        });
-        ContextMenus.installTable(this.keyTable, this::keyMenu);
-        revertOnDelete(this.keyTable, () -> {
-            List<KeyChange> selected = new ArrayList<>();
-            for (int viewRow : this.keyTable.getSelectedRows()) selected.add(this.keyModel.shown.get(viewRow));
-            if (!selected.isEmpty()) report(revert(selected));
-        });
-        this.keyTable.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent event) {
-                int row = ChangesPanel.this.keyTable.rowAtPoint(event.getPoint());
-                if (row >= 0 && event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
-                    ChangesPanel.this.navigator.accept(new NavigationTarget.KeyBindings(ChangesPanel.this.keyModel.shown.get(row).name()));
-                }
-            }
-        });
-    }
-
-    private void configureResourceTable() {
-        this.resourceTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        Tables.configure(this.resourceTable);
-        this.resourceTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
-            @Override
-            public Component getTableCellRendererComponent(JTable table, Object value, boolean selected, boolean focused,
-                                                           int row, int column) {
-                super.getTableCellRendererComponent(table, value, selected, false, row, column);
-                ResourceChange change = ChangesPanel.this.resourceModel.shown.get(row);
-                setBorder(UiMetrics.cellPadding());
-                setIcon(column == 0 ? FileTypeResolver.resolve(change.name()).icon() : null);
-                setForeground(selected ? table.getSelectionForeground()
-                        : column == 0 ? ThemeColors.text() : ThemeColors.secondaryText());
-                Path file = change.target().location().resolve(change.target().path());
-                Tooltip tooltip = Tooltip.of(change.target().path()).detail(Tooltip.shortPath(file))
-                        .fact("Changed", ago(change.change().lastChanged()));
-                if (change.change().original().isEmpty()) tooltip.text("Added by Companion; Revert deletes it");
-                if (!change.held()) tooltip.text("The file was changed outside Companion since");
-                setToolTipText(tooltip.html());
-                return this;
-            }
-        });
-        ContextMenus.installTable(this.resourceTable, this::resourceMenu);
-        revertOnDelete(this.resourceTable, () -> {
-            List<ResourceChange> selected = new ArrayList<>();
-            for (int viewRow : this.resourceTable.getSelectedRows()) selected.add(this.resourceModel.shown.get(viewRow));
-            if (selected.isEmpty()) return;
-            // Reverting a file Companion added deletes it, which the menu names; a key press asks first.
-            long added = selected.stream().filter(change -> change.change().original().isEmpty()).count();
-            if (added > 0 && JOptionPane.showConfirmDialog(this, added == 1 ? "Delete the file Companion added?"
-                    : "Delete the " + added + " files Companion added?", "Revert and Delete", JOptionPane.OK_CANCEL_OPTION)
-                    != JOptionPane.OK_OPTION) {
-                return;
-            }
-            report(revertResources(selected));
-        });
-        this.resourceTable.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent event) {
-                int row = ChangesPanel.this.resourceTable.rowAtPoint(event.getPoint());
-                if (row >= 0 && event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
-                    openResource(ChangesPanel.this.resourceModel.shown.get(row));
-                }
-            }
-        });
-    }
-
-    private void configurePackTable() {
-        this.packTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        Tables.configure(this.packTable);
-        this.packTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
-            @Override
-            public Component getTableCellRendererComponent(JTable table, Object value, boolean selected, boolean focused,
-                                                           int row, int column) {
-                super.getTableCellRendererComponent(table, value, selected, false, row, column);
-                PackChange change = ChangesPanel.this.packModel.shown.get(row);
-                setBorder(UiMetrics.cellPadding());
-                setForeground(selected ? table.getSelectionForeground()
-                        : column == 0 ? ThemeColors.text() : ThemeColors.secondaryText());
-                Tooltip tooltip = Tooltip.of(change.name()).fact("Enabled", change.enabled())
-                        .fact("Before", highestFirst(PackSelections.parse(change.change().original())))
-                        .fact("Changed", ago(change.change().lastChanged()));
-                if (!change.held()) tooltip.text("Changed outside Companion since");
-                setToolTipText(tooltip.html());
-                return this;
-            }
-        });
-        ContextMenus.installTable(this.packTable, row -> {
-            if (row < 0) return null;
-            List<PackChange> selected = new ArrayList<>();
-            for (int viewRow : this.packTable.getSelectedRows()) selected.add(this.packModel.shown.get(viewRow));
-            JPopupMenu menu = new JPopupMenu();
-            menu.add(ContextMenus.action(selected.size() > 1 ? "Revert " + selected.size() : "Revert", null, "DELETE",
-                    () -> report(revertPacks(selected))));
-            return menu;
-        });
-        revertOnDelete(this.packTable, () -> {
-            List<PackChange> selected = new ArrayList<>();
-            for (int viewRow : this.packTable.getSelectedRows()) selected.add(this.packModel.shown.get(viewRow));
-            if (!selected.isEmpty()) report(revertPacks(selected));
-        });
-    }
-
-    /** Enables what each selection held before Companion changed it, one after another; completes with what failed. */
-    private CompletableFuture<String> revertPacks(List<PackChange> reverted) {
-        List<String> failed = new ArrayList<>();
-        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
-        for (PackChange change : reverted) {
-            chain = chain.thenCompose(ignored -> this.packSelections.revert(change.change()).handle((applied, failure) -> {
-                if (failure != null) {
-                    Throwable cause = failure.getCause() == null ? failure : failure.getCause();
-                    synchronized (failed) {
-                        failed.add(change.name() + ": " + cause.getMessage());
-                    }
-                }
-                return null;
-            }));
-        }
-        return chain.thenApply(ignored -> failed.isEmpty() ? "" : "Not reverted: " + String.join("; ", failed));
-    }
-
-    /** Pack ids, lowest first, as the pack screen lists them: the highest first. */
-    private static String highestFirst(List<String> ids) {
-        List<String> shown = ids.reversed();
-        return shown.isEmpty() ? "None" : String.join(", ", shown);
-    }
-
-    /** Reverts the selected rows of {@code table} with Delete, the removal key the menus name beside Revert. */
-    private static void revertOnDelete(JTable table, Runnable revert) {
-        table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "revertChanges");
-        table.getActionMap().put("revertChanges", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent event) {
-                revert.run();
-            }
-        });
-    }
-
-    /** Shows what {@code reverted} completes with, which is empty unless something failed. */
-    private void report(CompletableFuture<String> reverted) {
-        reverted.thenAccept(failure -> SwingUtilities.invokeLater(() -> setStatus(failure)));
-    }
-
-    private JPopupMenu resourceMenu(int row) {
-        if (row < 0) return null;
-        List<ResourceChange> selected = new ArrayList<>();
-        for (int viewRow : this.resourceTable.getSelectedRows()) selected.add(this.resourceModel.shown.get(viewRow));
-        JPopupMenu menu = new JPopupMenu();
-        if (selected.size() > 1) {
-            menu.add(ContextMenus.action("Revert " + selected.size(), null, "DELETE", () -> report(revertResources(selected))));
-            return menu;
-        }
-        ResourceChange change = this.resourceModel.shown.get(row);
-        menu.add(ContextMenus.action("Open", null, null, () -> openResource(change)));
-        menu.add(ContextMenus.action(change.change().original().isEmpty() ? "Revert and Delete" : "Revert", null, "DELETE",
-                () -> report(revertResources(List.of(change)))));
-        return menu;
-    }
-
-    private void openResource(ResourceChange change) {
-        Path file = change.target().location().resolve(change.target().path());
-        this.navigator.accept(new NavigationTarget.LocalFile(file));
-    }
-
-    /** Puts back what the managed packs held before Companion changed them; completes with what failed, or empty. */
-    private CompletableFuture<String> revertResources(List<ResourceChange> reverted) {
-        List<CompletableFuture<ResourceEdits.Saved>> requests =
-                this.resourceEdits.revert(reverted.stream().map(ResourceChange::change).toList());
-        return CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).handle((ignored, failure) -> {
-            List<String> failed = new ArrayList<>();
-            for (int index = 0; index < requests.size(); index++) {
-                CompletableFuture<ResourceEdits.Saved> request = requests.get(index);
-                String name = reverted.get(index).name();
-                if (request.isCompletedExceptionally()) {
-                    Throwable cause = request.exceptionNow();
-                    failed.add(name + ": " + (cause.getCause() == null ? cause.getMessage() : cause.getCause().getMessage()));
-                } else if (!request.join().reloadFailure().isEmpty()) {
-                    failed.add(name + ": " + request.join().reloadFailure());
-                } else if (!request.join().unused().isEmpty()) {
-                    failed.add(name + ": " + request.join().unused());
-                }
-            }
-            return failed.isEmpty() ? "" : "Not reverted or not reloaded: " + String.join("; ", failed);
-        });
-    }
-
-    private JPopupMenu keyMenu(int row) {
-        if (row < 0) return null;
-        List<KeyChange> selected = new ArrayList<>();
-        for (int viewRow : this.keyTable.getSelectedRows()) selected.add(this.keyModel.shown.get(viewRow));
-        JPopupMenu menu = new JPopupMenu();
-        if (selected.size() > 1) {
-            menu.add(ContextMenus.action("Revert " + selected.size(), null, "DELETE", () -> report(revert(selected))));
-            return menu;
-        }
-        KeyChange change = this.keyModel.shown.get(row);
-        menu.add(ContextMenus.action("Revert to " + this.bindings.display(change.original()), null, "DELETE",
-                () -> report(revert(List.of(change)))));
-        menu.add(ContextMenus.action("Show in Key Bindings", null, null,
-                () -> this.navigator.accept(new NavigationTarget.KeyBindings(change.name()))));
-        return menu;
-    }
-
-    /** Reads the changed files and keys again. */
     public void load() {
         this.loader.load();
     }
 
-    /** Reads the files of the changes recorded now, naming mods from the catalog. */
+    /** Reads what each category's changed targets hold now, naming mods from the catalog. */
     private Callable<Loaded> prepareLoad() {
         CatalogIndex index = this.catalog.index().orElse(null);
         List<ChangeRecord.Change> recorded = this.record.changes();
+        List<ChangeLabels> labels = this.categories.stream().map(category -> category.labels).toList();
         return () -> {
-            this.writer.refreshPending();
-            return read(recorded, index);
+            Map<ChangeLabels, List<ChangeLabels.Row>> rows = new LinkedHashMap<>();
+            List<String> problems = new ArrayList<>();
+            for (ChangeLabels category : labels) {
+                List<ChangeRecord.Change> changes = recorded.stream().filter(change -> category.covers(change.target())).toList();
+                if (changes.isEmpty()) continue;
+                ChangeLabels.Rows read = category.rows(changes, index);
+                rows.put(category, read.rows());
+                problems.addAll(read.problems());
+            }
+            return new Loaded(rows, problems, index);
         };
     }
 
-    /** The recorded changes: settings under their mod and file, mods by name, then key bindings. Blocking. */
-    private Loaded read(List<ChangeRecord.Change> recorded, CatalogIndex index) {
-        Map<String, List<ChangeRecord.Change>> byMod = new HashMap<>();
-        List<ChangeRecord.Change> keyChanges = new ArrayList<>();
-        List<ChangeRecord.Change> resourceChanges = new ArrayList<>();
-        List<ChangeRecord.Change> packChanges = new ArrayList<>();
-        for (ChangeRecord.Change change : recorded) {
-            switch (change.target()) {
-                case ChangeRecord.Setting setting -> byMod.computeIfAbsent(setting.modId(), ignored -> new ArrayList<>()).add(change);
-                case ChangeRecord.KeyBinding ignored -> keyChanges.add(change);
-                case ChangeRecord.Resource ignored -> resourceChanges.add(change);
-                case ChangeRecord.PackSelection ignored -> packChanges.add(change);
-            }
-        }
-        List<String> mods = new ArrayList<>(byMod.keySet());
-        mods.sort(Comparator.comparing(modId -> modName(index, modId).toLowerCase(Locale.ROOT)));
-        List<ConfigSettingsTable.Row> rows = new ArrayList<>();
-        Map<String, ConfigSettings.Target> targets = new HashMap<>();
-        Map<String, ChangeRecord.Change> changes = new HashMap<>();
-        Map<String, Section> sections = new HashMap<>();
-        List<String> problems = new ArrayList<>();
-        for (String modId : mods) {
-            Map<Path, List<ChangeRecord.Change>> byFile = new LinkedHashMap<>();
-            for (ChangeRecord.Change change : byMod.get(modId)) byFile.computeIfAbsent(setting(change).file(), ignored -> new ArrayList<>()).add(change);
-            List<ConfigSettingsTable.Row> modRows = new ArrayList<>();
-            int fileNumber = 0;
-            for (Map.Entry<Path, List<ChangeRecord.Change>> entry : byFile.entrySet()) {
-                Path file = entry.getKey();
-                String fileName = setting(entry.getValue().getFirst()).fileName();
-                ConfigValues values;
-                try {
-                    values = ConfigValues.read(file);
-                } catch (IOException exception) {
-                    problems.add(exception.getMessage());
-                    continue;
-                }
-                PackCatalog.ConfigFile described = configFile(index, modId, fileName);
-                // Files of one name in several worlds stay apart by number.
-                String filePath = modId + "." + fileNumber++;
-                List<ConfigSettingsTable.Row> fileRows = new ArrayList<>();
-                for (ChangeRecord.Change change : entry.getValue()) {
-                    String key = setting(change).setting();
-                    String literal = values.literals().get(key);
-                    if (literal == null) {
-                        problems.add(key + " is no longer in " + file.getFileName());
-                        continue;
-                    }
-                    this.record.observed(change.target(), literal, ConfigEdit::sameValue);
-                    if (ConfigEdit.sameValue(literal, change.original())) continue;
-                    PackCatalog.ConfigSetting setting = setting(described, key);
-                    ConfigSettingsTable.Row row = new ConfigSettingsTable.Row(2, filePath + "." + key, key, setting.comment(),
-                            setting, values.values().getOrDefault(key, ""), literal);
-                    fileRows.add(row);
-                    changes.put(row.path(), change);
-                    targets.put(row.path(), new ConfigSettings.Target(modId, fileName, file,
-                            described == null ? PackCatalog.ConfigType.COMMON : described.type(), setting));
-                }
-                if (fileRows.isEmpty()) continue;
-                modRows.add(new ConfigSettingsTable.Row(1, filePath, fileName, "", null, "", null));
-                sections.put(filePath, new Section(modId, modName(index, modId), fileName, file));
-                modRows.addAll(fileRows);
-            }
-            if (modRows.isEmpty()) continue;
-            rows.add(new ConfigSettingsTable.Row(0, modId, modName(index, modId), "", null, "", null));
-            sections.put(modId, new Section(modId, modName(index, modId), null, null));
-            rows.addAll(modRows);
-        }
-        Map<String, KeyBindings.Assignment> options = options(problems);
-        KeyBindings bindings = keyBindings(index, options);
-        List<KeyChange> keys = new ArrayList<>();
-        for (ChangeRecord.Change change : keyChanges) {
-            String name = ((ChangeRecord.KeyBinding) change.target()).name();
-            KeyBindings.Binding binding = bindings.bindings().stream()
-                    .filter(candidate -> candidate.spec().name().equals(name)).findFirst().orElse(null);
-            // A binding the catalog does not describe still has its line in options.txt.
-            KeyBindings.Assignment current = binding != null ? binding.current()
-                    : options.getOrDefault(name, KeyBindings.Assignment.decode(change.current()));
-            this.record.observed(change.target(), current.encode(), String::equals);
-            if (current.encode().equals(change.original())) continue;
-            String mod = binding == null || index == null ? "" : modName(index, index.keyBindingOwner(binding.spec()));
-            keys.add(new KeyChange(name, binding == null ? name : binding.name(), current,
-                    KeyBindings.Assignment.decode(change.original()), mod));
-        }
-        List<ResourceChange> resources = new ArrayList<>();
-        for (ChangeRecord.Change change : resourceChanges) {
-            ChangeRecord.Resource target = (ChangeRecord.Resource) change.target();
-            boolean held = this.resourceEdits.holds(change);
-            if (this.record.change(target) == null) continue;
-            String name = target.path().substring(target.path().indexOf('/') + 1);
-            resources.add(new ResourceChange(change, name, packName(target.location()), held));
-        }
-        resources.sort(Comparator.comparing(ResourceChange::name));
-        List<PackChange> packs = new ArrayList<>();
-        for (ChangeRecord.Change change : packChanges) {
-            ChangeRecord.PackSelection target = (ChangeRecord.PackSelection) change.target();
-            String name = target.side() == ChangeRecord.PackSide.RESOURCES ? "Resource packs"
-                    : "Datapacks of " + GameState.worldName(target.location());
-            packs.add(new PackChange(change, name, highestFirst(PackSelections.parse(change.current())),
-                    this.packSelections.holds(change)));
-        }
-        return new Loaded(rows, targets, changes, sections, keys, bindings, resources, packs, problems);
-    }
-
-    /** The pack a change was saved into, such as {@code MyPack datapack of World}. */
-    private static String packName(Path pack) {
-        return PackFolders.label(pack);
-    }
-
-    private static ChangeRecord.Setting setting(ChangeRecord.Change change) {
-        return (ChangeRecord.Setting) change.target();
-    }
-
-    /** The pack's bindings with the keys options.txt gives them now. */
-    private Map<String, KeyBindings.Assignment> options(List<String> problems) {
-        try {
-            return KeyBindings.readOptions(this.keyControl.options());
-        } catch (IOException exception) {
-            problems.add("Could not read options.txt: " + exception.getMessage());
-            return Map.of();
-        }
-    }
-
-    private static KeyBindings keyBindings(CatalogIndex index, Map<String, KeyBindings.Assignment> current) {
-        PackCatalog captured = index == null ? null : index.catalog();
-        return captured == null ? new KeyBindings(List.of(), List.of(), current, Map.of())
-                : new KeyBindings(captured.keyBindings(), captured.keyContexts(), current, captured.keyNames());
-    }
-
-    private static String modName(CatalogIndex index, String modId) {
-        return index == null ? modId : index.mod(modId).map(PackCatalog.Mod::name).orElse(modId);
-    }
-
-    private static PackCatalog.ConfigFile configFile(CatalogIndex index, String modId, String fileName) {
-        if (index == null) return null;
-        return index.mod(modId).flatMap(mod -> mod.configs().stream()
-                .filter(file -> file.fileName().equals(fileName)).findFirst()).orElse(null);
-    }
-
-    /** The captured setting, or one without a description when the catalog no longer has it. */
-    private static PackCatalog.ConfigSetting setting(PackCatalog.ConfigFile file, String key) {
-        if (file != null) {
-            for (PackCatalog.ConfigSetting setting : file.settings()) {
-                if (setting.path().equals(key)) return setting;
-            }
-        }
-        return new PackCatalog.ConfigSetting(key, "", "", "", List.of(), PackCatalog.Restart.NONE);
-    }
-
     private void show(Loaded loaded) {
-        this.targets = loaded.targets();
-        this.changes = loaded.changes();
-        this.sections = loaded.sections();
-        this.keys = loaded.keys();
-        this.resources = loaded.resources();
-        this.packs = loaded.packs();
-        this.bindings = loaded.bindings();
+        this.index = loaded.index();
         this.problem = String.join("; ", loaded.problems());
         showNotice();
-        this.table.show(loaded.rows(), true, true);
-        this.keyModel.setChanges(loaded.keys());
-        this.resourceModel.setChanges(loaded.resources());
-        this.packModel.setChanges(loaded.packs());
-        this.revertAll.setEnabled(!loaded.changes().isEmpty() || !loaded.keys().isEmpty() || !loaded.resources().isEmpty()
-                || !loaded.packs().isEmpty());
+        // A read again keeps the tab shown and the rows selected that are still listed.
+        Component shownTab = this.tabs.getSelectedComponent();
+        Map<Category, Set<ChangeRecord.Target>> selected = new LinkedHashMap<>();
+        for (Category category : this.categories) {
+            Set<ChangeRecord.Target> targets = new HashSet<>();
+            for (ChangeLabels.Row row : category.selected()) targets.add(row.change().target());
+            selected.put(category, targets);
+        }
         this.tabs.removeAll();
-        if (!loaded.changes().isEmpty()) {
-            this.tabs.addTab("Configuration", SubjectIcons.tab(ModTab.CONFIGURATION), this.settingsScroll);
-            TabTitles.setCounted(this.tabs, this.tabs.getTabCount() - 1, "Configuration", loaded.changes().size());
+        int total = 0;
+        for (Category category : this.categories) {
+            List<ChangeLabels.Row> rows = loaded.rows().getOrDefault(category.labels, List.of());
+            category.model.setRows(rows);
+            total += rows.size();
+            if (rows.isEmpty()) continue;
+            this.tabs.addTab(category.labels.tab(), category.scroll);
+            TabTitles.setCounted(this.tabs, this.tabs.getTabCount() - 1, category.labels.tab(), rows.size());
         }
-        if (!loaded.keys().isEmpty()) {
-            this.tabs.addTab("Key bindings", SubjectIcons.tab(ModTab.KEY_BINDINGS), this.keysScroll);
-            TabTitles.setCounted(this.tabs, this.tabs.getTabCount() - 1, "Key bindings", loaded.keys().size());
-        }
-        if (!loaded.resources().isEmpty()) {
-            this.tabs.addTab("Resources", SubjectIcons.tab(ModTab.RESOURCES), this.resourcesScroll);
-            TabTitles.setCounted(this.tabs, this.tabs.getTabCount() - 1, "Resources", loaded.resources().size());
-        }
-        if (!loaded.packs().isEmpty()) {
-            this.tabs.addTab("Packs", Icons.RESOURCES_ROOT, this.packsScroll);
-            TabTitles.setCounted(this.tabs, this.tabs.getTabCount() - 1, "Packs", loaded.packs().size());
-        }
+        this.revertAll.setEnabled(total > 0);
         applyFilter();
+        int shown = shownTab == null ? -1 : this.tabs.indexOfComponent(shownTab);
+        if (shown >= 0) this.tabs.setSelectedIndex(shown);
+        selected.forEach(Category::select);
     }
 
-    private void edit(ConfigSettingsTable.Row row, String literal) {
-        ConfigSettings.Target target = this.targets.get(row.path());
-        if (target != null) this.writer.edit(target, row.literal(), literal);
+    private void open(ChangeLabels.Row row) {
+        if (row.opens() != null) this.navigator.accept(row.opens());
     }
 
-    /** Puts bindings back on the keys they had before Companion changed them; completes with what failed, or empty. */
-    private CompletableFuture<String> revert(List<KeyChange> reverted) {
-        // Each binding is reverted on its own, so one changed since does not keep the others from their keys.
-        Map<String, CompletableFuture<String>> reverts = new LinkedHashMap<>();
-        Map<String, String> names = new HashMap<>();
-        for (KeyChange change : reverted) {
-            reverts.put(change.name(), this.keyControl.set(List.of(
-                    new KeyBindingControl.Change(change.name(), change.current(), change.original()))));
-            names.put(change.name(), change.action());
-        }
-        return CompletableFuture.allOf(reverts.values().toArray(CompletableFuture[]::new)).thenApply(ignored -> {
-            Map<String, String> failed = new LinkedHashMap<>();
-            reverts.forEach((name, revert) -> {
-                if (!revert.join().isEmpty()) failed.put(name, revert.join());
-            });
-            return KeyBindingsPanel.notChanged(failed, names);
-        });
-    }
-
-    /** Writes every original value back, after asking. */
+    /** Puts back what every listed change replaced, after asking. */
     private void revertAll() {
-        int total = this.changes.size() + this.keys.size() + this.resources.size() + this.packs.size();
+        int total = this.categories.stream().mapToInt(category -> category.model.all.size()).sum();
         if (total == 0) return;
         int answer = JOptionPane.showConfirmDialog(this,
                 "Put back the original value of " + total + (total == 1 ? " change?" : " changes?"),
                 "Revert All", JOptionPane.OK_CANCEL_OPTION);
         if (answer != JOptionPane.OK_OPTION) return;
-        Map<ConfigSettings.Target, ChangeRecord.Change> files = new LinkedHashMap<>();
-        this.changes.forEach((path, change) -> {
-            ConfigSettings.Target target = this.targets.get(path);
-            if (target != null) files.put(target, change);
-        });
-        List<CompletableFuture<String>> writes = new ArrayList<>();
-        files.forEach((target, change) -> writes.add(this.writer.revert(target, change.current(), change.original())));
-        CompletableFuture<String> settings = CompletableFuture.allOf(writes.toArray(CompletableFuture[]::new)).thenApply(done -> {
-            List<String> failed = writes.stream().map(CompletableFuture::join).filter(failure -> !failure.isEmpty()).toList();
-            return failed.isEmpty() ? "" : "Not reverted: " + String.join("; ", failed);
-        });
-        List<CompletableFuture<String>> reverts = List.of(revert(this.keys), revertResources(this.resources),
-                revertPacks(this.packs), settings);
-        // One status once every kind is done, so a later success never hides an earlier failure.
+        List<CompletableFuture<String>> reverts = new ArrayList<>();
+        for (Category category : this.categories) {
+            if (!category.model.all.isEmpty()) reverts.add(category.revert(category.model.all));
+        }
+        // One status once every category is done, so a later success never hides an earlier failure.
         report(CompletableFuture.allOf(reverts.toArray(CompletableFuture[]::new)).thenApply(ignored -> String.join("; ",
                 reverts.stream().map(CompletableFuture::join).filter(failure -> !failure.isEmpty()).toList())));
     }
 
-    /** A mod row opens the mod's page, a file row its Configuration tab. */
-    private void open(ConfigSettingsTable.Row row) {
-        Section section = row.setting() == null ? this.sections.get(row.path()) : null;
-        if (section == null) return;
-        this.navigator.accept(new NavigationTarget.ModPage(section.modId(),
-                section.file() == null ? ModTab.OVERVIEW : ModTab.CONFIGURATION, ""));
+    private void report(CompletableFuture<String> reverted) {
+        reverted.whenComplete((failure, error) -> SwingUtilities.invokeLater(() ->
+                setStatus(error != null ? "Not reverted: " + error.getMessage() : failure)));
     }
 
-    private String sectionTooltip(ConfigSettingsTable.Row row) {
-        Section section = this.sections.get(row.path());
-        if (section == null) return null;
-        if (section.file() == null) return Tooltip.of(section.modName()).detail(section.modId()).html();
-        Tooltip tooltip = Tooltip.of(section.fileName()).detail(Tooltip.shortPath(section.file()));
-        Instant last = null;
-        for (ChangeRecord.Change change : this.changes.values()) {
-            if (setting(change).file().equals(section.file()) && (last == null || change.lastChanged().isAfter(last))) {
-                last = change.lastChanged();
-            }
-        }
-        if (last != null) tooltip.fact("Changed", ago(last));
+    private static String tooltip(ChangeLabels.Row row) {
+        Tooltip tooltip = Tooltip.of(row.name());
+        if (!row.where().isEmpty()) tooltip.detail(row.where());
+        tooltip.fact("Now", row.now()).fact("Before", row.before()).fact("Changed", ago(row.changed()));
+        if (!row.notice().isEmpty()) tooltip.text(row.notice());
         return tooltip.html();
     }
 
-    /** How long ago {@code time} was, in the largest whole unit. */
     static String ago(Instant time) {
         Duration elapsed = Duration.between(time, Instant.now());
         if (elapsed.toMinutes() < 1) return "just now";
@@ -735,41 +337,54 @@ public final class ChangesPanel extends JPanel {
     }
 
     private void applyFilter() {
-        String query = this.filter.getText();
-        this.table.filter(query, false);
-        this.keyModel.filter(query.strip().toLowerCase(Locale.ROOT));
-        this.resourceModel.filter(query.strip().toLowerCase(Locale.ROOT));
-        this.packModel.filter(query.strip().toLowerCase(Locale.ROOT));
+        String query = this.filter.getText().strip().toLowerCase(Locale.ROOT);
+        for (Category category : this.categories) category.model.filter(query);
         boolean empty = this.tabs.getTabCount() == 0;
         this.message.setText(!query.isBlank() ? "No change matches the filter." : "Companion has not changed anything in this pack.");
         ((CardLayout) this.cards.getLayout()).show(this.cards, empty ? MESSAGE_CARD : TABS_CARD);
     }
 
-    /** The table of changed settings, which sits in a tab only while there are some. */
-    ConfigSettingsTable settingsTable() {
-        return this.table;
+    /** The rows shown in the tab named {@code tab}, for tests. */
+    List<ChangeLabels.Row> rows(String tab) {
+        for (Category category : this.categories) {
+            if (category.labels.tab().equals(tab)) return category.model.shown;
+        }
+        return List.of();
     }
 
     public void dispose() {
         this.loader.dispose();
     }
 
-    private final class PackChangesModel extends AbstractTableModel {
-        private List<PackChange> all = List.of();
-        private List<PackChange> shown = List.of();
+    /** A category's rows, those the filter shows. */
+    private static final class RowsModel extends AbstractTableModel {
+        private List<ChangeLabels.Row> all = List.of();
+        private List<ChangeLabels.Row> shown = List.of();
         private String query = "";
 
-        void setChanges(List<PackChange> changes) {
-            this.all = List.copyOf(changes);
+        void setRows(List<ChangeLabels.Row> rows) {
+            this.all = List.copyOf(rows);
             filter(this.query);
         }
 
         void filter(String query) {
             this.query = query;
-            this.shown = this.all.stream().filter(change -> query.isEmpty()
-                    || change.name().toLowerCase(Locale.ROOT).contains(query)
-                    || change.enabled().toLowerCase(Locale.ROOT).contains(query)).toList();
+            this.shown = query.isEmpty() ? this.all : this.all.stream().filter(row -> matches(row, query)).toList();
             fireTableDataChanged();
+        }
+
+        private static boolean matches(ChangeLabels.Row row, String query) {
+            String squashed = squash(query);
+            for (String text : List.of(row.name(), row.where(), row.now(), row.before(), row.actions().search())) {
+                String lower = text.toLowerCase(Locale.ROOT);
+                if (lower.contains(query) || !squashed.isEmpty() && squash(lower).contains(squashed)) return true;
+            }
+            return false;
+        }
+
+        /** {@code text} without spaces and plus signs, so a key typed as {@code ctrl+g} finds "Ctrl + G". */
+        private static String squash(String text) {
+            return text.replace(" ", "").replace("+", "").replace("control", "ctrl");
         }
 
         @Override
@@ -779,122 +394,23 @@ public final class ChangesPanel extends JPanel {
 
         @Override
         public int getColumnCount() {
-            return 3;
+            return COLUMNS.length;
         }
 
         @Override
         public String getColumnName(int column) {
-            return switch (column) {
-                case 0 -> "Packs";
-                case 1 -> "Enabled";
-                default -> "Changed";
-            };
+            return COLUMNS[column];
         }
 
         @Override
         public Object getValueAt(int row, int column) {
-            PackChange change = this.shown.get(row);
+            ChangeLabels.Row change = this.shown.get(row);
             return switch (column) {
                 case 0 -> change.name();
-                case 1 -> change.enabled();
-                default -> ago(change.change().lastChanged());
-            };
-        }
-    }
-
-    private final class ResourceChangesModel extends AbstractTableModel {
-        private List<ResourceChange> all = List.of();
-        private List<ResourceChange> shown = List.of();
-        private String query = "";
-
-        void setChanges(List<ResourceChange> changes) {
-            this.all = List.copyOf(changes);
-            filter(this.query);
-        }
-
-        void filter(String query) {
-            this.query = query;
-            this.shown = this.all.stream().filter(change -> query.isEmpty()
-                    || change.name().toLowerCase(Locale.ROOT).contains(query)
-                    || change.pack().toLowerCase(Locale.ROOT).contains(query)).toList();
-            fireTableDataChanged();
-        }
-
-        @Override
-        public int getRowCount() {
-            return this.shown.size();
-        }
-
-        @Override
-        public int getColumnCount() {
-            return 3;
-        }
-
-        @Override
-        public String getColumnName(int column) {
-            return switch (column) {
-                case 0 -> "Resource";
-                case 1 -> "Pack";
-                default -> "Changed";
-            };
-        }
-
-        @Override
-        public Object getValueAt(int row, int column) {
-            ResourceChange change = this.shown.get(row);
-            return switch (column) {
-                case 0 -> change.name();
-                case 1 -> change.pack();
-                default -> ago(change.change().lastChanged());
-            };
-        }
-    }
-
-    private final class KeyChangesModel extends AbstractTableModel {
-        private List<KeyChange> all = List.of();
-        private List<KeyChange> shown = List.of();
-        private String query = "";
-
-        void setChanges(List<KeyChange> changes) {
-            this.all = List.copyOf(changes);
-            filter(this.query);
-        }
-
-        void filter(String query) {
-            this.query = query;
-            this.shown = this.all.stream().filter(change -> query.isEmpty()
-                    || change.action().toLowerCase(Locale.ROOT).contains(query)
-                    || change.mod().toLowerCase(Locale.ROOT).contains(query)
-                    || ChangesPanel.this.bindings.namesKey(change.current(), query)).toList();
-            fireTableDataChanged();
-        }
-
-        @Override
-        public int getRowCount() {
-            return this.shown.size();
-        }
-
-        @Override
-        public int getColumnCount() {
-            return 3;
-        }
-
-        @Override
-        public String getColumnName(int column) {
-            return switch (column) {
-                case 0 -> "Action";
-                case 1 -> "Key";
-                default -> "Mod";
-            };
-        }
-
-        @Override
-        public Object getValueAt(int row, int column) {
-            KeyChange change = this.shown.get(row);
-            return switch (column) {
-                case 0 -> change.action();
-                case 1 -> ChangesPanel.this.bindings.display(change.current());
-                default -> change.mod();
+                case 1 -> change.where();
+                case 2 -> change.now();
+                case 3 -> change.before();
+                default -> ago(change.changed());
             };
         }
     }

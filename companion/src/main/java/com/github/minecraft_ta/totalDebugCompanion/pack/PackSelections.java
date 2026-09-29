@@ -45,6 +45,16 @@ public final class PackSelections {
         this.datapacks = new DatapackSelection();
     }
 
+    /** Where the game whose packs are selected is. */
+    GameLocation location() {
+        return this.location;
+    }
+
+    /** The change record the selections are entered in. */
+    ChangeRecord record() {
+        return this.pipeline.record();
+    }
+
     /** The record's target for the resource packs, or for {@code world}'s datapacks. */
     public ChangeRecord.PackSelection target(ChangeRecord.PackSide side, Path world) {
         return new ChangeRecord.PackSelection(side, side == ChangeRecord.PackSide.RESOURCES ? options() : Objects.requireNonNull(world, "world"));
