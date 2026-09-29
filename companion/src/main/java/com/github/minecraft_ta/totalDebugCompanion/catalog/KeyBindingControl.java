@@ -89,7 +89,8 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
         for (String line : Files.readAllLines(this.options, StandardCharsets.UTF_8)) {
             for (ChangeRecord.KeyBinding target : targets) {
                 String prefix = "key_" + target.name() + ":";
-                if (line.startsWith(prefix)) held.put(target, line.substring(prefix.length()));
+                // Read as the page reads it, so an unchanged key written another way, such as with :NONE, compares equal.
+                if (line.startsWith(prefix)) held.put(target, KeyBindings.Assignment.decode(line.substring(prefix.length())).encode());
             }
         }
         return held;

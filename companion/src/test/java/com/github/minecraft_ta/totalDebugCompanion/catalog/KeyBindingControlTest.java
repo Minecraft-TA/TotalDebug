@@ -63,6 +63,16 @@ class KeyBindingControlTest {
     }
 
     @Test
+    void aKeyWrittenWithItsNoneModifierIsTheKeyTheOptionsReaderShows() throws Exception {
+        Path options = this.directory.resolve("options.txt");
+        Files.writeString(options, "key_key.jump:key.keyboard.g:NONE\n");
+        KeyBindingControl control = control(GameLocations.of(this.directory, false));
+
+        assertEquals("", set(control, new KeyBindingControl.Change("key.jump", KeyBindings.readOptions(options).get("key.jump"), SPACE)));
+        assertEquals(List.of("key_key.jump:key.keyboard.space"), Files.readAllLines(options));
+    }
+
+    @Test
     void aGameRunningWithoutAConnectionKeepsItsOptions() throws Exception {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "key_key.jump:key.keyboard.space\n");
