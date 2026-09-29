@@ -41,6 +41,28 @@ class PackCatalogServiceTest {
     }
 
     @Test
+    void aCatalogCapturedAgainWithTheSameContentKeepsTheShownIndexAndTellsNoOne() throws Exception {
+        InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
+        Path jar = CatalogFixtures.modJar(this.directory);
+        inventory(paths, CatalogFixtures.INVENTORY, jar);
+        CatalogFixtures.catalog(jar).write(paths.catalog());
+        PackCatalogService service = new PackCatalogService(paths);
+        service.restore();
+        CatalogIndex shown = service.index().orElseThrow();
+        AtomicInteger changes = new AtomicInteger();
+        service.addListener(changes::incrementAndGet);
+
+        // As after every resource reload: Minecraft captures the catalog again.
+        service.capturing();
+        assertEquals(shown, service.index().orElseThrow(), "the catalog before stays shown while the new one is captured");
+        service.accept(CatalogFixtures.INVENTORY, paths.catalog(), Runnable::run);
+        SwingUtilities.invokeAndWait(() -> { });
+
+        assertEquals(shown, service.index().orElseThrow(), "the same content keeps the index the pages hold");
+        assertEquals(0, changes.get(), "no page reads the catalog again for nothing new");
+    }
+
+    @Test
     void aCatalogOfAnotherRuntimeIsStale() throws Exception {
         InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
         Path jar = CatalogFixtures.modJar(this.directory);
