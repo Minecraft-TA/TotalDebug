@@ -169,6 +169,20 @@ class PackSelectionsTest {
     }
 
     @Test
+    void aModsOwnResourcePackIsEnabledLikeAnyOther() throws Exception {
+        Path options = this.directory.resolve("options.txt");
+        Files.writeString(options, "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
+        ChangeRecord record = ChangeRecord.inMemory();
+        PackSelections selections = selections(record, edits(record, false));
+
+        selections.set(SetPacksPayload.Side.RESOURCES, null, List.of("vanilla", "mod_resources", "mod/testmod")).get(5, TimeUnit.SECONDS);
+        assertEquals(List.of("vanilla", "mod_resources", "mod/testmod"), PackResources.enabledInOptions(options),
+                "a mod that shows its resources as a pack of its own, as the pack screen lists it");
+        selections.revert(record.changes().getFirst()).get(5, TimeUnit.SECONDS);
+        assertEquals(0, record.size());
+    }
+
+    @Test
     void optionsLeavingOutTheRequiredPacksAreReadAsTheGameReadsThem() throws Exception {
         Path options = this.directory.resolve("options.txt");
         Files.writeString(options, "resourcePacks:[\"vanilla\",\"file/A\"]\n");

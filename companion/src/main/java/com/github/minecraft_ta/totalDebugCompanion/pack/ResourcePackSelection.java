@@ -25,8 +25,9 @@ import java.util.function.Consumer;
 /**
  * The resource pack selection as a category of the change pipeline: the connected game client enables and orders the
  * packs and reloads its resources, and a closed game's {@code options.txt} is written. Its value is the enabled packs,
- * lowest first, as the game keeps them: without the parts of the mods' pack, which come and go with it, and with the
- * packs it requires, which it adds where {@code options.txt} leaves them out.
+ * lowest first, as the game keeps them: with the packs it requires, which it adds where {@code options.txt} leaves them
+ * out. The hidden parts of the mods' pack are in neither, while a mod's pack of its own, {@code mod/<id>}, is a pack like
+ * any other.
  */
 final class ResourcePackSelection implements ChangeCategory<ChangeRecord.PackSelection, List<String>> {
     /** The one target the game client's change table knows, the selection itself. */
@@ -83,12 +84,11 @@ final class ResourcePackSelection implements ChangeCategory<ChangeRecord.PackSel
     }
 
     /**
-     * {@code enabled} as the game keeps the selection: without the parts of the mods' pack, and with Minecraft's pack at
-     * the bottom and the mods' resources at the top where it leaves them out, as the game adds them when it reads
-     * {@code options.txt}.
+     * {@code enabled} as the game keeps the selection: with Minecraft's pack at the bottom and the mods' resources at the
+     * top where it leaves them out, as the game adds them when it reads {@code options.txt}.
      */
     static List<String> asTheGameKeepsIt(List<String> enabled) {
-        List<String> ids = new ArrayList<>(enabled.stream().filter(id -> !id.startsWith("mod/")).toList());
+        List<String> ids = new ArrayList<>(enabled);
         if (!ids.contains(PackResources.VANILLA)) ids.addFirst(PackResources.VANILLA);
         if (!ids.contains(PackResources.MOD_RESOURCES)) ids.add(PackResources.MOD_RESOURCES);
         return ids;
@@ -111,7 +111,7 @@ final class ResourcePackSelection implements ChangeCategory<ChangeRecord.PackSel
             for (String id : enabled) {
                 if (!previous.contains(id) && id.startsWith("file/")) incompatible.add(id);
             }
-            put(lines, "resourcePacks:", enabled.stream().filter(id -> !id.startsWith("mod/")).toList());
+            put(lines, "resourcePacks:", enabled);
             put(lines, "incompatibleResourcePacks:", List.copyOf(incompatible));
             AtomicFiles.writeString(this.options, String.join("\n", lines) + "\n");
             landed.accept(write.target());

@@ -59,6 +59,18 @@ public final class ClientChanges {
      * changed; or both the values and why the change did not take effect.
      */
     public CompletableFuture<ChangeResultPayload> apply(ChangePayload change) {
+        CompletableFuture<ChangeResultPayload> answer;
+        try {
+            answer = make(change);
+        } catch (RuntimeException failure) {
+            answer = CompletableFuture.failedFuture(failure);
+        }
+        // Whatever fails in the game, Companion hears of it rather than waiting.
+        return answer.exceptionally(failure -> ChangeResultPayload.refused(change.requestId(),
+                "The game failed while making the change: " + message(failure)));
+    }
+
+    private CompletableFuture<ChangeResultPayload> make(ChangePayload change) {
         List<Category> handlers = new ArrayList<>();
         List<String> before = new ArrayList<>();
         Set<String> targets = new HashSet<>();

@@ -23,6 +23,7 @@ class ClientChangesTest {
         @Override public String read(String target) {
             String value = this.values.get(target);
             if (value == null) throw new IllegalArgumentException(target + " is not a key binding of this game");
+            if (value.equals("gone")) throw new IllegalStateException("gone cannot be read back");
             return value;
         }
 
@@ -31,6 +32,7 @@ class ClientChangesTest {
         }
 
         @Override public void set(String target, String value) {
+            if (value.equals("crash")) throw new IllegalStateException("the key table is locked");
             this.values.put(target, value);
         }
 
@@ -92,6 +94,14 @@ class ClientChangesTest {
         this.keys.taking.completeExceptionally(new IllegalStateException("The game could not load the resources"));
         assertEquals(new ChangeResultPayload(1, List.of(new ChangeResultPayload.Applied("space", "space")),
                 "The game could not load the resources"), answer.join(), "the values it holds after the failure, and why");
+    }
+
+    @Test
+    void whateverFailsInTheGameIsAnswered() {
+        assertRefused("The game failed while making the change: the key table is locked", apply(edit("key.jump", "space", "crash")));
+
+        assertRefused("The game failed while making the change: gone cannot be read back",
+                apply(edit("key.jump", "space", "gone")));
     }
 
     private void assertRefused(String reason, ChangeResultPayload result) {

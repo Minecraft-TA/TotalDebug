@@ -12,6 +12,7 @@ import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.server.packs.resources.Resource;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -26,9 +27,12 @@ import java.util.stream.Collectors;
  * above it. The world's data is reloaded by its server ({@code WorldDatapacks}).
  */
 public final class ResourceReloads {
-    /** A resource reload that has not finished, and the folder packs selected when it started; client thread only. */
-    private static CompletableFuture<Void> pendingResources;
-    private static Set<String> pendingPacks = Set.of();
+    /** A resource reload that has not finished, and the folder packs selected when it started. */
+    private record Pending(CompletableFuture<Void> reload, Set<String> packs) {
+    }
+
+    /** The resource reloads that have not finished, as a pack change and an edit's reload can overlap; client thread only. */
+    private static final List<Pending> pending = new ArrayList<>();
 
     private ResourceReloads() {
     }
@@ -58,10 +62,7 @@ public final class ResourceReloads {
         });
         Set<String> folderPacks = minecraft.getResourcePackRepository().getSelectedIds().stream()
                 .filter(id -> id.startsWith("file/")).collect(Collectors.toSet());
-        if (!folderPacks.isEmpty()) {
-            pendingResources = reload;
-            pendingPacks = folderPacks;
-        }
+        if (!folderPacks.isEmpty()) pending.add(new Pending(reload, folderPacks));
         return reload;
     }
 
@@ -79,16 +80,12 @@ public final class ResourceReloads {
      * selected, the managed pack or the player's own, are then gone. Client thread only, from the reload listener.
      */
     public static void reloaded() {
-        CompletableFuture<Void> pending = pendingResources;
-        if (pending == null) return;
-        if (pending.isDone()) {
-            pendingResources = null;
-            return;
-        }
-        if (Minecraft.getInstance().getResourcePackRepository().getSelectedIds().containsAll(pendingPacks)) return;
-        pendingResources = null;
-        pending.completeExceptionally(new IllegalStateException(
-                "The game could not load the resources and turned off every resource pack; its log names the cause"));
+        pending.removeIf(reload -> reload.reload().isDone());
+        Collection<String> selected = Minecraft.getInstance().getResourcePackRepository().getSelectedIds();
+        List<Pending> rolledBack = pending.stream().filter(reload -> !selected.containsAll(reload.packs())).toList();
+        pending.removeAll(rolledBack);
+        rolledBack.forEach(reload -> reload.reload().completeExceptionally(new IllegalStateException(
+                "The game could not load the resources and turned off every resource pack; its log names the cause")));
     }
 
     /**
