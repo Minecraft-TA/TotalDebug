@@ -172,7 +172,11 @@ public final class PackCatalogPublisher implements AutoCloseable {
     }
 
     @Override
+    /**
+     * Stops taking requests. A read or write already running finishes rather than being interrupted, which would leave
+     * the catalog file half written; each is short, since a capture runs on the client thread.
+     */
     public void close() {
-        this.worker.shutdownNow();
+        this.worker.shutdown();
     }
 }
