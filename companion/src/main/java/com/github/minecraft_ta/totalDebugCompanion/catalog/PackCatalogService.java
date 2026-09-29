@@ -58,11 +58,7 @@ public final class PackCatalogService {
 
     /** The catalog to show: the one ready, or while Minecraft captures it again, the one before. */
     public Optional<CatalogIndex> index() {
-        return switch (state()) {
-            case Ready ready -> Optional.of(ready.index());
-            case Capturing capturing -> Optional.ofNullable(capturing.previous());
-            default -> Optional.empty();
-        };
+        return Optional.ofNullable(shown(state()));
     }
 
     /** Listeners run on the Swing thread after the state changed. */
@@ -190,7 +186,8 @@ public final class PackCatalogService {
         SwingUtilities.invokeLater(() -> this.listeners.forEach(Runnable::run));
     }
 
-    private static CatalogIndex shown(State state) {
+    /** The catalog {@code state} shows: the one ready, or while Minecraft captures it again, the one before; or null. */
+    public static CatalogIndex shown(State state) {
         return switch (state) {
             case Ready ready -> ready.index();
             case Capturing capturing -> capturing.previous();
