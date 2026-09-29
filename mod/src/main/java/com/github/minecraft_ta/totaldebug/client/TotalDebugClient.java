@@ -190,7 +190,10 @@ public final class TotalDebugClient {
         play(Playing.joined());
     }
 
-    /** The player is leaving the world or server: what ran there ends. Client thread only. */
+    /**
+     * The player is leaving the world or server: what ran there ends. Client thread only. The game drops its integrated
+     * server before it fires {@code LoggingOut}, so the packs told with the menu name no datapacks.
+     */
     public void left() {
         this.relay.serverLeft();
         play(new PlayingPayload.Menu());
