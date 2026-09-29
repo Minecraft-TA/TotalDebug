@@ -267,9 +267,13 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                         case CompanionProtocol.RUN_SCRIPT, CompanionProtocol.STOP_SCRIPT -> {
                             if (executionRuns != null) executionRuns.relayFailed(message.correlation(), message.reason());
                         }
-                        case CompanionProtocol.RELOAD, CompanionProtocol.SET_PACKS -> {
+                        case CompanionProtocol.RELOAD -> {
                             ProjectScope scope = current;
                             if (scope != null) scope.pipeline().reloads().relayFailed(message.correlation(), message.reason());
+                        }
+                        case CompanionProtocol.CHANGE -> {
+                            ProjectScope scope = current;
+                            if (scope != null) scope.pipeline().relayFailed(message.correlation(), message.reason());
                         }
                         default -> { }
                     }

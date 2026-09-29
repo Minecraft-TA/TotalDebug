@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 39;
+    public static final int VERSION = 40;
 
     public static final short READY = 1;
     // 2 was the game opening a class, which the /decompile command used.
@@ -24,7 +24,7 @@ public final class CompanionProtocol {
     public static final short PACK_STACK = 35;
     public static final short RELOAD = 36;
     public static final short RELOAD_RESULT = 37;
-    public static final short SET_PACKS = 38;
+    // 38 was a pack selection, now a change.
     public static final short PLAYING = 39;
     // 40 and 41 belong to game-rule messages.
     public static final short TO_SERVER = 42;

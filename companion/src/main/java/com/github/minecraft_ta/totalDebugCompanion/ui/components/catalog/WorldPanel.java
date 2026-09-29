@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.NoticeLine;
@@ -28,7 +29,6 @@ import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
@@ -112,7 +112,7 @@ public final class WorldPanel extends JPanel {
         this.datapacks.setApplier(enabled -> {
             CurrentWorld.Saved shown = this.saved;
             if (shown == null) return CompletableFuture.failedFuture(new IllegalStateException("No world is shown"));
-            return selections.set(SetPacksPayload.Side.DATA, shown.directory(), enabled);
+            return selections.set(ChangeRecord.PackSide.DATA, shown.directory(), enabled);
         }, "Enables the checked datapacks in this order: in the world the connected game has open, which reloads its data, otherwise in the world's level.dat");
 
         this.tabContent.put(WorldTab.OVERVIEW, scroll(this.overview));

@@ -1,6 +1,6 @@
 # Resource editing
 
-Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`); textures drawn pixel by pixel, saved the same way and put in place in the running game without a full reload; resource packs and the current world's datapacks enabled and ordered, in the connected game or in `options.txt` and `level.dat` (the resource packs as a `CHANGE`, protocol 39; the datapacks with `SET_PACKS`); the change record holds all of them and reverts them. Not yet: forced values.
+Status: design recorded 2026-09-26, simplified 2026-09-27. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; text resources written into the packs Companion manages and reloaded in the running game (`PACK_STACK`, `RELOAD`, `RELOAD_RESULT`); textures drawn pixel by pixel, saved the same way and put in place in the running game without a full reload; resource packs and the current world's datapacks enabled and ordered, in the connected game or in `options.txt` and `level.dat` (as a `CHANGE` of the change pipeline, protocol 40); the change record holds all of them and reverts them. Not yet: forced values.
 
 ## Goal
 
@@ -91,7 +91,7 @@ The game's own rules for a selection hold in every mode, so Companion never writ
 | Pack list | Game connected | Game running, not connected | Game closed |
 |---|---|---|---|
 | Resource packs | The mod selects the packs as the pack screen does (`PackRepository.setSelected`, then saves `options.txt` as `Options.updateResourcePacks` does), reloads the client's resources, and answers the change once they reloaded | Refused: the game writes `options.txt` when it closes, over Companion's | `resourcePacks` in `options.txt`, lowest first. A pack Companion enables is also listed in `incompatibleResourcePacks`, which the game drops again for a pack that is compatible, so it keeps a pack of another format that its pack screen would have asked about |
-| Datapacks of the world the game has open | The server reloads with the new selection, as `/datapack enable` and `disable` do (`MinecraftServer.reloadResources`); the game saves it into `level.dat` | Refused: the open world's server writes `level.dat` | Not possible: a world is only open while its game runs |
+| Datapacks of the world the game has open | The server selects the packs and reloads with them, as `/datapack enable` and `disable` do (`MinecraftServer.reloadResources`), and answers the change once it did; the game saves the selection into `level.dat` | Refused: the open world's server writes `level.dat` | Not possible: a world is only open while its game runs |
 | Datapacks of a world no game has open | Written into its `level.dat` | Written into its `level.dat` | Written into its `level.dat` |
 
 - **Who decides:** the columns are the states of [GAME_LOCATION.md](GAME_LOCATION.md), which answers for every write. A world open in another program, such as a world editor, is refused as well.
@@ -110,7 +110,8 @@ A selection is a target of its own, `PackSelection`: the side (resource packs, o
 | `PACK_STACK` | Game to Companion | Enabled resource packs in order, with their files, the resource and datapack formats; sent on the events that change the stack and after every handshake. The world's datapacks come from its server as `DATAPACKS` ([GAME_LOCATION.md](GAME_LOCATION.md)) |
 | `RELOAD` | Companion to game | Request id, what to reload (language, textures, resources, data), the managed pack and the edited paths |
 | `RELOAD_RESULT` | Game to Companion | Request id, duration, problems naming edited paths, or the error |
-| `SET_PACKS` | Companion to the world's server, through the relay | Request id, the side, and the enabled datapack ids, lowest first; answered with `RELOAD_RESULT` once the data reloaded. The resource packs are a `CHANGE` of the change pipeline ([CHANGE_PIPELINE.md](CHANGE_PIPELINE.md#live-changes)) |
+
+Pack selections are a `CHANGE` of the change pipeline ([CHANGE_PIPELINE.md](CHANGE_PIPELINE.md#live-changes)): the resource packs to the game client, the datapacks through the relay to the world's server.
 
 - These are kernel services every extension needs, so they are native messages rather than scripts run through the evaluator.
 - One protocol version bump for the step: 27; textures shown the quick way: 28; pack order: 29, which also lists the packs that are not enabled in `PACK_STACK`, with whether each is required, fixed, compatible and the features it requests, and names the managed pack per side in `RELOAD`.

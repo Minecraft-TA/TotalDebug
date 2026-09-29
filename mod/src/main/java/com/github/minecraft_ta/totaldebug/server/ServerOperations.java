@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totaldebug.server;
 
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.SetPacksMessage;
 import com.github.minecraft_ta.totaldebug.server.world.WorldDatapacks;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
@@ -39,7 +39,7 @@ public final class ServerOperations {
                         scripts.stopScript(player, companion, ((StopScriptMessage) message).scriptId()),
                 CompanionLeftMessage.class, (player, companion, message) -> scripts.companionLeft(player, companion),
                 ReloadMessage.class, (player, companion, message) -> datapacks.reload(player, companion, ((ReloadMessage) message).payload()),
-                SetPacksMessage.class, (player, companion, message) -> datapacks.select(player, companion, ((SetPacksMessage) message).payload()),
+                ChangeMessage.class, (player, companion, message) -> datapacks.change(player, companion, ((ChangeMessage) message).payload()),
                 DatapacksRequestMessage.class, (player, companion, message) -> datapacks.report(player, companion));
     }
 

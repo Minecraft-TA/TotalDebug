@@ -50,7 +50,7 @@ class ChangesPanelTest {
                 Runnable::run, InstanceState.inMemory());
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(GameLocations.of(this.directory, false), record),
                 new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run)), edits,
-                new PackSelections(record, edits, Runnable::run), target -> { }));
+                new PackSelections(edits), target -> { }));
         ConfigSettingsTable table = panel[0].settingsTable();
         try {
             awaitOnSwing(() -> table.getRowCount() == 3);

@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.storage;
 
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import com.google.gson.JsonArray;
@@ -85,11 +84,17 @@ public final class ChangeRecord implements AutoCloseable {
      * {@code options.txt}, or a world's datapacks, whose {@code location} is the world's folder. Its values are the
      * enabled pack ids, lowest first, as a JSON array.
      */
-    public record PackSelection(SetPacksPayload.Side side, Path location) implements Target {
+    public record PackSelection(PackSide side, Path location) implements Target {
         public PackSelection {
             Objects.requireNonNull(side, "side");
             location = location.toAbsolutePath().normalize();
         }
+    }
+
+    /** Which packs a {@link PackSelection} enables: the resource packs, or a world's datapacks. */
+    public enum PackSide {
+        RESOURCES,
+        DATA
     }
 
     /** A change still in effect: {@code original} is the value before the first change, {@code current} the last written. */
@@ -169,7 +174,7 @@ public final class ChangeRecord implements AutoCloseable {
                                     + ": it is not a file of this instance");
                             yield null;
                         }
-                        yield new PackSelection(SetPacksPayload.Side.valueOf(JsonFiles.string(entry, "side")), location);
+                        yield new PackSelection(PackSide.valueOf(JsonFiles.string(entry, "side")), location);
                     }
                     default -> throw new IllegalArgumentException("Unknown change kind " + JsonFiles.string(entry, "kind"));
                 };

@@ -25,7 +25,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextFie
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import javax.swing.AbstractAction;
@@ -359,9 +358,8 @@ public final class ChangesPanel extends JPanel {
 
     /** Pack ids, lowest first, as the pack screen lists them: the highest first. */
     private static String highestFirst(ChangeRecord.PackSelection target, List<String> ids) {
-        // A world's level.dat keeps the hidden parts of the mods' pack too; a mod's own resource pack is shown.
-        List<String> shown = ids.reversed().stream()
-                .filter(id -> target.side() == SetPacksPayload.Side.RESOURCES || !id.startsWith("mod/")).toList();
+        // A world's level.dat keeps the parts of the mods' pack too; a pack a mod shows or adds is shown.
+        List<String> shown = (target.side() == ChangeRecord.PackSide.RESOURCES ? ids : PackSelections.withoutModParts(ids)).reversed();
         return shown.isEmpty() ? "None" : String.join(", ", shown);
     }
 
@@ -551,7 +549,7 @@ public final class ChangesPanel extends JPanel {
         List<PackChange> packs = new ArrayList<>();
         for (ChangeRecord.Change change : packChanges) {
             ChangeRecord.PackSelection target = (ChangeRecord.PackSelection) change.target();
-            String name = target.side() == SetPacksPayload.Side.RESOURCES ? "Resource packs"
+            String name = target.side() == ChangeRecord.PackSide.RESOURCES ? "Resource packs"
                     : "Datapacks of " + target.location().getFileName();
             packs.add(new PackChange(change, name, highestFirst(target, PackSelections.parse(change.current())),
                     this.packSelections.holds(change)));

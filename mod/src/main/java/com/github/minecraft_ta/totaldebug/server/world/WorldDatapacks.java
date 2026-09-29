@@ -1,9 +1,12 @@
 package com.github.minecraft_ta.totaldebug.server.world;
 
+import com.github.minecraft_ta.totaldebug.change.ChangeTable;
+import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
-import com.github.minecraft_ta.totaldebug.protocol.message.SetPacksPayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.resource.PackOrder;
@@ -21,6 +24,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -30,8 +34,8 @@ import java.util.stream.Stream;
 
 /**
  * The world's datapacks as Companion changes them (see {@code docs/MOD_SIDES.md}): the server reloads its data, as
- * {@code /reload} does, or enables exactly the datapacks Companion names, as {@code /datapack} does, and answers through
- * the relay. It names them too, in place of the game client: when Companion asks, and after each time the data loaded.
+ * {@code /reload} does, or makes a change of its datapacks, as {@code /datapack} does ({@link DatapackEdits}), and
+ * answers through the relay. It names them too, in place of the game client: when Companion asks, and after each time the data loaded.
  * Only the player whose singleplayer world it is may change or read them so far; who else may on a server is decided with
  * the permissions of a later layer.
  */
@@ -79,33 +83,18 @@ public final class WorldDatapacks {
     }
 
     /**
-     * Enables exactly the datapacks {@code request} names, lowest first, and answers once the data reloaded. A pack the
-     * world does not have, or one that requests features the world lacks, fails the request unchanged. Server thread.
+     * Makes a change of the world's datapacks through the server's change table, and answers once the data reloaded with
+     * it. Server thread.
      */
-    public void select(ServerPlayer player, int companion, SetPacksPayload request) {
-        long started = System.nanoTime();
+    public void change(ServerPlayer player, int companion, ChangePayload change) {
         MinecraftServer server = player.server;
-        if (refused(player, companion, request.requestId())) return;
-        if (request.side() != SetPacksPayload.Side.DATA) {
-            answer(player, companion, new ReloadResultPayload(request.requestId(), 0, List.of(),
-                    "The server selects the world's datapacks only; the client selects its resource packs"));
+        if (!server.isSingleplayerOwner(player.getGameProfile())) {
+            this.relay.send(server, player, companion, new ChangeResultMessage(ChangeResultPayload.refused(change.requestId(),
+                    "Companion changes the datapacks of a singleplayer world for its owner only; a server's are not open to it yet")));
             return;
         }
-        attempt(() -> {
-            PackRepository packs = server.getPackRepository();
-            packs.reload();
-            List<String> refused = new ArrayList<>();
-            for (String id : request.enabled()) {
-                Pack pack = packs.getPack(id);
-                if (pack == null) refused.add(id + " is not a datapack of the world");
-                else if (!pack.getRequestedFeatures().isSubsetOf(server.getWorldData().enabledFeatures())) {
-                    refused.add(id + " needs features the world does not have");
-                }
-            }
-            if (!refused.isEmpty()) throw new IllegalArgumentException(String.join("; ", refused));
-            return server.reloadResources(request.enabled());
-        }).whenComplete((ignored, failure) -> answer(player, companion, new ReloadResultPayload(request.requestId(),
-                (System.nanoTime() - started) / 1_000_000, List.of(), failure == null ? "" : message(failure))));
+        new ChangeTable(Map.of(DatapackEdits.CATEGORY, new DatapackEdits(server)), server).apply(change)
+                .thenAccept(result -> this.relay.send(server, player, companion, new ChangeResultMessage(result)));
     }
 
     /**
