@@ -109,7 +109,7 @@ final class ResourcePackSelection implements ChangeCategory<ChangeRecord.PackSel
             Set<String> incompatible = new LinkedHashSet<>(listed(lines, "incompatibleResourcePacks:"));
             incompatible.retainAll(enabled);
             for (String id : enabled) {
-                if (!previous.contains(id) && id.startsWith("file/")) incompatible.add(id);
+                if (!previous.contains(id) && (id.startsWith("file/") || id.startsWith("mod/"))) incompatible.add(id);
             }
             put(lines, "resourcePacks:", enabled);
             put(lines, "incompatibleResourcePacks:", List.copyOf(incompatible));

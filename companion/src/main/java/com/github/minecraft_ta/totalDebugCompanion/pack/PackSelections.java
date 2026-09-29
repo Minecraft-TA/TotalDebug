@@ -102,7 +102,9 @@ public final class PackSelections {
     public boolean holds(ChangeRecord.Change change) {
         if (!(change.target() instanceof ChangeRecord.PackSelection target)) return true;
         try {
-            return comparable(current(this.location.read(), target)).equals(comparable(parse(change.current())));
+            List<String> current = current(this.location.read(), target);
+            List<String> recorded = parse(change.current());
+            return target.side() == SetPacksPayload.Side.RESOURCES ? current.equals(recorded) : comparable(current).equals(comparable(recorded));
         } catch (IOException unreadable) {
             return true;
         }
@@ -215,8 +217,8 @@ public final class PackSelections {
     }
 
     /**
-     * The ids a comparison of two selections looks at: the parts of the mods' pack come and go with it, and the game
-     * keeps them in {@code level.dat} but not in {@code options.txt}.
+     * The ids a comparison of two datapack selections looks at: the parts of the mods' pack come and go with it, and the
+     * game keeps them in {@code level.dat}.
      */
     private static List<String> comparable(List<String> ids) {
         return ids.stream().filter(id -> !id.startsWith("mod/")).toList();

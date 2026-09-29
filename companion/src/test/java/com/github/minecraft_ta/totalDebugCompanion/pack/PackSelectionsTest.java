@@ -178,6 +178,12 @@ class PackSelectionsTest {
         selections.set(SetPacksPayload.Side.RESOURCES, null, List.of("vanilla", "mod_resources", "mod/testmod")).get(5, TimeUnit.SECONDS);
         assertEquals(List.of("vanilla", "mod_resources", "mod/testmod"), PackResources.enabledInOptions(options),
                 "a mod that shows its resources as a pack of its own, as the pack screen lists it");
+        assertTrue(Files.readString(options).contains("incompatibleResourcePacks:[\"mod/testmod\"]"),
+                "kept even when made for another format, as a folder pack is");
+        assertTrue(selections.holds(record.changes().getFirst()));
+        Files.writeString(options, "resourcePacks:[\"vanilla\",\"mod_resources\"]\n");
+        assertFalse(selections.holds(record.changes().getFirst()), "the game turned it off since");
+        Files.writeString(options, "resourcePacks:[\"vanilla\",\"mod_resources\",\"mod/testmod\"]\n");
         selections.revert(record.changes().getFirst()).get(5, TimeUnit.SECONDS);
         assertEquals(0, record.size());
     }

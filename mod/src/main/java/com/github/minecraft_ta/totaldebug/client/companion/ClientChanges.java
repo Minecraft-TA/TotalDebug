@@ -97,14 +97,22 @@ public final class ClientChanges {
             ChangePayload.Edit edit = change.edits().get(index);
             handlers.get(index).set(edit.target(), edit.value());
         }
+        // What this change set, read now: while it takes effect, another request may change the same values.
+        List<ChangeResultPayload.Applied> applied = applied(change, handlers, before);
         CompletableFuture<?>[] finished = new LinkedHashSet<>(handlers).stream().map(ClientChanges::finish).toArray(CompletableFuture[]::new);
         return CompletableFuture.allOf(finished).handleAsync((ignored, failure) -> {
-            List<ChangeResultPayload.Applied> applied = new ArrayList<>();
-            for (int index = 0; index < handlers.size(); index++) {
-                applied.add(new ChangeResultPayload.Applied(before.get(index), handlers.get(index).read(change.edits().get(index).target())));
-            }
-            return new ChangeResultPayload(change.requestId(), applied, failure == null ? "" : message(failure));
+            if (failure == null) return new ChangeResultPayload(change.requestId(), applied, "");
+            // The game may have undone the change, as a failed reload turns the packs off: what it holds after that.
+            return new ChangeResultPayload(change.requestId(), applied(change, handlers, before), message(failure));
         }, this.client);
+    }
+
+    private static List<ChangeResultPayload.Applied> applied(ChangePayload change, List<Category> handlers, List<String> before) {
+        List<ChangeResultPayload.Applied> applied = new ArrayList<>();
+        for (int index = 0; index < handlers.size(); index++) {
+            applied.add(new ChangeResultPayload.Applied(before.get(index), handlers.get(index).read(change.edits().get(index).target())));
+        }
+        return applied;
     }
 
     private static CompletableFuture<Void> finish(Category category) {

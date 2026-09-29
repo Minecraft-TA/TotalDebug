@@ -86,12 +86,21 @@ class ClientChangesTest {
 
     @Test
     void theAnswerWaitsForTheChangeToTakeEffectAndNamesWhyItDidNot() {
-        this.keys.taking = new CompletableFuture<>();
+        CompletableFuture<Void> reload = new CompletableFuture<>();
+        this.keys.taking = reload;
         CompletableFuture<ChangeResultPayload> answer = this.changes.apply(new ChangePayload(1, List.of(edit("key.jump", "space", "g"))));
         assertFalse(answer.isDone(), "a pack selection is answered once the game reloaded");
 
+        CompletableFuture<Void> other = new CompletableFuture<>();
+        this.keys.taking = other;
+        CompletableFuture<ChangeResultPayload> made = this.changes.apply(new ChangePayload(2, List.of(edit("key.sneak", "shift", "h"))));
+        this.keys.values.put("key.sneak", "j");
+        other.complete(null);
+        assertEquals(new ChangeResultPayload(2, List.of(new ChangeResultPayload.Applied("shift", "h")), ""), made.join(),
+                "the value this change set, not what another request set while it took effect");
+
         this.keys.values.put("key.jump", "space");
-        this.keys.taking.completeExceptionally(new IllegalStateException("The game could not load the resources"));
+        reload.completeExceptionally(new IllegalStateException("The game could not load the resources"));
         assertEquals(new ChangeResultPayload(1, List.of(new ChangeResultPayload.Applied("space", "space")),
                 "The game could not load the resources"), answer.join(), "the values it holds after the failure, and why");
     }
