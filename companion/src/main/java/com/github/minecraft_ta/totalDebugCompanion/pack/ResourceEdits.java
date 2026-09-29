@@ -611,9 +611,16 @@ public final class ResourceEdits {
         }).thenCompose(Function.identity()));
     }
 
-    /** What Companion wrote last to each target of {@code outcome}, so a program's save is told from it. */
-    private void wrote(ChangePipeline.Outcome<ChangeRecord.Resource> outcome) {
-        outcome.applied().forEach(applied -> this.lastWritten.put(applied.target(), applied.now()));
+    /**
+     * What Companion wrote last to each target of {@code outcome}, so a program's save is told from it. Adopting that save
+     * reads the content back by this hash, so a target the change found holding its value already, and did not write,
+     * has that content kept too.
+     */
+    private void wrote(ChangePipeline.Outcome<ChangeRecord.Resource> outcome) throws IOException {
+        for (ChangePipeline.Applied<ChangeRecord.Resource> applied : outcome.applied()) {
+            if (applied.before().equals(applied.now())) this.originals.keep(this.files.read.get(applied.target()));
+            this.lastWritten.put(applied.target(), applied.now());
+        }
     }
 
     /**
