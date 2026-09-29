@@ -263,6 +263,11 @@ public final class ResourceBrowser extends JPanel {
         return selected == null ? this.pendingCategory : selected.key();
     }
 
+    /** The list of resources, for tests. */
+    JList<ModResources.Resource> resourceList() {
+        return this.list;
+    }
+
     public int rowCount() {
         return this.shown.size();
     }
