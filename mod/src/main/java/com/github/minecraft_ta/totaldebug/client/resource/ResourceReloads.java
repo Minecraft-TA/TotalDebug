@@ -12,14 +12,12 @@ import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.server.packs.resources.Resource;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 /**
  * Reloads what Companion's edited resources need in the game client: the language, or every client resource. The
@@ -27,12 +25,11 @@ import java.util.stream.Collectors;
  * above it. The world's data is reloaded by its server ({@code WorldDatapacks}).
  */
 public final class ResourceReloads {
-    /** A resource reload that has not finished, and the folder packs selected when it started. */
-    private record Pending(CompletableFuture<Void> reload, Set<String> packs) {
-    }
-
-    /** The resource reloads that have not finished, as a pack change and an edit's reload can overlap; client thread only. */
-    private static final List<Pending> pending = new ArrayList<>();
+    /**
+     * The resource reloads that have not finished and started with a pack the game could turn off, as a pack change and
+     * an edit's reload can overlap; client thread only.
+     */
+    private static final List<CompletableFuture<Void>> pending = new ArrayList<>();
 
     private ResourceReloads() {
     }
@@ -60,9 +57,7 @@ public final class ResourceReloads {
             if (failure == null) reload.complete(null);
             else reload.completeExceptionally(failure);
         });
-        Set<String> folderPacks = minecraft.getResourcePackRepository().getSelectedIds().stream()
-                .filter(id -> id.startsWith("file/")).collect(Collectors.toSet());
-        if (!folderPacks.isEmpty()) pending.add(new Pending(reload, folderPacks));
+        if (!onlyRequired(minecraft.getResourcePackRepository())) pending.add(reload);
         return reload;
     }
 
@@ -75,17 +70,24 @@ public final class ResourceReloads {
     }
 
     /**
-     * Fails a resource reload the game rolled back, as the next reload applies. When a reload fails, Minecraft turns off
-     * every resource pack, reloads again and never completes the reload it was asked for; the folder packs it had
-     * selected, the managed pack or the player's own, are then gone. Client thread only, from the reload listener.
+     * Fails the resource reloads the game rolled back, as the next reload applies. When a reload fails while a pack it
+     * may turn off is selected, Minecraft selects only the packs it requires, reloads again and never completes the
+     * reload it was asked for ({@code Minecraft.clearResourcePacksOnError}). A pack deselected while a reload ran, which
+     * Minecraft reloads for once that one finished, leaves the others selected and is no rollback. Client thread only,
+     * from the reload listener.
      */
     public static void reloaded() {
-        pending.removeIf(reload -> reload.reload().isDone());
-        Collection<String> selected = Minecraft.getInstance().getResourcePackRepository().getSelectedIds();
-        List<Pending> rolledBack = pending.stream().filter(reload -> !selected.containsAll(reload.packs())).toList();
-        pending.removeAll(rolledBack);
-        rolledBack.forEach(reload -> reload.reload().completeExceptionally(new IllegalStateException(
+        pending.removeIf(CompletableFuture::isDone);
+        if (!onlyRequired(Minecraft.getInstance().getResourcePackRepository())) return;
+        List<CompletableFuture<Void>> rolledBack = List.copyOf(pending);
+        pending.clear();
+        rolledBack.forEach(reload -> reload.completeExceptionally(new IllegalStateException(
                 "The game could not load the resources and turned off every resource pack; its log names the cause")));
+    }
+
+    /** Whether every selected pack is one the game requires, as after it turned the others off. */
+    private static boolean onlyRequired(PackRepository packs) {
+        return packs.getSelectedPacks().stream().allMatch(Pack::isRequired);
     }
 
     /**
