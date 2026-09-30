@@ -171,12 +171,13 @@ public final class TotalDebugClient {
     }
 
     /**
-     * A client resource reload finished, such as after a language or resource pack change. The catalog holds
-     * translated names and the snapshot the winning resources, so both are brought up to date; Companion hears of them
-     * only where they differ. The packs are told after every reload, also unchanged: the reload read the packs' files
-     * again, which may have changed though the packs did not. Client thread only.
+     * A client resource reload finished, such as after a language or resource pack change, or textures were put in place
+     * without one. The catalog holds translated names and the snapshot the winning resources, so both are brought up to
+     * date; Companion hears of them only where they differ. The packs are told after every reload, also unchanged: the
+     * reload read the packs' files again, which may have changed though the packs did not. Client thread only.
      */
     public void resourcesReloaded() {
+        this.resources.resourcesChanged();
         this.catalogs.recapture();
         this.companionApp.announceInventory();
         this.packStacks.republish();

@@ -16,9 +16,13 @@ import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtension
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -40,7 +44,8 @@ import java.util.zip.ZipOutputStream;
  * Keeps one immutable archive of the active pack stack's winning models and textures, plus every contributing atlas
  * definition, so Companion can draw item icons without Minecraft. Layer {@code n} holds the n-th contribution of an
  * additive atlas definition; ordinary resources only use layer 0. A new archive is captured when the pack stack
- * changes. Older archives are removed once no renderer holds them open.
+ * changes or the resources were read again; one that holds the same as the last is dropped, so Companion keeps the
+ * archive it has and draws no icon again. Older archives are removed once no renderer holds them open.
  *
  * <p>Fluid appearances come from mod code rather than resources, so the snapshot also records each fluid's still
  * texture, tint and light properties in {@value #FLUID_APPEARANCES}, the format Companion's renderer reads.</p>
@@ -62,20 +67,36 @@ public final class ResourceSnapshots {
     private List<PackResources> packs = List.of();
     private CompletableFuture<Path> pending;
     private long attemptedAt;
+    /** The resources were read again since the last capture, as after a reload or a texture put in place. */
+    private boolean changed;
+    /** The archive captured last and the digest of what it holds. Worker thread only. */
+    private Captured last;
 
     public ResourceSnapshots(Path directory, Consumer<Path> publish) {
         this.directory = Objects.requireNonNull(directory, "directory");
         this.publish = Objects.requireNonNull(publish, "publish");
     }
 
-    /** Publishes the current snapshot, capturing it first when the pack stack changed. Client thread only. */
+    /**
+     * The resources were read again, as after a reload or a texture put in place without one; the next {@link #prepare()}
+     * captures them, since what a pack holds may have changed though the packs did not.
+     */
+    public synchronized void resourcesChanged() {
+        this.changed = true;
+    }
+
+    /**
+     * Publishes the current snapshot, capturing it first when the pack stack changed or the resources were read again.
+     * Client thread only.
+     */
     public synchronized void prepare() {
         ResourceManager manager = Minecraft.getInstance().getResourceManager();
         List<PackResources> current = manager.listPacks().toList();
         boolean retry = this.pending != null && this.pending.isCompletedExceptionally()
                 && System.nanoTime() - this.attemptedAt > RETRY_NANOS;
-        if (this.pending == null || !current.equals(this.packs) || retry) {
+        if (this.pending == null || !current.equals(this.packs) || this.changed || retry) {
             this.packs = current;
+            this.changed = false;
             this.attemptedAt = System.nanoTime();
             byte[] fluids = fluidAppearances();
             this.pending = CompletableFuture.supplyAsync(() -> {
@@ -124,13 +145,18 @@ public final class ResourceSnapshots {
         return root.toString().getBytes(StandardCharsets.UTF_8);
     }
 
-    private Path capture(ResourceManager manager, List<PackResources> expected, byte[] fluids) throws IOException {
+    /**
+     * Writes the archive of {@code manager}'s resources and {@code fluids}; returns the last one instead where it holds
+     * the same. Worker thread only.
+     */
+    Path capture(ResourceManager manager, List<PackResources> expected, byte[] fluids) throws IOException {
         Files.createDirectories(this.directory);
         trimArchives();
         if (retainedBytes() > MAX_RETAINED_BYTES) {
             throw new IOException("Older icon archives are still open; close Companion inspections and retry");
         }
         Path output = this.directory.resolve(UUID.randomUUID() + ".zip");
+        MessageDigest digest = sha256();
         AtomicFiles.replace(output, staged -> {
             try (var zip = new ZipOutputStream(Files.newOutputStream(staged))) {
                 zip.setLevel(1);
@@ -147,23 +173,38 @@ public final class ResourceSnapshots {
                                 : List.of(entry.getValue().getLast());
                         ResourceLocation id = entry.getKey();
                         for (int layer = 0; layer < retained.size(); layer++) {
-                            write(zip, written, total, path(layer, id, ""), retained.get(layer)::open,
+                            write(zip, digest, written, total, path(layer, id, ""), retained.get(layer)::open,
                                     MAX_RESOURCE_BYTES);
                         }
                         Optional<Resource> meta = manager.getResource(id.withPath(id.getPath() + ".mcmeta"));
                         // Metadata from a lower pack does not describe an overriding image.
                         if (meta.isPresent() && expected.indexOf(meta.get().source())
                                 >= expected.indexOf(entry.getValue().getLast().source())) {
-                            write(zip, written, total, path(0, id, ".mcmeta"), meta.get()::open, MAX_METADATA_BYTES);
+                            write(zip, digest, written, total, path(0, id, ".mcmeta"), meta.get()::open,
+                                    MAX_METADATA_BYTES);
                         }
                     }
                 }
                 requireUnchanged(manager, expected);
-                write(zip, written, total, "layers/0/" + FLUID_APPEARANCES,
+                write(zip, digest, written, total, "layers/0/" + FLUID_APPEARANCES,
                         () -> new ByteArrayInputStream(fluids), MAX_METADATA_BYTES * 4);
             }
         });
+        byte[] held = digest.digest();
+        if (this.last != null && Arrays.equals(held, this.last.digest()) && Files.isRegularFile(this.last.archive())) {
+            Files.deleteIfExists(output);
+            return this.last.archive();
+        }
+        this.last = new Captured(output, held);
         return output;
+    }
+
+    private static MessageDigest sha256() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException missing) {
+            throw new IllegalStateException("SHA-256 is part of every Java runtime", missing);
+        }
     }
 
     private static String path(int layer, ResourceLocation id, String suffix) {
@@ -172,6 +213,7 @@ public final class ResourceSnapshots {
 
     private static void write(
             ZipOutputStream zip,
+            MessageDigest digest,
             Set<String> written,
             long[] total,
             String path,
@@ -192,6 +234,11 @@ public final class ResourceSnapshots {
         zip.putNextEntry(new ZipEntry(path));
         zip.write(bytes);
         zip.closeEntry();
+        // Each entry's name and length, then its bytes, so no two different archives read as the same.
+        byte[] name = path.getBytes(StandardCharsets.UTF_8);
+        digest.update(ByteBuffer.allocate(8).putInt(name.length).putInt(bytes.length).array());
+        digest.update(name);
+        digest.update(bytes);
     }
 
     private static void requireUnchanged(ResourceManager manager, List<PackResources> expected) throws IOException {
@@ -239,6 +286,9 @@ public final class ResourceSnapshots {
 
     private static boolean ownedArchive(Path path) {
         return Files.isRegularFile(path) && path.getFileName().toString().matches("[0-9a-f-]{36}\\.zip");
+    }
+
+    private record Captured(Path archive, byte[] digest) {
     }
 
     @FunctionalInterface
