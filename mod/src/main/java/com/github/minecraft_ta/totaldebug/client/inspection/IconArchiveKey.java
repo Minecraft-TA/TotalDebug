@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totaldebug.client.inspection;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -46,7 +48,7 @@ final class IconArchiveKey {
     }
 
     /** The key of {@code packs} for {@code version} and {@code fluids}, as of {@code now}, or empty when there is none. */
-    static Optional<String> of(String version, List<Part> packs, byte[] fluids, Instant now) throws IOException {
+    static Optional<String> of(String version, List<Part> packs, byte[] fluids, Instant now) {
         MessageDigest digest = sha256();
         text(digest, version);
         for (Part part : packs) {
@@ -60,19 +62,27 @@ final class IconArchiveKey {
         return Optional.of(HexFormat.of().formatHex(digest.digest()));
     }
 
-    /** Adds the files of {@code source}, a folder or a file; false when it is gone or changed a moment ago. */
-    private static boolean stamp(MessageDigest digest, Path source, Instant now) throws IOException {
-        if (Files.isRegularFile(source)) return stampFile(digest, source.toString(), source, now);
-        if (!Files.isDirectory(source)) return false;
-        List<Path> files;
-        try (Stream<Path> walk = Files.walk(source)) {
-            files = walk.filter(Files::isRegularFile).sorted().toList();
+    /**
+     * Adds the files of {@code source}, a folder or a file; false when it is gone, cannot be read or changed a moment ago.
+     * A folder that is a link is walked where it leads, as the game reads it.
+     */
+    private static boolean stamp(MessageDigest digest, Path source, Instant now) {
+        try {
+            if (Files.isRegularFile(source)) return stampFile(digest, source.toString(), source, now);
+            if (!Files.isDirectory(source)) return false;
+            Path root = source.getFileSystem() == FileSystems.getDefault() ? source.toRealPath() : source;
+            List<Path> files;
+            try (Stream<Path> walk = Files.walk(root)) {
+                files = walk.filter(Files::isRegularFile).sorted().toList();
+            }
+            text(digest, source.toString());
+            for (Path file : files) {
+                if (!stampFile(digest, root.relativize(file).toString().replace('\\', '/'), file, now)) return false;
+            }
+            return true;
+        } catch (IOException | UncheckedIOException unreadable) {
+            return false;
         }
-        text(digest, source.toString());
-        for (Path file : files) {
-            if (!stampFile(digest, source.relativize(file).toString().replace('\\', '/'), file, now)) return false;
-        }
-        return true;
     }
 
     private static boolean stampFile(MessageDigest digest, String name, Path file, Instant now) throws IOException {

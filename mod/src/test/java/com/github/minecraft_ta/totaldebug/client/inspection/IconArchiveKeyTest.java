@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.client.inspection;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -66,6 +67,25 @@ class IconArchiveKeyTest {
         Files.setLastModifiedTime(texture, FileTime.from(NOW.minusMillis(500)));
         assertEquals(Optional.empty(), IconArchiveKey.of("1.21.1", List.of(new IconArchiveKey.Part("file/Faithful", List.of(pack))), FLUIDS, NOW),
                 "a file written a moment ago may change again within the same time");
+    }
+
+    @Test
+    void aPackFolderThatIsALinkIsWalkedWhereItLeads() throws Exception {
+        Path pack = pack("Faithful");
+        Path link;
+        try {
+            link = Files.createSymbolicLink(this.directory.resolve("Linked"), pack);
+        } catch (UnsupportedOperationException | IOException | SecurityException notAllowed) {
+            // Windows without the privilege to create links: nothing to check here.
+            return;
+        }
+        List<IconArchiveKey.Part> parts = List.of(new IconArchiveKey.Part("file/Linked", List.of(link)));
+        Optional<String> before = IconArchiveKey.of("1.21.1", parts, FLUIDS, NOW);
+        Path texture = pack.resolve("assets/minecraft/textures/block/sand.png");
+        Files.write(texture, new byte[]{9, 9, 9, 9, 9});
+        Files.setLastModifiedTime(texture, FileTime.from(NOW.minusSeconds(30)));
+        assertTrue(before.isPresent());
+        assertNotEquals(before, IconArchiveKey.of("1.21.1", parts, FLUIDS, NOW), "a texture changed where the link leads");
     }
 
     /** A folder pack with a texture and its pack.mcmeta, last written a minute before {@link #NOW}. */

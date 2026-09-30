@@ -27,6 +27,7 @@ import java.nio.file.attribute.FileTime;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -42,6 +43,7 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 /**
@@ -75,6 +77,9 @@ public final class ResourceSnapshots {
             .name("TotalDebug resource snapshot")
             .unstarted(task));
     private CompletableFuture<Path> pending;
+    /** What the pending archive is prepared for: the resource manager's packs and the fluids' looks. */
+    private List<PackResources> pendingPacks = List.of();
+    private byte[] pendingFluids = new byte[0];
     private long attemptedAt;
 
     public ResourceSnapshots(Path directory, Consumer<Path> publish) {
@@ -93,14 +98,21 @@ public final class ResourceSnapshots {
         }
         ResourceManager manager = Minecraft.getInstance().getResourceManager();
         List<PackResources> current = manager.listPacks().toList();
-        List<IconArchiveKey.Part> parts = parts(current);
         byte[] fluids = fluidAppearances();
+        // Asked again while the archive of the same resources is prepared, as by several inspections: that one is told.
+        if (this.pending != null && !this.pending.isDone() && current.equals(this.pendingPacks) && Arrays.equals(fluids, this.pendingFluids)) {
+            this.pending.thenAccept(this.publish);
+            return;
+        }
+        List<IconArchiveKey.Part> parts = parts(current);
+        this.pendingPacks = current;
+        this.pendingFluids = fluids;
         this.attemptedAt = System.nanoTime();
         this.pending = CompletableFuture.supplyAsync(() -> {
             try {
                 long started = System.nanoTime();
                 Optional<String> key = IconArchiveKey.of(VERSION, parts, fluids, Instant.now());
-                Optional<Path> kept = key.map(name -> this.directory.resolve(name + ".zip")).filter(Files::isRegularFile);
+                Optional<Path> kept = key.map(name -> this.directory.resolve(name + ".zip")).filter(ResourceSnapshots::complete);
                 if (kept.isPresent()) {
                     used(kept.get());
                     TotalDebug.LOGGER.info("Item icon archive unchanged; key taken in {} ms", (System.nanoTime() - started) / 1_000_000);
@@ -138,14 +150,44 @@ public final class ResourceSnapshots {
                 parts.add(new IconArchiveKey.Part(id, List.of(folder.resolve(id.substring("file/".length())))));
             } else if (id.startsWith("mod/")) {
                 IModFileInfo file = ModList.get().getModFileById(id.substring("mod/".length()).split(",")[0]);
-                parts.add(file == null ? IconArchiveKey.Part.unknown(id) : new IconArchiveKey.Part(id, List.of(file.getFile().getFilePath())));
+                parts.add(file == null ? IconArchiveKey.Part.unknown(id) : new IconArchiveKey.Part(id, resources(file)));
             } else if (id.equals("mod_resources")) {
-                parts.add(new IconArchiveKey.Part(id, ModList.get().getModFiles().stream().map(file -> file.getFile().getFilePath()).toList()));
+                parts.add(new IconArchiveKey.Part(id, ModList.get().getModFiles().stream().flatMap(file -> resources(file).stream()).toList()));
             } else {
                 parts.add(IconArchiveKey.Part.unknown(id));
             }
         }
         return parts;
+    }
+
+    /**
+     * Where a mod file's resources are read: the jar itself; for a mod of folders, as in a development run, which may
+     * merge several, its {@code assets} as the game reads them through the jar it makes of them, or none without any.
+     */
+    private static List<Path> resources(IModFileInfo info) {
+        Path file = info.getFile().getFilePath();
+        if (Files.isRegularFile(file)) return List.of(file);
+        Path assets = info.getFile().getSecureJar().getRootPath().resolve("assets");
+        return Files.isDirectory(assets) ? List.of(assets) : List.of();
+    }
+
+    /**
+     * Whether a kept archive was written whole: its fluids' looks, written last, are there. One that is not, as after a
+     * crash of an earlier run, is removed and captured again.
+     */
+    private static boolean complete(Path archive) {
+        if (!Files.isRegularFile(archive)) return false;
+        try (ZipFile zip = new ZipFile(archive.toFile())) {
+            if (zip.getEntry("layers/0/" + FLUID_APPEARANCES) != null) return true;
+        } catch (IOException unreadable) {
+            TotalDebug.LOGGER.warn("Icon archive {} cannot be read and is captured again: {}", archive, unreadable.getMessage());
+        }
+        try {
+            Files.deleteIfExists(archive);
+        } catch (IOException inUse) {
+            TotalDebug.LOGGER.debug("Icon archive {} is still open", archive);
+        }
+        return false;
     }
 
     /** Marks {@code archive} as the most recently used, so it is kept and Companion restores it without a game. */
