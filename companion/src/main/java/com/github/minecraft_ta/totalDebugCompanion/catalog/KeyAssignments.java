@@ -41,6 +41,8 @@ public final class KeyAssignments implements AutoCloseable {
     private long generation;
     /** The assignments read last, or null before the first read. */
     private Map<String, KeyBindings.Assignment> read;
+    /** Whether the last read failed: a page may show that failure, so the next read that succeeds is told. */
+    private boolean unreadable;
 
     /** Watches {@code options}; where its folder, the game's, cannot be watched, nothing is told. */
     public KeyAssignments(Path options) {
@@ -119,6 +121,7 @@ public final class KeyAssignments implements AutoCloseable {
             now = KeyBindings.readOptions(this.options);
         } catch (IOException | RuntimeException unreadable) {
             synchronized (this) {
+                if (generation == this.generation) this.unreadable = true;
                 if (generation == this.generation && attempt < RETRY_MILLIS.size()) {
                     schedule(() -> read(attempt + 1, generation), RETRY_MILLIS.get(attempt));
                 }
@@ -128,8 +131,9 @@ public final class KeyAssignments implements AutoCloseable {
         boolean changed;
         synchronized (this) {
             if (generation != this.generation) return;
-            changed = this.read != null && !this.read.equals(now);
+            changed = this.unreadable || this.read != null && !this.read.equals(now);
             this.read = now;
+            this.unreadable = false;
         }
         if (changed) this.listeners.forEach(Runnable::run);
     }
