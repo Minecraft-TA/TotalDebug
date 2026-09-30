@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.storage;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import com.google.gson.JsonArray;
@@ -113,7 +114,7 @@ public final class ChangeRecord implements AutoCloseable {
     /** The game directory the record's files are stored relative to, or null for a record that is not saved. */
     private final Path gameDirectory;
     private final Map<Target, Change> changes = new LinkedHashMap<>();
-    private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
+    private final Signal changed = new Signal();
 
     private ChangeRecord(JsonStateWriter writer, Clock clock, Path gameDirectory) {
         this.writer = writer;
@@ -232,7 +233,7 @@ public final class ChangeRecord implements AutoCloseable {
             }
             scheduleSave();
         }
-        this.listeners.forEach(Runnable::run);
+        this.changed.fire();
     }
 
     /**
@@ -250,7 +251,7 @@ public final class ChangeRecord implements AutoCloseable {
                 scheduleSave();
             }
         }
-        if (dropped) this.listeners.forEach(Runnable::run);
+        if (dropped) this.changed.fire();
     }
 
     /** The value a setting of {@code file} had before Companion first changed it, or null when it is unchanged. */
@@ -286,13 +287,9 @@ public final class ChangeRecord implements AutoCloseable {
         return this.changes.size();
     }
 
-    /**
-     * Runs {@code listener} after every change of the record, on the thread that changed it, but not after a write that
-     * leaves it as it was; returns its removal.
-     */
-    public Runnable addListener(Runnable listener) {
-        this.listeners.add(listener);
-        return () -> this.listeners.remove(listener);
+    /** Fires after every change of the record, on the thread that changed it, but not after a write that leaves it as it was. */
+    public Signal changed() {
+        return this.changed;
     }
 
     private void scheduleSave() {

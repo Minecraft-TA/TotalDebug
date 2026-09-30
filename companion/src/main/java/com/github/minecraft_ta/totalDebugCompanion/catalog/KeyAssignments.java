@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import java.io.IOException;
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.FileSystems;
@@ -22,14 +23,15 @@ import java.util.concurrent.TimeUnit;
  * screen, Companion or an editor, the listeners hear of it once the assignments differ from those read before. Another
  * option written, such as the volume, tells nobody. The file's folder is watched, so a file replaced by a rename, as the
  * game and Companion write it, is seen; a deleted file assigns nothing. A file that cannot be read keeps the assignments
- * read before, and is read again after 1, 5 and 30 seconds and at its next change.
+ * read before, and is read again after 1, 5 and 30 seconds and at its next change. Companion's own writes are read at once
+ * ({@link #readNow()}), so a page shows them without waiting for the watch.
  */
 public final class KeyAssignments implements AutoCloseable {
     private static final long SETTLE_MILLIS = 300;
     private static final List<Long> RETRY_MILLIS = List.of(1_000L, 5_000L, 30_000L);
 
     private final Path options;
-    private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
+    private final Signal changed = new Signal();
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(task -> Thread.ofPlatform()
             .daemon()
             .name("Companion options.txt")
@@ -74,10 +76,15 @@ public final class KeyAssignments implements AutoCloseable {
         }
     }
 
-    /** Runs {@code listener} on a Companion thread after the assignments changed; returns its removal. */
-    public Runnable addListener(Runnable listener) {
-        this.listeners.add(Objects.requireNonNull(listener, "listener"));
-        return () -> this.listeners.remove(listener);
+    /** Fires on a Companion thread after the assignments changed. */
+    public Signal changed() {
+        return this.changed;
+    }
+
+    /** Reads the file now rather than once a watch saw it settle, as after Companion wrote it. */
+    public synchronized void readNow() {
+        long generation = ++this.generation;
+        schedule(() -> read(0, generation), 0);
     }
 
     private void watch() {
@@ -135,7 +142,7 @@ public final class KeyAssignments implements AutoCloseable {
             this.read = now;
             this.unreadable = false;
         }
-        if (changed) this.listeners.forEach(Runnable::run);
+        if (changed) this.changed.fire();
     }
 
     /** Stops watching. It never fails, so a project's shutdown goes on to its queued writes after it. */

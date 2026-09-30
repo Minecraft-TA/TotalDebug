@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.Access;
@@ -20,7 +21,6 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * Puts key bindings on keys, as a category of the {@link ChangePipeline}: a binding is named as in {@code options.txt},
@@ -36,24 +36,21 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
 
     private final ChangePipeline pipeline;
     private final Path options;
-    private final Function<Runnable, Runnable> assignmentsChanged;
+    private final KeyAssignments assignments;
 
     /**
-     * Changes the keys of the pipeline's game, in its {@code options.txt}. {@code assignmentsChanged} adds a listener for
-     * the keys that file assigns changing, whoever wrote it ({@link KeyAssignments}), and returns its removal.
+     * Changes the keys of the pipeline's game, in its {@code options.txt}, whose keys {@code assignments} follows, whoever
+     * writes the file.
      */
-    public KeyBindingControl(ChangePipeline pipeline, Function<Runnable, Runnable> assignmentsChanged) {
+    public KeyBindingControl(ChangePipeline pipeline, KeyAssignments assignments) {
         this.pipeline = Objects.requireNonNull(pipeline, "pipeline");
         this.options = pipeline.location().workspace().resolve("options.txt");
-        this.assignmentsChanged = Objects.requireNonNull(assignmentsChanged, "assignmentsChanged");
+        this.assignments = Objects.requireNonNull(assignments, "assignments");
     }
 
-    /**
-     * Runs {@code listener} when the keys {@code options.txt} assigns changed, such as a key rebound in the game's
-     * controls screen; returns its removal.
-     */
-    public Runnable addAssignmentListener(Runnable listener) {
-        return this.assignmentsChanged.apply(listener);
+    /** Fires when the keys {@code options.txt} assigns changed, such as a key rebound in the game's controls screen. */
+    public Signal assignmentsChanged() {
+        return this.assignments.changed();
     }
 
     /** The change record the bindings' changes are entered in. */
@@ -73,7 +70,9 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
     public CompletableFuture<String> set(List<Change> changes) {
         List<ChangePipeline.Edit<ChangeRecord.KeyBinding, String>> edits = changes.stream().map(change -> new ChangePipeline.Edit<>(
                 new ChangeRecord.KeyBinding(change.name()), change.shown().encode(), change.assignment().encode())).toList();
-        return this.pipeline.change(this, edits).handle((done, failure) -> failure == null ? "" : message(failure));
+        // The game saved options.txt before it answered, or Companion wrote it: the owner of the keys reads what changed.
+        return this.pipeline.change(this, edits).whenComplete((done, failure) -> this.assignments.readNow())
+                .handle((done, failure) -> failure == null ? "" : message(failure));
     }
 
     private static String message(Throwable failure) {

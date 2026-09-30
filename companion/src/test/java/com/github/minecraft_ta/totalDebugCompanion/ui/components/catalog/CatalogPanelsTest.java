@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import org.junit.jupiter.api.AfterEach;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyAssignments;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettingsFixture;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
@@ -48,6 +52,20 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class CatalogPanelsTest {
     @TempDir Path directory;
+
+    private final List<KeyAssignments> assignments = new ArrayList<>();
+
+    @AfterEach
+    void closeAssignments() {
+        this.assignments.forEach(KeyAssignments::close);
+    }
+
+    /** The key assignments of the test's {@code options.txt}, watched until the test ends. */
+    private KeyAssignments assignments() {
+        KeyAssignments assignments = new KeyAssignments(this.directory.resolve("options.txt"));
+        this.assignments.add(assignments);
+        return assignments;
+    }
 
     @Test
     void wideModLogosStayReadableAndFitInsideTheirHeader() throws Exception {
@@ -99,7 +117,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
-                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run), listener -> () -> { }), opened::add, listener -> () -> { });
+                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run), assignments()), opened::add, listener -> () -> { });
                 try {
                     assertEquals("Test Mod", panel.title());
                     assertTrue(labels(panel).contains("1.2.3"), labels(panel)::toString);
@@ -135,7 +153,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
-                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run), listener -> () -> { }), target -> { }, listener -> () -> { });
+                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run), assignments()), target -> { }, listener -> () -> { });
                 try {
                     List<FactSection> sections = panel.sections(catalog.index().orElseThrow().mod("testmod").orElseThrow());
                     assertEquals(List.of("Mod", "Dependencies"), sections.stream().map(FactSection::title).toList());
@@ -156,7 +174,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 ModPanel panel = new ModPanel("absent", catalog, RuntimeSourceCatalog::empty, icons, this.directory, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
-                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run), listener -> () -> { }), target -> { }, listener -> () -> { });
+                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run), assignments()), target -> { }, listener -> () -> { });
                 try {
                     assertTrue(labels(panel).contains("absent is not an installed mod"), labels(panel)::toString);
                     assertEquals(1, panel.tabs().getTabCount(), "Only the Overview has something to show");
@@ -236,16 +254,18 @@ class CatalogPanelsTest {
     }
 
     @Test
+    @UiTest
     void keyBindingsKeepTheirSelectionWhenTheirKeysAreReadAgain() throws Exception {
         PackCatalogService catalog = readyCatalog();
         Files.writeString(this.directory.resolve("options.txt"), "key_key.drop:key.keyboard.q\n");
         KeyBindingControl control = new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false),
-                ChangeRecord.inMemory(), Runnable::run), listener -> () -> { });
+                ChangeRecord.inMemory(), Runnable::run), assignments());
         KeyBindingsPanel[] panel = new KeyBindingsPanel[1];
         onEdt(() -> panel[0] = new KeyBindingsPanel(catalog, control, "", target -> { }));
         try {
-            panel[0].loading().get(10, TimeUnit.SECONDS);
-            SwingUtilities.invokeAndWait(() -> { });
+            assertEquals(0, (int) UiTestScope.onEdt(panel[0]::reads), "a page does not read before it is shown");
+            onEdt(() -> UiTestScope.showPages(panel[0]));
+            UiTestScope.await(() -> panel[0].table().getRowCount() > 0);
             onEdt(() -> {
                 JTable table = panel[0].table();
                 int drop = -1;
@@ -256,16 +276,16 @@ class CatalogPanelsTest {
                 table.setRowSelectionInterval(drop, drop);
             });
 
-            // As when the game saved a key rebound in its controls screen.
+            // As when the game saved a key rebound in its controls screen: the watch of options.txt tells the page.
             Files.writeString(this.directory.resolve("options.txt"), "key_key.drop:key.keyboard.g\n");
-            onEdt(panel[0]::load);
-            panel[0].loading().get(10, TimeUnit.SECONDS);
+            UiTestScope.await(() -> panel[0].reads() == 2 && panel[0].loading().isDone());
             SwingUtilities.invokeAndWait(() -> { });
             onEdt(() -> {
                 JTable table = panel[0].table();
                 assertEquals(1, table.getSelectedRowCount());
                 assertTrue(String.valueOf(table.getValueAt(table.getSelectedRow(), 0)).contains("Drop Selected Item"),
                         "the binding stays selected when its keys are read again");
+                assertTrue(String.valueOf(table.getValueAt(table.getSelectedRow(), 1)).contains("G"), "and shows its new key");
             });
         } finally {
             onEdt(() -> panel[0].dispose());

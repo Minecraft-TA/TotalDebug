@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
@@ -44,7 +45,7 @@ public final class PackCatalogService {
     }
 
     private final InstancePaths paths;
-    private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
+    private final Signal changed = new Signal();
     private State state = new None();
     private long generation;
 
@@ -61,10 +62,9 @@ public final class PackCatalogService {
         return Optional.ofNullable(shown(state()));
     }
 
-    /** Listeners run on the Swing thread after the state changed. */
-    public Runnable addListener(Runnable listener) {
-        this.listeners.add(Objects.requireNonNull(listener, "listener"));
-        return () -> this.listeners.remove(listener);
+    /** Fires on the Swing thread after the state changed. */
+    public Signal changed() {
+        return this.changed;
     }
 
     /**
@@ -108,7 +108,7 @@ public final class PackCatalogService {
             this.state = new Capturing(shown);
         }
         // Pages that show the catalog go on showing it; only one without a catalog says it is being captured.
-        if (!shownBefore) SwingUtilities.invokeLater(() -> this.listeners.forEach(Runnable::run));
+        if (!shownBefore) SwingUtilities.invokeLater(this.changed::fire);
     }
 
     /**
@@ -183,7 +183,7 @@ public final class PackCatalogService {
             }
             this.state = state;
         }
-        SwingUtilities.invokeLater(() -> this.listeners.forEach(Runnable::run));
+        SwingUtilities.invokeLater(this.changed::fire);
     }
 
     /** The catalog {@code state} shows: the one ready, or while Minecraft captures it again, the one before; or null. */

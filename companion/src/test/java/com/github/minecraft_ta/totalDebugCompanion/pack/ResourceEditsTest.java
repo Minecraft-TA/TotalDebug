@@ -118,7 +118,7 @@ class ResourceEditsTest {
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         edits.packs().named(new ClientPacksPayload(STACK, 48));
         List<String> seen = new CopyOnWriteArrayList<>();
-        edits.addEditListener(() -> {
+        edits.edited().subscribe(() -> {
             try {
                 seen.add(Files.readString(options));
             } catch (IOException unreadable) {
@@ -126,7 +126,7 @@ class ResourceEditsTest {
             }
         });
         AtomicInteger resourcePacks = new AtomicInteger();
-        edits.packs().addResourcePackListener(resourcePacks::incrementAndGet);
+        edits.packs().changed(ChangeRecord.PackSide.RESOURCES).subscribe(resourcePacks::incrementAndGet);
 
         edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
         assertEquals(List.of("resourcePacks:[\"vanilla\",\"file/TotalDebug\"]\n"), seen,

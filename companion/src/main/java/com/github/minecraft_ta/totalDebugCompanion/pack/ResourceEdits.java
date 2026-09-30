@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
@@ -83,9 +84,9 @@ public final class ResourceEdits {
     private final Executor writes;
     private final InstanceState state;
     /** Run after a save or revert has written its file and the game used it, or failed to. */
-    private final List<Runnable> editListeners = new CopyOnWriteArrayList<>();
-    /** Run when a working pack is chosen, which changes where resource tabs save. */
-    private final List<Consumer<String>> workingPackListeners = new CopyOnWriteArrayList<>();
+    private final Signal edited = new Signal();
+    /** Fired by side when its working pack is chosen, which changes where resource tabs save. */
+    private final Map<String, Signal> workingPackChosen = Map.of("assets", new Signal(), "data", new Signal());
     /** The hash of what Companion last wrote to each resource, by the write queue, so a program's save is told from it. */
     private final Map<ChangeRecord.Resource, String> lastWritten = new ConcurrentHashMap<>();
     /** Opens resources in other programs and takes their saves; started when the first is opened. */
@@ -136,18 +137,14 @@ public final class ResourceEdits {
         this.external.close();
     }
 
-    /**
-     * Runs {@code listener} after each save or revert has finished, the managed pack enabled and the game reloaded;
-     * returns its removal.
-     */
-    public Runnable addEditListener(Runnable listener) {
-        this.editListeners.add(listener);
-        return () -> this.editListeners.remove(listener);
+    /** Fires after each save or revert has finished, the managed pack enabled and the game reloaded. */
+    public Signal edited() {
+        return this.edited;
     }
 
-    /** Tells the edit listeners once {@code edit} has finished, whether it worked or not. */
+    /** Fires {@link #edited()} once {@code edit} has finished, whether it worked or not. */
     private CompletableFuture<Saved> finished(CompletableFuture<Saved> edit) {
-        return edit.whenComplete((ignored, failure) -> this.editListeners.forEach(Runnable::run));
+        return edit.whenComplete((ignored, failure) -> this.edited.fire());
     }
 
     /**
@@ -185,13 +182,17 @@ public final class ResourceEdits {
     public void setWorkingPack(String path, Path pack) {
         String name = pack.getFileName().toString();
         this.state.setWorkingPack(side(path), name.equals(PACK_NAME) ? "" : name);
-        this.workingPackListeners.forEach(listener -> listener.accept(side(path)));
+        this.workingPackChosen.get(side(path)).fire();
     }
 
-    /** Runs {@code listener} with the side, as {@link #side} names it, whenever a working pack is chosen; returns what removes it. */
-    public Runnable addWorkingPackListener(Consumer<String> listener) {
-        this.workingPackListeners.add(listener);
-        return () -> this.workingPackListeners.remove(listener);
+    /** Fires whenever a working pack of {@code path}'s side is chosen. */
+    public Signal workingPackChosen(String path) {
+        return this.workingPackChosen.get(side(path));
+    }
+
+    /** The name of the working pack chosen for {@code path}'s side, or empty for the pack Companion manages. */
+    public String workingPackName(String path) {
+        return this.state.workingPack(side(path));
     }
 
     /** Whether {@code pack} is a pack Companion manages, which it creates, enables and places on top. */

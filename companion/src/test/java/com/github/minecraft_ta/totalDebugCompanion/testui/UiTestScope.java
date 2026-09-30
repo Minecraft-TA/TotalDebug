@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.testui;
 
+import java.awt.GridLayout;
 import com.formdev.flatlaf.FlatLaf;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
@@ -118,6 +119,20 @@ public final class UiTestScope implements AutoCloseable {
     public static void show(Window window) {
         prepare(window);
         window.setVisible(true);
+    }
+
+    /**
+     * Shows {@code pages} side by side in a window of their own, as open tabs show them, offscreen and unfocusable; the
+     * scope disposes it. Pages read when they are shown (docs/SYSTEMS.md, section 3).
+     */
+    public static JFrame showPages(Component... pages) {
+        requireEdt();
+        JFrame window = new JFrame();
+        window.setLayout(new GridLayout(1, pages.length));
+        for (Component page : pages) window.add(page);
+        window.setSize(800 * pages.length, 600);
+        show(window);
+        return window;
     }
 
     /** Used by previews in both interactive and offscreen modes. */

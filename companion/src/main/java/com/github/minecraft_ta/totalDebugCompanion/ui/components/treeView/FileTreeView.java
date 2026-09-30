@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 
@@ -281,7 +282,7 @@ public class FileTreeView extends JScrollPane {
                 });
             });
             // A server names its world's datapacks after the game joined it.
-            Runnable removeNamed = scope.packs().addDatapackListener(refresh);
+            Runnable removeNamed = scope.packs().changed(ChangeRecord.PackSide.DATA).subscribe(refresh);
             this.removeWorldListener = () -> {
                 removeRead.run();
                 removePlayed.run();

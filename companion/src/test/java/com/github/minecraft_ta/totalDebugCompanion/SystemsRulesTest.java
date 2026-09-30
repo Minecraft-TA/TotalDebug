@@ -1,0 +1,219 @@
+package com.github.minecraft_ta.totalDebugCompanion;
+
+import org.eclipse.jdt.core.JavaCore;
+import org.eclipse.jdt.core.dom.AST;
+import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.ClassInstanceCreation;
+import org.eclipse.jdt.core.dom.CompilationUnit;
+import org.eclipse.jdt.core.dom.FieldDeclaration;
+import org.eclipse.jdt.core.dom.MethodInvocation;
+import org.eclipse.jdt.core.dom.SimpleName;
+import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * The rules of docs/SYSTEMS.md that the build checks, so a new listener list, thread or watcher is found here rather than
+ * in a review. Each file that breaks a rule today is listed with how often and why; a new one fails, and so does a listed
+ * one that no longer breaks it, so the lists only shrink. Adding to a list is a decision recorded in docs/SYSTEMS.md.
+ */
+class SystemsRulesTest {
+    private static final Path SOURCES = Path.of("src/main/java/com/github/minecraft_ta/totalDebugCompanion");
+    private static final Pattern LISTENER_COLLECTION = Pattern.compile(
+            "(List|Set|Collection|Map)<.*\\b(Runnable|Consumer|BiConsumer|IntConsumer|[A-Z]\\w*Listener)\\b.*>");
+    private static final Set<String> THREAD_TYPES = Set.of("Thread", "ThreadPoolExecutor", "ScheduledThreadPoolExecutor", "ForkJoinPool");
+
+    /** What a file does against a rule, and how often. */
+    private record Found(Map<String, Integer> threads, Map<String, Integer> sharedPool, Map<String, Integer> listenerLists,
+                         Map<String, Integer> watchers) {
+    }
+
+    private static Found found;
+
+    /** A file allowed to break a rule this many times, and why. */
+    private record Allowed(int times, String why) {
+    }
+
+    // Counted per call: an executor made with a thread factory counts twice. Services that own a thread for a reason of their
+    // own (section 4), and those that move onto Workers.
+    private static final Map<String, Allowed> THREADS = Map.ofEntries(
+            Map.entry("CompanionApplication.java", new Allowed(4, "project switching and the MCP lifecycle")),
+            Map.entry("debugger/DebuggerSessionQueue.java", new Allowed(2, "the debugger")),
+            Map.entry("debugger/expression/DebuggerEvaluationRunner.java", new Allowed(1, "the debugger")),
+            Map.entry("ui/components/global/EditorTabs.java", new Allowed(2, "the editor's Java analysis")),
+            Map.entry("script/ScriptCompilationService.java", new Allowed(2, "script compilation")),
+            Map.entry("decompile/CompanionDecompilationService.java", new Allowed(3, "decompilation")),
+            Map.entry("search/SearchManager.java", new Allowed(2, "search")),
+            Map.entry("search/reference/ReferenceSearchService.java", new Allowed(2, "search")),
+            Map.entry("search/insight/CodeInsightService.java", new Allowed(2, "search")),
+            Map.entry("ui/views/SearchEverywherePopup.java", new Allowed(2, "search")),
+            Map.entry("runtime/RuntimeIndexService.java", new Allowed(2, "the runtime index")),
+            Map.entry("mcp/CodeModeJobService.java", new Allowed(2, "the MCP job service")),
+            Map.entry("session/ProjectSelectionServer.java", new Allowed(2, "accepts connections")),
+            Map.entry("inspection/ItemIconService.java", new Allowed(2, "the item icon renderer is confined to one thread")),
+            Map.entry("catalog/ConfigChanges.java", new Allowed(2, "the project's write queue, which the pipeline takes over in PR 3")),
+            Map.entry("storage/JsonStateWriter.java", new Allowed(2, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/catalog/TextureThumbnails.java", new Allowed(2, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/catalog/ModLogoIcons.java", new Allowed(2, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/editors/ResourceViewPanel.java", new Allowed(2, "moves onto Workers in PR 3")),
+            Map.entry("catalog/KeyAssignments.java", new Allowed(3, "becomes a file reading in PR 4")),
+            Map.entry("pack/ExternalEdits.java", new Allowed(3, "becomes an adoption in PR 5")),
+            Map.entry("util/FileUtils.java", new Allowed(1, "its watcher becomes FileWatch in PR 4")));
+
+    // All move onto Workers' file work in PR 3.
+    private static final Map<String, Allowed> SHARED_POOL = Map.ofEntries(
+            Map.entry("CompanionApplication.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("inspection/InspectionSession.java", new Allowed(2, "moves onto Workers in PR 3")),
+            Map.entry("model/CodeView.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("navigation/NavigationService.java", new Allowed(2, "moves onto Workers in PR 3")),
+            Map.entry("pack/ExternalEdits.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("script/SnippetExpressionSupport.java", new Allowed(2, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/PageLoader.java", new Allowed(1, "reads on Workers' file work from PR 3")),
+            Map.entry("ui/components/catalog/ModPanel.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/editors/PackResourceEditor.java", new Allowed(2, "its saves move onto Workers in PR 3")),
+            Map.entry("ui/components/editors/ResourceTextEditor.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/editors/ScriptPanel.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/global/NotificationWidget.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/global/ProjectSelector.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/treeView/FileTreeView.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/treeView/ScriptFileActions.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/treeView/lazyFileTree/LazyFileJTree.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/views/PrismInstancePicker.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/views/debugger/BreakpointsWindow.java", new Allowed(2, "moves onto Workers in PR 3")),
+            Map.entry("ui/views/debugger/DebuggerInspector.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("util/FileUtils.java", new Allowed(1, "moves onto Workers in PR 3")));
+
+    // Signal itself; events inside a subsystem or a control, which are not state (section 1); owners not on signals yet.
+    private static final Map<String, Allowed> LISTENER_LISTS = Map.ofEntries(
+            Map.entry("util/Signal.java", new Allowed(1, "the signal every owner uses")),
+            Map.entry("jdt/diagnostics/ASTCache.java", new Allowed(1, "the editor's analysis")),
+            Map.entry("notification/NotificationCenter.java", new Allowed(1, "notifications, an event")),
+            Map.entry("script/EditorScriptRunService.java", new Allowed(2, "script runs, an event")),
+            Map.entry("session/CompanionSession.java", new Allowed(1, "script results, an event")),
+            Map.entry("search/SearchManager.java", new Allowed(2, "search matches, an event")),
+            Map.entry("ui/components/SegmentedToggle.java", new Allowed(1, "a control's choice, an event")),
+            Map.entry("ui/components/global/EditorTabs.java", new Allowed(1, "the tab chosen, an event")),
+            Map.entry("ui/components/inspection/DataView.java", new Allowed(1, "speed search, an event")),
+            Map.entry("ui/components/treeView/lazyFileTree/LazyFileJTree.java", new Allowed(1, "a double click, an event")),
+            Map.entry("ui/theme/ThemeManager.java", new Allowed(1, "the theme, which stays as it is")),
+            Map.entry("game/GameLocation.java", new Allowed(1, "moves onto signals in PR 3")),
+            Map.entry("inspection/ItemIconService.java", new Allowed(1, "moves onto signals in PR 3")),
+            Map.entry("catalog/WorldReadings.java", new Allowed(1, "replaced by CurrentWorld in PR 4")),
+            Map.entry("util/FileUtils.java", new Allowed(1, "becomes FileWatch in PR 4")),
+            Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 5")));
+
+    private static final Map<String, Allowed> WATCHERS = Map.ofEntries(
+            Map.entry("util/FileUtils.java", new Allowed(1, "becomes FileWatch in PR 4")),
+            Map.entry("catalog/KeyAssignments.java", new Allowed(1, "becomes a file reading in PR 4")),
+            Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 5")));
+
+    @BeforeAll
+    static void scan() throws IOException {
+        Map<String, Integer> threads = new TreeMap<>();
+        Map<String, Integer> sharedPool = new TreeMap<>();
+        Map<String, Integer> listenerLists = new TreeMap<>();
+        Map<String, Integer> watchers = new TreeMap<>();
+        List<Path> files;
+        try (Stream<Path> walk = Files.walk(SOURCES)) {
+            files = walk.filter(path -> path.toString().endsWith(".java")).sorted().toList();
+        }
+        for (Path file : files) {
+            String name = SOURCES.relativize(file).toString().replace('\\', '/');
+            parse(file).accept(new ASTVisitor() {
+                @Override
+                public boolean visit(MethodInvocation call) {
+                    String method = call.getName().getIdentifier();
+                    String target = call.getExpression() instanceof SimpleName simple ? simple.getIdentifier() : "";
+                    if (target.equals("Executors") && method.startsWith("new")
+                            || target.equals("Thread") && (method.equals("ofPlatform") || method.equals("ofVirtual"))) {
+                        threads.merge(name, 1, Integer::sum);
+                    }
+                    if ((method.equals("supplyAsync") || method.equals("runAsync")) && call.arguments().size() == 1) {
+                        sharedPool.merge(name, 1, Integer::sum);
+                    }
+                    if (method.equals("newWatchService")) watchers.merge(name, 1, Integer::sum);
+                    return true;
+                }
+
+                @Override
+                public boolean visit(ClassInstanceCreation creation) {
+                    if (THREAD_TYPES.contains(creation.getType().toString())) threads.merge(name, 1, Integer::sum);
+                    return true;
+                }
+
+                @Override
+                public boolean visit(FieldDeclaration field) {
+                    if (!LISTENER_COLLECTION.matcher(field.getType().toString()).matches()) return true;
+                    for (Object fragment : field.fragments()) {
+                        // A collection of callbacks kept to be told, not of what removes subscriptions.
+                        String variable = ((VariableDeclarationFragment) fragment).getName().getIdentifier();
+                        if (variable.toLowerCase(Locale.ROOT).contains("listener")) listenerLists.merge(name, 1, Integer::sum);
+                    }
+                    return true;
+                }
+            });
+        }
+        found = new Found(threads, sharedPool, listenerLists, watchers);
+    }
+
+    private static CompilationUnit parse(Path file) throws IOException {
+        ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
+        parser.setKind(ASTParser.K_COMPILATION_UNIT);
+        Map<String, String> options = JavaCore.getOptions();
+        JavaCore.setComplianceOptions(JavaCore.VERSION_21, options);
+        parser.setCompilerOptions(options);
+        parser.setSource(Files.readString(file, StandardCharsets.UTF_8).toCharArray());
+        return (CompilationUnit) parser.createAST(null);
+    }
+
+    @Test
+    void threadsAndExecutorsComeFromTheirOwners() {
+        check("creates a thread or executor", found.threads(), THREADS);
+    }
+
+    @Test
+    void workRunsOnANamedWorkerNotTheSharedPool() {
+        check("runs supplyAsync or runAsync on the shared pool", found.sharedPool(), SHARED_POOL);
+    }
+
+    @Test
+    void stateIsFollowedThroughSignals() {
+        check("keeps a list of listeners", found.listenerLists(), LISTENER_LISTS);
+    }
+
+    @Test
+    void filesAreWatchedInOnePlace() {
+        check("watches files", found.watchers(), WATCHERS);
+    }
+
+    private static void check(String breaks, Map<String, Integer> actual, Map<String, Allowed> allowed) {
+        List<String> problems = new ArrayList<>();
+        actual.forEach((file, times) -> {
+            Allowed exception = allowed.get(file);
+            if (exception == null) problems.add(file + " " + breaks + " " + times + " times; use the system of docs/SYSTEMS.md");
+            else if (times > exception.times()) problems.add(file + " " + breaks + " " + times + " times, " + exception.times() + " allowed");
+        });
+        allowed.forEach((file, exception) -> {
+            int times = actual.getOrDefault(file, 0);
+            if (times < exception.times()) problems.add(file + " " + breaks + " " + times + " times now, not " + exception.times()
+                    + "; lower its exception, or remove it at 0");
+        });
+        assertTrue(problems.isEmpty(), () -> String.join("\n", problems));
+    }
+}

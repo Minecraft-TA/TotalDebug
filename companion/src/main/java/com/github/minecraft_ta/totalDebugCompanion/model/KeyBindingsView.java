@@ -17,11 +17,6 @@ public final class KeyBindingsView implements IEditorPanel {
                 context.navigation()::navigate);
     }
 
-    /** Reads the keys again. */
-    public void refresh() {
-        this.panel.load();
-    }
-
     /** Shows a binding, such as {@code key.jump}; an empty name shows none. */
     public void show(String binding) {
         if (!binding.isEmpty()) this.panel.select(binding);

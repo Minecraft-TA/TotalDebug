@@ -23,7 +23,7 @@ public final class KeyBindingLabels implements ChangeLabels {
     /** A key rebound outside Companion, such as in the game, changes the key a row shows. */
     @Override
     public Runnable follow(Runnable listener) {
-        return this.keys.addAssignmentListener(listener);
+        return this.keys.assignmentsChanged().subscribe(listener);
     }
 
     public KeyBindingLabels(KeyBindingControl keys) {

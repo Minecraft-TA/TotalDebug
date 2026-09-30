@@ -342,10 +342,7 @@ public final class NavigationService {
                         KeyBindingsView.class,
                         view -> true,
                         () -> new KeyBindingsView(editors.get())
-                ).thenAccept(view -> {
-                    view.refresh();
-                    view.show(keys.binding());
-                }), activation);
+                ).thenAccept(view -> view.show(keys.binding())), activation);
                 case NavigationTarget.Pack pack -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         PackView.class,
                         view -> view.file().equals(pack.file()),

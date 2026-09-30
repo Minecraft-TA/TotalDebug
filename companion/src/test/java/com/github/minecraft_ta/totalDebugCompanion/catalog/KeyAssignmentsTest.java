@@ -21,7 +21,7 @@ class KeyAssignmentsTest {
         Files.writeString(options, "soundCategory_master:1.0\nkey_key.jump:key.keyboard.space\n");
         AtomicInteger told = new AtomicInteger();
         try (KeyAssignments assignments = new KeyAssignments(options)) {
-            assignments.addListener(told::incrementAndGet);
+            assignments.changed().subscribe(told::incrementAndGet);
             // The first read only learns what the file assigns.
             Thread.sleep(500);
 
@@ -42,7 +42,7 @@ class KeyAssignmentsTest {
     @Test
     void aGameFolderThatCannotBeWatchedTellsNothing() throws Exception {
         try (KeyAssignments assignments = new KeyAssignments(this.directory.resolve("missing/options.txt"))) {
-            assignments.addListener(() -> { });
+            assignments.changed().subscribe(() -> { });
         }
     }
 

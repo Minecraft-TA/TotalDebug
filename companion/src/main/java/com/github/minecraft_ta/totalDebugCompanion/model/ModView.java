@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
@@ -15,7 +16,7 @@ public final class ModView implements IEditorPanel {
     public ModView(EditorContext context, NavigationTarget.ModPage page) {
         this.panel = new ModPanel(page.modId(), context.project().catalog(), () -> context.project().sources(),
                 context.itemIcons(), context.project().profile().workspaceDirectory(), context.project().configSettings(),
-                context.project().keyBindings(), context.navigation()::navigate, context.project().packs()::addResourcePackListener);
+                context.project().keyBindings(), context.navigation()::navigate, context.project().packs().changed(ChangeRecord.PackSide.RESOURCES)::subscribe);
         this.panel.show(page);
     }
 

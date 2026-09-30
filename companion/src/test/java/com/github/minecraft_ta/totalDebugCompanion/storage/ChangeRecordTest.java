@@ -27,7 +27,7 @@ class ChangeRecordTest {
         ChangeRecord record = ChangeRecord.inMemory(Clock.fixed(Instant.parse("2026-09-25T12:00:00Z"), ZoneOffset.UTC));
         ChangeRecord.Setting speed = setting("speed");
         List<String> events = new ArrayList<>();
-        record.addListener(() -> events.add("changed"));
+        record.changed().subscribe(() -> events.add("changed"));
 
         record.changed(speed, "9", "12");
         record.changed(speed, "12", "14");
@@ -48,7 +48,7 @@ class ChangeRecordTest {
     void aWriteThatLeavesTheRecordAsItWasTellsNobody() {
         ChangeRecord record = ChangeRecord.inMemory();
         AtomicInteger told = new AtomicInteger();
-        record.addListener(told::incrementAndGet);
+        record.changed().subscribe(told::incrementAndGet);
         ChangeRecord.Setting speed = setting("speed");
 
         record.changed(speed, "9", "9");

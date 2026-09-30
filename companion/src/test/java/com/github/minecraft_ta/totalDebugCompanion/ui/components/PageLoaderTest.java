@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.SwingUtilities;
@@ -171,6 +173,102 @@ class PageLoaderTest {
         changed();
         settle(loader);
         assertEquals(1, this.prepared.get());
+    }
+
+    @Test
+    void aPageReadsWhenFirstShownAndThenOnlyAfterItsSignals() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal signal = new Signal();
+        PageLoader<String> loader = onEdt(() -> loader().page(page).follows(signal));
+
+        assertEquals(0, this.prepared.get(), "a page does not read before it is shown");
+        show(page, loader, true);
+        assertEquals(1, this.prepared.get(), "shown, it reads");
+        show(page, loader, false);
+        show(page, loader, true);
+        assertEquals(1, this.prepared.get(), "shown again without a change, it reads nothing");
+
+        show(page, loader, false);
+        fire(signal);
+        fire(signal);
+        assertEquals(1, this.prepared.get(), "a hidden page does not read");
+        show(page, loader, true);
+        assertEquals(2, this.prepared.get(), "shown again, it reads what it missed once");
+
+        fire(signal);
+        settle(loader);
+        assertEquals(3, this.prepared.get(), "a shown page reads a change at once");
+    }
+
+    @Test
+    void aChangeThatDoesNotConcernThePageReadsNothing() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal signal = new Signal();
+        AtomicBoolean concerns = new AtomicBoolean();
+        PageLoader<String> loader = onEdt(() -> loader().page(page).follows(signal, concerns::get));
+        show(page, loader, true);
+
+        fire(signal);
+        settle(loader);
+        assertEquals(1, this.prepared.get(), "another file's change, say, leaves the page alone");
+        concerns.set(true);
+        fire(signal);
+        settle(loader);
+        assertEquals(2, this.prepared.get());
+    }
+
+    @Test
+    void aHeldPageReadsWhatItMissedOnceReleased() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal signal = new Signal();
+        AtomicBoolean concerns = new AtomicBoolean(true);
+        PageLoader<String> loader = onEdt(() -> loader().page(page).follows(signal, concerns::get));
+        show(page, loader, true);
+
+        SwingUtilities.invokeAndWait(loader::hold);
+        fire(signal);
+        SwingUtilities.invokeAndWait(loader::load);
+        assertEquals(1, this.prepared.get(), "a page holding its reads, as while it saves, reads nothing");
+        SwingUtilities.invokeAndWait(loader::release);
+        settle(loader);
+        assertEquals(2, this.prepared.get(), "released, it reads what it missed once");
+
+        // The change came from the page's own save: by the time it is released, the change does not concern it.
+        SwingUtilities.invokeAndWait(loader::hold);
+        fire(signal);
+        concerns.set(false);
+        SwingUtilities.invokeAndWait(loader::release);
+        settle(loader);
+        assertEquals(2, this.prepared.get(), "whether a change concerns the page is asked when it would read");
+    }
+
+    @Test
+    void aReadUnderWayWhenThePageHoldsIsNotShownAndIsReadAgain() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger reads = new AtomicInteger();
+        List<Integer> shown = new CopyOnWriteArrayList<>();
+        PageLoader<Integer> loader = new PageLoader<>(() -> () -> {
+            int read = reads.incrementAndGet();
+            if (read == 1) release.await(5, TimeUnit.SECONDS);
+            return read;
+        }, shown::add, failure -> { });
+
+        SwingUtilities.invokeAndWait(() -> {
+            loader.load();
+            loader.hold();
+        });
+        release.countDown();
+        loader.current().get(5, TimeUnit.SECONDS);
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(List.of(), shown, "a read that may predate the write is not shown");
+        SwingUtilities.invokeAndWait(loader::release);
+        settle(loader);
+        assertEquals(List.of(2), shown, "what it was for is read again after the write");
+    }
+
+    private static void fire(Signal signal) throws Exception {
+        signal.fire();
+        SwingUtilities.invokeAndWait(() -> { });
     }
 
     private PageLoader<String> loader() {

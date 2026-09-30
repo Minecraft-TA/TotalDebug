@@ -16,6 +16,8 @@ UI text must serve an action: labels, actual state, errors, or necessary instruc
 
 Do not use the middle dot (`·`) as a separator anywhere: UI text, tooltips, tests or documentation. Separate metadata the way the surrounding view already does: muted secondary text or a secondary column in lists (`PrimarySecondaryText`), spacing between parts in the subject header, or commas inside a value.
 
+Companion's features use the systems in [docs/SYSTEMS.md](docs/SYSTEMS.md) to learn of changes, watch files, load pages, run work off the Swing thread, write and receive game messages. Do not add a listener list, file watcher, thread or executor, page loading path or message route beside them; a need they do not meet changes the system, with a decision recorded in that document. Fix a problem of timing, staleness or reading twice in the system that owns it, not with a flag in a feature. `SystemsRulesTest` checks the parts it can.
+
 Keep the evaluator and compiled Code mode within their existing responsibilities. Changes to that architecture require an explicit design decision.
 
 Match checks to the changed behavior and affected consumers. Documentation-only changes need link and diff checks. Preserve unrelated working-tree changes and coordinate file ownership when another task is editing the same repository.

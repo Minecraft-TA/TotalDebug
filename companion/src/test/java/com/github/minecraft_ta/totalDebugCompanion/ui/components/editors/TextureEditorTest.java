@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.pack.GamePacks;
@@ -34,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@UiTest
 class TextureEditorTest {
     private static final String TEXTURE = "assets/testmod/textures/item/gear.png";
     private static final int GRAY = 0xFF808080;
@@ -57,6 +60,7 @@ class TextureEditorTest {
             assertFalse(editor[0].view().painter().paints(),
                     "until the pack's copy is read, a stroke would be drawn on the mod's copy and saved over the pack's");
         });
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
         try {
             awaitOnSwing(() -> editor[0].targetBox().getItemCount() > 0);
             SwingUtilities.invokeAndWait(() -> {
@@ -99,6 +103,7 @@ class TextureEditorTest {
         TextureEditor[] editor = new TextureEditor[1];
         SwingUtilities.invokeAndWait(() -> editor[0] = new TextureEditor(TEXTURE, "testmod.jar", null,
                 new LoadedResource.Image(gear, 100), edits, ignored -> { }));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
         try {
             awaitOnSwing(() -> editor[0].targetBox().getItemCount() > 0);
             SwingUtilities.invokeAndWait(() -> {
@@ -139,6 +144,7 @@ class TextureEditorTest {
         TextureEditor[] editor = new TextureEditor[1];
         SwingUtilities.invokeAndWait(() -> editor[0] = new TextureEditor(TEXTURE, "testmod.jar", null,
                 new LoadedResource.Image(new BufferedImage(4, 4, BufferedImage.TYPE_INT_ARGB), 100), edits, ignored -> { }));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
         try {
             awaitOnSwing(() -> editor[0].noticeText().contains("2049 x 2048"));
             SwingUtilities.invokeAndWait(() -> {
@@ -163,6 +169,7 @@ class TextureEditorTest {
         TextureEditor[] editor = new TextureEditor[1];
         SwingUtilities.invokeAndWait(() -> editor[0] = new TextureEditor(TEXTURE, "testmod.jar", null,
                 new LoadedResource.Image(new BufferedImage(4, 8, BufferedImage.TYPE_INT_ARGB), 100), edits, ignored -> { }));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
         try {
             awaitOnSwing(() -> editor[0].targetBox().getItemCount() > 0);
             SwingUtilities.invokeAndWait(() -> assertEquals(4, editor[0].view().shownRegion().height,

@@ -223,7 +223,7 @@ public final class ChangesPanel extends JPanel {
 
         this.loader = new PageLoader<>(this::prepareLoad, this::show,
                 failure -> setStatus("Could not read the changes: " + failure.getMessage()))
-                .whenShown(this).follow(this.record::addListener).follow(this.catalog::addListener);
+                .whenShown(this).follow(this.record.changed()::subscribe).follow(this.catalog.changed()::subscribe);
         for (ChangeLabels labels : categories) this.loader.follow(labels::follow);
         load();
     }

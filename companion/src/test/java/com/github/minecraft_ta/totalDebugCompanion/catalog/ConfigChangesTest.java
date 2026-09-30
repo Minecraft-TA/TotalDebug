@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import java.util.ArrayList;
+import org.junit.jupiter.api.AfterEach;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
@@ -31,6 +33,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigChangesTest {
     @TempDir Path directory;
+
+    private final List<KeyAssignments> assignments = new ArrayList<>();
+
+    @AfterEach
+    void closeAssignments() {
+        this.assignments.forEach(KeyAssignments::close);
+    }
+
+    /** The key assignments of the test's {@code options.txt}, watched until the test ends. */
+    private KeyAssignments assignments() {
+        KeyAssignments assignments = new KeyAssignments(this.directory.resolve("options.txt"));
+        this.assignments.add(assignments);
+        return assignments;
+    }
     private GameLocation location;
 
     @BeforeEach
@@ -99,7 +115,7 @@ class ConfigChangesTest {
         Files.writeString(options, "key_key.jump:key.keyboard.space\n");
         ChangeRecord record = ChangeRecord.inMemory();
         ConfigChanges changes = new ConfigChanges(this.location, record);
-        KeyBindingControl keys = new KeyBindingControl(new ChangePipeline(this.location, record, changes.writes()), listener -> () -> { });
+        KeyBindingControl keys = new KeyBindingControl(new ChangePipeline(this.location, record, changes.writes()), assignments());
         CountDownLatch release = new CountDownLatch(1);
         changes.write(() -> {
             try {

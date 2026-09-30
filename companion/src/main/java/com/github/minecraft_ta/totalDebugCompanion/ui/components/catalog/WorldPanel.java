@@ -150,7 +150,7 @@ public final class WorldPanel extends JPanel {
         add(this.cards, BorderLayout.CENTER);
 
         // Only the names of the mods behind datapacks come from the catalog.
-        this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, () -> {
+        this.removeCatalogListener = ShownUpdates.follow(this, catalog.changed()::subscribe, () -> {
             if (!this.disposed && (this.saved != null || this.server != null)) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
         });
         // The game saves the world while it runs, so the page reads it whenever it is shown. A change of the datapacks,
@@ -161,7 +161,7 @@ public final class WorldPanel extends JPanel {
             String refusal = edits.packs().worldRefusal();
             return () -> read(edits.location().read(), stack, refusal);
         }, this::show, failure -> show(Loaded.problem("The world could not be read: " + failure.getMessage())))
-                .readsWhenShown(this).follow(edits.packs()::addDatapackListener);
+                .readsWhenShown(this).follow(edits.packs().changed(ChangeRecord.PackSide.DATA)::subscribe);
     }
 
     private static Loaded read(GameState game, PackStackPayload stack, String refusal) {

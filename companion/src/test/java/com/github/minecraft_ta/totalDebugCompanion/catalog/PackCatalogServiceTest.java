@@ -30,7 +30,7 @@ class PackCatalogServiceTest {
         CatalogFixtures.catalog(jar).write(paths.catalog());
         PackCatalogService service = new PackCatalogService(paths);
         AtomicInteger changes = new AtomicInteger();
-        service.addListener(changes::incrementAndGet);
+        service.changed().subscribe(changes::incrementAndGet);
 
         service.restore();
         SwingUtilities.invokeAndWait(() -> { });
@@ -51,7 +51,7 @@ class PackCatalogServiceTest {
         SwingUtilities.invokeAndWait(() -> { });
         CatalogIndex shown = service.index().orElseThrow();
         AtomicInteger changes = new AtomicInteger();
-        service.addListener(changes::incrementAndGet);
+        service.changed().subscribe(changes::incrementAndGet);
 
         // As after every resource reload: Minecraft captures the catalog again.
         service.capturing();
