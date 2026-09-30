@@ -162,6 +162,8 @@ public final class KeyBindingsPanel extends JPanel {
         this.loader = new PageLoader<>(this::prepareLoad, loaded -> show(loaded.index(), loaded.bindings(), ""),
                 failure -> show(this.catalog.index().orElse(null), null, "Could not read options.txt: " + failure.getMessage()))
                 .page(this).follows(catalog.changed()).follows(control.assignmentsChanged());
+        // Until the game's folder can be watched, as before the game first ran, others' writes are seen when shown.
+        if (!control.assignmentsWatched()) this.loader.readsWhenShown(this);
         addHierarchyListener(event -> {
             if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !isShowing()) stopCapture();
         });
@@ -246,7 +248,7 @@ public final class KeyBindingsPanel extends JPanel {
         }
         PackCatalog captured = index.catalog();
         return () -> new Loaded(index, new KeyBindings(captured.keyBindings(), captured.keyContexts(),
-                KeyBindings.readOptions(this.control.options()), captured.keyNames()));
+                this.control.assignments(), captured.keyNames()));
     }
 
     /** Shows the binding named {@code name}, such as {@code key.jump}, once the keys are read. */

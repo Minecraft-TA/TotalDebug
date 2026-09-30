@@ -24,8 +24,9 @@ import java.util.function.Function;
  *
  * <p>A page names itself ({@link #page}) and the signals it follows ({@link #follows}); the loader reads when the page is
  * first shown, and after a followed signal fires, at once while the page is shown, otherwise once it is shown again. A
- * page shown again with nothing changed reads nothing. While the page holds its reads ({@link #hold}), as during a save,
- * signals wait in the same way. The page never reads in its constructor or because a navigation showed it.</p>
+ * page shown again with nothing changed reads nothing, unless its last read failed. While the page holds its reads
+ * ({@link #hold}), as during a save, signals wait in the same way. The page never reads in its constructor or because a
+ * navigation showed it.</p>
  *
  * <p>Pages not moved to {@link #page} yet use the older modes {@link #whenShown}, {@link #waitsWhileHidden} and
  * {@link #readsWhenShown} with {@link #follow}, and read in their constructors; the last of them to move deletes those.</p>
@@ -242,8 +243,13 @@ public final class PageLoader<T> {
             return;
         }
         if (this.cancelled) return;
-        if (failure == null) this.show.accept(value);
-        else this.fail.accept(failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure);
+        if (failure == null) {
+            this.show.accept(value);
+            return;
+        }
+        // A page shown again after a failed read tries once more, as when the file was being written.
+        if (this.page != null) this.missed.add(() -> true);
+        this.fail.accept(failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure);
     }
 
     /** The read that runs or ran last, which completes when the read has finished, before it is shown. */

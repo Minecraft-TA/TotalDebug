@@ -46,13 +46,35 @@ public final class KeyAssignments implements AutoCloseable {
     /** Whether the last read failed: a page may show that failure, so the next read that succeeds is told. */
     private boolean unreadable;
 
-    /** Watches {@code options}; where its folder, the game's, cannot be watched, nothing is told. */
+    /**
+     * Watches {@code options}. Where its folder, the game's, cannot be watched, as before the game first ran, only
+     * Companion's own writes are told, and {@link #assignments()} reads the file each time.
+     */
     public KeyAssignments(Path options) {
         this.options = Objects.requireNonNull(options, "options").toAbsolutePath().normalize();
         this.watcher = watcher(this.options.getParent());
-        if (this.watcher == null) return;
-        Thread.ofPlatform().daemon().name("Companion options.txt watcher").start(this::watch);
+        if (this.watcher != null) Thread.ofPlatform().daemon().name("Companion options.txt watcher").start(this::watch);
         this.timer.execute(() -> read(0, 0));
+    }
+
+    /** Whether writes of others are seen; without, a page reads {@link #assignments()} whenever it is shown. */
+    public boolean watched() {
+        return this.watcher != null;
+    }
+
+    /**
+     * The keys the file assigns: as last read while it is watched, and read now where it has not been read yet or is
+     * not watched. Blocking where it reads.
+     */
+    public Map<String, KeyBindings.Assignment> assignments() throws IOException {
+        synchronized (this) {
+            if (this.read != null && this.watcher != null) return this.read;
+        }
+        Map<String, KeyBindings.Assignment> now = KeyBindings.readOptions(this.options);
+        synchronized (this) {
+            if (this.read == null || this.watcher == null) this.read = now;
+            return this.read;
+        }
     }
 
     private static WatchService watcher(Path folder) {
@@ -64,7 +86,7 @@ public final class KeyAssignments implements AutoCloseable {
             return watcher;
         } catch (IOException | RuntimeException unwatchable) {
             System.getLogger(KeyAssignments.class.getName()).log(System.Logger.Level.WARNING,
-                    "Key assignments in " + folder + " are read when a page is shown, not watched: " + unwatchable.getMessage());
+                    "Key assignments in " + folder + " are read when their page is shown, not watched: " + unwatchable.getMessage());
             if (watcher != null) {
                 try {
                     watcher.close();
@@ -137,7 +159,11 @@ public final class KeyAssignments implements AutoCloseable {
         }
         boolean changed;
         synchronized (this) {
-            if (generation != this.generation) return;
+            // A newer write is read after this one; what this one read is still what the next compares with.
+            if (generation != this.generation) {
+                if (this.read == null) this.read = now;
+                return;
+            }
             changed = this.unreadable || this.read != null && !this.read.equals(now);
             this.read = now;
             this.unreadable = false;

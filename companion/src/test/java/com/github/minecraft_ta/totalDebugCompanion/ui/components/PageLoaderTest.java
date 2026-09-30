@@ -266,6 +266,31 @@ class PageLoaderTest {
         assertEquals(List.of(2), shown, "what it was for is read again after the write");
     }
 
+    @Test
+    void aPageWhoseReadFailedReadsAgainWhenShownAgain() throws Exception {
+        ShowablePage page = new ShowablePage();
+        AtomicBoolean failing = new AtomicBoolean(true);
+        AtomicInteger failures = new AtomicInteger();
+        PageLoader<String> loader = onEdt(() -> new PageLoader<String>(() -> {
+            this.prepared.incrementAndGet();
+            return () -> {
+                if (failing.get()) throw new IOException("written in parts");
+                return "read";
+            };
+        }, read -> { }, failure -> failures.incrementAndGet()).page(page));
+
+        show(page, loader, true);
+        settle(loader);
+        assertEquals(1, failures.get());
+        failing.set(false);
+        show(page, loader, false);
+        show(page, loader, true);
+        assertEquals(2, this.prepared.get(), "shown again, a page whose read failed tries once more");
+        show(page, loader, false);
+        show(page, loader, true);
+        assertEquals(2, this.prepared.get(), "and once it read, shown again without a change it reads nothing");
+    }
+
     private static void fire(Signal signal) throws Exception {
         signal.fire();
         SwingUtilities.invokeAndWait(() -> { });

@@ -113,7 +113,7 @@ this.loader = new PageLoader<>(this::read, this::show, this::fail)
 ```
 
 - **It reads when the page is first shown**, never in a constructor and never because of a navigation.
-- **While the page is hidden, it only notes that a followed signal fired**, and reads once when the page is shown again. A page shown again with nothing changed reads nothing.
+- **While the page is hidden, it only notes that a followed signal fired**, and reads once when the page is shown again. A page shown again with nothing changed reads nothing, unless its last read failed, as for a file read while it was written.
 - **One read at a time, newest wins.** The loader shows every result it gets; it does not compare results, since owners only signal real changes.
 - **Reads run on file work, results are shown on the Swing thread.**
 - **`show` keeps what the user chose:** the selection and scroll position of rows that are still there (`Tables.keepingSelection`), and a selection a navigation asked for, such as a key binding to show, which the page keeps until a result contains it.

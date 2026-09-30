@@ -9,6 +9,7 @@ import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.SimpleName;
+import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -35,9 +36,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class SystemsRulesTest {
     private static final Path SOURCES = Path.of("src/main/java/com/github/minecraft_ta/totalDebugCompanion");
+    /** A collection of callbacks: any list, set, map, queue or deque whose elements are called. */
     private static final Pattern LISTENER_COLLECTION = Pattern.compile(
-            "(List|Set|Collection|Map)<.*\\b(Runnable|Consumer|BiConsumer|IntConsumer|[A-Z]\\w*Listener)\\b.*>");
-    private static final Set<String> THREAD_TYPES = Set.of("Thread", "ThreadPoolExecutor", "ScheduledThreadPoolExecutor", "ForkJoinPool");
+            "\\w*(List|Set|Collection|Map|Queue|Deque)<.*\\b(Runnable|Consumer|BiConsumer|IntConsumer|\\w*Listener|\\w*Callback)\\b.*>");
+    /** Names of fields that keep callbacks to tell, rather than, say, what removes subscriptions. */
+    private static final Pattern LISTENER_NAME = Pattern.compile(".*(listener|callback|subscriber|observer|handler).*");
+    private static final Set<String> THREAD_TYPES = Set.of("Thread", "java.lang.Thread", "ThreadPoolExecutor",
+            "ScheduledThreadPoolExecutor", "ForkJoinPool", "java.util.Timer");
+    /** Executor factories of {@code Executors}, also when imported statically. */
+    private static final Set<String> EXECUTOR_FACTORIES = Set.of("newFixedThreadPool", "newCachedThreadPool",
+            "newSingleThreadExecutor", "newSingleThreadScheduledExecutor", "newScheduledThreadPool", "newWorkStealingPool",
+            "newVirtualThreadPerTaskExecutor", "newThreadPerTaskExecutor", "unconfigurableExecutorService");
+    /** {@code CompletableFuture}'s async methods, by how many arguments they take without an executor. */
+    private static final Map<String, Integer> ASYNC_WITHOUT_EXECUTOR = Map.ofEntries(
+            Map.entry("supplyAsync", 1), Map.entry("runAsync", 1), Map.entry("thenApplyAsync", 1), Map.entry("thenAcceptAsync", 1),
+            Map.entry("thenRunAsync", 1), Map.entry("thenComposeAsync", 1), Map.entry("whenCompleteAsync", 1),
+            Map.entry("handleAsync", 1), Map.entry("exceptionallyAsync", 1), Map.entry("exceptionallyComposeAsync", 1),
+            Map.entry("thenCombineAsync", 2), Map.entry("thenAcceptBothAsync", 2), Map.entry("runAfterBothAsync", 2),
+            Map.entry("applyToEitherAsync", 2), Map.entry("acceptEitherAsync", 2), Map.entry("runAfterEitherAsync", 2));
 
     /** What a file does against a rule, and how often. */
     private record Found(Map<String, Integer> threads, Map<String, Integer> sharedPool, Map<String, Integer> listenerLists,
@@ -78,7 +94,9 @@ class SystemsRulesTest {
 
     // All move onto Workers' file work in PR 3.
     private static final Map<String, Allowed> SHARED_POOL = Map.ofEntries(
-            Map.entry("CompanionApplication.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("CompanionApplication.java", new Allowed(2, "moves onto Workers in PR 3")),
+            Map.entry("inspection/ItemIconService.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/inspection/DataView.java", new Allowed(1, "moves onto Workers in PR 3")),
             Map.entry("inspection/InspectionSession.java", new Allowed(2, "moves onto Workers in PR 3")),
             Map.entry("model/CodeView.java", new Allowed(1, "moves onto Workers in PR 3")),
             Map.entry("navigation/NavigationService.java", new Allowed(2, "moves onto Workers in PR 3")),
@@ -88,7 +106,7 @@ class SystemsRulesTest {
             Map.entry("ui/components/catalog/ModPanel.java", new Allowed(1, "moves onto Workers in PR 3")),
             Map.entry("ui/components/editors/PackResourceEditor.java", new Allowed(2, "its saves move onto Workers in PR 3")),
             Map.entry("ui/components/editors/ResourceTextEditor.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/editors/ScriptPanel.java", new Allowed(1, "moves onto Workers in PR 3")),
+            Map.entry("ui/components/editors/ScriptPanel.java", new Allowed(3, "moves onto Workers in PR 3")),
             Map.entry("ui/components/global/NotificationWidget.java", new Allowed(1, "moves onto Workers in PR 3")),
             Map.entry("ui/components/global/ProjectSelector.java", new Allowed(1, "moves onto Workers in PR 3")),
             Map.entry("ui/components/treeView/FileTreeView.java", new Allowed(1, "moves onto Workers in PR 3")),
@@ -103,6 +121,9 @@ class SystemsRulesTest {
     private static final Map<String, Allowed> LISTENER_LISTS = Map.ofEntries(
             Map.entry("util/Signal.java", new Allowed(1, "the signal every owner uses")),
             Map.entry("jdt/diagnostics/ASTCache.java", new Allowed(1, "the editor's analysis")),
+            Map.entry("debugger/DebuggerSessionController.java", new Allowed(1, "the debugger's session events")),
+            Map.entry("debugger/MicrosoftJavaDebugEngine.java", new Allowed(1, "the debugger's session events")),
+            Map.entry("ui/components/editors/DebuggerEditorPresentation.java", new Allowed(1, "the debugger's session events")),
             Map.entry("notification/NotificationCenter.java", new Allowed(1, "notifications, an event")),
             Map.entry("script/EditorScriptRunService.java", new Allowed(2, "script runs, an event")),
             Map.entry("session/CompanionSession.java", new Allowed(1, "script results, an event")),
@@ -114,6 +135,7 @@ class SystemsRulesTest {
             Map.entry("ui/theme/ThemeManager.java", new Allowed(1, "the theme, which stays as it is")),
             Map.entry("game/GameLocation.java", new Allowed(1, "moves onto signals in PR 3")),
             Map.entry("inspection/ItemIconService.java", new Allowed(1, "moves onto signals in PR 3")),
+            Map.entry("runtime/RuntimeIndexService.java", new Allowed(1, "moves onto signals in PR 3")),
             Map.entry("catalog/WorldReadings.java", new Allowed(1, "replaced by CurrentWorld in PR 4")),
             Map.entry("util/FileUtils.java", new Allowed(1, "becomes FileWatch in PR 4")),
             Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 5")));
@@ -135,16 +157,20 @@ class SystemsRulesTest {
         }
         for (Path file : files) {
             String name = SOURCES.relativize(file).toString().replace('\\', '/');
-            parse(file).accept(new ASTVisitor() {
+            CompilationUnit unit = parse(file);
+            // A Timer is Swing's, which runs on the Swing thread, unless the file names java.util's.
+            boolean utilTimer = unit.imports().stream().anyMatch(imported -> imported.toString().contains("java.util.Timer;"));
+            unit.accept(new ASTVisitor() {
                 @Override
                 public boolean visit(MethodInvocation call) {
                     String method = call.getName().getIdentifier();
                     String target = call.getExpression() instanceof SimpleName simple ? simple.getIdentifier() : "";
-                    if (target.equals("Executors") && method.startsWith("new")
-                            || target.equals("Thread") && (method.equals("ofPlatform") || method.equals("ofVirtual"))) {
+                    if (EXECUTOR_FACTORIES.contains(method) && (target.equals("Executors") || call.getExpression() == null)
+                            || target.equals("Thread") && Set.of("ofPlatform", "ofVirtual", "startVirtualThread").contains(method)) {
                         threads.merge(name, 1, Integer::sum);
                     }
-                    if ((method.equals("supplyAsync") || method.equals("runAsync")) && call.arguments().size() == 1) {
+                    Integer withoutExecutor = ASYNC_WITHOUT_EXECUTOR.get(method);
+                    if (withoutExecutor != null && call.arguments().size() == withoutExecutor || method.equals("commonPool")) {
                         sharedPool.merge(name, 1, Integer::sum);
                     }
                     if (method.equals("newWatchService")) watchers.merge(name, 1, Integer::sum);
@@ -153,17 +179,25 @@ class SystemsRulesTest {
 
                 @Override
                 public boolean visit(ClassInstanceCreation creation) {
-                    if (THREAD_TYPES.contains(creation.getType().toString())) threads.merge(name, 1, Integer::sum);
+                    String type = creation.getType().toString();
+                    if (THREAD_TYPES.contains(type) || utilTimer && type.equals("Timer")) threads.merge(name, 1, Integer::sum);
+                    return true;
+                }
+
+                @Override
+                public boolean visit(TypeDeclaration type) {
+                    if (type.getSuperclassType() != null && THREAD_TYPES.contains(type.getSuperclassType().toString())) {
+                        threads.merge(name, 1, Integer::sum);
+                    }
                     return true;
                 }
 
                 @Override
                 public boolean visit(FieldDeclaration field) {
-                    if (!LISTENER_COLLECTION.matcher(field.getType().toString()).matches()) return true;
+                    if (!LISTENER_COLLECTION.matcher(field.getType().toString()).find()) return true;
                     for (Object fragment : field.fragments()) {
-                        // A collection of callbacks kept to be told, not of what removes subscriptions.
                         String variable = ((VariableDeclarationFragment) fragment).getName().getIdentifier();
-                        if (variable.toLowerCase(Locale.ROOT).contains("listener")) listenerLists.merge(name, 1, Integer::sum);
+                        if (LISTENER_NAME.matcher(variable.toLowerCase(Locale.ROOT)).matches()) listenerLists.merge(name, 1, Integer::sum);
                     }
                     return true;
                 }
@@ -189,7 +223,7 @@ class SystemsRulesTest {
 
     @Test
     void workRunsOnANamedWorkerNotTheSharedPool() {
-        check("runs supplyAsync or runAsync on the shared pool", found.sharedPool(), SHARED_POOL);
+        check("runs async work on the shared pool", found.sharedPool(), SHARED_POOL);
     }
 
     @Test

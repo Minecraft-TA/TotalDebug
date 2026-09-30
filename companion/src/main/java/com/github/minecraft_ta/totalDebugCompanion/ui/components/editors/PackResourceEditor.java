@@ -423,23 +423,26 @@ abstract class PackResourceEditor<V> extends JPanel {
                 throw new CompletionException(exception);
             }
         }).whenComplete((held, failure) -> SwingUtilities.invokeLater(() -> {
-            this.busy = false;
-            changed();
-            if (this.disposed) return;
-            if (failure != null) {
-                showNotice("Not opened: " + message(failure), ThemeColors::error);
-                this.loader.release();
-            } else if (held.equals(read)) {
-                this.loader.release();
-                after.accept(pack);
-            } else if (this.askToReplace.test(new ChangePipeline.Stale(this.path.substring(this.path.lastIndexOf('/') + 1)
-                    + " changed in " + this.packName + " since this tab read it"))) {
-                this.baseline = null;
-                // The save holds the reads on; where it does not start, they go on.
-                if (!save(after)) this.loader.release();
-            } else {
-                readAfterSave();
-                this.loader.release();
+            // The reads go on afterwards, whatever happens here, unless a save takes the hold over.
+            boolean savingAgain = false;
+            try {
+                this.busy = false;
+                changed();
+                if (this.disposed) return;
+                if (failure != null) {
+                    showNotice("Not opened: " + message(failure), ThemeColors::error);
+                } else if (held.equals(read)) {
+                    this.loader.release();
+                    after.accept(pack);
+                } else if (this.askToReplace.test(new ChangePipeline.Stale(this.path.substring(this.path.lastIndexOf('/') + 1)
+                        + " changed in " + this.packName + " since this tab read it"))) {
+                    this.baseline = null;
+                    savingAgain = save(after);
+                } else {
+                    readAfterSave();
+                }
+            } finally {
+                if (!savingAgain) this.loader.release();
             }
         }));
     }
@@ -474,43 +477,48 @@ abstract class PackResourceEditor<V> extends JPanel {
             }
         }).thenCompose(bytes -> this.edits.save(this.path, into, bytes, alongside, expected))
                 .whenComplete((saved, failure) -> SwingUtilities.invokeLater(() -> {
-                    this.busy = false;
-                    this.saving = null;
-                    if (this.disposed) return;
-                    if (failure != null) {
-                        showState("");
-                        changed();
-                        // Asked before following a change that came during the save, which would hold the overwrite back.
-                        if (cause(failure) instanceof ChangePipeline.Stale changedSince && this.askToReplace.test(changedSince)) {
-                            this.baseline = null;
-                            if (!save(after)) this.loader.release();
+                    // The reads go on afterwards, whatever happens here, unless another save takes the hold over.
+                    boolean savingAgain = false;
+                    try {
+                        this.busy = false;
+                        this.saving = null;
+                        if (this.disposed) return;
+                        if (failure != null) {
+                            showState("");
+                            changed();
+                            // Asked before following a change that came during the save, which would hold the overwrite back.
+                            if (cause(failure) instanceof ChangePipeline.Stale changedSince && this.askToReplace.test(changedSince)) {
+                                this.baseline = null;
+                                savingAgain = save(after);
+                                return;
+                            }
+                            showNotice("Not saved: " + message(failure), ThemeColors::error);
+                            // What the record got during the attempt is the save's to tell, not a change that ends its notice.
+                            this.seen = recorded();
+                            // A copy written since, which the save refused to replace, is read, so Discard goes back to it;
+                            // the changes on screen stay, still unsaved.
+                            readAfterSave();
                             return;
                         }
-                        showNotice("Not saved: " + message(failure), ThemeColors::error);
-                        // What the record got during the attempt is the save's to tell, not a change that ends its notice.
-                        this.seen = recorded();
-                        // A copy written since, which the save refused to replace, is read, so Discard goes back to it;
-                        // the changes on screen stay, still unsaved.
-                        readAfterSave();
+                        this.baseline = written[0];
+                        this.baselinePack = saved.pack();
+                        this.packHash = written[0];
+                        boolean keepEdits = !same(shown(), edited);
+                        showPack(saved.pack());
+                        this.packContent = edited;
+                        this.managed = true;
+                        if (keepEdits) markSaved(edited);
+                        else load(edited);
+                        showSaved(saved);
+                        changed();
+                        // Another tab's save that came while this one ran was not read then.
+                        ChangeRecord.Change now = recorded();
+                        if (now != null && !now.current().equals(written[0])) readAfterSave();
                         this.loader.release();
-                        return;
+                        if (after != null) after.accept(saved.pack());
+                    } finally {
+                        if (!savingAgain) this.loader.release();
                     }
-                    this.baseline = written[0];
-                    this.baselinePack = saved.pack();
-                    this.packHash = written[0];
-                    boolean keepEdits = !same(shown(), edited);
-                    showPack(saved.pack());
-                    this.packContent = edited;
-                    this.managed = true;
-                    if (keepEdits) markSaved(edited);
-                    else load(edited);
-                    showSaved(saved);
-                    changed();
-                    // Another tab's save that came while this one ran was not read then.
-                    ChangeRecord.Change now = recorded();
-                    if (now != null && !now.current().equals(written[0])) readAfterSave();
-                    this.loader.release();
-                    if (after != null) after.accept(saved.pack());
                 }));
         return true;
     }
