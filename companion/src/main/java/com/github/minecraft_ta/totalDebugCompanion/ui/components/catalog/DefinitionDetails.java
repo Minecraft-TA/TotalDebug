@@ -118,7 +118,7 @@ public final class DefinitionDetails {
             this.matched = List.of();
             showExtras();
         }).waitsWhileHidden(page).follow(services.resourcesRead());
-        this.removeCatalogListener = ShownUpdates.follow(page, services.catalog()::addListener, this::reload);
+        this.removeCatalogListener = ShownUpdates.follow(page, services.catalog().changed()::subscribe, this::reload);
         read();
         loadAppearance();
         loadResources();

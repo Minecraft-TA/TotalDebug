@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import java.io.IOException;
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.FileSystems;
@@ -22,20 +23,27 @@ import java.util.concurrent.TimeUnit;
  * screen, Companion or an editor, the listeners hear of it once the assignments differ from those read before. Another
  * option written, such as the volume, tells nobody. The file's folder is watched, so a file replaced by a rename, as the
  * game and Companion write it, is seen; a deleted file assigns nothing. A file that cannot be read keeps the assignments
- * read before, and is read again after 1, 5 and 30 seconds and at its next change.
+ * read before, and is read again after 1, 5 and 30 seconds and at its next change. Companion's own writes are read at once
+ * ({@link #readNow()}), so a page shows them without waiting for the watch.
  */
 public final class KeyAssignments implements AutoCloseable {
     private static final long SETTLE_MILLIS = 300;
     private static final List<Long> RETRY_MILLIS = List.of(1_000L, 5_000L, 30_000L);
+    private static final System.Logger LOGGER = System.getLogger(KeyAssignments.class.getName());
 
     private final Path options;
-    private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
+    private final Signal changed = new Signal();
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(task -> Thread.ofPlatform()
             .daemon()
             .name("Companion options.txt")
             .unstarted(task));
-    /** Null where the game's folder cannot be watched, as before it exists. */
+    /** Null only where the system has no file watching at all. */
     private final WatchService watcher;
+    /**
+     * Whether the game's folder is watched now: not before it exists, or after it was removed; then its watch is tried
+     * again after 1 and 5 seconds and every 30 seconds after.
+     */
+    private volatile boolean watching;
     private ScheduledFuture<?> pending;
     /** Counts writes seen; only a read for the latest may tell, so a retry of an earlier one cannot read a write in parts. */
     private long generation;
@@ -44,40 +52,81 @@ public final class KeyAssignments implements AutoCloseable {
     /** Whether the last read failed: a page may show that failure, so the next read that succeeds is told. */
     private boolean unreadable;
 
-    /** Watches {@code options}; where its folder, the game's, cannot be watched, nothing is told. */
+    /** Watches {@code options}, whose folder, the game's, may not exist yet: it is watched once it does. */
     public KeyAssignments(Path options) {
         this.options = Objects.requireNonNull(options, "options").toAbsolutePath().normalize();
-        this.watcher = watcher(this.options.getParent());
-        if (this.watcher == null) return;
-        Thread.ofPlatform().daemon().name("Companion options.txt watcher").start(this::watch);
+        this.watcher = watchService();
+        if (this.watcher != null) {
+            Thread.ofPlatform().daemon().name("Companion options.txt watcher").start(this::watch);
+            if (!register()) registerLater(0);
+        }
         this.timer.execute(() -> read(0, 0));
     }
 
-    private static WatchService watcher(Path folder) {
-        WatchService watcher = null;
+    /**
+     * The keys the file assigns: as last read while its folder is watched, and read now where it has not been read yet
+     * or is not watched, since then a change would go unseen. The first read, whoever makes it, is what the next change
+     * is told against, so a follower that read before this owner did still hears of a later change; after it, only
+     * this owner's own reads are, so every follower hears of a change it has not seen. Blocking where it reads.
+     */
+    public Map<String, KeyBindings.Assignment> assignments() throws IOException {
+        synchronized (this) {
+            if (this.read != null && this.watching) return this.read;
+        }
+        Map<String, KeyBindings.Assignment> now = KeyBindings.readOptions(this.options);
+        synchronized (this) {
+            if (this.read == null) this.read = now;
+        }
+        return now;
+    }
+
+    private static WatchService watchService() {
         try {
-            watcher = FileSystems.getDefault().newWatchService();
-            folder.register(watcher, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_MODIFY,
-                    StandardWatchEventKinds.ENTRY_DELETE);
-            return watcher;
-        } catch (IOException | RuntimeException unwatchable) {
-            System.getLogger(KeyAssignments.class.getName()).log(System.Logger.Level.WARNING,
-                    "Key assignments in " + folder + " are read when a page is shown, not watched: " + unwatchable.getMessage());
-            if (watcher != null) {
-                try {
-                    watcher.close();
-                } catch (IOException ignored) {
-                    // Nothing was registered with it.
-                }
-            }
+            return FileSystems.getDefault().newWatchService();
+        } catch (IOException | RuntimeException unavailable) {
+            LOGGER.log(System.Logger.Level.WARNING, "Key assignments are read when asked, not watched: " + unavailable.getMessage());
             return null;
         }
     }
 
-    /** Runs {@code listener} on a Companion thread after the assignments changed; returns its removal. */
-    public Runnable addListener(Runnable listener) {
-        this.listeners.add(Objects.requireNonNull(listener, "listener"));
-        return () -> this.listeners.remove(listener);
+    /** Watches the game's folder; false where it cannot be, as before it exists. */
+    private boolean register() {
+        try {
+            this.options.getParent().register(this.watcher, StandardWatchEventKinds.ENTRY_CREATE,
+                    StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_DELETE);
+            this.watching = true;
+            return true;
+        } catch (IOException | RuntimeException unwatchable) {
+            return false;
+        }
+    }
+
+    /**
+     * Tries to watch the game's folder again after a while, and reads what the file assigns by then either way: while it
+     * cannot be watched, a key rebound in the game is found by these reads.
+     */
+    private void registerLater(int attempt) {
+        long delay = RETRY_MILLIS.get(Math.min(attempt, RETRY_MILLIS.size() - 1));
+        try {
+            this.timer.schedule(() -> {
+                boolean watchingNow = register();
+                written();
+                if (!watchingNow) registerLater(attempt + 1);
+            }, delay, TimeUnit.MILLISECONDS);
+        } catch (RuntimeException closed) {
+            // Closed with the project.
+        }
+    }
+
+    /** Fires on a Companion thread after the assignments changed. */
+    public Signal changed() {
+        return this.changed;
+    }
+
+    /** Reads the file now rather than once a watch saw it settle, as after Companion wrote it. */
+    public synchronized void readNow() {
+        long generation = ++this.generation;
+        schedule(() -> read(0, generation), 0);
     }
 
     private void watch() {
@@ -91,7 +140,12 @@ public final class KeyAssignments implements AutoCloseable {
                             || event.context() instanceof Path name && name.equals(this.options.getFileName());
                 }
                 if (ours) written();
-                if (!key.reset()) return;
+                if (!key.reset()) {
+                    // The folder was removed: what the file assigns is read now, and the folder watched again once it is back.
+                    this.watching = false;
+                    written();
+                    registerLater(0);
+                }
             }
         } catch (InterruptedException | ClosedWatchServiceException closed) {
             // Closed with the project.
@@ -130,12 +184,16 @@ public final class KeyAssignments implements AutoCloseable {
         }
         boolean changed;
         synchronized (this) {
-            if (generation != this.generation) return;
+            // A newer write is read after this one; what this one read is still what the next compares with.
+            if (generation != this.generation) {
+                if (this.read == null) this.read = now;
+                return;
+            }
             changed = this.unreadable || this.read != null && !this.read.equals(now);
             this.read = now;
             this.unreadable = false;
         }
-        if (changed) this.listeners.forEach(Runnable::run);
+        if (changed) this.changed.fire();
     }
 
     /** Stops watching. It never fails, so a project's shutdown goes on to its queued writes after it. */
@@ -146,8 +204,7 @@ public final class KeyAssignments implements AutoCloseable {
         try {
             this.watcher.close();
         } catch (IOException failure) {
-            System.getLogger(KeyAssignments.class.getName()).log(System.Logger.Level.WARNING,
-                    "The watcher of " + this.options + " did not close: " + failure.getMessage());
+            LOGGER.log(System.Logger.Level.WARNING, "The watcher of " + this.options + " did not close: " + failure.getMessage());
         }
     }
 }

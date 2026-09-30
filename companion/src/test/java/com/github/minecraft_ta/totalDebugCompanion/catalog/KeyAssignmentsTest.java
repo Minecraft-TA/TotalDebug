@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
@@ -21,7 +22,7 @@ class KeyAssignmentsTest {
         Files.writeString(options, "soundCategory_master:1.0\nkey_key.jump:key.keyboard.space\n");
         AtomicInteger told = new AtomicInteger();
         try (KeyAssignments assignments = new KeyAssignments(options)) {
-            assignments.addListener(told::incrementAndGet);
+            assignments.changed().subscribe(told::incrementAndGet);
             // The first read only learns what the file assigns.
             Thread.sleep(500);
 
@@ -40,9 +41,39 @@ class KeyAssignmentsTest {
     }
 
     @Test
-    void aGameFolderThatCannotBeWatchedTellsNothing() throws Exception {
-        try (KeyAssignments assignments = new KeyAssignments(this.directory.resolve("missing/options.txt"))) {
-            assignments.addListener(() -> { });
+    void aGameFolderThatAppearsLaterIsWatchedOnceItDoes() throws Exception {
+        Path options = this.directory.resolve("game/options.txt");
+        AtomicInteger told = new AtomicInteger();
+        try (KeyAssignments assignments = new KeyAssignments(options)) {
+            assignments.changed().subscribe(told::incrementAndGet);
+            Thread.sleep(300);
+
+            // The game runs for the first time: its folder and options.txt appear.
+            Files.createDirectories(options.getParent());
+            Files.writeString(options, "key_key.jump:key.keyboard.g\n");
+            assertEquals(Map.of("key.jump", KeyBindings.Assignment.decode("key.keyboard.g")), assignments.assignments(),
+                    "until the folder is watched, the keys are read whenever asked");
+            await(told::get, 1);
+
+            replace(options, "key_key.jump:key.keyboard.h\n");
+            await(told::get, 2);
+            assertEquals(Map.of("key.jump", KeyBindings.Assignment.decode("key.keyboard.h")), assignments.assignments(),
+                    "watched now, a key rebound in the game is told without Companion asking");
+        }
+    }
+
+    @Test
+    void aPageThatReadBeforeTheOwnerStillHearsOfTheNextChange() throws Exception {
+        Path options = this.directory.resolve("options.txt");
+        Files.writeString(options, "key_key.jump:key.keyboard.space" + System.lineSeparator());
+        AtomicInteger told = new AtomicInteger();
+        try (KeyAssignments assignments = new KeyAssignments(options)) {
+            assignments.changed().subscribe(told::incrementAndGet);
+            // A page opened at once reads the keys, perhaps before the owner's own first read, and the game then saves.
+            Map<String, KeyBindings.Assignment> shown = assignments.assignments();
+            replace(options, "key_key.jump:key.keyboard.g" + System.lineSeparator());
+            await(told::get, 1);
+            assertEquals(Map.of("key.jump", KeyBindings.Assignment.decode("key.keyboard.space")), shown);
         }
     }
 

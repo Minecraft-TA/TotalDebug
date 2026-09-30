@@ -48,6 +48,11 @@ public final class ResourceViewPanel extends JPanel {
     /** The folder pack the loaded file lies in, which its editor saves into, or null for a file of a mod or archive. */
     private Path openedPack;
     private Component activeView;
+
+    /** The editor the panel shows, or null while it shows the resource read-only, for tests. */
+    PackResourceEditor<?> editor() {
+        return this.activeView instanceof PackResourceEditor<?> editor ? editor : null;
+    }
     /** Where to show the text once it has loaded, or -1. */
     private int pendingOffset = -1;
     /** When a local file was last read, so an offset into a file written since reads it again first; null otherwise. */

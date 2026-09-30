@@ -174,7 +174,7 @@ public final class LogsPanel extends JPanel {
         this.loader = new PageLoader<List<Listed>>(() -> this::listFiles, this::showFiles,
                 failure -> showMessage("The logs could not be listed: " + failure.getMessage())).whenShown(this);
         // Rows name the mods behind frames and failures as the catalog knows them.
-        this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, () -> {
+        this.removeCatalogListener = ShownUpdates.follow(this, catalog.changed()::subscribe, () -> {
             if (this.disposed) return;
             this.rowsOf = null;
             showRows();

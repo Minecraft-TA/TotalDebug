@@ -55,7 +55,7 @@ class PackSelectionsTest {
         ResourceEdits edits = edits(record, false);
         PackSelections selections = selections(record, edits);
         AtomicInteger told = new AtomicInteger();
-        edits.packs().addResourcePackListener(told::incrementAndGet);
+        edits.packs().changed(ChangeRecord.PackSide.RESOURCES).subscribe(told::incrementAndGet);
 
         PackSelections.Applied applied = selections.set(ChangeRecord.PackSide.RESOURCES, null,
                 List.of("vanilla", "file/New", "mod_resources")).get(5, TimeUnit.SECONDS);

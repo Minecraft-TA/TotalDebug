@@ -27,7 +27,6 @@ import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
-import javax.swing.JViewport;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
@@ -40,7 +39,6 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
-import java.awt.Point;
 import java.awt.event.ActionEvent;
 import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
@@ -163,11 +161,10 @@ public final class KeyBindingsPanel extends JPanel {
 
         this.loader = new PageLoader<>(this::prepareLoad, loaded -> show(loaded.index(), loaded.bindings(), ""),
                 failure -> show(this.catalog.index().orElse(null), null, "Could not read options.txt: " + failure.getMessage()))
-                .whenShown(this).follow(catalog::addListener).follow(control::addAssignmentListener);
+                .page(this).follows(catalog.changed()).follows(control.assignmentsChanged());
         addHierarchyListener(event -> {
             if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !isShowing()) stopCapture();
         });
-        load();
     }
 
     private void configureTable() {
@@ -225,7 +222,6 @@ public final class KeyBindingsPanel extends JPanel {
         }
     }
 
-    /** Reads the keys again. */
     /** The table, for tests. */
     JTable table() {
         return this.table;
@@ -236,8 +232,9 @@ public final class KeyBindingsPanel extends JPanel {
         return this.loader.current();
     }
 
-    public void load() {
-        this.loader.load();
+    /** How many times the page read {@code options.txt}, which tests count. */
+    public int reads() {
+        return this.loader.reads();
     }
 
     /** Reads {@code options.txt} against the captured catalog; without one there is nothing to read. */
@@ -249,7 +246,7 @@ public final class KeyBindingsPanel extends JPanel {
         }
         PackCatalog captured = index.catalog();
         return () -> new Loaded(index, new KeyBindings(captured.keyBindings(), captured.keyContexts(),
-                KeyBindings.readOptions(this.control.options()), captured.keyNames()));
+                this.control.assignments(), captured.keyNames()));
     }
 
     /** Shows the binding named {@code name}, such as {@code key.jump}, once the keys are read. */
@@ -283,9 +280,6 @@ public final class KeyBindingsPanel extends JPanel {
     }
 
     private void show(CatalogIndex index, KeyBindings bindings, String problem) {
-        // Read again, as after a key rebound in the game, the table keeps what was selected and where it was scrolled.
-        Set<String> selected = selectedRows();
-        Point scrolled = this.table.getParent() instanceof JViewport viewport ? viewport.getViewPosition() : null;
         this.index = index;
         this.bindings = bindings;
         this.problem = bindings == null ? "" : problem;
@@ -302,32 +296,18 @@ public final class KeyBindingsPanel extends JPanel {
                 for (KeyBindings.Binding binding : members) rows.add(new Row(category, binding, 0));
             });
         }
-        this.model.setRows(rows);
         this.unavailable = bindings == null ? problem : "";
-        applyFilter();
-        if (this.selectAfterLoad == null) {
-            select(selected);
-            if (scrolled != null && this.table.getParent() instanceof JViewport viewport) viewport.setViewPosition(scrolled);
-        }
+        Runnable update = () -> {
+            this.model.setRows(rows);
+            applyFilter();
+        };
+        // Read again, as after a key rebound in the game, the table stays as it was, unless a binding is to be shown.
+        if (this.selectAfterLoad == null) Tables.keepingSelection(this.table, row -> identity(this.model.shown.get(row)), update);
+        else update.run();
         selectPending();
     }
 
-    /** The selected rows by what they show: a binding by its name, a category by its name. */
-    private Set<String> selectedRows() {
-        Set<String> selected = new HashSet<>();
-        for (int viewRow : this.table.getSelectedRows()) {
-            if (viewRow < this.model.shown.size()) selected.add(identity(this.model.shown.get(viewRow)));
-        }
-        return selected;
-    }
-
-    private void select(Set<String> rows) {
-        if (rows.isEmpty()) return;
-        for (int viewRow = 0; viewRow < this.model.shown.size(); viewRow++) {
-            if (rows.contains(identity(this.model.shown.get(viewRow)))) this.table.addRowSelectionInterval(viewRow, viewRow);
-        }
-    }
-
+    /** A row by what it shows: a binding by its name, a category by its name. */
     private static String identity(Row row) {
         return row.binding() == null ? "category " + row.category() : "binding " + row.binding().spec().name();
     }
@@ -554,8 +534,8 @@ public final class KeyBindingsPanel extends JPanel {
         this.control.set(requests).thenAccept(reason -> SwingUtilities.invokeLater(() -> {
             Map<String, String> failed = new LinkedHashMap<>();
             if (!reason.isEmpty()) requests.forEach(request -> failed.put(request.name(), reason));
+            // The keys changed show once their owner read them; only what failed is told here.
             setStatus(notChanged(failed, names));
-            load();
         }));
     }
 

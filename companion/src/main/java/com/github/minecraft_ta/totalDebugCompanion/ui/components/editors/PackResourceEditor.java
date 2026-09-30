@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.BorderFactory;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
@@ -51,10 +53,11 @@ import java.util.function.Supplier;
 abstract class PackResourceEditor<V> extends JPanel {
     /**
      * The pack the content is saved in, its entry in the change record when the copy was read, its copy there or null and
-     * the hash of that copy's bytes, empty for none, why the game does not use that copy or null, and the packs it could be
-     * saved into instead, empty for an opened pack.
+     * the hash of that copy's bytes, empty for none, why the game does not use that copy or null, the packs it could be
+     * saved into instead, empty for an opened pack, and the working pack chosen when it was read, or null for an opened pack.
      */
-    private record Found<V>(Path pack, ChangeRecord.Change recorded, V managed, String hash, String unused, List<Path> targets) {
+    private record Found<V>(Path pack, ChangeRecord.Change recorded, V managed, String hash, String unused, List<Path> targets,
+                            String working) {
     }
 
     private final String path;
@@ -71,39 +74,32 @@ abstract class PackResourceEditor<V> extends JPanel {
     private Supplier<Color> noticeColor = ThemeColors::secondaryText;
     /** The content of the file that was opened, which the pack supplies while the managed pack holds no copy. */
     private final V openedContent;
-    /** Stops following the change record. */
-    private Runnable stopListening = () -> { };
-    /** Stops following the game's packs. */
-    private Runnable stopFollowingPacks = () -> { };
-    /** Stops following the choice of working pack. */
-    private Runnable stopFollowingWorkingPack = () -> { };
+    /** Reads the copies when the tab is shown and after what changes them; held while a save runs. */
+    private PageLoader<Found<V>> loader;
     /** The content a save under way writes, or null. */
     private V saving;
     /** The folder pack the opened file lies in, which stays the target, or null to save into the working pack. */
     private final Path opened;
     /** The content the pack supplies: the managed pack's copy, or the opened file's; {@link #none()} for no copy. */
     private V packContent;
-    /** This resource's entry in the change record when the copies were last read, or null. */
+    /**
+     * This resource's entry in the change record when the copies were last read or saved, or null: a change of the record
+     * that leaves it alone does not concern the tab.
+     */
     private ChangeRecord.Change seen;
+    /** The working pack chosen when the copies were last read, or null before; an opened pack's tab has none. */
+    private String readWorking;
     /** The pack the shown copy was read from, or null until it is read. */
     private Path pack;
     /** The pack the content is saved in, as the bar names it. */
     private String packName = "the working pack";
-    /** Counts writes, so the copies read when the tab opened never replace the content of a later write. */
-    private int writes;
-    /** Counts reads of the copies; only the latest may show its result, since reads can finish out of order. */
-    private int reads;
     private boolean managed;
     private boolean busy;
     /**
-     * The working pack or the current world changed and its copy is being read; a save waits for it, so it goes into the
-     * pack the tab shows.
+     * The copies are being read where the tab may move to another pack, as when it opened or the packs or the working
+     * pack changed; a save waits for them, so it goes into the pack the tab shows.
      */
     private boolean following;
-    /** The working pack or the current world changed during a save, and is followed once the save completes. */
-    private boolean followAfterSave;
-    /** Whether that change ends what the notice said, as a new working pack does; a pack stack change does not. */
-    private boolean clearAfterSave;
     /**
      * What a read of the copies last put in the notice, such as why the game does not use the shown copy, or null. The
      * next read replaces it; a save's result stays.
@@ -242,15 +238,15 @@ abstract class PackResourceEditor<V> extends JPanel {
         this.following = true;
         changed();
         this.seen = recorded();
-        readCopies(false);
-        // A revert on the Changes page changes what the game uses.
-        this.stopListening = this.edits.record().addListener(() -> SwingUtilities.invokeLater(this::recordChanged));
-        // Another world opening changes the current world's datapack a data file is shown from and saved into.
-        this.stopFollowingPacks = this.edits.packs().addListener(GamePacks.side(this.path), () -> SwingUtilities.invokeLater(this::packsChanged));
-        // A working pack chosen in another tab is where this one saves too.
-        this.stopFollowingWorkingPack = this.edits.addWorkingPackListener(side -> {
-            if (side.equals(ResourceEdits.side(this.path))) SwingUtilities.invokeLater(this::targetChanged);
-        });
+        // A revert on the Changes page changes what the game uses; the tab's own saves show their own result.
+        this.loader = new PageLoader<>(this::prepareCopies, this::showCopies, this::copiesFailed)
+                .page(this).follows(this.edits.record().changed(), () -> !Objects.equals(recorded(), this.seen));
+        if (this.opened == null) {
+            // Another world opening changes the current world's datapack a data file is shown from and saved into, and a
+            // working pack chosen in another tab is where this one saves too.
+            this.loader.follows(this.edits.packs().changed(GamePacks.side(this.path)))
+                    .follows(this.edits.workingPackChosen(this.path));
+        }
     }
 
     private String saveTooltip() {
@@ -272,42 +268,6 @@ abstract class PackResourceEditor<V> extends JPanel {
         this.edits.setWorkingPack(this.path, chosen);
     }
 
-    /** Shows the copy of the working pack chosen now, whose notice replaces the last pack's. */
-    private void targetChanged() {
-        follow(true);
-    }
-
-    /** Reads the copies again when the tab follows the current world, which may have changed. */
-    private void packsChanged() {
-        follow(false);
-    }
-
-    /** Reads the working pack's copy again, once a save under way completes; {@code changed} as for {@link #readCopies}. */
-    private void follow(boolean changed) {
-        if (this.disposed || this.opened != null) return;
-        if (this.busy) {
-            this.followAfterSave = true;
-            this.clearAfterSave |= changed;
-            return;
-        }
-        this.following = true;
-        // A new working pack's copy is read before anything is edited, as when the tab opened. A pack stack change, which
-        // comes after every reload and rarely changes the pack, leaves typing and drawing alone.
-        if (changed) setEditable(false);
-        changed();
-        readCopies(changed);
-    }
-
-    /** Reads the copies again when this resource's entry in the change record changed. */
-    private void recordChanged() {
-        if (this.disposed) return;
-        ChangeRecord.Change now = recorded();
-        if (Objects.equals(now, this.seen)) return;
-        this.seen = now;
-        // A write of this editor shows its own result when it completes.
-        if (!this.busy) readCopies(true);
-    }
-
     /** This resource's entry in the change record for its managed pack, or null while it has none or the pack is not known. */
     private ChangeRecord.Change recorded() {
         return this.pack == null ? null : this.edits.record().change(new ChangeRecord.Resource(this.path, this.pack));
@@ -317,79 +277,99 @@ abstract class PackResourceEditor<V> extends JPanel {
         return this.target;
     }
 
+    /** How many times the tab read the pack's copies, which tests count. */
+    int reads() {
+        return this.loader.reads();
+    }
+
+    /** The read of the copies that runs or ran last, for tests. */
+    CompletableFuture<?> reading() {
+        return this.loader.current();
+    }
+
     String noticeText() {
         return this.notice.getText();
     }
 
     /**
-     * Shows the managed pack's copy instead of the opened file's, and names a pack that overrides the managed one.
-     * {@code changed} tells that the file itself changed, such as by a revert, which ends what the notice said about it.
+     * Reads the managed pack's copy, to show it instead of the opened file's, and whether a pack overrides it. Without an
+     * opened pack, the working pack is looked up each time: the player can open another world or choose another pack.
      */
-    private void readCopies(boolean changed) {
-        int started = this.writes;
-        int read = ++this.reads;
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                // Without an opened pack, the working pack is looked up each time: the player can open another world or
-                // choose another pack.
-                Path pack = this.opened != null ? this.opened : this.edits.pack(this.path);
-                // The record is looked at before the file, so a change between the two is caught afterwards.
-                ChangeRecord.Change recorded = this.edits.record().change(new ChangeRecord.Resource(this.path, pack));
-                Optional<byte[]> copy = this.edits.managed(pack, this.path);
-                return new Found<>(pack, recorded, copy.isPresent() ? decode(copy.get(), pack) : null,
-                        ResourceOriginals.hash(copy.orElse(null)),
-                        this.edits.packs().unusedBecause(this.path, pack).orElse(null),
-                        this.opened != null ? List.of() : this.edits.packs(this.path));
-            } catch (Exception exception) {
-                throw new CompletionException(exception);
-            }
-        }).whenComplete((found, failure) -> SwingUtilities.invokeLater(() -> {
-            if (this.disposed || this.writes != started || this.reads != read) return;
-            // A read that fails leaves the pack to save into unknown, so saving waits for the next one.
-            if (failure != null) {
-                this.readNotice = message(failure);
-                showNotice(this.readNotice, ThemeColors::error);
-                return;
-            }
-            this.following = false;
-            setEditable(true);
-            showPack(found.pack());
-            showTargets(found.targets(), found.pack());
-            this.seen = found.recorded();
-            if (changed) showNotice("", ThemeColors::secondaryText);
-            // Without a managed copy, such as after a revert, the pack supplies the opened file's content again, unless
-            // the opened file was the managed copy: then nothing is left, and the shown content is unsaved.
-            this.managed = found.managed() != null;
-            this.packContent = this.managed ? found.managed() : this.opened != null ? none() : this.openedContent;
-            // A deleted file keeps its content on screen, as unsaved content a Save would write again.
-            if (!modified() && (this.managed || this.opened == null)) load(this.packContent);
-            else markSaved(this.packContent);
-            // Changes that match the copy read now, such as another tab's save of the same text, are unsaved no more.
-            boolean unsaved = modified();
-            // Unsaved changes keep the copy they were made to as the one a save replaces, so replacing another asks. A tab
-            // moved to another pack, such as a newly chosen working pack, carries its changes over to that pack's copy.
-            boolean samePack = found.pack().equals(this.baselinePack);
-            boolean changedSince = unsaved && samePack && this.baseline != null && !this.baseline.equals(found.hash());
-            if (!unsaved || this.baseline == null || !samePack) {
-                this.baseline = found.hash();
-                this.baselinePack = found.pack();
-            }
-            this.packHash = found.hash();
-            showState("");
-            // Why the game did not use the copy ends when it does now, such as after the player enabled the pack.
-            boolean replaceable = this.notice.getText().isEmpty() || this.notice.getText().equals(this.readNotice);
-            if (replaceable) showNotice("", ThemeColors::secondaryText);
-            this.readNotice = found.unused();
-            // A save's reload failure or problems stay: they tell why, such as a pack the game turned off after a failure.
-            if (found.unused() != null && replaceable) showNotice(found.unused(), ThemeColors::warning);
-            if (changedSince && replaceable) {
-                this.readNotice = "The " + noun() + " changed in the pack since this tab read it; saving asks before replacing it";
-                showNotice(this.readNotice, ThemeColors::warning);
-            }
+    private Callable<Found<V>> prepareCopies() {
+        String working = this.opened != null ? null : this.edits.workingPackName(this.path);
+        // A new working pack's copy is read before anything is edited, as when the tab opened. A pack stack change, which
+        // comes after every reload and rarely changes the pack, leaves typing and drawing alone.
+        if (working != null && !working.equals(this.readWorking)) setEditable(false);
+        // A read for an edit elsewhere, such as a revert or another tab's save, leaves the pack alone, and saving goes on.
+        if (this.pack == null || this.loader.fired(this.edits.packs().changed(GamePacks.side(this.path)))
+                || this.loader.fired(this.edits.workingPackChosen(this.path))) {
+            this.following = true;
             changed();
-            // A save or revert that came after the record was looked at is read again.
-            if (!Objects.equals(recorded(), this.seen)) readCopies(true);
-        }));
+        }
+        return () -> {
+            Path pack = this.opened != null ? this.opened : this.edits.pack(this.path);
+            // The record is looked at before the file, so a change between the two is caught afterwards.
+            ChangeRecord.Change recorded = this.edits.record().change(new ChangeRecord.Resource(this.path, pack));
+            Optional<byte[]> copy = this.edits.managed(pack, this.path);
+            return new Found<>(pack, recorded, copy.isPresent() ? decode(copy.get(), pack) : null,
+                    ResourceOriginals.hash(copy.orElse(null)),
+                    this.edits.packs().unusedBecause(this.path, pack).orElse(null),
+                    this.opened != null ? List.of() : this.edits.packs(this.path), working);
+        };
+    }
+
+    /** A read that fails leaves the pack to save into unknown, so saving waits for the next one. */
+    private void copiesFailed(Throwable failure) {
+        this.readNotice = message(failure);
+        showNotice(this.readNotice, ThemeColors::error);
+    }
+
+    /**
+     * Shows the copies read. Another pack, as a newly chosen working pack, or a change of the file itself, as a revert,
+     * ends what the notice said about the copy shown before.
+     */
+    private void showCopies(Found<V> found) {
+        boolean changed = this.pack != null && (!found.pack().equals(this.pack) || !Objects.equals(found.recorded(), this.seen));
+        this.following = false;
+        this.readWorking = found.working();
+        setEditable(true);
+        showPack(found.pack());
+        showTargets(found.targets(), found.pack());
+        this.seen = found.recorded();
+        if (changed) showNotice("", ThemeColors::secondaryText);
+        // Without a managed copy, such as after a revert, the pack supplies the opened file's content again, unless
+        // the opened file was the managed copy: then nothing is left, and the shown content is unsaved.
+        this.managed = found.managed() != null;
+        this.packContent = this.managed ? found.managed() : this.opened != null ? none() : this.openedContent;
+        // A deleted file keeps its content on screen, as unsaved content a Save would write again.
+        if (!modified() && (this.managed || this.opened == null)) load(this.packContent);
+        else markSaved(this.packContent);
+        // Changes that match the copy read now, such as another tab's save of the same text, are unsaved no more.
+        boolean unsaved = modified();
+        // Unsaved changes keep the copy they were made to as the one a save replaces, so replacing another asks. A tab
+        // moved to another pack, such as a newly chosen working pack, carries its changes over to that pack's copy.
+        boolean samePack = found.pack().equals(this.baselinePack);
+        boolean changedSince = unsaved && samePack && this.baseline != null && !this.baseline.equals(found.hash());
+        if (!unsaved || this.baseline == null || !samePack) {
+            this.baseline = found.hash();
+            this.baselinePack = found.pack();
+        }
+        this.packHash = found.hash();
+        showState("");
+        // Why the game did not use the copy ends when it does now, such as after the player enabled the pack.
+        boolean replaceable = this.notice.getText().isEmpty() || this.notice.getText().equals(this.readNotice);
+        if (replaceable) showNotice("", ThemeColors::secondaryText);
+        this.readNotice = found.unused();
+        // A save's reload failure or problems stay: they tell why, such as a pack the game turned off after a failure.
+        if (found.unused() != null && replaceable) showNotice(found.unused(), ThemeColors::warning);
+        if (changedSince && replaceable) {
+            this.readNotice = "The " + noun() + " changed in the pack since this tab read it; saving asks before replacing it";
+            showNotice(this.readNotice, ThemeColors::warning);
+        }
+        changed();
+        // The pack is known only once read, as when the tab opened or moved to another working pack: a change of its
+        // entry in the record after the read looked at it did not concern the pack the tab showed then, so it is read now.
+        if (!Objects.equals(recorded(), this.seen)) this.loader.load();
     }
 
     /** Lists the packs the content could be saved into, the current one selected; an opened pack's file shows none. */
@@ -453,6 +433,7 @@ abstract class PackResourceEditor<V> extends JPanel {
         Path pack = this.opened != null ? this.opened : this.pack;
         String read = this.packHash;
         this.busy = true;
+        this.loader.hold();
         changed();
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -462,32 +443,41 @@ abstract class PackResourceEditor<V> extends JPanel {
                 throw new CompletionException(exception);
             }
         }).whenComplete((held, failure) -> SwingUtilities.invokeLater(() -> {
-            this.busy = false;
-            changed();
-            if (this.disposed) return;
-            if (failure != null) {
-                showNotice("Not opened: " + message(failure), ThemeColors::error);
-            } else if (held.equals(read)) {
-                after.accept(pack);
-            } else if (this.askToReplace.test(new ChangePipeline.Stale(this.path.substring(this.path.lastIndexOf('/') + 1)
-                    + " changed in " + this.packName + " since this tab read it"))) {
-                this.baseline = null;
-                save(after);
-            } else {
-                readAfterSave();
+            // The reads go on afterwards, whatever happens here, unless a save takes the hold over.
+            boolean savingAgain = false;
+            try {
+                this.busy = false;
+                changed();
+                if (this.disposed) return;
+                if (failure != null) {
+                    showNotice("Not opened: " + message(failure), ThemeColors::error);
+                } else if (held.equals(read)) {
+                    this.loader.release();
+                    after.accept(pack);
+                } else if (this.askToReplace.test(new ChangePipeline.Stale(this.path.substring(this.path.lastIndexOf('/') + 1)
+                        + " changed in " + this.packName + " since this tab read it"))) {
+                    this.baseline = null;
+                    savingAgain = save(after);
+                } else {
+                    readAfterSave();
+                }
+            } finally {
+                if (!savingAgain) this.loader.release();
             }
         }));
     }
 
-    private void save(Consumer<Path> after) {
-        if (this.busy || this.following || after == null && same(shown(), this.packContent)) return;
+    /** Saves as {@link #save()} does, then runs {@code after} with the pack; returns whether a save started. */
+    private boolean save(Consumer<Path> after) {
+        if (this.busy || this.following || after == null && same(shown(), this.packContent)) return false;
         V edited = copy(shown());
         Optional<String> problem = check(edited);
         if (problem.isPresent()) {
             showNotice(problem.get(), ThemeColors::error);
-            return;
+            return false;
         }
-        this.writes++;
+        // The copies read before the write never replace what it writes; what changes meanwhile is read after it.
+        this.loader.hold();
         this.busy = true;
         changed();
         this.state.setText("Reloading in the game");
@@ -499,6 +489,12 @@ abstract class PackResourceEditor<V> extends JPanel {
         // Encoding a large texture takes a while, so it runs with the rest of the save, and so does its hash.
         CompletableFuture.supplyAsync(() -> {
             try {
+                // The working pack or the world may have changed since the tab read its pack, before the tab could hear of
+                // it: the save goes nowhere else than where the tab saves now, and the tab reads that pack's copy instead.
+                Path now = this.opened != null ? this.opened : this.edits.pack(this.path);
+                if (!now.equals(into)) {
+                    throw new IOException("the " + noun() + " is saved into the " + PackFolders.label(now) + " now; its copy is read");
+                }
                 byte[] bytes = encode(edited);
                 written[0] = ResourceOriginals.hash(bytes);
                 return bytes;
@@ -507,42 +503,50 @@ abstract class PackResourceEditor<V> extends JPanel {
             }
         }).thenCompose(bytes -> this.edits.save(this.path, into, bytes, alongside, expected))
                 .whenComplete((saved, failure) -> SwingUtilities.invokeLater(() -> {
-                    this.busy = false;
-                    this.saving = null;
-                    if (this.disposed) return;
-                    if (failure != null) {
-                        showState("");
-                        changed();
-                        // Asked before following a change that came during the save, which would hold the overwrite back.
-                        if (cause(failure) instanceof ChangePipeline.Stale changedSince && this.askToReplace.test(changedSince)) {
-                            this.baseline = null;
-                            save(after);
+                    // The reads go on afterwards, whatever happens here, unless another save takes the hold over.
+                    boolean savingAgain = false;
+                    try {
+                        this.busy = false;
+                        this.saving = null;
+                        if (this.disposed) return;
+                        if (failure != null) {
+                            showState("");
+                            changed();
+                            // Asked before following a change that came during the save, which would hold the overwrite back.
+                            if (cause(failure) instanceof ChangePipeline.Stale changedSince && this.askToReplace.test(changedSince)) {
+                                this.baseline = null;
+                                savingAgain = save(after);
+                                return;
+                            }
+                            showNotice("Not saved: " + message(failure), ThemeColors::error);
+                            // What the record got during the attempt is the save's to tell, not a change that ends its notice.
+                            this.seen = recorded();
+                            // A copy written since, which the save refused to replace, is read, so Discard goes back to it;
+                            // the changes on screen stay, still unsaved.
+                            readAfterSave();
                             return;
                         }
-                        showNotice("Not saved: " + message(failure), ThemeColors::error);
-                        followLater();
-                        // A copy written since, which the save refused to replace, is read, so Discard goes back to it;
-                        // the changes on screen stay, still unsaved.
-                        readAfterSave();
-                        return;
+                        this.baseline = written[0];
+                        this.baselinePack = saved.pack();
+                        this.packHash = written[0];
+                        boolean keepEdits = !same(shown(), edited);
+                        showPack(saved.pack());
+                        this.packContent = edited;
+                        this.managed = true;
+                        if (keepEdits) markSaved(edited);
+                        else load(edited);
+                        showSaved(saved);
+                        changed();
+                        // Another tab's save that came while this one ran was not read then.
+                        ChangeRecord.Change now = recorded();
+                        if (now != null && !now.current().equals(written[0])) readAfterSave();
+                        this.loader.release();
+                        if (after != null) after.accept(saved.pack());
+                    } finally {
+                        if (!savingAgain) this.loader.release();
                     }
-                    this.baseline = written[0];
-                    this.baselinePack = saved.pack();
-                    this.packHash = written[0];
-                    boolean keepEdits = !same(shown(), edited);
-                    showPack(saved.pack());
-                    this.packContent = edited;
-                    this.managed = true;
-                    if (keepEdits) markSaved(edited);
-                    else load(edited);
-                    showSaved(saved);
-                    changed();
-                    followLater();
-                    // Another tab's save that came while this one ran was not read then.
-                    ChangeRecord.Change now = recorded();
-                    if (now != null && !now.current().equals(written[0])) readAfterSave();
-                    if (after != null) after.accept(saved.pack());
                 }));
+        return true;
     }
 
     /** Shows what the game made of a save: whether it uses it now, and what its reload reported. */
@@ -556,18 +560,9 @@ abstract class PackResourceEditor<V> extends JPanel {
         }
     }
 
-    /** Reads the copies again after a save, unless following a working pack or world change does already. */
+    /** Reads the copies again after a save, unless a read of them is under way already. */
     private void readAfterSave() {
-        if (!this.following && !this.busy) readCopies(false);
-    }
-
-    /** Follows a working pack or world change that came during the save just completed. */
-    private void followLater() {
-        if (!this.followAfterSave) return;
-        boolean changed = this.clearAfterSave;
-        this.followAfterSave = false;
-        this.clearAfterSave = false;
-        follow(changed);
+        if (!this.following) this.loader.load();
     }
 
     private void showResult(List<String> problems, String reloadFailure) {
@@ -643,8 +638,6 @@ abstract class PackResourceEditor<V> extends JPanel {
 
     void dispose() {
         this.disposed = true;
-        this.stopListening.run();
-        this.stopFollowingPacks.run();
-        this.stopFollowingWorkingPack.run();
+        this.loader.dispose();
     }
 }

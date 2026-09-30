@@ -113,12 +113,28 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aSaveThatWritesNothingTellsNothing() throws Exception {
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
+        edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
+        AtomicInteger told = new AtomicInteger();
+        edits.edited().subscribe(told::incrementAndGet);
+
+        Path pack = edits.pack(LANG);
+        assertThrows(ExecutionException.class, () -> edits.save(LANG, pack, bytes("{\"a\":1}"), Map.of(), "not what the pack holds")
+                .get(5, TimeUnit.SECONDS), "a save over a copy changed since is refused");
+        assertEquals(0, told.get(), "the packs are as they were, so the views that show them read nothing");
+        edits.save(LANG, bytes("{\"a\":2}")).get(5, TimeUnit.SECONDS);
+        assertEquals(1, told.get());
+    }
+
+    @Test
     void editListenersHearOfASaveOnceTheOptionsEnableThePack() throws Exception {
         Path options = Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\"]\n");
         ResourceEdits edits = edits(ChangeRecord.inMemory());
         edits.packs().named(new ClientPacksPayload(STACK, 48));
         List<String> seen = new CopyOnWriteArrayList<>();
-        edits.addEditListener(() -> {
+        edits.edited().subscribe(() -> {
             try {
                 seen.add(Files.readString(options));
             } catch (IOException unreadable) {
@@ -126,7 +142,7 @@ class ResourceEditsTest {
             }
         });
         AtomicInteger resourcePacks = new AtomicInteger();
-        edits.packs().addResourcePackListener(resourcePacks::incrementAndGet);
+        edits.packs().changed(ChangeRecord.PackSide.RESOURCES).subscribe(resourcePacks::incrementAndGet);
 
         edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
         assertEquals(List.of("resourcePacks:[\"vanilla\",\"file/TotalDebug\"]\n"), seen,

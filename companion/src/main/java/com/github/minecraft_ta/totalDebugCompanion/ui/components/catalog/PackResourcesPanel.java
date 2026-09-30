@@ -66,8 +66,8 @@ public final class PackResourcesPanel extends JPanel {
             TabTitles.setUncounted(this.tabs, 0, ResourcesTab.FILES.title());
             this.browser.setResources(List.of());
             this.browser.setMessage("Resources could not be read: " + failure.getMessage());
-        }).waitsWhileHidden(this).follow(catalog::addListener).follow(edits.packs()::addResourcePackListener)
-                .follow(edits.packs()::addDatapackListener).follow(edits::addEditListener);
+        }).waitsWhileHidden(this).follow(catalog.changed()::subscribe).follow(edits.packs().changed(ChangeRecord.PackSide.RESOURCES)::subscribe)
+                .follow(edits.packs().changed(ChangeRecord.PackSide.DATA)::subscribe).follow(edits.edited()::subscribe);
         this.packLoader = new PageLoader<>(() -> {
             PackStackPayload stack = this.edits.packs().resourcePacks();
             return () -> PackResources.resourcePacks(stack, this.workspace);
@@ -80,7 +80,7 @@ public final class PackResourcesPanel extends JPanel {
         })
                 // Its count on the tab follows while the page is shown; the folders are read again when the tab is chosen.
                 .waitsWhileHidden(this).readsWhenShown(this.packs)
-                .follow(edits.packs()::addResourcePackListener).follow(catalog::addListener);
+                .follow(edits.packs().changed(ChangeRecord.PackSide.RESOURCES)::subscribe).follow(catalog.changed()::subscribe);
         load();
     }
 

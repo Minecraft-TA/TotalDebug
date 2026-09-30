@@ -35,7 +35,7 @@ public final class ContentPanel extends JPanel {
         this.browser = new ContentBrowser(this.icons, this::iconOf, Objects.requireNonNull(navigator, "navigator"),
                 entry -> this.index == null ? entry.namespace() : this.index.ownerName(entry.namespace()));
         this.message.setVerticalAlignment(JLabel.TOP);
-        this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, this::load);
+        this.removeCatalogListener = ShownUpdates.follow(this, catalog.changed()::subscribe, this::load);
         load();
     }
 

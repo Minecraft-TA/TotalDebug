@@ -809,10 +809,10 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
     /** Shows the project's saved pack catalog and item icons, which stay browsable without a game connection. */
     private void restoreCatalog(ProjectScope scope) {
-        scope.catalog().addListener(() -> {
+        scope.catalog().changed().subscribe(() -> {
             if (currentScope() == scope) onUi(CompanionUi::catalogChanged);
         });
-        scope.changes().addListener(() -> {
+        scope.changes().changed().subscribe(() -> {
             if (currentScope() == scope) onUi(CompanionUi::changesRecorded);
         });
         itemIcons.setItemLookup(itemId -> scope.catalog().index().flatMap(index -> index.itemIcon(itemId)));

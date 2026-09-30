@@ -61,8 +61,8 @@ class GamePacksTest {
     }
 
     private GamePacks follow(GamePacks packs) {
-        packs.addResourcePackListener(this.resources::incrementAndGet);
-        packs.addDatapackListener(this.data::incrementAndGet);
+        packs.changed(ChangeRecord.PackSide.RESOURCES).subscribe(this.resources::incrementAndGet);
+        packs.changed(ChangeRecord.PackSide.DATA).subscribe(this.data::incrementAndGet);
         return packs;
     }
 

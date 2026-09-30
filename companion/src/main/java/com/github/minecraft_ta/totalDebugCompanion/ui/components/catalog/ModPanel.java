@@ -146,7 +146,7 @@ public final class ModPanel extends JPanel {
         }
         add(this.tabs, BorderLayout.CENTER);
         TypeToFilter.forwardTyping(this.tabs, this::selectedFilter);
-        this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, this::rebuild);
+        this.removeCatalogListener = ShownUpdates.follow(this, catalog.changed()::subscribe, this::rebuild);
         rebuild();
     }
 

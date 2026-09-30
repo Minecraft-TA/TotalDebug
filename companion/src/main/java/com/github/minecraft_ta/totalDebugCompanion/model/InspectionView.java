@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
@@ -22,7 +23,7 @@ public final class InspectionView implements IEditorPanel {
         this.subject = Objects.requireNonNull(subject, "subject");
         this.panel = SubjectPanel.occurrence(subject, context.snippets(), () -> context.project().scriptFiles(),
                 new DefinitionDetails.Services(context.project().catalog(), () -> context.project().sources(),
-                        context.itemIcons(), context.navigation()::navigate, context.project().packs()::addResourcePackListener));
+                        context.itemIcons(), context.navigation()::navigate, context.project().packs().changed(ChangeRecord.PackSide.RESOURCES)::subscribe));
     }
 
     public InspectSubjectPayload subject() {

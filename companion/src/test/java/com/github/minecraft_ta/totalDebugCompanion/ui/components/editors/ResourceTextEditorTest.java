@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
@@ -27,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@UiTest
 class ResourceTextEditorTest {
     private static final String LANG = "assets/testmod/lang/en_us.json";
 
@@ -46,6 +49,7 @@ class ResourceTextEditorTest {
         ResourceTextEditor[] editor = new ResourceTextEditor[1];
         SwingUtilities.invokeAndWait(() -> editor[0] = new ResourceTextEditor(LANG, "testmod.jar", null,
                 new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
         try {
             awaitOnSwing(() -> editor[0].textPanel().text().equals(saved));
 
@@ -71,6 +75,7 @@ class ResourceTextEditorTest {
         ResourceTextEditor[] editor = new ResourceTextEditor[1];
         SwingUtilities.invokeAndWait(() -> editor[0] = new ResourceTextEditor(LANG, "en_us.json", pack,
                 new LoadedResource.Text(added, "text/json", "UTF-8", added.length()), edits));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
         try {
             edits.revert(record.changes().getFirst()).get(5, TimeUnit.SECONDS);
             awaitOnSwing(() -> editor[0].textPanel().modified());
@@ -100,6 +105,7 @@ class ResourceTextEditorTest {
             assertFalse(editor[0].textPanel().editorPane.isEditable(),
                     "until the working pack's copy is read, typing would edit the mod's text and save it over that copy");
         });
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
         try {
             awaitOnSwing(() -> editor[0].targetBox().getItemCount() == 2);
             SwingUtilities.invokeAndWait(() -> assertTrue(editor[0].textPanel().editorPane.isEditable()));
@@ -122,6 +128,39 @@ class ResourceTextEditorTest {
     }
 
     @Test
+    void aSaveAfterTheWorkingPackMovedBeforeTheTabHeardGoesIntoNoPack() throws Exception {
+        InstanceState state = InstanceState.inMemory();
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, state);
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), 48));
+        Path mine = Files.createDirectories(this.directory.resolve("resourcepacks/MyPack"));
+        Files.writeString(mine.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":\"\"}}");
+        Path managed = edits.pack(LANG);
+        String inJar = "{\"a\":\"jar\"}";
+
+        ResourceTextEditor[] editor = new ResourceTextEditor[1];
+        SwingUtilities.invokeAndWait(() -> editor[0] = new ResourceTextEditor(LANG, "testmod.jar", null,
+                new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
+        try {
+            awaitOnSwing(() -> editor[0].targetBox().getItemCount() == 2);
+            // Another tab chose the player's pack, and this tab has not heard of it yet, as while one of its reads runs.
+            state.setWorkingPack(ResourceEdits.side(LANG), "MyPack");
+            SwingUtilities.invokeAndWait(() -> {
+                editor[0].textPanel().editorPane.setText("{\"a\":\"edited\"}");
+                editor[0].save();
+            });
+            // The save is refused, and the tab reads the pack it saves into now, keeping the edit unsaved.
+            awaitOnSwing(() -> mine.equals(editor[0].targetBox().getSelectedItem()));
+            SwingUtilities.invokeAndWait(() -> assertTrue(editor[0].textPanel().modified(), "the edit is still there, unsaved"));
+            assertFalse(Files.exists(managed.resolve(LANG)), "nothing is saved into the pack the tab showed");
+            assertFalse(Files.exists(mine.resolve(LANG)), "nor into the one it had not read yet");
+        } finally {
+            SwingUtilities.invokeAndWait(editor[0]::dispose);
+        }
+    }
+
+    @Test
     void theWarningThatTheGameDoesNotUseTheCopyEndsWhenItDoes() throws Exception {
         ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
                 new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
@@ -136,6 +175,7 @@ class ResourceTextEditorTest {
         ResourceTextEditor[] editor = new ResourceTextEditor[1];
         SwingUtilities.invokeAndWait(() -> editor[0] = new ResourceTextEditor(LANG, "testmod.jar", null,
                 new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
         try {
             awaitOnSwing(() -> editor[0].noticeText().contains("not enabled"));
             // The player enables the pack in the game.
@@ -161,6 +201,7 @@ class ResourceTextEditorTest {
                         new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits);
             }
         });
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(tabs[0], tabs[1]));
         try {
             awaitOnSwing(() -> tabs[0].targetBox().getItemCount() > 0 && tabs[1].targetBox().getItemCount() > 0);
             List<String> asked = new CopyOnWriteArrayList<>();
@@ -213,6 +254,7 @@ class ResourceTextEditorTest {
                         new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits);
             }
         });
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(tabs[0], tabs[1]));
         try {
             awaitOnSwing(() -> tabs[0].targetBox().getItemCount() > 0 && tabs[1].targetBox().getItemCount() > 0);
             List<String> asked = new CopyOnWriteArrayList<>();
@@ -258,6 +300,7 @@ class ResourceTextEditorTest {
         ResourceTextEditor[] editor = new ResourceTextEditor[1];
         SwingUtilities.invokeAndWait(() -> editor[0] = new ResourceTextEditor(LANG, "testmod.jar", null,
                 new LoadedResource.Text(inJar, "text/json", "UTF-8", inJar.length()), edits));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
         try {
             awaitOnSwing(() -> editor[0].targetBox().getItemCount() == 2);
             List<String> asked = new CopyOnWriteArrayList<>();
@@ -293,6 +336,7 @@ class ResourceTextEditorTest {
             editor[0].reformat();
             assertEquals(inJar, editor[0].textPanel().text(), "until the working pack's copy is read, the text stays");
         });
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
         try {
             awaitOnSwing(() -> editor[0].targetBox().getItemCount() > 0);
             SwingUtilities.invokeAndWait(() -> {

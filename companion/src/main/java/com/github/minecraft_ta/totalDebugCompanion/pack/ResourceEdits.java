@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
@@ -33,6 +34,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
@@ -83,9 +85,11 @@ public final class ResourceEdits {
     private final Executor writes;
     private final InstanceState state;
     /** Run after a save or revert has written its file and the game used it, or failed to. */
-    private final List<Runnable> editListeners = new CopyOnWriteArrayList<>();
-    /** Run when a working pack is chosen, which changes where resource tabs save. */
-    private final List<Consumer<String>> workingPackListeners = new CopyOnWriteArrayList<>();
+    private final Signal edited = new Signal();
+    /** Counts the files Companion wrote into packs and the options, so an edit tells only what landed. */
+    private final AtomicLong landed = new AtomicLong();
+    /** Fired by side when its working pack is chosen, which changes where resource tabs save. */
+    private final Map<String, Signal> workingPackChosen = Map.of("assets", new Signal(), "data", new Signal());
     /** The hash of what Companion last wrote to each resource, by the write queue, so a program's save is told from it. */
     private final Map<ChangeRecord.Resource, String> lastWritten = new ConcurrentHashMap<>();
     /** Opens resources in other programs and takes their saves; started when the first is opened. */
@@ -137,17 +141,20 @@ public final class ResourceEdits {
     }
 
     /**
-     * Runs {@code listener} after each save or revert has finished, the managed pack enabled and the game reloaded;
-     * returns its removal.
+     * Fires after each save, revert or adoption that wrote a file, once the managed pack is enabled and the game reloaded,
+     * also where it failed after a first file landed, as a texture's animation beside it. One that wrote nothing tells
+     * nothing.
      */
-    public Runnable addEditListener(Runnable listener) {
-        this.editListeners.add(listener);
-        return () -> this.editListeners.remove(listener);
+    public Signal edited() {
+        return this.edited;
     }
 
-    /** Tells the edit listeners once {@code edit} has finished, whether it worked or not. */
-    private CompletableFuture<Saved> finished(CompletableFuture<Saved> edit) {
-        return edit.whenComplete((ignored, failure) -> this.editListeners.forEach(Runnable::run));
+    /** Starts {@code edit} and fires {@link #edited()} once it has finished, where a file landed meanwhile. */
+    private CompletableFuture<Saved> finished(Supplier<CompletableFuture<Saved>> edit) {
+        long before = this.landed.get();
+        return edit.get().whenComplete((saved, failure) -> {
+            if (this.landed.get() != before) this.edited.fire();
+        });
     }
 
     /**
@@ -185,13 +192,17 @@ public final class ResourceEdits {
     public void setWorkingPack(String path, Path pack) {
         String name = pack.getFileName().toString();
         this.state.setWorkingPack(side(path), name.equals(PACK_NAME) ? "" : name);
-        this.workingPackListeners.forEach(listener -> listener.accept(side(path)));
+        this.workingPackChosen.get(side(path)).fire();
     }
 
-    /** Runs {@code listener} with the side, as {@link #side} names it, whenever a working pack is chosen; returns what removes it. */
-    public Runnable addWorkingPackListener(Consumer<String> listener) {
-        this.workingPackListeners.add(listener);
-        return () -> this.workingPackListeners.remove(listener);
+    /** Fires whenever a working pack of {@code path}'s side is chosen. */
+    public Signal workingPackChosen(String path) {
+        return this.workingPackChosen.get(side(path));
+    }
+
+    /** The name of the working pack chosen for {@code path}'s side, or empty for the pack Companion manages. */
+    public String workingPackName(String path) {
+        return this.state.workingPack(side(path));
     }
 
     /** Whether {@code pack} is a pack Companion manages, which it creates, enables and places on top. */
@@ -280,7 +291,7 @@ public final class ResourceEdits {
         Objects.requireNonNull(alongside, "alongside");
         // The files written beside it, which the reload watches too: they may change what the game makes of the resource.
         List<String> added = new CopyOnWriteArrayList<>();
-        return finished(writeAndApply(path, added, () -> {
+        return finished(() -> writeAndApply(path, added, () -> {
             try {
                 Path pack = into != null ? into : pack(path);
                 if (managed(pack)) preparePack(pack, path.startsWith("assets/"));
@@ -320,7 +331,7 @@ public final class ResourceEdits {
         if (!(change.target() instanceof ChangeRecord.Resource target)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Not a resource in the managed pack"));
         }
-        return finished(writeAndApply(target.path(), List.of(), () -> {
+        return finished(() -> writeAndApply(target.path(), List.of(), () -> {
             try {
                 // Reverted already, such as twice from the Changes page before it refreshed.
                 if (!change.equals(this.record.change(target))) return target.location();
@@ -350,36 +361,40 @@ public final class ResourceEdits {
     public CompletableFuture<Saved> adopt(String path, Path pack, byte[] before, byte[] seen) {
         ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
         this.pipeline.reloads().writing();
-        // Checked in the write queue, after every save and revert queued before it has written and been recorded.
-        CompletableFuture<Boolean> taken = write(() -> {
-            try {
-                Path file = pack.resolve(path);
-                String now = ResourceOriginals.hash(Files.isRegularFile(file) ? Files.readAllBytes(file) : null);
-                // Changed again since it was found whole: the program's next write is taken instead.
-                if (!now.equals(ResourceOriginals.hash(seen))) return false;
-                ChangeRecord.Change change = this.record.change(target);
-                // Without a change, what Companion wrote last is the original it put back.
-                String known = change == null ? this.lastWritten.get(target) : null;
-                String expected = change != null ? change.current() : known != null ? known : ResourceOriginals.hash(before);
-                if (expected.equals(now)) return false;
-                if (change == null) this.originals.keep(known != null ? this.originals.read(known) : before);
-                this.lastWritten.put(target, now);
-                this.record.changed(target, expected, now);
-                return true;
-            } catch (IOException exception) {
-                throw new CompletionException(exception);
-            }
+        return finished(() -> {
+            // Checked in the write queue, after every save and revert queued before it has written and been recorded.
+            CompletableFuture<Boolean> taken = write(() -> {
+                try {
+                    Path file = pack.resolve(path);
+                    String now = ResourceOriginals.hash(Files.isRegularFile(file) ? Files.readAllBytes(file) : null);
+                    // Changed again since it was found whole: the program's next write is taken instead.
+                    if (!now.equals(ResourceOriginals.hash(seen))) return false;
+                    ChangeRecord.Change change = this.record.change(target);
+                    // Without a change, what Companion wrote last is the original it put back.
+                    String known = change == null ? this.lastWritten.get(target) : null;
+                    String expected = change != null ? change.current() : known != null ? known : ResourceOriginals.hash(before);
+                    if (expected.equals(now)) return false;
+                    if (change == null) this.originals.keep(known != null ? this.originals.read(known) : before);
+                    this.lastWritten.put(target, now);
+                    this.record.changed(target, expected, now);
+                    // The program wrote it; taken into the pack, it counts as written.
+                    this.landed.incrementAndGet();
+                    return true;
+                } catch (IOException exception) {
+                    throw new CompletionException(exception);
+                }
+            });
+            return taken.handle((changed, failure) -> {
+                try {
+                    if (failure != null) return CompletableFuture.<Saved>failedFuture(failure);
+                    if (!changed) return CompletableFuture.<Saved>completedFuture(null);
+                    return apply(path, List.of(), pack).thenApply(saved -> new Saved(saved.effect(), saved.pack(), saved.problems(),
+                            saved.reloadFailure(), this.packs.unusedBecause(path, saved.pack()).orElse("")));
+                } finally {
+                    this.pipeline.reloads().written();
+                }
+            }).thenCompose(Function.identity());
         });
-        return finished(taken.handle((changed, failure) -> {
-            try {
-                if (failure != null) return CompletableFuture.<Saved>failedFuture(failure);
-                if (!changed) return CompletableFuture.<Saved>completedFuture(null);
-                return apply(path, List.of(), pack).thenApply(saved -> new Saved(saved.effect(), saved.pack(), saved.problems(),
-                        saved.reloadFailure(), this.packs.unusedBecause(path, saved.pack()).orElse("")));
-            } finally {
-                this.pipeline.reloads().written();
-            }
-        }).thenCompose(Function.identity()));
     }
 
     /**
@@ -451,6 +466,7 @@ public final class ResourceEdits {
                 if (write.value() == null) Files.deleteIfExists(file);
                 else AtomicFiles.replace(file, staged -> Files.write(staged, write.value()));
                 lastWritten.put(write.target(), text(write.value()));
+                ResourceEdits.this.landed.incrementAndGet();
                 landed.accept(write.target());
             }
         }
@@ -637,11 +653,13 @@ public final class ResourceEdits {
             packs.add(PACK_ID);
             lines.set(index, "resourcePacks:" + packs);
             AtomicFiles.writeString(options, String.join("\n", lines) + "\n");
+            this.landed.incrementAndGet();
             this.packs.written(ChangeRecord.PackSide.RESOURCES);
             return;
         }
         lines.add("resourcePacks:[\"vanilla\",\"" + PACK_ID + "\"]");
         AtomicFiles.writeString(options, String.join("\n", lines) + "\n");
+        this.landed.incrementAndGet();
         this.packs.written(ChangeRecord.PackSide.RESOURCES);
     }
 
@@ -659,6 +677,7 @@ public final class ResourceEdits {
         JsonObject json = new JsonObject();
         json.add("pack", description);
         AtomicFiles.writeString(meta, json + "\n");
+        this.landed.incrementAndGet();
         this.packs.written(assets ? ChangeRecord.PackSide.RESOURCES : ChangeRecord.PackSide.DATA);
     }
 }

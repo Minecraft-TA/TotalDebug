@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import org.junit.jupiter.api.AfterEach;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
@@ -25,6 +26,20 @@ class KeyBindingControlTest {
     private static final KeyBindings.Assignment G = new KeyBindings.Assignment("key.keyboard.g", "NONE");
 
     @TempDir Path directory;
+
+    private final List<KeyAssignments> assignments = new ArrayList<>();
+
+    @AfterEach
+    void closeAssignments() {
+        this.assignments.forEach(KeyAssignments::close);
+    }
+
+    /** The key assignments of the test's {@code options.txt}, watched until the test ends. */
+    private KeyAssignments assignments() {
+        KeyAssignments assignments = new KeyAssignments(this.directory.resolve("options.txt"));
+        this.assignments.add(assignments);
+        return assignments;
+    }
 
     @Test
     void aClosedGameGetsItsKeysInOptions() throws Exception {
@@ -103,7 +118,7 @@ class KeyBindingControlTest {
     void aRunningGameMakesTheChangeAndAnswers() throws Exception {
         GameLocation location = GameLocations.of(this.directory, true);
         ChangePipeline pipeline = new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run);
-        KeyBindingControl control = new KeyBindingControl(pipeline, listener -> () -> { });
+        KeyBindingControl control = new KeyBindingControl(pipeline, assignments());
         List<ChangePayload> sent = new ArrayList<>();
         location.connected(message -> {
             if (message instanceof ChangeMessage change) sent.add(change.payload());
@@ -138,7 +153,7 @@ class KeyBindingControlTest {
     void anAnswerAfterTheCallerStoppedWaitingIsStillRecorded() throws Exception {
         GameLocation location = GameLocations.of(this.directory, true);
         ChangePipeline pipeline = new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run);
-        KeyBindingControl control = new KeyBindingControl(pipeline, listener -> () -> { });
+        KeyBindingControl control = new KeyBindingControl(pipeline, assignments());
         List<ChangePayload> sent = new ArrayList<>();
         location.connected(message -> {
             if (message instanceof ChangeMessage change) sent.add(change.payload());
@@ -159,8 +174,8 @@ class KeyBindingControlTest {
         assertEquals(new KeyBindings.Assignment("key.keyboard.e", "SHIFT"), KeyBindings.Assignment.decode("key.keyboard.e:SHIFT"));
     }
 
-    private static KeyBindingControl control(GameLocation location) {
-        return new KeyBindingControl(new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run), listener -> () -> { });
+    private KeyBindingControl control(GameLocation location) {
+        return new KeyBindingControl(new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run), assignments());
     }
 
     private static String set(KeyBindingControl control, KeyBindingControl.Change... changes) throws Exception {

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ListedPack;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
@@ -29,7 +30,7 @@ import java.util.zip.ZipFile;
  * it plays names, each in its order; without them, what {@code options.txt} and a world's {@code level.dat} enable. It
  * answers which pack's copy of a file the game uses, for the views and the edits that show whether a copy is used.
  *
- * <p>Each side tells its own listeners, only when its packs may differ: the resource packs whenever the game client
+ * <p>Each side has its own signal, fired only when its packs may differ: the resource packs whenever the game client
  * names them, and the datapacks whenever the world's server does, since each names them after a load of its resources,
  * which may change the packs' files though not their order; the datapacks also when the game goes to another world; and
  * a side whose file Companion wrote. A disconnect changes both, since the files take over from the game.
@@ -45,9 +46,9 @@ public final class GamePacks {
     private volatile String worldRefusal = "";
     /** What the game played when its server named {@link #datapacks}, whose datapacks they are. */
     private volatile PlayingPayload datapacksFor;
-    private final Map<ChangeRecord.PackSide, List<Runnable>> listeners = new EnumMap<>(Map.of(
-            ChangeRecord.PackSide.RESOURCES, new CopyOnWriteArrayList<>(),
-            ChangeRecord.PackSide.DATA, new CopyOnWriteArrayList<>()));
+    private final Map<ChangeRecord.PackSide, Signal> changed = new EnumMap<>(Map.of(
+            ChangeRecord.PackSide.RESOURCES, new Signal(),
+            ChangeRecord.PackSide.DATA, new Signal()));
 
     /** The packs of the game {@code location} tells of. */
     public GamePacks(GameLocation location) {
@@ -172,13 +173,9 @@ public final class GamePacks {
         return stack == null ? null : stack.enabled();
     }
 
-    /**
-     * Runs {@code listener} whenever the packs of {@code side} may differ, on the thread that saw it; returns its removal.
-     */
-    public Runnable addListener(ChangeRecord.PackSide side, Runnable listener) {
-        List<Runnable> listeners = this.listeners.get(Objects.requireNonNull(side, "side"));
-        listeners.add(listener);
-        return () -> listeners.remove(listener);
+    /** Fires whenever the packs of {@code side} may differ, on the thread that saw it. */
+    public Signal changed(ChangeRecord.PackSide side) {
+        return this.changed.get(Objects.requireNonNull(side, "side"));
     }
 
     /** The side whose packs supply {@code path}: resource packs for {@code assets/}, datapacks for the rest. */
@@ -186,18 +183,8 @@ public final class GamePacks {
         return path.startsWith("assets/") ? ChangeRecord.PackSide.RESOURCES : ChangeRecord.PackSide.DATA;
     }
 
-    /** Listens to the resource packs, for {@code PageLoader.follow}. */
-    public Runnable addResourcePackListener(Runnable listener) {
-        return addListener(ChangeRecord.PackSide.RESOURCES, listener);
-    }
-
-    /** Listens to the datapacks of the world the game plays, for {@code PageLoader.follow}. */
-    public Runnable addDatapackListener(Runnable listener) {
-        return addListener(ChangeRecord.PackSide.DATA, listener);
-    }
-
     private void tell(ChangeRecord.PackSide side) {
-        this.listeners.get(side).forEach(Runnable::run);
+        this.changed.get(side).fire();
     }
 
     /**

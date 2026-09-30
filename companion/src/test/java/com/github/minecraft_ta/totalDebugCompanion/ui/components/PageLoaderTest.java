@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.SwingUtilities;
@@ -173,6 +175,199 @@ class PageLoaderTest {
         assertEquals(1, this.prepared.get());
     }
 
+    @Test
+    void aPageReadsWhenFirstShownAndThenOnlyAfterItsSignals() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal signal = new Signal();
+        PageLoader<String> loader = onEdt(() -> loader().page(page).follows(signal));
+
+        assertEquals(0, this.prepared.get(), "a page does not read before it is shown");
+        show(page, loader, true);
+        assertEquals(1, this.prepared.get(), "shown, it reads");
+        show(page, loader, false);
+        show(page, loader, true);
+        assertEquals(1, this.prepared.get(), "shown again without a change, it reads nothing");
+
+        show(page, loader, false);
+        fire(signal);
+        fire(signal);
+        assertEquals(1, this.prepared.get(), "a hidden page does not read");
+        show(page, loader, true);
+        assertEquals(2, this.prepared.get(), "shown again, it reads what it missed once");
+
+        fire(signal);
+        awaitPrepared(3, "a shown page reads a change at once");
+    }
+
+    @Test
+    void aChangeThatDoesNotConcernThePageReadsNothing() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal signal = new Signal();
+        AtomicBoolean concerns = new AtomicBoolean();
+        PageLoader<String> loader = onEdt(() -> loader().page(page).follows(signal, concerns::get));
+        show(page, loader, true);
+
+        fire(signal);
+        settle(loader);
+        assertEquals(1, this.prepared.get(), "another file's change, say, leaves the page alone");
+        concerns.set(true);
+        fire(signal);
+        awaitPrepared(2, "a change that concerns the page reads it");
+    }
+
+    @Test
+    void aHeldPageReadsWhatItMissedOnceReleased() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal signal = new Signal();
+        AtomicBoolean concerns = new AtomicBoolean(true);
+        PageLoader<String> loader = onEdt(() -> loader().page(page).follows(signal, concerns::get));
+        show(page, loader, true);
+
+        SwingUtilities.invokeAndWait(loader::hold);
+        fire(signal);
+        SwingUtilities.invokeAndWait(loader::load);
+        assertEquals(1, this.prepared.get(), "a page holding its reads, as while it saves, reads nothing");
+        SwingUtilities.invokeAndWait(loader::release);
+        awaitPrepared(2, "released, it reads what it missed once");
+        settle(loader);
+
+        // The change came from the page's own save: by the time it is released, the change does not concern it.
+        SwingUtilities.invokeAndWait(loader::hold);
+        fire(signal);
+        concerns.set(false);
+        SwingUtilities.invokeAndWait(loader::release);
+        settle(loader);
+        assertEquals(2, this.prepared.get(), "whether a change concerns the page is asked when it would read");
+    }
+
+    @Test
+    void aReadUnderWayWhenThePageHoldsIsNotShownAndIsReadAgain() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger reads = new AtomicInteger();
+        List<Integer> shown = new CopyOnWriteArrayList<>();
+        PageLoader<Integer> loader = new PageLoader<>(() -> () -> {
+            int read = reads.incrementAndGet();
+            if (read == 1) release.await(5, TimeUnit.SECONDS);
+            return read;
+        }, shown::add, failure -> { });
+
+        SwingUtilities.invokeAndWait(() -> {
+            loader.load();
+            loader.hold();
+        });
+        release.countDown();
+        loader.current().get(5, TimeUnit.SECONDS);
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(List.of(), shown, "a read that may predate the write is not shown");
+        SwingUtilities.invokeAndWait(loader::release);
+        settle(loader);
+        assertEquals(List.of(2), shown, "what it was for is read again after the write");
+    }
+
+    @Test
+    void aPageWhoseReadFailedReadsAgainWhenShownAgain() throws Exception {
+        ShowablePage page = new ShowablePage();
+        AtomicBoolean failing = new AtomicBoolean(true);
+        AtomicInteger failures = new AtomicInteger();
+        PageLoader<String> loader = onEdt(() -> new PageLoader<String>(() -> {
+            this.prepared.incrementAndGet();
+            return () -> {
+                if (failing.get()) throw new IOException("written in parts");
+                return "read";
+            };
+        }, read -> { }, failure -> failures.incrementAndGet()).page(page));
+
+        show(page, loader, true);
+        settle(loader);
+        assertEquals(1, failures.get());
+        failing.set(false);
+        show(page, loader, false);
+        show(page, loader, true);
+        assertEquals(2, this.prepared.get(), "shown again, a page whose read failed tries once more");
+        show(page, loader, false);
+        show(page, loader, true);
+        assertEquals(2, this.prepared.get(), "and once it read, shown again without a change it reads nothing");
+    }
+
+    @Test
+    void aReadCanTellWhichOfItsSignalsLedToIt() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal packs = new Signal();
+        Signal record = new Signal();
+        List<String> causes = new CopyOnWriteArrayList<>();
+        PageLoader<String>[] loader = new PageLoader[1];
+        loader[0] = onEdt(() -> new PageLoader<String>(() -> {
+            causes.add((loader[0].fired(packs) ? "packs" : "") + (loader[0].fired(record) ? "record" : ""));
+            return () -> "read";
+        }, read -> { }, failure -> { }).page(page).follows(packs).follows(record));
+        show(page, loader[0], true);
+        fire(record);
+        settle(loader[0]);
+        fire(packs);
+        settle(loader[0]);
+        assertEquals(List.of("", "record", "packs"), causes, "each read knows what it is for, and no more");
+    }
+
+    @Test
+    void aPageHiddenWhileItReadsReadsNothingMoreUntilShownWhoeverAsks() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal signal = new Signal();
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger reads = new AtomicInteger();
+        PageLoader<String> loader = onEdt(() -> new PageLoader<String>(() -> {
+            this.prepared.incrementAndGet();
+            return () -> {
+                if (reads.incrementAndGet() == 1) release.await(5, TimeUnit.SECONDS);
+                return "read";
+            };
+        }, read -> { }, failure -> { }).page(page).follows(signal));
+        SwingUtilities.invokeAndWait(() -> page.setShown(true));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(1, this.prepared.get(), "the first read runs");
+
+        SwingUtilities.invokeAndWait(() -> page.setShown(false));
+        fire(signal);
+        // As a page checking its read against a later change asks for another, and a request during the read does.
+        SwingUtilities.invokeAndWait(loader::load);
+        release.countDown();
+        settle(loader);
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(1, this.prepared.get(), "hidden, the page reads nothing more, whoever asked");
+
+        show(page, loader, true);
+        settle(loader);
+        assertEquals(2, this.prepared.get(), "shown, it reads once for all that came meanwhile");
+    }
+
+    @Test
+    void manyChangesWhileHiddenAreAskedAboutOncePerSource() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal signal = new Signal();
+        AtomicInteger asked = new AtomicInteger();
+        PageLoader<String> loader = onEdt(() -> loader().page(page).follows(signal, () -> {
+            asked.incrementAndGet();
+            return false;
+        }));
+        show(page, loader, true);
+        show(page, loader, false);
+        for (int change = 0; change < 1_000; change++) signal.fire();
+        SwingUtilities.invokeAndWait(() -> { });
+        show(page, loader, true);
+        assertEquals(1, asked.get(), "a hidden page keeps one question per source, however often it changed");
+    }
+
+    /** Waits until {@code expected} reads were prepared, as a read that a slow machine starts late. */
+    private void awaitPrepared(int expected, String message) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (this.prepared.get() < expected && System.nanoTime() < deadline) Thread.sleep(10);
+        assertEquals(expected, this.prepared.get(), message);
+    }
+
+    private static void fire(Signal signal) throws Exception {
+        signal.fire();
+        SwingUtilities.invokeAndWait(() -> { });
+    }
+
     private PageLoader<String> loader() {
         return new PageLoader<>(() -> {
             this.prepared.incrementAndGet();
@@ -192,8 +387,10 @@ class PageLoaderTest {
         SwingUtilities.invokeAndWait(() -> { });
     }
 
+    /** Shows or hides {@code page}, and waits for a read that showing starts, which runs a Swing step later. */
     private static void show(ShowablePage page, PageLoader<?> loader, boolean shown) throws Exception {
         SwingUtilities.invokeAndWait(() -> page.setShown(shown));
+        SwingUtilities.invokeAndWait(() -> { });
         settle(loader);
     }
 

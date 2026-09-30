@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.DefinitionDetails;
@@ -18,7 +19,7 @@ public final class DefinitionView implements IEditorPanel {
         this.subject = subject;
         this.panel = SubjectPanel.definition(subject, new DefinitionDetails.Services(context.project().catalog(),
                 () -> context.project().sources(), context.itemIcons(), context.navigation()::navigate,
-                context.project().packs()::addResourcePackListener));
+                context.project().packs().changed(ChangeRecord.PackSide.RESOURCES)::subscribe));
     }
 
     public SubjectRef.Definition subject() {
