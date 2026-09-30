@@ -13,14 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 
 /**
  * When configuration edits take effect in the game, and the edits the running game has not applied yet. NeoForge
@@ -45,9 +38,6 @@ public final class ConfigChanges {
     private final Path workspace;
     private final ChangeRecord record;
     private final Map<Key, Pending> pending = new ConcurrentHashMap<>();
-    /** One write at a time for the project, so writes to the same file never interleave. */
-    private final ExecutorService writes = Executors.newSingleThreadExecutor(task ->
-            Thread.ofPlatform().daemon().name("Configuration writes").unstarted(task));
     /** The game process the pending edits wait in, or 0 while it is unknown. */
     private long gameProcess;
 
@@ -65,40 +55,6 @@ public final class ConfigChanges {
     /** Where the game of the instance is. */
     public GameLocation location() {
         return this.location;
-    }
-
-    /** Runs {@code write} after the project's earlier writes; refused once the project closes. */
-    public <T> CompletableFuture<T> write(Supplier<T> write) {
-        try {
-            return CompletableFuture.supplyAsync(write, this.writes);
-        } catch (RejectedExecutionException closed) {
-            return CompletableFuture.failedFuture(new IOException("The project is closing; the change was not written"));
-        }
-    }
-
-    /**
-     * The project's writes to the game's files, one at a time, which the project finishes before its change record
-     * closes. Refuses work once the project closes.
-     */
-    public Executor writes() {
-        return this.writes;
-    }
-
-    /**
-     * Stops taking writes and waits until those already taken have finished, so every file written is also recorded
-     * before the change record closes. An interruption does not cut the wait short; it is kept for the caller.
-     */
-    public void close() {
-        this.writes.shutdown();
-        boolean interrupted = false;
-        while (true) {
-            try {
-                if (this.writes.awaitTermination(1, TimeUnit.MINUTES)) break;
-            } catch (InterruptedException interruption) {
-                interrupted = true;
-            }
-        }
-        if (interrupted) Thread.currentThread().interrupt();
     }
 
     /**

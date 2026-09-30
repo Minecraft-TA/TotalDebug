@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.change;
 
+import java.util.function.Supplier;
 import com.github.minecraft_ta.totalDebugCompanion.game.Access;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
@@ -68,7 +69,7 @@ public final class ChangePipeline {
     private final Map<Integer, CompletableFuture<ChangeResultPayload>> waiting = new ConcurrentHashMap<>();
     private final Reloads reloads;
 
-    /** Changes the game {@code location} tells of; {@code writes} is the project's write queue. */
+    /** Changes the game {@code location} tells of; {@code writes} is the project's write queue ({@link WriteQueue}). */
     public ChangePipeline(GameLocation location, ChangeRecord record, Executor writes) {
         this.location = Objects.requireNonNull(location, "location");
         this.record = Objects.requireNonNull(record, "record");
@@ -77,6 +78,20 @@ public final class ChangePipeline {
         location.connectionChanged().subscribe(() -> {
             if (location.connection() == null) gameDisconnected();
         });
+    }
+
+    /** The project's write queue, where every write of the game's and the packs' files runs, one at a time. */
+    public Executor writes() {
+        return this.writes;
+    }
+
+    /** Runs {@code write} after the project's earlier writes; refused once the project closes. */
+    public <T> CompletableFuture<T> write(Supplier<T> write) {
+        try {
+            return CompletableFuture.supplyAsync(write, this.writes);
+        } catch (RejectedExecutionException closed) {
+            return CompletableFuture.failedFuture(new IOException("The project is closing; the change was not written"));
+        }
     }
 
     public GameLocation location() {

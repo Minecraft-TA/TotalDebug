@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
@@ -767,7 +768,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         DebugEngine.Source source = frame.sourceUri() == null ? null : this.controller.source(frame.sourceUri());
         CompletableFuture.supplyAsync(() ->
                 DebuggerVariableNavigation.declarationTarget(source, frame, variable, parent)
-        ).whenComplete((target, failure) -> UIUtils.onEdt(() -> {
+        , Workers.files()).whenComplete((target, failure) -> UIUtils.onEdt(() -> {
             if (disposed || !Objects.equals(frame, this.frame)) return;
             if (failure != null) {
                 if (!isCancellation(failure)) notifications.publish(NotificationCenter.Severity.ERROR, "Unable to Jump to Source",

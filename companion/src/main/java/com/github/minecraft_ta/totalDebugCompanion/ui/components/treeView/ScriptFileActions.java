@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
@@ -381,7 +382,7 @@ public final class ScriptFileActions {
                     previews.stream().filter(view -> !Files.exists(((NavigationTarget.LocalFile) view.getNavigationTarget()).path())).forEach(removedPreviews::add);
                 }
             }
-        }).whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
+        }, Workers.files()).whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
             try {
             requireOwner(ctx);
             saved.forEach(view -> view.saved(drafts.get(view)));

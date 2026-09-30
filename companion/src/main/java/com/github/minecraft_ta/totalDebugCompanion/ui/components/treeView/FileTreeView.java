@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 
@@ -71,7 +72,7 @@ public class FileTreeView extends JScrollPane {
             var scripts = factory.createFileSystemDirectoryItem(scope.paths().scripts(), true);
             scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
             return scripts;
-        }).thenAcceptAsync(scripts -> {
+        }, Workers.files()).thenAcceptAsync(scripts -> {
             if (disposed || project.get() != scope || scope.phase() == ProjectScope.Phase.RETIRED) {
                 if (scripts != null) scripts.dispose();
                 throw new CancellationException("Project changed while preparing Scripts");

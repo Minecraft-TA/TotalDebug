@@ -41,6 +41,11 @@ public final class Workers {
         return FILES;
     }
 
+    /** A new serial path over the file work, for file work whose state stays on one thread, as open archives. */
+    public static Strand fileStrand() {
+        return new Strand(FILES);
+    }
+
     /** A new serial path, for an owner whose state changes in one order. */
     public static Strand strand() {
         return new Strand(OWNERS);

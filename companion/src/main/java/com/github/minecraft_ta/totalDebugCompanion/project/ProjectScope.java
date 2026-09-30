@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.project;
 
+import com.github.minecraft_ta.totalDebugCompanion.change.WriteQueue;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReading;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
@@ -71,6 +72,8 @@ public final class ProjectScope implements AutoCloseable {
     private final ChangeRecord changes;
     /** What Companion changed in the pack, kept with the instance. */
     public ChangeRecord changes() { return changes; }
+    /** The project's write queue, which its change pipeline writes through. */
+    private final WriteQueue writes = new WriteQueue();
     private final ConfigChanges configChanges;
     private final ConfigSettings configSettings;
     public ConfigSettings configSettings() { return configSettings; }
@@ -113,14 +116,14 @@ public final class ProjectScope implements AutoCloseable {
         this.changes = Objects.requireNonNull(changes);
         this.location = new GameLocation(profile.workspaceDirectory());
         this.configChanges = new ConfigChanges(this.location, changes);
-        this.pipeline = new ChangePipeline(this.location, changes, this.configChanges.writes());
+        this.pipeline = new ChangePipeline(this.location, changes, this.writes);
         this.configSettings = new ConfigSettings(this.configChanges, this.pipeline);
         this.keyAssignments = new KeyAssignments(profile.workspaceDirectory().resolve("options.txt"));
         this.keyBindings = new KeyBindingControl(this.pipeline, this.keyAssignments);
         this.packs = new GamePacks(this.location);
         this.world = new WorldReading(this.location, this.packs);
         this.resources = new ResourceEdits(this.pipeline, this.packs, new ResourceOriginals(paths().originals()),
-                this.configChanges.writes(), state);
+                this.pipeline.writes(), state);
         this.packSelections = new PackSelections(this.resources);
     }
 
@@ -227,7 +230,7 @@ public final class ProjectScope implements AutoCloseable {
             pending.clear();
         }
         // Writes still queued finish first, so each is recorded before the change record closes.
-        try { keyAssignments.close(); world.close(); resources.close(); configChanges.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
+        try { keyAssignments.close(); world.close(); resources.close(); writes.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
     }
 
     public String loadBreakpointScript(String name) {

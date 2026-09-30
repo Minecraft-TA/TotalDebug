@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
@@ -331,7 +332,7 @@ public class LazyFileJTree extends JTree {
                 DirectoryChain.compactChildren(source.loadChildren()).stream()
                 .sorted(LazyFileJTree::compareTreeItems)
                 .toList()
-        ).thenComposeAsync(items -> {
+        , Workers.files()).thenComposeAsync(items -> {
             this.activeLoads.remove(node);
             if (!isAttached(node)) {
                 this.rowsOnly.remove(node);

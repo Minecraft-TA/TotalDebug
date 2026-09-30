@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
@@ -46,11 +47,11 @@ public final class SnippetExpressionSupport {
             int caret,
             boolean explicit
     ) {
-        return CompletableFuture.supplyAsync(() -> completeNow(expression, caret));
+        return CompletableFuture.supplyAsync(() -> completeNow(expression, caret), Workers.files());
     }
 
     public CompletableFuture<List<DebugEngine.ExpressionToken>> tokens(String expression) {
-        return CompletableFuture.supplyAsync(() -> tokensNow(expression));
+        return CompletableFuture.supplyAsync(() -> tokensNow(expression), Workers.files());
     }
 
     public synchronized void accepted(DebuggerCompletionProposal proposal) {

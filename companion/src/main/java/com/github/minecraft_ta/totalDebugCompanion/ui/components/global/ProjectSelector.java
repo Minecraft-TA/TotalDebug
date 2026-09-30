@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
@@ -182,7 +183,7 @@ public final class ProjectSelector extends JMenu {
         prismPicker.setVisible(true);
     }
     private void openDirectory(Path selected) {
-        finish(CompletableFuture.supplyAsync(() -> ProjectDirectories.resolve(selected))
+        finish(CompletableFuture.supplyAsync(() -> ProjectDirectories.resolve(selected), Workers.files())
                 .thenCompose(profile -> projects.openProject(profile, null)));
     }
     private void open(CompanionProfile profile) { finish(this.projects.openProject(profile, null)); }

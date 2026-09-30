@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ThinSplitPane;
 
 import com.formdev.flatlaf.util.UIScale;
@@ -380,7 +381,7 @@ public final class BreakpointsWindow extends JDialog {
         CompletableFuture.supplyAsync(() -> {
             try { return scripts.listScripts(); }
             catch (IOException failure) { throw new CompletionException(failure); }
-        }).whenComplete((names, failure) -> SwingUtilities.invokeLater(() -> {
+        }, Workers.files()).whenComplete((names, failure) -> SwingUtilities.invokeLater(() -> {
             if (disposed || revision != scriptLoadRevision) return;
             scriptsLoading = false;
             scriptsError = null;
@@ -727,7 +728,7 @@ public final class BreakpointsWindow extends JDialog {
                 contextOffset += 2 + caret;
             }
             return ExpressionScopeAnalyzer.complete(unit, contextOffset, text, caret);
-        });
+        }, Workers.files());
     }
 
     private static int sourceOffset(String source, int displayedLine) {

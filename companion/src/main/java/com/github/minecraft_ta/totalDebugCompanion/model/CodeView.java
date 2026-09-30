@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.formdev.flatlaf.util.StringUtils;
@@ -56,7 +57,7 @@ public class CodeView implements IEditorPanel {
 
     public void reload(int offset) {
         CompletableFuture<Void> task = CompletableFuture
-                .supplyAsync(() -> readCode(this.path))
+                .supplyAsync(() -> readCode(this.path), Workers.files())
                 .thenAcceptAsync(code -> {
                     this.codeViewPanel.setCode(code);
                     this.codeViewPanel.navigateToOffset(offset);

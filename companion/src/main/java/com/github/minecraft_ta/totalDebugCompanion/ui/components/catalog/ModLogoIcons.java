@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Strand;
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModFiles;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
@@ -17,8 +19,6 @@ import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Mod logos as square row icons. A banner is much wider than tall and unreadable in a square, so mods with one keep
@@ -28,11 +28,8 @@ public final class ModLogoIcons {
     /** The widest (or tallest) logo that still reads as a square icon. */
     static final double MAXIMUM_ASPECT = 1.5;
     private static final int MAXIMUM_LOGO_BYTES = 8 * 1024 * 1024;
-    private static final ExecutorService LOADER = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "Mod logo loader");
-        thread.setDaemon(true);
-        return thread;
-    });
+    /** Where logos are read, one at a time. */
+    private static final Strand LOADER = Workers.fileStrand();
     /** Shared by every list and tree that shows mods; Swing thread only, like each of them. */
     private static final IconLoader<Key> LOGOS = new IconLoader<>(1_024, 4, ModLogoIcons::load);
 

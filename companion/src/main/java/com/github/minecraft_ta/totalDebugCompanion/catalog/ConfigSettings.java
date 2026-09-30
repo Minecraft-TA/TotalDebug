@@ -113,7 +113,7 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
      * made, or whatever it holds where {@code expected} is null.
      */
     public CompletableFuture<Saved> set(Target target, String expected, String literal) {
-        return this.changes.write(() -> {
+        return this.pipeline.write(() -> {
             try {
                 ChangePipeline.Applied<ChangeRecord.Setting> applied = this.pipeline.write(this,
                         List.of(new ChangePipeline.Edit<>(target.recorded(), expected, new Value(literal)))).applied().getFirst();
@@ -141,7 +141,7 @@ public final class ConfigSettings implements ChangeCategory<ChangeRecord.Setting
     public CompletableFuture<Saved> saveText(FileTarget target, List<PackCatalog.ConfigSetting> settings, String base, String after,
                                              boolean overwrite) {
         String fileName = target.fileName().substring(target.fileName().lastIndexOf('/') + 1);
-        return this.changes.write(() -> {
+        return this.pipeline.write(() -> {
             try {
                 // The text as a whole is what the edit was made against, and what is written, comments too.
                 String current = Files.readString(target.file(), StandardCharsets.UTF_8);
