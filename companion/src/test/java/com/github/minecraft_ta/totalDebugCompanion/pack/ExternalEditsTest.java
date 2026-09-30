@@ -121,6 +121,23 @@ class ExternalEditsTest {
     }
 
     @Test
+    void aClosedProjectTakesNoSaveAndHoldsNoFolderOfThePack() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        Path pack = edits.save(TEXTURE, png(0xFF112233)).get(5, TimeUnit.SECONDS).pack();
+        BlockingQueue<Object> taken = new LinkedBlockingQueue<>();
+        edits.external().follow(TEXTURE, pack);
+        edits.external().addListener(TEXTURE, pack, (saved, failure) -> taken.add(failure != null ? failure : saved));
+        edits.close();
+
+        Files.write(pack.resolve(TEXTURE), png(0xFF445566));
+        assertNull(taken.poll(1500, TimeUnit.MILLISECONDS), "a save after the project closed is not taken");
+        // On Windows a watch of the texture's folder would keep the pack from being moved.
+        Files.move(pack, pack.resolveSibling("Moved"));
+        assertFalse(Files.exists(pack));
+    }
+
+    @Test
     void aTextureIsWholeOnceItEndsWithItsClosingChunk() throws Exception {
         byte[] whole = png(0xFF112233);
         assertTrue(ExternalEdits.readable(TEXTURE, whole));

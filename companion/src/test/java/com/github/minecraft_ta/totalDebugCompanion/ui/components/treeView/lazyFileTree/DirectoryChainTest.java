@@ -1,9 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
-import com.github.minecraft_ta.totalDebugCompanion.util.FileUtils;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -24,8 +24,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -415,15 +413,11 @@ class DirectoryChainTest {
     }
 
     private static int subscriptions() {
-        synchronized (FileUtils.class) {
+        FileWatch watch = FileWatch.shared();
+        synchronized (watch) {
             try {
-                var field = FileUtils.class.getDeclaredField("registrations"); field.setAccessible(true);
-                int count = 0;
-                for (Object value : ((Map<?, ?>) field.get(null)).values()) {
-                    var listeners = value.getClass().getDeclaredField("listeners"); listeners.setAccessible(true);
-                    count += ((Set<?>) listeners.get(value)).size();
-                }
-                return count;
+                var field = FileWatch.class.getDeclaredField("watched"); field.setAccessible(true);
+                return ((List<?>) field.get(watch)).size();
             } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
         }
     }

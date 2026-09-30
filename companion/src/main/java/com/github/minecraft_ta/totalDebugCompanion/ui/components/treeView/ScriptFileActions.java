@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import com.formdev.flatlaf.util.SystemFileChooser;
@@ -19,7 +20,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFi
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.FileSystemFileItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.FileNamePopup;
-import com.github.minecraft_ta.totalDebugCompanion.util.FileUtils;
 
 import javax.swing.*;
 import javax.swing.tree.TreePath;
@@ -373,7 +373,7 @@ public final class ScriptFileActions {
                 ctx.project().requireActive();
                 for (Path root : roots) ctx.project().scriptFiles().mutable(root);
                 for (var entry : drafts.entrySet()) { entry.getKey().pendingSave().join(); entry.getKey().persist(entry.getValue()); saved.add(entry.getKey()); }
-                FileUtils.withPausedDirectoryWatchers(roots, () -> work.run(ctx.project().scriptFiles(), changes));
+                FileWatch.shared().pausing(roots, () -> work.run(ctx.project().scriptFiles(), changes));
             } catch (IOException failure) { throw new CompletionException(failure); }
             finally {
                 if (deleting) {

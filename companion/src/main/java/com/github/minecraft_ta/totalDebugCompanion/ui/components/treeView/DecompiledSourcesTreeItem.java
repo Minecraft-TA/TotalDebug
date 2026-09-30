@@ -1,10 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
-import com.github.minecraft_ta.totalDebugCompanion.util.FileUtils;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -19,7 +19,7 @@ final class DecompiledSourcesTreeItem extends DirectoryTreeItem {
         super("decompiled-files");
         this.service = service;
         setIcon(Icons.FOLDER);
-        this.stopWatching = FileUtils.startNewDirectoryWatcher(service.cacheDirectory(),
+        this.stopWatching = FileWatch.shared().watchEntries(service.cacheDirectory(),
                 () -> tree.loadItemsForTopLevelItem(this));
     }
 

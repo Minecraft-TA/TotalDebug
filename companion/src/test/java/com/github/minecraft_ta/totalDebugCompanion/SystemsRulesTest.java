@@ -88,8 +88,6 @@ class SystemsRulesTest {
             Map.entry("ui/components/catalog/TextureThumbnails.java", new Allowed(2, "moves onto Workers in PR 8")),
             Map.entry("ui/components/catalog/ModLogoIcons.java", new Allowed(2, "moves onto Workers in PR 8")),
             Map.entry("ui/components/editors/ResourceViewPanel.java", new Allowed(2, "moves onto Workers in PR 8")),
-            Map.entry("pack/ExternalEdits.java", new Allowed(3, "becomes an adoption in PR 6")),
-            Map.entry("util/FileUtils.java", new Allowed(1, "its watcher becomes a FileWatch follower in PR 6")),
             Map.entry("util/Workers.java", new Allowed(6, "the file work, the owners' strands and the timer everything shares")),
             Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")));
 
@@ -101,7 +99,6 @@ class SystemsRulesTest {
             Map.entry("inspection/InspectionSession.java", new Allowed(2, "moves onto Workers in PR 8")),
             Map.entry("model/CodeView.java", new Allowed(1, "moves onto Workers in PR 8")),
             Map.entry("navigation/NavigationService.java", new Allowed(2, "moves onto Workers in PR 8")),
-            Map.entry("pack/ExternalEdits.java", new Allowed(1, "moves onto Workers in PR 8")),
             Map.entry("script/SnippetExpressionSupport.java", new Allowed(2, "moves onto Workers in PR 8")),
             Map.entry("ui/components/PageLoader.java", new Allowed(1, "reads on Workers' file work from PR 7")),
             Map.entry("ui/components/catalog/ModPanel.java", new Allowed(1, "moves onto Workers in PR 8")),
@@ -115,10 +112,9 @@ class SystemsRulesTest {
             Map.entry("ui/components/treeView/lazyFileTree/LazyFileJTree.java", new Allowed(1, "moves onto Workers in PR 8")),
             Map.entry("ui/views/PrismInstancePicker.java", new Allowed(1, "moves onto Workers in PR 8")),
             Map.entry("ui/views/debugger/BreakpointsWindow.java", new Allowed(2, "moves onto Workers in PR 8")),
-            Map.entry("ui/views/debugger/DebuggerInspector.java", new Allowed(1, "moves onto Workers in PR 8")),
-            Map.entry("util/FileUtils.java", new Allowed(1, "moves onto Workers in PR 8")));
+            Map.entry("ui/views/debugger/DebuggerInspector.java", new Allowed(1, "moves onto Workers in PR 8")));
 
-    // Signal itself; events inside a subsystem or a control, which are not state (section 1); owners not on signals yet.
+    // Signal itself; events inside a subsystem or a control, which are not state (section 1).
     private static final Map<String, Allowed> LISTENER_LISTS = Map.ofEntries(
             Map.entry("util/Signal.java", new Allowed(1, "the signal every owner uses")),
             Map.entry("jdt/diagnostics/ASTCache.java", new Allowed(1, "the editor's analysis")),
@@ -134,13 +130,10 @@ class SystemsRulesTest {
             Map.entry("ui/components/inspection/DataView.java", new Allowed(1, "speed search, an event")),
             Map.entry("ui/components/treeView/lazyFileTree/LazyFileJTree.java", new Allowed(1, "a double click, an event")),
             Map.entry("ui/theme/ThemeManager.java", new Allowed(1, "the theme, which stays as it is")),
-            Map.entry("util/FileUtils.java", new Allowed(1, "becomes FileWatch in PR 6")),
-            Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 6")));
+            Map.entry("pack/ExternalEdits.java", new Allowed(1, "an external save's result, an event")));
 
     private static final Map<String, Allowed> WATCHERS = Map.ofEntries(
-            Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")),
-            Map.entry("util/FileUtils.java", new Allowed(1, "becomes a FileWatch follower in PR 6")),
-            Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 6")));
+            Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")));
 
     @BeforeAll
     static void scan() throws IOException {
