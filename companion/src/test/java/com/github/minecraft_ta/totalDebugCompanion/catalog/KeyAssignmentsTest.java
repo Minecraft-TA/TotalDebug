@@ -62,6 +62,21 @@ class KeyAssignmentsTest {
         }
     }
 
+    @Test
+    void aPageThatReadBeforeTheOwnerStillHearsOfTheNextChange() throws Exception {
+        Path options = this.directory.resolve("options.txt");
+        Files.writeString(options, "key_key.jump:key.keyboard.space" + System.lineSeparator());
+        AtomicInteger told = new AtomicInteger();
+        try (KeyAssignments assignments = new KeyAssignments(options)) {
+            assignments.changed().subscribe(told::incrementAndGet);
+            // A page opened at once reads the keys, perhaps before the owner's own first read, and the game then saves.
+            Map<String, KeyBindings.Assignment> shown = assignments.assignments();
+            replace(options, "key_key.jump:key.keyboard.g" + System.lineSeparator());
+            await(told::get, 1);
+            assertEquals(Map.of("key.jump", KeyBindings.Assignment.decode("key.keyboard.space")), shown);
+        }
+    }
+
     /** Writes {@code text} beside {@code file} and moves it over the file, as the game and Companion save it. */
     private static void replace(Path file, String text) throws Exception {
         Path staged = file.resolveSibling(file.getFileName() + ".tmp");

@@ -65,15 +65,19 @@ public final class KeyAssignments implements AutoCloseable {
 
     /**
      * The keys the file assigns: as last read while its folder is watched, and read now where it has not been read yet
-     * or is not watched, since then a change would go unseen. A read made here is not what the next change is told
-     * against: only this owner's own reads are, so every follower hears of a change it has not seen. Blocking where it
-     * reads.
+     * or is not watched, since then a change would go unseen. The first read, whoever makes it, is what the next change
+     * is told against, so a follower that read before this owner did still hears of a later change; after it, only
+     * this owner's own reads are, so every follower hears of a change it has not seen. Blocking where it reads.
      */
     public Map<String, KeyBindings.Assignment> assignments() throws IOException {
         synchronized (this) {
             if (this.read != null && this.watching) return this.read;
         }
-        return KeyBindings.readOptions(this.options);
+        Map<String, KeyBindings.Assignment> now = KeyBindings.readOptions(this.options);
+        synchronized (this) {
+            if (this.read == null) this.read = now;
+        }
+        return now;
     }
 
     private static WatchService watchService() {
