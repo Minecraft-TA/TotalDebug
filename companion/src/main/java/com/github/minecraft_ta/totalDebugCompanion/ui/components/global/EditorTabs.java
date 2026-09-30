@@ -223,6 +223,15 @@ public class EditorTabs extends JTabbedPane {
         notifySelectedEditorChanged();
     }
 
+    /**
+     * Brings every tab's title and icon up to date after the catalog or the item icons changed; the pages themselves
+     * follow once they are shown.
+     */
+    public void refreshTabIdentities() {
+        this.editors.forEach(IEditorPanel::refreshTabIcon);
+        refreshEditorTitles();
+    }
+
     public IEditorPanel getSelectedEditor() {
         if (getSelectedIndex() == -1)
             return null;

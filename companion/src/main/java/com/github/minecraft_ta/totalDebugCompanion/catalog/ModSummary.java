@@ -50,6 +50,22 @@ public record ModSummary(String id, String title, String version, PackCatalog.Mo
         return Optional.empty();
     }
 
+    /**
+     * The name {@link #resolve} gives mod {@code id}, or the id when neither the catalog nor the runtime knows it, found
+     * without looking for its files: for a tab, which the Swing thread names whenever the tab strip asks.
+     */
+    public static String title(String id, CatalogIndex index, RuntimeSourceCatalog sources) {
+        if (index != null) {
+            Optional<PackCatalog.Mod> mod = index.mod(id);
+            if (mod.isPresent()) return mod.get().title();
+            if (index.otherNamespaces().contains(id)) return id;
+        }
+        for (RuntimeInventory.RuntimeModule module : sources.modules()) {
+            if (module.id().equals(id)) return module.displayName();
+        }
+        return id;
+    }
+
     /** The original files of a mod; only local files can be listed. */
     private static List<Path> existing(List<URI> uris) {
         List<Path> files = new ArrayList<>();
