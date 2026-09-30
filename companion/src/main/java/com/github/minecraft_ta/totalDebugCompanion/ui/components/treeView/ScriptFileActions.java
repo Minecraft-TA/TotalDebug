@@ -369,11 +369,13 @@ public final class ScriptFileActions {
         var removed = new ArrayList<ScriptView>();
         var changes = new ArrayList<Change>();
         var result = new CompletableFuture<Void>();
-        CompletableFuture.runAsync(() -> {
+        CompletableFuture<Void> pendingSaves = CompletableFuture.allOf(
+                views.stream().map(ScriptView::pendingSave).toArray(CompletableFuture[]::new));
+        pendingSaves.thenRunAsync(() -> {
             try {
                 ctx.project().requireActive();
                 for (Path root : roots) ctx.project().scriptFiles().mutable(root);
-                for (var entry : drafts.entrySet()) { entry.getKey().pendingSave().join(); entry.getKey().persist(entry.getValue()); saved.add(entry.getKey()); }
+                for (var entry : drafts.entrySet()) { entry.getKey().persist(entry.getValue()); saved.add(entry.getKey()); }
                 FileWatch.shared().pausing(roots, () -> work.run(ctx.project().scriptFiles(), changes));
             } catch (IOException failure) { throw new CompletionException(failure); }
             finally {
