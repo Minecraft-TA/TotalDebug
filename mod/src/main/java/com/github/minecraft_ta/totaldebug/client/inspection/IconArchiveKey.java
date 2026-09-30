@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -64,7 +65,8 @@ final class IconArchiveKey {
 
     /**
      * Adds the files of {@code source}, a folder or a file; false when it is gone, cannot be read or changed a moment ago.
-     * A folder that is a link is walked where it leads, as the game reads it.
+     * Links to folders, the pack's own or inside it, are followed, as the game reads through them; links that loop give
+     * no key.
      */
     private static boolean stamp(MessageDigest digest, Path source, Instant now) {
         try {
@@ -72,7 +74,7 @@ final class IconArchiveKey {
             if (!Files.isDirectory(source)) return false;
             Path root = source.getFileSystem() == FileSystems.getDefault() ? source.toRealPath() : source;
             List<Path> files;
-            try (Stream<Path> walk = Files.walk(root)) {
+            try (Stream<Path> walk = Files.walk(root, FileVisitOption.FOLLOW_LINKS)) {
                 files = walk.filter(Files::isRegularFile).sorted().toList();
             }
             text(digest, source.toString());

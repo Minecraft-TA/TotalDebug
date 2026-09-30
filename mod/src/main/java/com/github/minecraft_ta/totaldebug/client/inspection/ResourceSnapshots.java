@@ -162,13 +162,11 @@ public final class ResourceSnapshots {
 
     /**
      * Where a mod file's resources are read: the jar itself; for a mod of folders, as in a development run, which may
-     * merge several, its {@code assets} as the game reads them through the jar it makes of them, or none without any.
+     * merge several, everything the game reads through the jar it makes of them, its pack.mcmeta and overlays too.
      */
     private static List<Path> resources(IModFileInfo info) {
         Path file = info.getFile().getFilePath();
-        if (Files.isRegularFile(file)) return List.of(file);
-        Path assets = info.getFile().getSecureJar().getRootPath().resolve("assets");
-        return Files.isDirectory(assets) ? List.of(assets) : List.of();
+        return List.of(Files.isRegularFile(file) ? file : info.getFile().getSecureJar().getRootPath());
     }
 
     /**

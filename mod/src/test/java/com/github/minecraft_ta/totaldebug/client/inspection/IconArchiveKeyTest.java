@@ -88,6 +88,27 @@ class IconArchiveKeyTest {
         assertNotEquals(before, IconArchiveKey.of("1.21.1", parts, FLUIDS, NOW), "a texture changed where the link leads");
     }
 
+    @Test
+    void aLinkedFolderInsideAPackCounts() throws Exception {
+        Path pack = pack("Faithful");
+        Path shared = Files.createDirectories(this.directory.resolve("shared/models"));
+        Path model = shared.resolve("sand.json");
+        Files.writeString(model, "{}");
+        Files.setLastModifiedTime(model, FileTime.from(NOW.minusSeconds(60)));
+        try {
+            Files.createSymbolicLink(pack.resolve("assets/minecraft/models"), shared);
+        } catch (UnsupportedOperationException | IOException | SecurityException notAllowed) {
+            // Windows without the privilege to create links: nothing to check here.
+            return;
+        }
+        List<IconArchiveKey.Part> parts = List.of(new IconArchiveKey.Part("file/Faithful", List.of(pack)));
+        Optional<String> before = IconArchiveKey.of("1.21.1", parts, FLUIDS, NOW);
+        Files.writeString(model, "{\"parent\":\"block/cube\"}");
+        Files.setLastModifiedTime(model, FileTime.from(NOW.minusSeconds(30)));
+        assertTrue(before.isPresent());
+        assertNotEquals(before, IconArchiveKey.of("1.21.1", parts, FLUIDS, NOW), "a model changed where a folder of the pack links to");
+    }
+
     /** A folder pack with a texture and its pack.mcmeta, last written a minute before {@link #NOW}. */
     private Path pack(String name) throws Exception {
         Path pack = Files.createDirectories(this.directory.resolve(name));
