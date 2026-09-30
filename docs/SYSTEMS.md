@@ -145,7 +145,7 @@ The Swing thread runs Swing, and nothing that waits or grows with the data: no f
 |---|---|---|
 | File work (`Workers.files()`, a bounded pool of platform threads) | Reads for pages and readings, and other short work off the Swing thread | The shared pool in `PageLoader` and the one-argument `supplyAsync` calls; `ResourceViewPanel`'s pool |
 | Serial paths (`Workers.strand()` for owners, `Workers.fileStrand()` for file work), each a `Strand` over the shared threads | Owners, and components whose state stays on one thread or whose order matters, as open archives | The own executors of `TextureThumbnails` and `ModLogoIcons` |
-| The project's write queue (`WriteQueue`, a serial path over the file work that the pipeline writes through) | Every write of the pipeline, adoptions, and owners noticing values put back | `ConfigChanges`' executor, which every category borrowed |
+| The project's write queue (`WriteQueue`, with its own serial worker from `Workers.projectWrites()`) | Every write of the pipeline, independent of unrelated reads, so closing can finish its writes | `ConfigChanges`' executor, which every category borrowed |
 | Timers (`Workers.later`, one scheduler) | Settle delays, retries, timeouts; a timer only hands work to another worker | `KeyAssignments`' and `ExternalEdits`' schedulers, `JsonStateWriter`'s scheduled flush |
 
 - Platform threads, not virtual ones: on Java 21 a virtual thread is pinned inside `synchronized` and by `ZipFile`, which most reads use.
@@ -156,7 +156,7 @@ The Swing thread runs Swing, and nothing that waits or grows with the data: no f
 
 The change pipeline ([CHANGE_PIPELINE.md](CHANGE_PIPELINE.md)) stays the one way to change the game's and the packs' files and what the running game keeps.
 
-- **The pipeline owns the project's write queue.** The project makes one `WriteQueue` for its pipeline and closes it before its change record; `ConfigChanges` makes none, and `ResourceEdits` and configuration settings write through the pipeline's.
+- **The pipeline owns the project's write queue.** The project makes one `WriteQueue` for its pipeline and closes it before its change record; `ConfigChanges` makes none, and `ResourceEdits` and configuration settings write through the pipeline's. Its worker is separate from the shared file pool, so unrelated reads cannot delay writes or closing an empty queue.
 - **A category may write beside its value inside its own write task**, as `ResourceEdits` enables the managed pack in `options.txt` and writes its `pack.mcmeta`. Nothing writes the game's or the packs' files outside a write task.
 - **Companion's own files** (its state, script files, originals, decompiled sources) are not the pipeline's; they are written by their owners on serial workers.
 - **After a write, the category's owner fires its signal** if the value differs.

@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyAssignments;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,37 @@ class WriteQueueTest {
     @AfterEach
     void closeAssignments() {
         this.assignments.forEach(KeyAssignments::close);
+    }
+
+    @Test
+    void writesAndClosingDoNotWaitForUnrelatedFileReads() throws Exception {
+        CountDownLatch entered = new CountDownLatch(4);
+        CountDownLatch release = new CountDownLatch(1);
+        WriteQueue empty = new WriteQueue();
+        WriteQueue writes = new WriteQueue();
+        for (int index = 0; index < 4; index++) {
+            Workers.files().execute(() -> {
+                entered.countDown();
+                try {
+                    release.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+        try {
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            CompletableFuture.runAsync(empty::close).get(5, TimeUnit.SECONDS);
+            ChangePipeline changes = new ChangePipeline(this.location, ChangeRecord.inMemory(), writes);
+            CompletableFuture<String> taken = changes.write(() -> "written");
+            CompletableFuture<Void> closing = CompletableFuture.runAsync(writes::close);
+            assertEquals("written", taken.get(5, TimeUnit.SECONDS));
+            closing.get(5, TimeUnit.SECONDS);
+        } finally {
+            release.countDown();
+            empty.close();
+            writes.close();
+        }
     }
 
     @Test

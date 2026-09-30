@@ -46,6 +46,14 @@ public final class Workers {
         return new Strand(FILES);
     }
 
+    /** A project's serial write worker, independent of unrelated reads and closed by its write queue. */
+    public static ExecutorService projectWrites() {
+        return Executors.newSingleThreadExecutor(task -> Thread.ofPlatform()
+                .daemon()
+                .name("Companion writes")
+                .unstarted(task));
+    }
+
     /** A new serial path, for an owner whose state changes in one order. */
     public static Strand strand() {
         return new Strand(OWNERS);

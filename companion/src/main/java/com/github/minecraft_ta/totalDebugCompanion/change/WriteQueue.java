@@ -1,12 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.change;
 
-import com.github.minecraft_ta.totalDebugCompanion.util.Strand;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The project's writes to the game's and the packs' files, one at a time, so writes to the same file never interleave
@@ -14,13 +13,13 @@ import java.util.concurrent.RejectedExecutionException;
  * closes. It refuses work once closed.
  */
 public final class WriteQueue implements Executor, AutoCloseable {
-    private final Strand strand = Workers.fileStrand();
+    private final ExecutorService worker = Workers.projectWrites();
     private boolean closed;
 
     @Override
     public synchronized void execute(Runnable write) {
         if (this.closed) throw new RejectedExecutionException("The project is closing");
-        this.strand.execute(write);
+        this.worker.execute(write);
     }
 
     /**
@@ -29,20 +28,16 @@ public final class WriteQueue implements Executor, AutoCloseable {
      */
     @Override
     public void close() {
-        CompletableFuture<Void> drained = new CompletableFuture<>();
         synchronized (this) {
             this.closed = true;
-            this.strand.execute(() -> drained.complete(null));
+            this.worker.shutdown();
         }
         boolean interrupted = false;
         while (true) {
             try {
-                drained.get();
-                break;
+                if (this.worker.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)) break;
             } catch (InterruptedException interruption) {
                 interrupted = true;
-            } catch (ExecutionException impossible) {
-                break;
             }
         }
         if (interrupted) Thread.currentThread().interrupt();

@@ -83,7 +83,7 @@ class SystemsRulesTest {
             Map.entry("mcp/CodeModeJobService.java", new Allowed(2, "the MCP job service")),
             Map.entry("session/ProjectSelectionServer.java", new Allowed(2, "accepts connections")),
             Map.entry("inspection/ItemIconService.java", new Allowed(2, "the item icon renderer is confined to one thread")),
-            Map.entry("util/Workers.java", new Allowed(6, "the file work, the owners' strands and the timer everything shares")),
+            Map.entry("util/Workers.java", new Allowed(8, "the shared file work, owners and timer, and each project's write worker")),
             Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")));
 
     // Every async task names its worker.
