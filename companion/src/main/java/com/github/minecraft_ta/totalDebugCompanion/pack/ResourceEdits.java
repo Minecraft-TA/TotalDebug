@@ -138,17 +138,21 @@ public final class ResourceEdits {
     }
 
     /**
-     * Fires after each save, revert or adoption that wrote, once the managed pack is enabled and the game reloaded; one
-     * that failed or found nothing to write leaves the packs as they were and tells nothing.
+     * Fires after each save, revert or adoption that may have written, once the managed pack is enabled and the game
+     * reloaded. One refused before it wrote, as over a copy changed since, or that found nothing to write, tells nothing;
+     * one that failed while writing tells, since what landed before stays, as a texture's animation beside it.
      */
     public Signal edited() {
         return this.edited;
     }
 
-    /** Fires {@link #edited()} once {@code edit} has written. */
+    /** Fires {@link #edited()} once {@code edit} has finished, unless it wrote nothing. */
     private CompletableFuture<Saved> finished(CompletableFuture<Saved> edit) {
         return edit.whenComplete((saved, failure) -> {
-            if (failure == null && saved != null) this.edited.fire();
+            Throwable cause = failure;
+            while (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+            boolean wrote = failure == null ? saved != null : !(cause instanceof ChangePipeline.Stale);
+            if (wrote) this.edited.fire();
         });
     }
 
