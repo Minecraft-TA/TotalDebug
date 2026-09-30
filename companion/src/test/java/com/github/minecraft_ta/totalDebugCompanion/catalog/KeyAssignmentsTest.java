@@ -52,9 +52,9 @@ class KeyAssignmentsTest {
             // The game runs for the first time: its folder and options.txt appear.
             Files.createDirectories(options.getParent());
             Files.writeString(options, "key_key.jump:key.keyboard.g\n");
-            assertEquals(Map.of("key.jump", KeyBindings.Assignment.decode("key.keyboard.g")), assignments.assignments(),
-                    "until the folder is watched, the keys are read whenever asked");
             await(told::get, 1);
+            assertEquals(Map.of("key.jump", KeyBindings.Assignment.decode("key.keyboard.g")), assignments.assignments(),
+                    "once the folder is there, it is followed and its keys are told");
 
             replace(options, "key_key.jump:key.keyboard.h\n");
             await(told::get, 2);
