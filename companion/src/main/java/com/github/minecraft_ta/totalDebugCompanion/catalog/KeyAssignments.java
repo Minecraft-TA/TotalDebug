@@ -37,6 +37,8 @@ public final class KeyAssignments implements AutoCloseable {
     /** Null where the game's folder cannot be watched, as before it exists. */
     private final WatchService watcher;
     private ScheduledFuture<?> pending;
+    /** Counts writes seen; only a read for the latest may tell, so a retry of an earlier one cannot read a write in parts. */
+    private long generation;
     /** The assignments read last, or null before the first read. */
     private Map<String, KeyBindings.Assignment> read;
 
@@ -46,7 +48,7 @@ public final class KeyAssignments implements AutoCloseable {
         this.watcher = watcher(this.options.getParent());
         if (this.watcher == null) return;
         Thread.ofPlatform().daemon().name("Companion options.txt watcher").start(this::watch);
-        this.timer.execute(() -> read(0));
+        this.timer.execute(() -> read(0, 0));
     }
 
     private static WatchService watcher(Path folder) {
@@ -96,30 +98,36 @@ public final class KeyAssignments implements AutoCloseable {
 
     /** Reads the file once it has not been written for {@value #SETTLE_MILLIS} ms, as a write can come in parts. */
     private synchronized void written() {
+        long generation = ++this.generation;
+        schedule(() -> read(0, generation), SETTLE_MILLIS);
+    }
+
+    /** Replaces the read waiting, if any, with {@code read} in {@code millis}. */
+    private synchronized void schedule(Runnable read, long millis) {
         if (this.pending != null) this.pending.cancel(false);
         try {
-            this.pending = this.timer.schedule(() -> read(0), SETTLE_MILLIS, TimeUnit.MILLISECONDS);
+            this.pending = this.timer.schedule(read, millis, TimeUnit.MILLISECONDS);
         } catch (RuntimeException closed) {
             // Closed with the project.
         }
     }
 
-    private void read(int attempt) {
+    /** Reads the file for write {@code generation}; a newer write makes it tell nothing and try no more. */
+    private void read(int attempt, long generation) {
         Map<String, KeyBindings.Assignment> now;
         try {
             now = KeyBindings.readOptions(this.options);
         } catch (IOException | RuntimeException unreadable) {
-            if (attempt < RETRY_MILLIS.size()) {
-                try {
-                    this.timer.schedule(() -> read(attempt + 1), RETRY_MILLIS.get(attempt), TimeUnit.MILLISECONDS);
-                } catch (RuntimeException closed) {
-                    // Closed with the project.
+            synchronized (this) {
+                if (generation == this.generation && attempt < RETRY_MILLIS.size()) {
+                    schedule(() -> read(attempt + 1, generation), RETRY_MILLIS.get(attempt));
                 }
             }
             return;
         }
         boolean changed;
         synchronized (this) {
+            if (generation != this.generation) return;
             changed = this.read != null && !this.read.equals(now);
             this.read = now;
         }
