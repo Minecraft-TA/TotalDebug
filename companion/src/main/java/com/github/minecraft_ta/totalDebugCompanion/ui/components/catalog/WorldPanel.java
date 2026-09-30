@@ -159,7 +159,8 @@ public final class WorldPanel extends JPanel {
                     if (this.saved != null || this.server != null) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
                 })
                 // The tab names the world the owner read, also while the page is hidden.
-                .retitles(world.changed(), this::refreshTitle).retitles(edits.location().playingChanged(), this::refreshTitle);
+                .retitles(world.changed(), this::refreshTitle).retitles(edits.location().playingChanged(), this::refreshTitle)
+                .retitles(edits.location().connectionChanged(), this::refreshTitle);
         this.location = edits.location();
     }
 

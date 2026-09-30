@@ -153,6 +153,13 @@ class PageReadsTest {
             location.playing(new PlayingPayload.Singleplayer(second.toString()));
             UiTestScope.await(() -> "Second".equals(tabTitle(window, view)));
             assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "the hidden page does not read for its tab's title");
+            location.playing(new PlayingPayload.Multiplayer("play.example.net", false, true));
+            UiTestScope.await(() -> "play.example.net".equals(tabTitle(window, view)));
+            settle();
+            String offlineTitle = app.currentScope().world().publishedName().orElse("World");
+            location.disconnected();
+            UiTestScope.await(() -> offlineTitle.equals(tabTitle(window, view)));
+            assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "disconnecting retitles the hidden tab without reading its page");
         }
     }
 

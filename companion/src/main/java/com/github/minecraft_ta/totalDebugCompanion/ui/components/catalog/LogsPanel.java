@@ -200,6 +200,8 @@ public final class LogsPanel extends JPanel {
         for (int index = 0; index < this.files.size(); index++) listed.add(this.files.get(index));
         int index = index(listed, wanted);
         if (index >= 0) {
+            // A file asked for before, still being looked for, is not this navigation's.
+            this.wanted = null;
             this.fileList.setSelectedIndex(index);
             return;
         }
