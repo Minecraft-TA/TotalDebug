@@ -350,6 +350,9 @@ abstract class PackResourceEditor<V> extends JPanel {
             showNotice(this.readNotice, ThemeColors::warning);
         }
         changed();
+        // The pack is known only once read, as when the tab opened or moved to another working pack: a change of its
+        // entry in the record after the read looked at it did not concern the pack the tab showed then, so it is read now.
+        if (!Objects.equals(recorded(), this.seen)) this.loader.load();
     }
 
     /** Lists the packs the content could be saved into, the current one selected; an opened pack's file shows none. */
