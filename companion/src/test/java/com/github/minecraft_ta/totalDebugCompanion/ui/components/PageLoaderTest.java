@@ -310,6 +310,54 @@ class PageLoaderTest {
         assertEquals(List.of("", "record", "packs"), causes, "each read knows what it is for, and no more");
     }
 
+    @Test
+    void aPageHiddenWhileItReadsReadsNothingMoreUntilShownWhoeverAsks() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal signal = new Signal();
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger reads = new AtomicInteger();
+        PageLoader<String> loader = onEdt(() -> new PageLoader<String>(() -> {
+            this.prepared.incrementAndGet();
+            return () -> {
+                if (reads.incrementAndGet() == 1) release.await(5, TimeUnit.SECONDS);
+                return "read";
+            };
+        }, read -> { }, failure -> { }).page(page).follows(signal));
+        SwingUtilities.invokeAndWait(() -> page.setShown(true));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(1, this.prepared.get(), "the first read runs");
+
+        SwingUtilities.invokeAndWait(() -> page.setShown(false));
+        fire(signal);
+        // As a page checking its read against a later change asks for another, and a request during the read does.
+        SwingUtilities.invokeAndWait(loader::load);
+        release.countDown();
+        settle(loader);
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(1, this.prepared.get(), "hidden, the page reads nothing more, whoever asked");
+
+        show(page, loader, true);
+        settle(loader);
+        assertEquals(2, this.prepared.get(), "shown, it reads once for all that came meanwhile");
+    }
+
+    @Test
+    void manyChangesWhileHiddenAreAskedAboutOncePerSource() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal signal = new Signal();
+        AtomicInteger asked = new AtomicInteger();
+        PageLoader<String> loader = onEdt(() -> loader().page(page).follows(signal, () -> {
+            asked.incrementAndGet();
+            return false;
+        }));
+        show(page, loader, true);
+        show(page, loader, false);
+        for (int change = 0; change < 1_000; change++) signal.fire();
+        SwingUtilities.invokeAndWait(() -> { });
+        show(page, loader, true);
+        assertEquals(1, asked.get(), "a hidden page keeps one question per source, however often it changed");
+    }
+
     private static void fire(Signal signal) throws Exception {
         signal.fire();
         SwingUtilities.invokeAndWait(() -> { });

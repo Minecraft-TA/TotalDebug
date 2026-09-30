@@ -137,14 +137,19 @@ public final class ResourceEdits {
         this.external.close();
     }
 
-    /** Fires after each save or revert has finished, the managed pack enabled and the game reloaded. */
+    /**
+     * Fires after each save, revert or adoption that wrote, once the managed pack is enabled and the game reloaded; one
+     * that failed or found nothing to write leaves the packs as they were and tells nothing.
+     */
     public Signal edited() {
         return this.edited;
     }
 
-    /** Fires {@link #edited()} once {@code edit} has finished, whether it worked or not. */
+    /** Fires {@link #edited()} once {@code edit} has written. */
     private CompletableFuture<Saved> finished(CompletableFuture<Saved> edit) {
-        return edit.whenComplete((ignored, failure) -> this.edited.fire());
+        return edit.whenComplete((saved, failure) -> {
+            if (failure == null && saved != null) this.edited.fire();
+        });
     }
 
     /**

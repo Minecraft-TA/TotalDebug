@@ -277,6 +277,16 @@ abstract class PackResourceEditor<V> extends JPanel {
         return this.target;
     }
 
+    /** How many times the tab read the pack's copies, which tests count. */
+    int reads() {
+        return this.loader.reads();
+    }
+
+    /** The read of the copies that runs or ran last, for tests. */
+    CompletableFuture<?> reading() {
+        return this.loader.current();
+    }
+
     String noticeText() {
         return this.notice.getText();
     }
@@ -479,6 +489,12 @@ abstract class PackResourceEditor<V> extends JPanel {
         // Encoding a large texture takes a while, so it runs with the rest of the save, and so does its hash.
         CompletableFuture.supplyAsync(() -> {
             try {
+                // The working pack or the world may have changed since the tab read its pack, before the tab could hear of
+                // it: the save goes nowhere else than where the tab saves now, and the tab reads that pack's copy instead.
+                Path now = this.opened != null ? this.opened : this.edits.pack(this.path);
+                if (!now.equals(into)) {
+                    throw new IOException("the " + noun() + " is saved into the " + PackFolders.label(now) + " now; its copy is read");
+                }
                 byte[] bytes = encode(edited);
                 written[0] = ResourceOriginals.hash(bytes);
                 return bytes;

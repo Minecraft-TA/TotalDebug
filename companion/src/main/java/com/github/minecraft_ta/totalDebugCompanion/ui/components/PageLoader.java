@@ -8,6 +8,7 @@ import java.awt.event.HierarchyEvent;
 import java.awt.event.HierarchyListener;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -53,15 +54,20 @@ public final class PageLoader<T> {
     private boolean disposed;
     /** The page whose visibility decides when a followed change loads, or null to load at once. */
     private JComponent page;
+    /** A change the page reads whatever it is, such as its first read or one it asked for. */
+    private static final BooleanSupplier ALWAYS = () -> true;
+
     /**
-     * What the page missed while it was hidden or held: for each followed change, whether it concerns the page, asked when
-     * the page would read. Empty when there is nothing to read.
+     * What the page missed while it was hidden or held: for each followed source that changed, whether that concerns the
+     * page, asked when the page would read; once per source however often it changed. Empty when there is nothing to read.
      */
-    private final List<BooleanSupplier> missed = new ArrayList<>();
+    private final Set<BooleanSupplier> missed = new LinkedHashSet<>();
     /** The followed signals fired since the last read started, which that read's preparation may ask about. */
     private final Set<Signal> fired = new HashSet<>();
     /** Whether the page holds its reads, as while it saves. */
     private boolean held;
+    /** Whether no read runs while the page is hidden, whoever asks for it: set by {@link #page}. */
+    private boolean waitsForShow;
     /** How many reads started. */
     private int reads;
     /** Removes the listeners on the components whose showing this loader watches. */
@@ -85,7 +91,8 @@ public final class PageLoader<T> {
      */
     public PageLoader<T> page(JComponent page) {
         this.page = Objects.requireNonNull(page, "page");
-        this.missed.add(() -> true);
+        this.waitsForShow = true;
+        this.missed.add(ALWAYS);
         watch(page, false);
         if (page.isShowing()) SwingUtilities.invokeLater(this::resume);
         return this;
@@ -93,7 +100,7 @@ public final class PageLoader<T> {
 
     /** Reads again whenever {@code signal} fires. */
     public PageLoader<T> follows(Signal signal) {
-        return follows(signal, () -> true);
+        return follows(signal, ALWAYS);
     }
 
     /**
@@ -166,7 +173,7 @@ public final class PageLoader<T> {
      * and returns what removes it, as {@code catalog.changed()::subscribe} does; the listener may be called on any thread.
      */
     public PageLoader<T> follow(Function<Runnable, Runnable> subscribe) {
-        this.unsubscribe.add(subscribe.apply(() -> SwingUtilities.invokeLater(() -> changed(() -> true))));
+        this.unsubscribe.add(subscribe.apply(() -> SwingUtilities.invokeLater(() -> changed(ALWAYS))));
         return this;
     }
 
@@ -201,7 +208,7 @@ public final class PageLoader<T> {
         this.held = true;
         if (this.running || this.again) {
             // What that read was for is read again once released.
-            this.missed.add(() -> true);
+            this.missed.add(ALWAYS);
             cancel();
         }
     }
@@ -212,15 +219,19 @@ public final class PageLoader<T> {
         resume();
     }
 
-    /** Reads again, now or once the running read has finished; while held, once released. */
+    /**
+     * Reads again, now or once the running read has finished. A page named with {@link #page} reads only while it is
+     * shown and not held, whoever asks, the page itself too, as to check a read against a later change: otherwise it reads
+     * once it is shown and released.
+     */
     public void load() {
         if (!SwingUtilities.isEventDispatchThread()) {
             SwingUtilities.invokeLater(this::load);
             return;
         }
         if (this.disposed) return;
-        if (this.held) {
-            this.missed.add(() -> true);
+        if (this.held || this.waitsForShow && !this.page.isShowing()) {
+            this.missed.add(ALWAYS);
             return;
         }
         this.missed.clear();
@@ -264,7 +275,7 @@ public final class PageLoader<T> {
             return;
         }
         // A page shown again after a failed read tries once more, as when the file was being written.
-        if (this.page != null) this.missed.add(() -> true);
+        if (this.page != null) this.missed.add(ALWAYS);
         this.fail.accept(failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure);
     }
 
