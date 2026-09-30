@@ -3,6 +3,12 @@ package com.github.minecraft_ta.totalDebugCompanion.util;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.List;
+import java.io.UncheckedIOException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -132,7 +138,8 @@ class FileReadingTest {
                 reading.readNow();
                 write(file, "v" + ask);
             }
-            await(() -> reads.get() >= 20);
+            // Reads a later request overtook are left out; the last write is read in the end.
+            await(() -> "v19".equals(value(reading)));
             Thread.sleep(500);
             assertEquals(0, overlapping.get(), "the owner reads on one path, whoever asks");
         }
@@ -168,6 +175,109 @@ class FileReadingTest {
         write(file, "b");
         Thread.sleep(600);
         assertEquals(0, told.get());
+    }
+
+    @Test
+    void aReadOvertakenByAnotherWritePublishesNothing() throws Exception {
+        Path file = write(this.directory.resolve("options.txt"), "a");
+        AtomicReference<CountDownLatch> gate = new AtomicReference<>();
+        CountDownLatch entered = new CountDownLatch(1);
+        List<String> told = new CopyOnWriteArrayList<>();
+        try (FileReading<String> reading = new FileReading<>(file, path -> {
+            String read = text(path);
+            CountDownLatch waiting = gate.get();
+            if (waiting != null) {
+                entered.countDown();
+                try {
+                    waiting.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            return read;
+        }, SETTLE)) {
+            assertEquals("a", reading.value());
+            reading.changed().subscribe(() -> told.add(value(reading)));
+
+            // The game writes in parts: the first part is read, and the next part comes while that read runs.
+            CountDownLatch release = new CountDownLatch(1);
+            gate.set(release);
+            write(file, "partial");
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            gate.set(null);
+            write(file, "partial and whole");
+            Thread.sleep(100);
+            release.countDown();
+            await(() -> !told.isEmpty());
+            Thread.sleep(500);
+            assertEquals(List.of("partial and whole"), told, "the read the next write overtook is not told");
+        }
+    }
+
+    @Test
+    void aReadingClosedWhileItReadsTellsNothing() throws Exception {
+        Path file = write(this.directory.resolve("options.txt"), "a");
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean waitNext = new AtomicBoolean();
+        AtomicInteger told = new AtomicInteger();
+        FileReading<String> reading = new FileReading<>(file, path -> {
+            String read = text(path);
+            if (waitNext.getAndSet(false)) {
+                entered.countDown();
+                try {
+                    release.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            return read;
+        }, SETTLE);
+        assertEquals("a", reading.value());
+        reading.changed().subscribe(told::incrementAndGet);
+        waitNext.set(true);
+        write(file, "b");
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        // The project closes while its reading reads.
+        reading.close();
+        release.countDown();
+        Thread.sleep(500);
+        assertEquals(0, told.get(), "a reading closed while it read tells nothing");
+    }
+
+    @Test
+    void aFolderReachedThroughALinkIsFollowedByEveryReadingOfIt() throws Exception {
+        Path folder = Files.createDirectories(this.directory.resolve("game"));
+        Path link;
+        try {
+            link = Files.createSymbolicLink(this.directory.resolve("linked"), folder);
+        } catch (UnsupportedOperationException | IOException | SecurityException notAllowed) {
+            // Windows without the privilege to create links: nothing to check here.
+            return;
+        }
+        Path file = write(folder.resolve("options.txt"), "a");
+        AtomicInteger direct = new AtomicInteger();
+        AtomicInteger linked = new AtomicInteger();
+        try (FileReading<String> first = new FileReading<>(file, FileReadingTest::text, SETTLE);
+             FileReading<String> second = new FileReading<>(link.resolve("options.txt"), FileReadingTest::text, SETTLE)) {
+            first.changed().subscribe(direct::incrementAndGet);
+            second.changed().subscribe(linked::incrementAndGet);
+            first.value();
+            second.value();
+            write(file, "b");
+            await(() -> direct.get() == 1 && linked.get() == 1);
+            second.close();
+            write(file, "c");
+            await(() -> direct.get() == 2);
+        }
+    }
+
+    private static String value(FileReading<String> reading) {
+        try {
+            return reading.value();
+        } catch (IOException unreadable) {
+            throw new UncheckedIOException(unreadable);
+        }
     }
 
     private static String text(Path file) throws IOException {

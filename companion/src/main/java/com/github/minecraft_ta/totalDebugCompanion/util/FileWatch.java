@@ -36,6 +36,8 @@ public final class FileWatch {
         final Runnable changed;
         /** The folder watched for it: its own, or its nearest existing ancestor; null while it cannot be watched. */
         Path at;
+        /** The watch of {@link #at}, which a folder reached through another path, as a link, shares. */
+        WatchKey key;
         ScheduledFuture<?> retry;
         boolean closed;
 
@@ -48,8 +50,8 @@ public final class FileWatch {
 
     /** Null where the system has no file watching at all; then every folder is followed by the retries alone. */
     private final WatchService service;
+    /** The watches by the real path of their folder, so one reached through a link is watched once. */
     private final Map<Path, WatchKey> keys = new HashMap<>();
-    private final Map<WatchKey, Path> folders = new HashMap<>();
     private final List<Watched> watched = new ArrayList<>();
 
     private FileWatch() {
@@ -84,56 +86,62 @@ public final class FileWatch {
                 followed.closed = true;
                 this.watched.remove(followed);
                 if (followed.retry != null) followed.retry.cancel(false);
-                release(followed.at);
+                release(followed.key);
             }
         };
     }
 
     /** Watches {@code followed}'s folder or its nearest existing ancestor, or tries again later. Under the lock. */
     private void place(Watched followed, int attempt) {
-        Path previous = followed.at;
+        WatchKey previous = followed.key;
+        List<WatchKey> passed = new ArrayList<>();
         Path at;
-        do {
+        WatchKey key;
+        while (true) {
             at = followed.folder;
             while (at != null && !Files.isDirectory(at)) at = at.getParent();
-            if (at == null || !register(at)) {
+            key = at == null ? null : register(at);
+            if (key == null) {
                 at = null;
                 break;
             }
             // A folder created between looking and watching, as a game makes its folders at once, was not seen: once
             // watched, the folder beneath is looked for again.
-        } while (!at.equals(followed.folder) && Files.isDirectory(followed.folder.getRoot().resolve(
-                followed.folder.subpath(0, at.getNameCount() + 1))));
+            if (at.equals(followed.folder) || !Files.isDirectory(followed.folder.getRoot().resolve(
+                    followed.folder.subpath(0, at.getNameCount() + 1)))) break;
+            passed.add(key);
+        }
         followed.at = at;
-        if (previous != null && !previous.equals(at)) release(previous);
-        // Ancestors registered on the way down that no longer hold anything are let go.
-        for (Path passed = at == null ? null : at.getParent(); passed != null; passed = passed.getParent()) release(passed);
-        if (at == null) retryLater(followed, attempt);
+        followed.key = key;
+        if (previous != null && previous != key) release(previous);
+        // Ancestors watched on the way down that nothing else follows are let go.
+        passed.forEach(this::release);
+        if (key == null) retryLater(followed, attempt);
     }
 
-    private boolean register(Path folder) {
-        if (this.service == null) return false;
-        if (this.keys.containsKey(folder)) return true;
+    /** The watch of {@code folder}, shared with every path that leads to it; null where it cannot be watched. */
+    private WatchKey register(Path folder) {
+        if (this.service == null) return null;
         try {
-            WatchKey key = folder.register(this.service, StandardWatchEventKinds.ENTRY_CREATE,
+            Path real = folder.toRealPath();
+            WatchKey key = this.keys.get(real);
+            if (key != null && key.isValid()) return key;
+            key = real.register(this.service, StandardWatchEventKinds.ENTRY_CREATE,
                     StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_DELETE);
-            this.keys.put(folder, key);
-            this.folders.put(key, folder);
-            return true;
+            this.keys.put(real, key);
+            return key;
         } catch (IOException | RuntimeException unwatchable) {
-            return false;
+            return null;
         }
     }
 
-    /** Stops watching {@code folder} once nothing followed is watched there. Under the lock. */
-    private void release(Path folder) {
-        if (folder == null) return;
-        for (Watched followed : this.watched) {
-            if (folder.equals(followed.at)) return;
-        }
-        WatchKey key = this.keys.remove(folder);
+    /** Stops the watch {@code key} once nothing followed uses it. Under the lock. */
+    private void release(WatchKey key) {
         if (key == null) return;
-        this.folders.remove(key);
+        for (Watched followed : this.watched) {
+            if (followed.key == key) return;
+        }
+        this.keys.values().remove(key);
         key.cancel();
     }
 
@@ -161,25 +169,20 @@ public final class FileWatch {
                 }
                 List<Runnable> tell = new ArrayList<>();
                 synchronized (this) {
-                    Path folder = this.folders.get(key);
                     boolean gone = !key.reset();
-                    if (folder != null) {
-                        if (gone) {
-                            this.keys.remove(folder);
-                            this.folders.remove(key);
-                        }
-                        for (Watched followed : List.copyOf(this.watched)) {
-                            if (!folder.equals(followed.at)) continue;
-                            if (gone || !folder.equals(followed.folder)) {
-                                // Removed, or an ancestor whose entry toward the folder may have appeared: placed again.
-                                Path toward = gone ? null : followed.folder.getName(folder.getNameCount());
-                                if (gone || lost || names.contains(toward)) {
-                                    place(followed, 0);
-                                    tell.add(followed.changed);
-                                }
-                            } else if (lost || names.stream().anyMatch(followed.names)) {
+                    if (gone) this.keys.values().remove(key);
+                    for (Watched followed : List.copyOf(this.watched)) {
+                        if (followed.key != key) continue;
+                        if (gone || !followed.at.equals(followed.folder)) {
+                            // Removed, or an ancestor whose entry toward the folder may have appeared: placed again.
+                            Path toward = gone ? null : followed.folder.getName(followed.at.getNameCount());
+                            if (gone || lost || names.contains(toward)) {
+                                if (gone) followed.key = null;
+                                place(followed, 0);
                                 tell.add(followed.changed);
                             }
+                        } else if (lost || names.stream().anyMatch(followed.names)) {
+                            tell.add(followed.changed);
                         }
                     }
                 }

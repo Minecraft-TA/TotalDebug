@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The owner of a value read from a file others write, such as the keys {@code options.txt} assigns (docs/SYSTEMS.md,
@@ -42,10 +43,14 @@ public final class FileReading<T> implements AutoCloseable {
     private Path file;
     private Runnable unwatch = () -> { };
     private ScheduledFuture<?> pending;
-    /** Counts the reads asked for; one waiting for a write to settle gives way to a later one. */
-    private long generation;
+    /**
+     * Counts the reads asked for, counted where they are asked, also on the watcher's thread: a read waiting for a write
+     * to settle, or one under way when another write is seen, gives way to the later one and publishes nothing.
+     */
+    private final AtomicLong generation = new AtomicLong();
     private boolean unreadable;
-    private boolean closed;
+    /** Set as soon as the reading closes, so a read under way then publishes nothing. */
+    private volatile boolean closed;
 
     /** Reads {@code file} with {@code reader}, and again after each write that stopped for {@code settle}. */
     public FileReading(Path file, Reader<T> reader, Duration settle) {
@@ -71,7 +76,7 @@ public final class FileReading<T> implements AutoCloseable {
         this.strand.execute(() -> {
             try {
                 Read<T> now = this.last;
-                read.complete(now != null ? now.value() : readHere());
+                read.complete(now != null ? now.value() : readHere(0));
             } catch (IOException | RuntimeException failure) {
                 read.completeExceptionally(failure);
             }
@@ -89,7 +94,8 @@ public final class FileReading<T> implements AutoCloseable {
 
     /** Reads the file now rather than once a write settled, as after Companion wrote it. */
     public void readNow() {
-        this.strand.execute(() -> read(0, ++this.generation));
+        long generation = this.generation.incrementAndGet();
+        this.strand.execute(() -> read(0, generation));
     }
 
     /** Follows {@code file} from now on, as the current world after the game opened another; its value is read now. */
@@ -98,11 +104,11 @@ public final class FileReading<T> implements AutoCloseable {
         this.strand.execute(() -> follow(followed));
     }
 
-    /** Stops following the file; a read under way is not told. */
+    /** Stops following the file; a read under way publishes nothing. */
     @Override
     public void close() {
+        this.closed = true;
         this.strand.execute(() -> {
-            this.closed = true;
             this.unwatch.run();
             if (this.pending != null) this.pending.cancel(false);
         });
@@ -114,23 +120,24 @@ public final class FileReading<T> implements AutoCloseable {
         this.file = followed;
         Path name = followed.getFileName();
         this.unwatch = FileWatch.shared().watch(followed.getParent(), name::equals, this::written);
-        read(0, ++this.generation);
+        read(0, this.generation.incrementAndGet());
     }
 
     /** A write of the file was seen: it is read once no other came for the settle time. Any thread. */
     private void written() {
+        // Counted here, so a read under way gives way at once.
+        long generation = this.generation.incrementAndGet();
         this.strand.execute(() -> {
             if (this.closed) return;
-            long generation = ++this.generation;
             if (this.pending != null) this.pending.cancel(false);
             this.pending = Workers.later(this.settleMillis, this.strand, () -> read(0, generation));
         });
     }
 
     private void read(int attempt, long generation) {
-        if (this.closed || generation != this.generation) return;
+        if (this.closed || generation != this.generation.get()) return;
         try {
-            readHere();
+            readHere(generation);
         } catch (IOException | RuntimeException unreadable) {
             if (attempt < RETRY_MILLIS.size()) {
                 this.pending = Workers.later(RETRY_MILLIS.get(attempt), this.strand, () -> read(attempt + 1, generation));
@@ -138,8 +145,11 @@ public final class FileReading<T> implements AutoCloseable {
         }
     }
 
-    /** Reads the file, publishes what it holds and tells the followers where that changed. On the strand only. */
-    private T readHere() throws IOException {
+    /**
+     * Reads the file, publishes what it holds and tells the followers where that changed. A read for {@code generation},
+     * other than 0 for one a page waits for, publishes nothing where another write was seen meanwhile. On the strand only.
+     */
+    private T readHere(long generation) throws IOException {
         T now;
         try {
             now = this.reader.read(this.file);
@@ -147,11 +157,12 @@ public final class FileReading<T> implements AutoCloseable {
             this.unreadable = true;
             throw failure instanceof IOException unreadable ? unreadable : new IOException(failure);
         }
+        if (generation != 0 && generation != this.generation.get() || this.closed) return now;
         Read<T> before = this.last;
         boolean tell = this.unreadable || before != null && !Objects.equals(before.value(), now);
         this.last = new Read<>(now);
         this.unreadable = false;
-        if (tell && !this.closed) this.changed.fire();
+        if (tell) this.changed.fire();
         return now;
     }
 }
