@@ -9,9 +9,13 @@ import org.junit.jupiter.api.io.TempDir;
 import javax.swing.SwingUtilities;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The project the window shows, whose changes reach the window only while it is the current one. */
 class CurrentProjectTest {
@@ -43,11 +47,61 @@ class CurrentProjectTest {
             SwingUtilities.invokeAndWait(() -> { });
             assertEquals(2, told.get(), "a change of the project before, queued before the switch, is not told");
 
-            stop.run();
+            SwingUtilities.invokeAndWait(() -> {
+                second.changes().changed().fire();
+                stop.run();
+            });
+            SwingUtilities.invokeAndWait(() -> { });
+            assertEquals(2, told.get(), "a change queued before stopping is not delivered afterward");
             fire(second);
             assertEquals(2, told.get(), "a follower that stopped hears nothing");
             first.retire();
             second.retire();
+        }
+    }
+
+    @Test
+    void aSwitchDuringInitialBindingIsNotMissed() throws Exception {
+        try (ProjectScope first = scope("first"); ProjectScope second = scope("second")) {
+            CurrentProject current = new CurrentProject();
+            current.set(first);
+            CountDownLatch binding = new CountDownLatch(1);
+            CountDownLatch switched = new CountDownLatch(1);
+            Runnable stopObservingSwitch = current.changed().subscribe(switched::countDown);
+            Thread switching = Thread.ofPlatform().daemon().name("Test project switch").start(() -> {
+                try {
+                    if (binding.await(5, TimeUnit.SECONDS)) current.set(second);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            Runnable stop = () -> { };
+            try {
+                AtomicInteger told = new AtomicInteger();
+                stop = current.follows(selected -> {
+                    if (selected == first) {
+                        binding.countDown();
+                        try {
+                            assertTrue(switched.await(5, TimeUnit.SECONDS));
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread().interrupt();
+                            throw new AssertionError(interrupted);
+                        }
+                    }
+                    return selected.changes().changed();
+                }, told::incrementAndGet);
+                switching.join(5_000);
+                assertFalse(switching.isAlive());
+                fire(second);
+                assertEquals(1, told.get(), "the follower binds to the project selected during its initial binding");
+                fire(first);
+                assertEquals(1, told.get(), "the previous project has no remaining delivery");
+            } finally {
+                stop.run();
+                stopObservingSwitch.run();
+                first.retire();
+                second.retire();
+            }
         }
     }
 

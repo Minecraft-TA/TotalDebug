@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 
 import javax.swing.SwingUtilities;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 /**
@@ -40,19 +41,22 @@ public final class CurrentProject {
         Objects.requireNonNull(signal, "signal");
         Objects.requireNonNull(told, "told");
         Object lock = new Object();
+        AtomicBoolean stopped = new AtomicBoolean();
         Runnable[] fromScope = {() -> { }};
         Runnable move = () -> {
             synchronized (lock) {
+                if (stopped.get()) return;
                 fromScope[0].run();
                 ProjectScope now = this.scope;
                 fromScope[0] = now == null ? () -> { } : signal.apply(now).subscribe(() -> SwingUtilities.invokeLater(() -> {
-                    if (this.scope == now) told.run();
+                    if (!stopped.get() && this.scope == now) told.run();
                 }));
             }
         };
-        move.run();
         Runnable fromProject = this.changed.subscribe(move);
+        move.run();
         return () -> {
+            stopped.set(true);
             fromProject.run();
             synchronized (lock) {
                 fromScope[0].run();
