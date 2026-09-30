@@ -2,6 +2,10 @@ package com.github.minecraft_ta.totaldebug.client.companion;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.ProjectSelectionRequest;
+import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
@@ -30,7 +34,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -278,6 +284,28 @@ class CompanionAutomaticConnectionTest {
         }
     }
 
+    @Test void anAnswerGoesOnlyToTheConnectionThatAsked() throws Exception {
+        var asked = new CompletableFuture<Integer>();
+        try (var endpoint = new Endpoint(); var client = client()) {
+            client.setChangeHandler((message, companion) -> asked.complete(companion));
+            endpoint.publish(profile());
+            client.startDiscovery(() -> true);
+            await(client::isConnected);
+            endpoint.server.getMessageProcessor().enqueueMessage(new ChangeMessage(new ChangePayload(7,
+                    List.of(new ChangePayload.Edit("keyBinding", "key.jump", "key.keyboard.space", "key.keyboard.g")))));
+            int first = asked.get(5, TimeUnit.SECONDS);
+
+            // Companion restarts, counting its request ids from the beginning, while the game still works on the change.
+            endpoint.server.closeClient();
+            await(() -> endpoint.hellos.get() == 2 && client.isConnected());
+            client.sendChangeResult(first, new ChangeResultMessage(ChangeResultPayload.refused(7, "late")));
+            client.sendChangeResult(client.companionConnection(), new ChangeResultMessage(ChangeResultPayload.refused(8, "current")));
+            await(() -> !endpoint.answers.isEmpty());
+            Thread.sleep(200);
+            assertEquals(List.of(8), endpoint.answers, "an answer for the earlier connection does not reach the new one");
+        }
+    }
+
     private String profile() { return InstancePaths.profileId(game); }
 
     private static void await(BooleanSupplier condition) throws Exception {
@@ -294,6 +322,7 @@ class CompanionAutomaticConnectionTest {
         final AtomicInteger hellos = new AtomicInteger();
         final AtomicInteger selections = new AtomicInteger();
         final AtomicInteger focused = new AtomicInteger();
+        final List<Integer> answers = new CopyOnWriteArrayList<>();
         volatile boolean hold;
         volatile boolean reject;
         volatile boolean drop;
@@ -319,6 +348,7 @@ class CompanionAutomaticConnectionTest {
                 } else if (!holdHello) accept();
             });
             server.getMessageBus().listenAlways(FocusWindowMessage.class, ignored -> focused.incrementAndGet());
+            server.getMessageBus().listenAlways(ChangeResultMessage.class, result -> answers.add(result.payload().requestId()));
             server.bind(new InetSocketAddress("127.0.0.1", 0));
             selection = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             selection.createContext(ProjectSelectionRequest.PATH, exchange -> {

@@ -97,7 +97,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
-                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run)), opened::add);
+                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run)), opened::add, listener -> () -> { });
                 try {
                     assertEquals("Test Mod", panel.title());
                     assertTrue(labels(panel).contains("1.2.3"), labels(panel)::toString);
@@ -133,7 +133,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
-                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run)), target -> { });
+                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run)), target -> { }, listener -> () -> { });
                 try {
                     List<FactSection> sections = panel.sections(catalog.index().orElseThrow().mod("testmod").orElseThrow());
                     assertEquals(List.of("Mod", "Dependencies"), sections.stream().map(FactSection::title).toList());
@@ -154,7 +154,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 ModPanel panel = new ModPanel("absent", catalog, RuntimeSourceCatalog::empty, icons, this.directory, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
-                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run)), target -> { });
+                        new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), ChangeRecord.inMemory(), Runnable::run)), target -> { }, listener -> () -> { });
                 try {
                     assertTrue(labels(panel).contains("absent is not an installed mod"), labels(panel)::toString);
                     assertEquals(1, panel.tabs().getTabCount(), "Only the Overview has something to show");
@@ -171,7 +171,7 @@ class CatalogPanelsTest {
         PackCatalogService catalog = readyCatalog();
         try (ItemIconService icons = new ItemIconService()) {
             DefinitionDetails.Services services = new DefinitionDetails.Services(catalog, RuntimeSourceCatalog::empty,
-                    icons, target -> { });
+                    icons, target -> { }, listener -> () -> { });
             onEdt(() -> {
                 DefinitionDetails block = new DefinitionDetails(
                         new SubjectRef.Definition(RegistryIds.BLOCK, "testmod:widget_block"), services, new JPanel(), () -> { });
@@ -210,7 +210,7 @@ class CatalogPanelsTest {
         AtomicInteger reads = new AtomicInteger();
         try (ItemIconService icons = new ItemIconService()) {
             DefinitionDetails.Services services = new DefinitionDetails.Services(catalog, RuntimeSourceCatalog::empty,
-                    icons, target -> { });
+                    icons, target -> { }, listener -> () -> { });
             DefinitionDetails[] details = new DefinitionDetails[1];
             onEdt(() -> details[0] = new DefinitionDetails(new SubjectRef.Definition(RegistryIds.BLOCK, "testmod:widget_block"),
                     services, new JPanel(), reads::incrementAndGet));
@@ -239,7 +239,7 @@ class CatalogPanelsTest {
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
                 SubjectPanel panel = SubjectPanel.definition(new SubjectRef.Definition(RegistryIds.ITEM, "testmod:widget"),
-                        new DefinitionDetails.Services(empty, RuntimeSourceCatalog::empty, icons, target -> { }));
+                        new DefinitionDetails.Services(empty, RuntimeSourceCatalog::empty, icons, target -> { }, listener -> () -> { }));
                 try {
                     assertTrue(labels(panel).contains(CatalogMessages.unavailable(new PackCatalogService.None())),
                             labels(panel)::toString);

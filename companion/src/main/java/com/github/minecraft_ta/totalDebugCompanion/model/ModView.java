@@ -15,7 +15,7 @@ public final class ModView implements IEditorPanel {
     public ModView(EditorContext context, NavigationTarget.ModPage page) {
         this.panel = new ModPanel(page.modId(), context.project().catalog(), () -> context.project().sources(),
                 context.itemIcons(), context.project().profile().workspaceDirectory(), context.project().configSettings(),
-                context.project().keyBindings(), context.navigation()::navigate);
+                context.project().keyBindings(), context.navigation()::navigate, context.project().packs()::addResourcePackListener);
         this.panel.show(page);
     }
 

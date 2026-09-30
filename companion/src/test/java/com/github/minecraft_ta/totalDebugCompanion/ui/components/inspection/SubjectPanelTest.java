@@ -238,7 +238,7 @@ class SubjectPanelTest {
                 SubjectPanel panel = SubjectPanel.occurrence(subject,
                         () -> { throw new IllegalStateException("Tests run no snippets"); },
                         () -> { throw new IllegalStateException("Tests have no project"); },
-                        new DefinitionDetails.Services(catalog, RuntimeSourceCatalog::empty, icons, navigator));
+                        new DefinitionDetails.Services(catalog, RuntimeSourceCatalog::empty, icons, navigator, listener -> () -> { }));
                 try {
                     test.accept(panel);
                 } catch (Throwable throwable) {
