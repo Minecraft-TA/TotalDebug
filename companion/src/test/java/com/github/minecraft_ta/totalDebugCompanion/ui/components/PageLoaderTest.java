@@ -291,6 +291,25 @@ class PageLoaderTest {
         assertEquals(2, this.prepared.get(), "and once it read, shown again without a change it reads nothing");
     }
 
+    @Test
+    void aReadCanTellWhichOfItsSignalsLedToIt() throws Exception {
+        ShowablePage page = new ShowablePage();
+        Signal packs = new Signal();
+        Signal record = new Signal();
+        List<String> causes = new CopyOnWriteArrayList<>();
+        PageLoader<String>[] loader = new PageLoader[1];
+        loader[0] = onEdt(() -> new PageLoader<String>(() -> {
+            causes.add((loader[0].fired(packs) ? "packs" : "") + (loader[0].fired(record) ? "record" : ""));
+            return () -> "read";
+        }, read -> { }, failure -> { }).page(page).follows(packs).follows(record));
+        show(page, loader[0], true);
+        fire(record);
+        settle(loader[0]);
+        fire(packs);
+        settle(loader[0]);
+        assertEquals(List.of("", "record", "packs"), causes, "each read knows what it is for, and no more");
+    }
+
     private static void fire(Signal signal) throws Exception {
         signal.fire();
         SwingUtilities.invokeAndWait(() -> { });

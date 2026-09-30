@@ -7,8 +7,10 @@ import javax.swing.SwingUtilities;
 import java.awt.event.HierarchyEvent;
 import java.awt.event.HierarchyListener;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -56,6 +58,8 @@ public final class PageLoader<T> {
      * the page would read. Empty when there is nothing to read.
      */
     private final List<BooleanSupplier> missed = new ArrayList<>();
+    /** The followed signals fired since the last read started, which that read's preparation may ask about. */
+    private final Set<Signal> fired = new HashSet<>();
     /** Whether the page holds its reads, as while it saves. */
     private boolean held;
     /** How many reads started. */
@@ -99,8 +103,19 @@ public final class PageLoader<T> {
      */
     public PageLoader<T> follows(Signal signal, BooleanSupplier concerns) {
         Objects.requireNonNull(concerns, "concerns");
-        this.unsubscribe.add(signal.subscribe(() -> SwingUtilities.invokeLater(() -> changed(concerns))));
+        this.unsubscribe.add(signal.subscribe(() -> SwingUtilities.invokeLater(() -> {
+            this.fired.add(signal);
+            changed(concerns);
+        })));
         return this;
+    }
+
+    /**
+     * Whether {@code signal} fired since the last read started, for {@link Read#prepare} to tell what a read is for, such
+     * as a pack change that may move a tab to another pack, as against an edit elsewhere. Swing thread only.
+     */
+    public boolean fired(Signal signal) {
+        return this.fired.contains(signal);
     }
 
     /**
@@ -214,6 +229,7 @@ public final class PageLoader<T> {
             return;
         }
         Callable<T> task = this.read.prepare();
+        this.fired.clear();
         if (task == null) return;
         this.running = true;
         this.cancelled = false;

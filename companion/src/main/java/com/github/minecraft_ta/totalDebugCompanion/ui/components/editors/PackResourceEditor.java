@@ -95,7 +95,10 @@ abstract class PackResourceEditor<V> extends JPanel {
     private String packName = "the working pack";
     private boolean managed;
     private boolean busy;
-    /** The copies are being read; a save waits for them, so it goes into the pack the tab shows. */
+    /**
+     * The copies are being read where the tab may move to another pack, as when it opened or the packs or the working
+     * pack changed; a save waits for them, so it goes into the pack the tab shows.
+     */
     private boolean following;
     /**
      * What a read of the copies last put in the notice, such as why the game does not use the shown copy, or null. The
@@ -287,8 +290,12 @@ abstract class PackResourceEditor<V> extends JPanel {
         // A new working pack's copy is read before anything is edited, as when the tab opened. A pack stack change, which
         // comes after every reload and rarely changes the pack, leaves typing and drawing alone.
         if (working != null && !working.equals(this.readWorking)) setEditable(false);
-        this.following = true;
-        changed();
+        // A read for an edit elsewhere, such as a revert or another tab's save, leaves the pack alone, and saving goes on.
+        if (this.pack == null || this.loader.fired(this.edits.packs().changed(GamePacks.side(this.path)))
+                || this.loader.fired(this.edits.workingPackChosen(this.path))) {
+            this.following = true;
+            changed();
+        }
         return () -> {
             Path pack = this.opened != null ? this.opened : this.edits.pack(this.path);
             // The record is looked at before the file, so a change between the two is caught afterwards.
