@@ -58,11 +58,6 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
         return this.assignments.assignments();
     }
 
-    /** Whether others' writes of {@code options.txt} are told; without, a page reads the keys whenever it is shown. */
-    public boolean assignmentsWatched() {
-        return this.assignments.watched();
-    }
-
     /** The change record the bindings' changes are entered in. */
     public ChangeRecord record() {
         return this.pipeline.record();

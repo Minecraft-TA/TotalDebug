@@ -12,7 +12,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class KeyAssignmentsTest {
     @TempDir Path directory;
@@ -42,22 +41,24 @@ class KeyAssignmentsTest {
     }
 
     @Test
-    void aGameFolderThatCannotBeWatchedYetReadsTheFileWhenAskedAndTellsCompanionsOwnWrites() throws Exception {
+    void aGameFolderThatAppearsLaterIsWatchedOnceItDoes() throws Exception {
         Path options = this.directory.resolve("game/options.txt");
         AtomicInteger told = new AtomicInteger();
         try (KeyAssignments assignments = new KeyAssignments(options)) {
             assignments.changed().subscribe(told::incrementAndGet);
-            assertFalse(assignments.watched(), "the game has not run yet, so its folder is missing");
             Thread.sleep(300);
 
+            // The game runs for the first time: its folder and options.txt appear.
             Files.createDirectories(options.getParent());
             Files.writeString(options, "key_key.jump:key.keyboard.g\n");
             assertEquals(Map.of("key.jump", KeyBindings.Assignment.decode("key.keyboard.g")), assignments.assignments(),
-                    "unwatched, the keys are read when asked, as when their page is shown");
-
-            Files.writeString(options, "key_key.jump:key.keyboard.h\n");
-            assignments.readNow();
+                    "until the folder is watched, the keys are read whenever asked");
             await(told::get, 1);
+
+            replace(options, "key_key.jump:key.keyboard.h\n");
+            await(told::get, 2);
+            assertEquals(Map.of("key.jump", KeyBindings.Assignment.decode("key.keyboard.h")), assignments.assignments(),
+                    "watched now, a key rebound in the game is told without Companion asking");
         }
     }
 

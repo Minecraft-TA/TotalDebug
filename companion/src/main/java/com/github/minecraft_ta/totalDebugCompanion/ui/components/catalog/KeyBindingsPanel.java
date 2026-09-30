@@ -162,8 +162,6 @@ public final class KeyBindingsPanel extends JPanel {
         this.loader = new PageLoader<>(this::prepareLoad, loaded -> show(loaded.index(), loaded.bindings(), ""),
                 failure -> show(this.catalog.index().orElse(null), null, "Could not read options.txt: " + failure.getMessage()))
                 .page(this).follows(catalog.changed()).follows(control.assignmentsChanged());
-        // Until the game's folder can be watched, as before the game first ran, others' writes are seen when shown.
-        if (!control.assignmentsWatched()) this.loader.readsWhenShown(this);
         addHierarchyListener(event -> {
             if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !isShowing()) stopCapture();
         });
