@@ -118,7 +118,7 @@ public final class ProjectScope implements AutoCloseable {
         this.keyAssignments = new KeyAssignments(profile.workspaceDirectory().resolve("options.txt"));
         this.keyBindings = new KeyBindingControl(this.pipeline, this.keyAssignments);
         this.packs = new GamePacks(this.location);
-        this.world = new WorldReading(this.location);
+        this.world = new WorldReading(this.location, this.packs);
         this.resources = new ResourceEdits(this.pipeline, this.packs, new ResourceOriginals(paths().originals()),
                 this.configChanges.writes(), state);
         this.packSelections = new PackSelections(this.resources);

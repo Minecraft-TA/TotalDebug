@@ -157,6 +157,17 @@ public final class FileWatch {
         });
     }
 
+    /** Whether an entry named among {@code names} matters to {@code followed}; a follower's failing names tell nothing. */
+    private static boolean concerns(Watched followed, List<Path> names) {
+        try {
+            return names.stream().anyMatch(followed.names);
+        } catch (RuntimeException failure) {
+            // One follower's failure does not stop the watch of every other.
+            LOGGER.log(System.Logger.Level.WARNING, "A follower of a watched folder failed", failure);
+            return false;
+        }
+    }
+
     private void run() {
         try {
             while (true) {
@@ -181,7 +192,7 @@ public final class FileWatch {
                                 place(followed, 0);
                                 tell.add(followed.changed);
                             }
-                        } else if (lost || names.stream().anyMatch(followed.names)) {
+                        } else if (lost || concerns(followed, names)) {
                             tell.add(followed.changed);
                         }
                     }

@@ -101,10 +101,14 @@ class PageReadsTest {
             assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "navigating to the page it shows reads nothing");
 
             open(window, new NavigationTarget.Changes());
-            Map<String, Object> saved = LevelDatFixture.world("World");
-            ((Map<String, Object>) saved.get("GameRules")).put("keepInventory", "false");
-            LevelDatFixture.write(world, saved);
-            Thread.sleep(1_500);
+            // A game holds the world and saves it.
+            try (LevelDatFixture.Held running = LevelDatFixture.hold(world)) {
+                Thread.sleep(700);
+                Map<String, Object> saved = LevelDatFixture.world("World");
+                ((Map<String, Object>) saved.get("GameRules")).put("keepInventory", "false");
+                LevelDatFixture.write(world, saved);
+                Thread.sleep(1_500);
+            }
             assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "a hidden page does not read, though the game saved the world");
             open(window, new NavigationTarget.World(WorldTab.OVERVIEW));
             UiTestScope.await(() -> panel.reads() == 2);

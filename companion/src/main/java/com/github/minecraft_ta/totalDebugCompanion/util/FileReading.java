@@ -47,6 +47,8 @@ public final class FileReading<T> implements AutoCloseable {
     // Changed on the strand only.
     private Path file;
     private Runnable unwatch = () -> { };
+    /** Whether the file is watched; one that is not is read only when asked, as a world the game does not hold. */
+    private boolean watching = true;
     private ScheduledFuture<?> pending;
     /**
      * Counts the reads asked for, counted where they are asked, also on the watcher's thread: a read waiting for a write
@@ -131,15 +133,37 @@ public final class FileReading<T> implements AutoCloseable {
         });
     }
 
+    /**
+     * Watches the file, or stops watching it while it is read only when asked ({@link #readNow()}), as a world the game
+     * does not hold: on Windows, a watched folder cannot be deleted or renamed, as by the game's Delete World.
+     */
+    public void watch(boolean watch) {
+        this.strand.execute(() -> {
+            if (this.closed || this.watching == watch) return;
+            this.watching = watch;
+            if (watch) register();
+            else unregister();
+        });
+    }
+
     private void follow(Path followed, long generation) {
         if (this.closed) return;
-        this.unwatch.run();
+        unregister();
         this.file = followed;
-        Path name = followed.getFileName();
-        this.unwatch = this.entries != null
-                ? FileWatch.shared().watch(followed, this.entries, this::written)
-                : FileWatch.shared().watch(followed.getParent(), name::equals, this::written);
+        if (this.watching) register();
         read(0, generation);
+    }
+
+    private void register() {
+        Path name = this.file.getFileName();
+        this.unwatch = this.entries != null
+                ? FileWatch.shared().watch(this.file, this.entries, this::written)
+                : FileWatch.shared().watch(this.file.getParent(), name::equals, this::written);
+    }
+
+    private void unregister() {
+        this.unwatch.run();
+        this.unwatch = () -> { };
     }
 
     /** A write of the file was seen: it is read once no other came for the settle time. Any thread. */

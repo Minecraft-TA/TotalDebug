@@ -299,6 +299,9 @@ class FileReadingTest {
         Runnable failing = FileWatch.shared().watch(folder, name -> true, () -> {
             throw new IllegalStateException("a follower's bug");
         });
+        Runnable failingNames = FileWatch.shared().watch(folder, name -> {
+            throw new IllegalStateException("a follower's bug");
+        }, () -> { });
         Runnable counting = FileWatch.shared().watch(folder, name -> true, told::incrementAndGet);
         try {
             write(folder.resolve("first.txt"), "a");
@@ -308,6 +311,7 @@ class FileReadingTest {
             await(() -> told.get() > before);
         } finally {
             failing.run();
+            failingNames.run();
             counting.run();
         }
     }
