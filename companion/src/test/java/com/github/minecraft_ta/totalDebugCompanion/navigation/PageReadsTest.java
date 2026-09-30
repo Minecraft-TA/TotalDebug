@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
+import java.util.Map;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.WorldPanel;
+import com.github.minecraft_ta.totalDebugCompanion.model.WorldView;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
@@ -69,6 +73,47 @@ class PageReadsTest {
             open(window, new NavigationTarget.Changes());
             open(window, new NavigationTarget.KeyBindings(""));
             assertEquals(2, reads(panel), "shown again without a change, it reads nothing");
+        }
+    }
+
+    @Test
+    void theWorldPageReadsOnceWhenOpenedAndAgainOnlyAfterTheGameSavedTheWorld() throws Exception {
+        Path home = Files.createDirectory(this.directory.resolve("home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        Path game = Files.createDirectory(this.directory.resolve("game"));
+        Path world = LevelDatFixture.write(game.resolve("saves/World"), LevelDatFixture.world("World")).getParent();
+        try (CompanionApplication app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(game)).get(10, TimeUnit.SECONDS);
+            MainWindow window = UiTestScope.onEdt(app::createWindow);
+            UiTestScope.onEdt(() -> {
+                window.setSize(1280, 720);
+                UiTestScope.show(window);
+            });
+
+            open(window, new NavigationTarget.World(WorldTab.OVERVIEW));
+            WorldPanel panel = UiTestScope.onEdt(() -> (WorldPanel) assertInstanceOf(WorldView.class,
+                    window.getEditorTabs().getSelectedEditor()).getComponent());
+            UiTestScope.await(() -> panel.reads() == 1);
+            settle();
+            assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "opening the page reads it once");
+
+            open(window, new NavigationTarget.World(WorldTab.GAME_RULES));
+            assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "navigating to the page it shows reads nothing");
+
+            open(window, new NavigationTarget.Changes());
+            Map<String, Object> saved = LevelDatFixture.world("World");
+            ((Map<String, Object>) saved.get("GameRules")).put("keepInventory", "false");
+            LevelDatFixture.write(world, saved);
+            Thread.sleep(1_500);
+            assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "a hidden page does not read, though the game saved the world");
+            open(window, new NavigationTarget.World(WorldTab.OVERVIEW));
+            UiTestScope.await(() -> panel.reads() == 2);
+            settle();
+            assertEquals(2, (int) UiTestScope.onEdt(panel::reads), "shown again, it reads the saved world once");
+
+            open(window, new NavigationTarget.Changes());
+            open(window, new NavigationTarget.World(WorldTab.OVERVIEW));
+            assertEquals(2, (int) UiTestScope.onEdt(panel::reads), "shown again without a change, it reads nothing");
         }
     }
 

@@ -10,6 +10,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 
 /**
  * The owner of a value read from a file others write, such as the keys {@code options.txt} assigns (docs/SYSTEMS.md,
@@ -19,9 +20,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>A write is read once it has settled, as a file can be written in parts. A read that fails keeps the value read
  * before, and is tried again after 1, 5 and 30 seconds and at the next write; the next read that succeeds is told, since a
  * page may show the failure. The file's folder is followed through {@link FileWatch}, also before it exists.</p>
+ *
+ * <p>A reading may also follow a whole folder, such as a world's, where some of its entries make up the value.</p>
  */
 public final class FileReading<T> implements AutoCloseable {
-    /** Reads the value a file holds; a missing file is a value too, such as nothing assigned. Blocking. */
+    /** Reads the value a file or folder holds; a missing one is a value too, such as nothing assigned. Blocking. */
     @FunctionalInterface
     public interface Reader<T> {
         T read(Path file) throws IOException;
@@ -34,6 +37,8 @@ public final class FileReading<T> implements AutoCloseable {
     }
 
     private final Reader<T> reader;
+    /** For a reading of a folder, the names of its entries that make up the value; null for a reading of a file. */
+    private final Predicate<Path> entries;
     private final long settleMillis;
     private final Signal changed = new Signal();
     private final Strand strand = Workers.strand();
@@ -54,9 +59,18 @@ public final class FileReading<T> implements AutoCloseable {
 
     /** Reads {@code file} with {@code reader}, and again after each write that stopped for {@code settle}. */
     public FileReading(Path file, Reader<T> reader, Duration settle) {
+        this(file, null, reader, settle);
+    }
+
+    /**
+     * Reads {@code folder} with {@code reader}, and again after each change of an entry that {@code entries} accepts that
+     * stopped for {@code settle}.
+     */
+    public FileReading(Path folder, Predicate<Path> entries, Reader<T> reader, Duration settle) {
         this.reader = Objects.requireNonNull(reader, "reader");
+        this.entries = entries;
         this.settleMillis = settle.toMillis();
-        Path followed = Objects.requireNonNull(file, "file").toAbsolutePath().normalize();
+        Path followed = Objects.requireNonNull(folder, "folder").toAbsolutePath().normalize();
         long generation = this.generation.incrementAndGet();
         this.strand.execute(() -> follow(followed, generation));
     }
@@ -122,7 +136,9 @@ public final class FileReading<T> implements AutoCloseable {
         this.unwatch.run();
         this.file = followed;
         Path name = followed.getFileName();
-        this.unwatch = FileWatch.shared().watch(followed.getParent(), name::equals, this::written);
+        this.unwatch = this.entries != null
+                ? FileWatch.shared().watch(followed, this.entries, this::written)
+                : FileWatch.shared().watch(followed.getParent(), name::equals, this::written);
         read(0, generation);
     }
 

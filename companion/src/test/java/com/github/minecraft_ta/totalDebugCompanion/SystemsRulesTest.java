@@ -137,7 +137,6 @@ class SystemsRulesTest {
             Map.entry("game/GameLocation.java", new Allowed(1, "moves onto signals in PR 3")),
             Map.entry("inspection/ItemIconService.java", new Allowed(1, "moves onto signals in PR 3")),
             Map.entry("runtime/RuntimeIndexService.java", new Allowed(1, "moves onto signals in PR 3")),
-            Map.entry("catalog/WorldReadings.java", new Allowed(1, "replaced by CurrentWorld in PR 4")),
             Map.entry("util/FileUtils.java", new Allowed(1, "becomes FileWatch in PR 4")),
             Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 5")));
 

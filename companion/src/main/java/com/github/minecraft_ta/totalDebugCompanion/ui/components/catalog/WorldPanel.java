@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReading;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
@@ -89,7 +89,7 @@ public final class WorldPanel extends JPanel {
 
     private final PackCatalogService catalog;
     private final ItemIconService icons;
-    private final WorldReadings readings;
+    private final WorldReading world;
     private final PageLoader<Loaded> loader;
     private final Runnable removeCatalogListener;
     private final SubjectHeader header = new SubjectHeader();
@@ -112,14 +112,11 @@ public final class WorldPanel extends JPanel {
     private WorldTab requested;
     private boolean disposed;
 
-    /**
-     * Shows the current world of the game {@code edits} tells of; each read is recorded in {@code readings}, which the
-     * Project tree follows.
-     */
-    public WorldPanel(PackCatalogService catalog, ItemIconService icons, WorldReadings readings,
+    /** Shows {@code world}, the current world, or the world of the server the game {@code edits} tells of plays on. */
+    public WorldPanel(PackCatalogService catalog, ItemIconService icons, WorldReading world,
                       ResourceEdits edits, PackSelections selections, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
-        this.readings = Objects.requireNonNull(readings, "readings");
+        this.world = Objects.requireNonNull(world, "world");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         this.icons = Objects.requireNonNull(icons, "icons");
         this.datapacks = new PacksPanel(PacksPanel.Side.DATA, Objects.requireNonNull(navigator, "navigator"));
@@ -153,28 +150,23 @@ public final class WorldPanel extends JPanel {
         this.removeCatalogListener = ShownUpdates.follow(this, catalog.changed()::subscribe, () -> {
             if (!this.disposed && (this.saved != null || this.server != null)) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
         });
-        // The game saves the world while it runs, so the page reads it whenever it is shown. A change of the datapacks,
-        // which also comes with another world or a disconnect, is read at once, shown or not: the tab names the world or
-        // server it reads.
+        // The world's owner reads it when the game saves it or plays another; the datapacks the connected game names
+        // come with its packs.
         this.loader = new PageLoader<>(() -> {
             PackStackPayload stack = edits.packs().datapacks();
             String refusal = edits.packs().worldRefusal();
-            return () -> read(edits.location().read(), stack, refusal);
+            return () -> read(edits.location().read(), this.world, stack, refusal);
         }, this::show, failure -> show(Loaded.problem("The world could not be read: " + failure.getMessage())))
-                .readsWhenShown(this).follow(edits.packs().changed(ChangeRecord.PackSide.DATA)::subscribe);
+                .page(this).follows(world.changed()).follows(edits.packs().changed(ChangeRecord.PackSide.DATA));
     }
 
-    private static Loaded read(GameState game, PackStackPayload stack, String refusal) {
+    private static Loaded read(GameState game, WorldReading world, PackStackPayload stack, String refusal) throws IOException {
         Optional<PlayingPayload.Multiplayer> server = game.server();
         if (server.isPresent()) return readServer(game, server.get(), stack, refusal);
-        Optional<Path> world = CurrentWorld.directory(game);
-        if (world.isEmpty()) return Loaded.problem("No world has been played in this instance yet.");
-        try {
-            CurrentWorld.Saved saved = CurrentWorld.read(game, world.get());
-            return new Loaded(saved, null, PackResources.worldDatapacks(stack, saved), icon(world.get().resolve("icon.png")), "");
-        } catch (IOException | RuntimeException unreadable) {
-            return Loaded.problem("The world " + world.get().getFileName() + " could not be read: " + unreadable.getMessage());
-        }
+        WorldReading.World current = world.value();
+        if (current.saved() == null) return Loaded.problem(current.problem());
+        CurrentWorld.Saved saved = current.saved();
+        return new Loaded(saved, null, PackResources.worldDatapacks(stack, saved), icon(current.directory().resolve("icon.png")), "");
     }
 
     /**
@@ -208,8 +200,6 @@ public final class WorldPanel extends JPanel {
         // Changes staged for another world, such as the server played before, would otherwise be applied to this one.
         if (!Objects.equals(world, this.shownWorld)) this.datapacks.discardChanges();
         this.shownWorld = world;
-        this.readings.read(this.server != null ? new WorldReadings.Summary(this.server.world(), 0, this.datapackList.size())
-                : WorldReadings.Summary.of(this.saved));
         if (this.server != null) {
             showServer(this.server);
             return;
@@ -347,6 +337,11 @@ public final class WorldPanel extends JPanel {
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         return scroll;
+    }
+
+    /** How many times the page read the world, which tests count. */
+    public int reads() {
+        return this.loader.reads();
     }
 
     public void dispose() {

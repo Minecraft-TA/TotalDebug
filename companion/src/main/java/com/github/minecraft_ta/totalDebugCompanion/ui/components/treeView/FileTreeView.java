@@ -266,12 +266,12 @@ public class FileTreeView extends JScrollPane {
             this.tree.refreshRootNodes(roots);
         } else {
             this.tree.setRootNodes(roots);
-            // The World rows follow what the World page read last, and the game to another world.
+            // The World rows follow the current world as its owner read it, and the game to another world.
             this.removeWorldListener.run();
             Runnable refresh = () -> SwingUtilities.invokeLater(() -> {
                 if (!this.disposed && project.get() == scope) this.tree.refreshRoot(WorldTreeItems.ROOT);
             });
-            Runnable removeRead = scope.world().addListener(refresh);
+            Runnable removeRead = scope.world().changed().subscribe(refresh);
             // What the game plays also decides whether there is a World root at all.
             Runnable removePlayed = scope.location().addListener(change -> {
                 if (change != GameLocation.Change.PLAYING) return;
