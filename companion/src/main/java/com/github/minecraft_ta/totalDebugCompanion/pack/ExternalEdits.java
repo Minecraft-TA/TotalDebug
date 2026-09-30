@@ -145,7 +145,12 @@ public final class ExternalEdits implements AutoCloseable {
             // Still being written; the program's next write comes as another event.
             return;
         }
-        this.edits.adopt(file.path, file.pack, file.before, seen).whenComplete((saved, failure) -> {
+        CompletableFuture<ResourceEdits.Saved> adopted;
+        synchronized (this) {
+            if (this.closed || write != file.writes) return;
+            adopted = this.edits.adopt(file.path, file.pack, file.before, seen);
+        }
+        adopted.whenComplete((saved, failure) -> {
             if (saved == null && failure == null) return;
             Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
             file.listeners.forEach(listener -> listener.accept(saved, cause));

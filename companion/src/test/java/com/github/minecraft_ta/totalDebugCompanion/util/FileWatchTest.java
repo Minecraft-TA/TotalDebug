@@ -102,6 +102,28 @@ class FileWatchTest {
 
     @Test
     @EnabledOnOs(OS.WINDOWS)
+    void aLinkedFoldersTargetIsFollowedAfterItIsRecreated() throws Exception {
+        Path real = Files.createDirectories(this.directory.resolve("targets/real"));
+        Path alias = Files.createDirectory(this.directory.resolve("links")).resolve("alias");
+        Process link = new ProcessBuilder("cmd", "/c", "mklink", "/J", alias.toString(), real.toString()).redirectErrorStream(true).start();
+        String output = new String(link.getInputStream().readAllBytes());
+        assertEquals(0, link.waitFor(), output);
+        AtomicReference<CountDownLatch> changed = new AtomicReference<>(new CountDownLatch(1));
+        Runnable stop = FileWatch.shared().watchEntries(alias, () -> changed.get().countDown());
+        try {
+            FileWatch.shared().pausing(List.of(real), () -> Files.delete(real));
+            assertTrue(changed.get().await(5, TimeUnit.SECONDS));
+            changed.set(new CountDownLatch(1));
+            Files.createDirectory(real);
+            assertTrue(changed.get().await(5, TimeUnit.SECONDS), "the target's parent observes its return even though the link's parent does not change");
+        } finally {
+            stop.run();
+            Files.delete(alias);
+        }
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
     void aFolderReachedThroughALinkIsPausedAndWatchedAgain() throws Exception {
         Path real = Files.createDirectory(this.directory.resolve("real"));
         Path alias = this.directory.resolve("alias");

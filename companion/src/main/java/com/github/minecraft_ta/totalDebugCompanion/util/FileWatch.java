@@ -92,7 +92,7 @@ public final class FileWatch {
      * removed, and whenever events may have been lost; returns what stops it.
      */
     public Runnable watch(Path folder, Predicate<Path> names, Runnable changed) {
-        return watch(new Watched(folder.toAbsolutePath().normalize(), Objects.requireNonNull(names, "names"), false,
+        return watch(new Watched(followedFolder(folder), Objects.requireNonNull(names, "names"), false,
                 Objects.requireNonNull(changed, "changed")));
     }
 
@@ -101,7 +101,22 @@ public final class FileWatch {
      * whenever events may have been lost; returns what stops it. For a listing of the folder.
      */
     public Runnable watchEntries(Path folder, Runnable changed) {
-        return watch(new Watched(folder.toAbsolutePath().normalize(), name -> true, true, Objects.requireNonNull(changed, "changed")));
+        return watch(new Watched(followedFolder(folder), name -> true, true, Objects.requireNonNull(changed, "changed")));
+    }
+
+    /** Keeps a linked folder's real target when it disappears, so watching its parent can follow its return. */
+    private static Path followedFolder(Path folder) {
+        Path absolute = folder.toAbsolutePath().normalize();
+        Path existing = absolute;
+        while (existing != null && !Files.isDirectory(existing)) existing = existing.getParent();
+        if (existing != null) {
+            try {
+                return existing.toRealPath().resolve(existing.relativize(absolute));
+            } catch (IOException | RuntimeException unavailable) {
+                // The ordinary registration retries paths it cannot resolve yet.
+            }
+        }
+        return absolute;
     }
 
     /**
@@ -134,7 +149,7 @@ public final class FileWatch {
                 real.forEach(root -> this.paused.computeIfPresent(root, (ignored, count) -> count == 1 ? null : count - 1));
                 for (Watched followed : this.watched) {
                     if (followed.key != null) continue;
-                    if (followed.pausedAt != null && paused(followed.pausedAt)) continue;
+                    if (followed.pausedAt == null || paused(followed.pausedAt)) continue;
                     if (followed.retry != null) followed.retry.cancel(false);
                     place(followed, 0);
                     if (followed.pausedAt == null) tell.add(followed.changed);
