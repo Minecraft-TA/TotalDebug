@@ -382,8 +382,10 @@ class PageLoaderTest {
         SwingUtilities.invokeAndWait(() -> { });
     }
 
+    /** Shows or hides {@code page}, and waits for a read that showing starts, which runs a Swing step later. */
     private static void show(ShowablePage page, PageLoader<?> loader, boolean shown) throws Exception {
         SwingUtilities.invokeAndWait(() -> page.setShown(shown));
+        SwingUtilities.invokeAndWait(() -> { });
         settle(loader);
     }
 
