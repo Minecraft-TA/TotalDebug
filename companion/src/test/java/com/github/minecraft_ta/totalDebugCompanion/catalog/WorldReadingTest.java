@@ -25,14 +25,16 @@ class WorldReadingTest {
     @TempDir Path directory;
 
     @Test
-    void theWorldTheGameHoldsIsReadAgainWhenTheGameSavesIt() throws Exception {
+    void theWorldTheGamePlaysIsReadAgainWhenTheGameSavesIt() throws Exception {
         Path world = LevelDatFixture.write(this.directory.resolve("saves/World"), LevelDatFixture.world("World")).getParent();
+        GameLocation location = new GameLocation(this.directory);
         AtomicInteger told = new AtomicInteger();
-        try (LevelDatFixture.Held game = LevelDatFixture.hold(world); WorldReading reading = reading()) {
+        try (WorldReading reading = new WorldReading(location, new GamePacks(location))) {
+            location.connected(message -> true);
+            location.playing(new PlayingPayload.Singleplayer(world.toString()));
+            await(() -> reading.value().saved().open());
             reading.changed().subscribe(told::incrementAndGet);
-            assertEquals("World", reading.value().saved().name());
-            assertTrue(reading.value().saved().open());
-            Thread.sleep(300);
+            Thread.sleep(700);
 
             // The game saves the world with a rule changed.
             Map<String, Object> saved = LevelDatFixture.world("World");
@@ -77,16 +79,53 @@ class WorldReadingTest {
     }
 
     @Test
-    void aWorldTheGameDoesNotHoldCanBeDeletedWhileItIsShown() throws Exception {
+    void aWorldAGameCompanionIsNotConnectedToHoldsCanBeMovedOnceItLeftIt() throws Exception {
         Path world = LevelDatFixture.write(this.directory.resolve("saves/World"), LevelDatFixture.world("World")).getParent();
-        GameLocation location = new GameLocation(this.directory);
-        try (WorldReading reading = new WorldReading(location, new GamePacks(location))) {
+        // On Windows a watch of a folder inside, as of the datapacks, holds the world's folder.
+        LevelDatFixture.datapack(world, "Pack");
+        WorldReading reading = null;
+        try {
+            try (LevelDatFixture.Held game = LevelDatFixture.hold(world)) {
+                reading = reading();
+                assertTrue(reading.value().saved().open());
+                Thread.sleep(300);
+            }
+            // The game left the world; nothing of Companion holds its folder, which can be moved, as a backup does.
+            Files.move(world, this.directory.resolve("saves/Moved"));
+            assertFalse(Files.exists(world), "nothing of Companion holds the folder");
+        } finally {
+            if (reading != null) reading.close();
+        }
+    }
+
+    @Test
+    void aWorldTheGameDoesNotPlayCanBeMovedWhileItIsShown() throws Exception {
+        Path world = LevelDatFixture.write(this.directory.resolve("saves/World"), LevelDatFixture.world("World")).getParent();
+        LevelDatFixture.datapack(world, "Pack");
+        try (WorldReading reading = reading()) {
             assertEquals("World", reading.value().saved().name());
             Thread.sleep(300);
-            // As the game's Delete World removes a world it does not hold.
-            try (Stream<Path> files = Files.walk(world)) {
-                for (Path file : files.sorted(Comparator.reverseOrder()).toList()) Files.delete(file);
-            }
+            Files.move(world, this.directory.resolve("saves/Moved"));
+            assertFalse(Files.exists(world), "nothing of Companion holds the folder");
+        }
+    }
+
+    @Test
+    void aWorldTheConnectedGameLeftCanBeMoved() throws Exception {
+        Path world = LevelDatFixture.write(this.directory.resolve("saves/World"), LevelDatFixture.world("World")).getParent();
+        LevelDatFixture.datapack(world, "Pack");
+        GameLocation location = new GameLocation(this.directory);
+        try (WorldReading reading = new WorldReading(location, new GamePacks(location))) {
+            location.connected(message -> true);
+            location.playing(new PlayingPayload.Singleplayer(world.toString()));
+            await(() -> reading.value().saved().open());
+            Thread.sleep(300);
+
+            // The game tells it is in the menu once it let go of the world.
+            location.playing(new PlayingPayload.Menu());
+            await(() -> !reading.value().saved().open());
+            Thread.sleep(300);
+            Files.move(world, this.directory.resolve("saves/Moved"));
             assertFalse(Files.exists(world), "nothing of Companion holds the folder");
         }
     }
@@ -126,7 +165,7 @@ class WorldReadingTest {
     }
 
     @Test
-    void aNewIconOrDatapackOfTheWorldTheGameHoldsIsAChange() throws Exception {
+    void aNewIconOrDatapackOfTheWorldTheGamePlaysIsAChange() throws Exception {
         Path world = LevelDatFixture.write(this.directory.resolve("saves/World"), LevelDatFixture.world("World")).getParent();
         GameLocation location = new GameLocation(this.directory);
         AtomicInteger told = new AtomicInteger();

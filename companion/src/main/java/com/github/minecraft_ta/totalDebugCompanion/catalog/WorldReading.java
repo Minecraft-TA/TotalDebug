@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import java.util.concurrent.CompletableFuture;
 import java.nio.file.attribute.FileTime;
 import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -23,8 +24,9 @@ import java.util.Set;
  * (docs/SYSTEMS.md, section 2). The World page and the Project tree show what it read; neither reads the world itself.
  * Which world is current is decided on its strand, again when the game connects, plays another world or leaves one, and
  * when a world of {@code saves} changes, as when a game Companion is not connected to opens or saves one. The current
- * world is read again then, and after Companion changed its datapacks. Its own folder is watched only while the game
- * holds it: on Windows a watched folder cannot be deleted or renamed, as by the game's Delete World.
+ * world is read again then, and after Companion changed its datapacks. Its own folder is watched only while the connected
+ * game plays it, which the game tells only once it let go of the world: on Windows a watched folder cannot be deleted or
+ * renamed, as by the game's Delete World.
  */
 public final class WorldReading implements AutoCloseable {
     /** The entries of a world's folder that make up what is read of it. */
@@ -52,7 +54,7 @@ public final class WorldReading implements AutoCloseable {
     private volatile Followed followed = new Followed(null, null);
     // Changed on the strand only.
     private Runnable stopReading = () -> { };
-    /** The open world whose datapacks folder is watched, or null: a change inside it is not told by the world's own watch. */
+    /** The played world whose datapacks folder is watched, or null: a change inside it is not told by the world's own watch. */
     private Path datapacksOf;
     private Runnable stopDatapacks = () -> { };
     private boolean closed;
@@ -63,13 +65,14 @@ public final class WorldReading implements AutoCloseable {
      */
     public WorldReading(GameLocation location, GamePacks packs) {
         this.location = Objects.requireNonNull(location, "location");
-        follow();
         // A game opening a world creates its session lock before it takes it: which world is open is looked at after that.
         this.stopFollowingSaves = FileWatch.shared().watch(location.workspace().resolve("saves"), world -> true,
                 () -> Workers.later(SETTLE_MILLIS, this.strand, this::follow));
         // Companion changed the datapacks, also in the level.dat of a world the game does not hold.
         this.stopFollowingDatapacks = packs.changed(ChangeRecord.PackSide.DATA).subscribe(() -> this.strand.execute(this::follow));
         this.stopFollowingGame = location.addListener(change -> this.strand.execute(this::follow));
+        // Followed after the triggers are, so none is missed in between; on the strand, as every later look.
+        CompletableFuture.runAsync(this::follow, this.strand).join();
     }
 
     /** Fires after the current world changed or what it holds did. */
@@ -95,11 +98,11 @@ public final class WorldReading implements AutoCloseable {
         GameState game = this.location.read();
         Path current = CurrentWorld.directory(game).orElse(null);
         Followed before = this.followed;
-        boolean open = current != null && game.isOpen(current);
+        boolean played = current != null && game.plays(current);
         if (Objects.equals(current, before.directory())) {
             if (before.reading() != null) {
-                before.reading().watch(open);
-                watchDatapacks(open ? current : null, before.reading());
+                before.reading().watch(played);
+                watchDatapacks(played ? current : null, before.reading());
                 before.reading().readNow();
             }
             return;
@@ -112,8 +115,8 @@ public final class WorldReading implements AutoCloseable {
         } else {
             FileReading<Read> reading = new FileReading<>(current, entry -> ENTRIES.contains(entry.toString()),
                     world -> new Read(CurrentWorld.read(this.location.read(), world), iconWritten(world)), Duration.ofMillis(SETTLE_MILLIS));
-            reading.watch(open);
-            watchDatapacks(open ? current : null, reading);
+            reading.watch(played);
+            watchDatapacks(played ? current : null, reading);
             Runnable stopTelling = reading.changed().subscribe(this.changed::fire);
             this.stopReading = () -> {
                 stopTelling.run();
@@ -124,7 +127,7 @@ public final class WorldReading implements AutoCloseable {
         if (before.directory() != null || current != null) this.changed.fire();
     }
 
-    /** Watches the datapacks folder of {@code world}, which the game holds, or none; a change there reads it again. */
+    /** Watches the datapacks folder of {@code world}, which the game plays, or none; a change there reads it again. */
     private void watchDatapacks(Path world, FileReading<Read> reading) {
         if (Objects.equals(world, this.datapacksOf)) return;
         this.stopDatapacks.run();

@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import java.util.Map;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.WorldPanel;
 import com.github.minecraft_ta.totalDebugCompanion.model.WorldView;
@@ -84,6 +86,10 @@ class PageReadsTest {
         Path world = LevelDatFixture.write(game.resolve("saves/World"), LevelDatFixture.world("World")).getParent();
         try (CompanionApplication app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
             app.openProject(CompanionProfile.forGame(game)).get(10, TimeUnit.SECONDS);
+            // The connected game plays the world.
+            GameLocation location = app.currentScope().location();
+            location.connected(message -> true);
+            location.playing(new PlayingPayload.Singleplayer(world.toString()));
             MainWindow window = UiTestScope.onEdt(app::createWindow);
             UiTestScope.onEdt(() -> {
                 window.setSize(1280, 720);
@@ -101,14 +107,11 @@ class PageReadsTest {
             assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "navigating to the page it shows reads nothing");
 
             open(window, new NavigationTarget.Changes());
-            // A game holds the world and saves it.
-            try (LevelDatFixture.Held running = LevelDatFixture.hold(world)) {
-                Thread.sleep(700);
-                Map<String, Object> saved = LevelDatFixture.world("World");
-                ((Map<String, Object>) saved.get("GameRules")).put("keepInventory", "false");
-                LevelDatFixture.write(world, saved);
-                Thread.sleep(1_500);
-            }
+            // The game saves the world it plays.
+            Map<String, Object> saved = LevelDatFixture.world("World");
+            ((Map<String, Object>) saved.get("GameRules")).put("keepInventory", "false");
+            LevelDatFixture.write(world, saved);
+            Thread.sleep(1_500);
             assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "a hidden page does not read, though the game saved the world");
             open(window, new NavigationTarget.World(WorldTab.OVERVIEW));
             UiTestScope.await(() -> panel.reads() == 2);
