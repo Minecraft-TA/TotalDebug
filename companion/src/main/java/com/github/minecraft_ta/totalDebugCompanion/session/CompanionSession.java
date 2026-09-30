@@ -38,6 +38,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -155,8 +156,15 @@ public final class CompanionSession implements AutoCloseable, MessageRoutes {
     public <M extends AbstractMessage> Runnable on(Class<M> type, Consumer<M> handler) {
         // A key of its own, so removing it never removes another registration of the same handler.
         Object key = new Object();
-        this.server.getMessageBus().listenAlways(type, key, handler);
-        return () -> this.server.getMessageBus().unregister(type, key);
+        // A message the bus is handing out while the route is removed is not handed to it any more.
+        AtomicBoolean active = new AtomicBoolean(true);
+        this.server.getMessageBus().listenAlways(type, key, message -> {
+            if (active.get()) handler.accept(message);
+        });
+        return () -> {
+            active.set(false);
+            this.server.getMessageBus().unregister(type, key);
+        };
     }
 
     public void setProjectSelectionHandler(AttachmentHandler handler) {
