@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,14 +42,23 @@ class FileWatchTest {
     void aFollowerAddedWhileAPauseLastsWatchesNothingThereUntilItEnds() throws Exception {
         Path parent = Files.createDirectories(this.directory.resolve("parent/child")).getParent();
         AtomicReference<Runnable> added = new AtomicReference<>(() -> { });
+        CountDownLatch told = new CountDownLatch(1);
+        Runnable original = FileWatch.shared().watchEntries(parent, told::countDown);
         try {
             FileWatch.shared().pausing(List.of(parent), () -> {
-                FileWatch.shared().pausing(List.of(parent), () -> added.set(FileWatch.shared().watchEntries(parent.resolve("child"), () -> { })));
+                FileWatch.shared().pausing(List.of(parent), () -> added.set(FileWatch.shared().watchEntries(parent.resolve("child"), told::countDown)));
+                try {
+                    assertFalse(told.await(1_250, TimeUnit.MILLISECONDS), "neither the inner pause nor a retry tells before the outer operation ends");
+                } catch (InterruptedException interrupted) {
+                    throw new IOException(interrupted);
+                }
                 Files.move(parent, this.directory.resolve("moved"));
             });
+            assertTrue(told.await(5, TimeUnit.SECONDS), "the completed outer operation tells its followers");
             assertTrue(Files.isDirectory(this.directory.resolve("moved/child")));
         } finally {
             added.get().run();
+            original.run();
         }
     }
 

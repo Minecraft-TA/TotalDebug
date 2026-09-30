@@ -50,6 +50,8 @@ public final class FileWatch {
         Path at;
         /** The watch of {@link #at}, which a folder reached through another path, as a link, shares. */
         WatchKey key;
+        /** The real folder whose pause holds this registration, even after that folder was moved. */
+        Path pausedAt;
         ScheduledFuture<?> retry;
         boolean closed;
 
@@ -120,6 +122,7 @@ public final class FileWatch {
                     if (followed.key != entry.getValue()) continue;
                     followed.key = null;
                     followed.at = null;
+                    followed.pausedAt = entry.getKey();
                 }
             }
         }
@@ -131,9 +134,10 @@ public final class FileWatch {
                 real.forEach(root -> this.paused.computeIfPresent(root, (ignored, count) -> count == 1 ? null : count - 1));
                 for (Watched followed : this.watched) {
                     if (followed.key != null) continue;
+                    if (followed.pausedAt != null && paused(followed.pausedAt)) continue;
                     if (followed.retry != null) followed.retry.cancel(false);
                     place(followed, 0);
-                    tell.add(followed.changed);
+                    if (followed.pausedAt == null) tell.add(followed.changed);
                 }
             }
             // Also where the operation failed: it may have changed something before.
@@ -158,6 +162,7 @@ public final class FileWatch {
 
     /** Watches {@code followed}'s folder or its nearest existing ancestor, or tries again later. Under the lock. */
     private void place(Watched followed, int attempt) {
+        followed.pausedAt = null;
         WatchKey previous = followed.key;
         List<WatchKey> passed = new ArrayList<>();
         Path at;
@@ -165,7 +170,7 @@ public final class FileWatch {
         while (true) {
             at = followed.folder;
             while (at != null && !Files.isDirectory(at)) at = at.getParent();
-            key = at == null ? null : register(at);
+            key = at == null ? null : register(at, followed);
             if (key == null) {
                 at = null;
                 break;
@@ -185,12 +190,15 @@ public final class FileWatch {
     }
 
     /** The watch of {@code folder}, shared with every path that leads to it; null where it cannot be watched. */
-    private WatchKey register(Path folder) {
+    private WatchKey register(Path folder, Watched followed) {
         if (this.service == null) return null;
         try {
             Path real = folder.toRealPath();
             // Watched again once the operation that pauses it ended.
-            if (paused(real)) return null;
+            if (paused(real)) {
+                followed.pausedAt = real;
+                return null;
+            }
             WatchKey key = this.keys.get(real);
             if (key != null && key.isValid()) return key;
             key = real.register(this.service, StandardWatchEventKinds.ENTRY_CREATE,
@@ -226,9 +234,14 @@ public final class FileWatch {
         followed.retry = Workers.later(delay, Workers.files(), () -> {
             synchronized (this) {
                 if (followed.closed) return;
+                if (followed.pausedAt != null && paused(followed.pausedAt)) {
+                    retryLater(followed, attempt + 1);
+                    return;
+                }
                 place(followed, attempt + 1);
+                if (followed.pausedAt != null) return;
             }
-            followed.changed.run();
+            tell(followed.changed);
         });
     }
 
