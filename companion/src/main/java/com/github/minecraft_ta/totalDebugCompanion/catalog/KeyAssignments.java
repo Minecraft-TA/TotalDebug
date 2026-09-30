@@ -138,9 +138,16 @@ public final class KeyAssignments implements AutoCloseable {
         if (changed) this.listeners.forEach(Runnable::run);
     }
 
+    /** Stops watching. It never fails, so a project's shutdown goes on to its queued writes after it. */
     @Override
-    public void close() throws IOException {
+    public void close() {
         this.timer.shutdownNow();
-        if (this.watcher != null) this.watcher.close();
+        if (this.watcher == null) return;
+        try {
+            this.watcher.close();
+        } catch (IOException failure) {
+            System.getLogger(KeyAssignments.class.getName()).log(System.Logger.Level.WARNING,
+                    "The watcher of " + this.options + " did not close: " + failure.getMessage());
+        }
     }
 }
