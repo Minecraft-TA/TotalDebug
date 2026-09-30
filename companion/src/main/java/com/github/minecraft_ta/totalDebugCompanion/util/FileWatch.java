@@ -92,11 +92,23 @@ public final class FileWatch {
     /** Watches {@code followed}'s folder or its nearest existing ancestor, or tries again later. Under the lock. */
     private void place(Watched followed, int attempt) {
         Path previous = followed.at;
-        Path at = followed.folder;
-        while (at != null && !Files.isDirectory(at)) at = at.getParent();
-        followed.at = at != null && register(at) ? at : null;
-        if (previous != null && !previous.equals(followed.at)) release(previous);
-        if (followed.at == null) retryLater(followed, attempt);
+        Path at;
+        do {
+            at = followed.folder;
+            while (at != null && !Files.isDirectory(at)) at = at.getParent();
+            if (at == null || !register(at)) {
+                at = null;
+                break;
+            }
+            // A folder created between looking and watching, as a game makes its folders at once, was not seen: once
+            // watched, the folder beneath is looked for again.
+        } while (!at.equals(followed.folder) && Files.isDirectory(followed.folder.getRoot().resolve(
+                followed.folder.subpath(0, at.getNameCount() + 1))));
+        followed.at = at;
+        if (previous != null && !previous.equals(at)) release(previous);
+        // Ancestors registered on the way down that no longer hold anything are let go.
+        for (Path passed = at == null ? null : at.getParent(); passed != null; passed = passed.getParent()) release(passed);
+        if (at == null) retryLater(followed, attempt);
     }
 
     private boolean register(Path folder) {

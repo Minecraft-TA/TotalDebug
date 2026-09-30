@@ -75,6 +75,23 @@ class FileReadingTest {
     }
 
     @Test
+    void foldersMadeAtOnceAreFollowedDownToTheFile() throws Exception {
+        for (int round = 0; round < 5; round++) {
+            Path file = this.directory.resolve("round" + round + "/game/a/b/options.txt");
+            AtomicInteger told = new AtomicInteger();
+            try (FileReading<String> reading = new FileReading<>(file, FileReadingTest::text, SETTLE)) {
+                reading.changed().subscribe(told::incrementAndGet);
+                assertEquals("", reading.value());
+                // As a game makes its folders in one go on its first start, while the watch moves down to them.
+                write(file, "a");
+                await(() -> told.get() == 1);
+                write(file, "b");
+                await(() -> told.get() == 2);
+            }
+        }
+    }
+
+    @Test
     void aFailedReadIsTriedAgainAndToldWhenItSucceeds() throws Exception {
         Path file = write(this.directory.resolve("options.txt"), "a");
         AtomicInteger failures = new AtomicInteger(0);
