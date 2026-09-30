@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.ProjectSelectionRequest;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
@@ -287,7 +288,7 @@ class CompanionAutomaticConnectionTest {
     @Test void anAnswerGoesOnlyToTheConnectionThatAsked() throws Exception {
         var asked = new CompletableFuture<Integer>();
         try (var endpoint = new Endpoint(); var client = client()) {
-            client.setChangeHandler((message, companion) -> asked.complete(companion));
+            client.on(ChangeMessage.class, (message, companion) -> asked.complete(companion));
             endpoint.publish(profile());
             client.startDiscovery(() -> true);
             await(client::isConnected);
@@ -303,6 +304,30 @@ class CompanionAutomaticConnectionTest {
             await(() -> !endpoint.answers.isEmpty());
             Thread.sleep(200);
             assertEquals(List.of(8), endpoint.answers, "an answer for the earlier connection does not reach the new one");
+        }
+    }
+
+    @Test void aRequestBeforeTheHandshakeFailsItsSessionWhateverItsType() throws Exception {
+        var handled = new AtomicInteger();
+        try (var endpoint = new Endpoint(); var client = client()) {
+            client.on(ChangeMessage.class, (message, companion) -> handled.incrementAndGet());
+            client.on(RetryRuntimeInventoryMessage.class, (message, companion) -> handled.incrementAndGet());
+            endpoint.hold = true;
+            endpoint.publish(profile());
+            client.startDiscovery(() -> true);
+            await(() -> endpoint.hellos.get() == 1);
+
+            // Before Companion answered the hello, whatever it sends is refused, and the session starts again.
+            endpoint.server.getMessageProcessor().enqueueMessage(new RetryRuntimeInventoryMessage());
+            await(() -> endpoint.hellos.get() == 2);
+            endpoint.server.getMessageProcessor().enqueueMessage(new ChangeMessage(new ChangePayload(1,
+                    List.of(new ChangePayload.Edit("keyBinding", "key.jump", "key.keyboard.space", "key.keyboard.g")))));
+            await(() -> endpoint.hellos.get() == 3);
+            assertEquals(0, handled.get(), "no request before the handshake reaches what handles it");
+
+            endpoint.hold = false;
+            endpoint.accept();
+            await(client::isConnected);
         }
     }
 

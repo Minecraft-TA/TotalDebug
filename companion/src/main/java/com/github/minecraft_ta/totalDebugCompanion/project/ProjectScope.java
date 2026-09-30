@@ -1,5 +1,13 @@
 package com.github.minecraft_ta.totalDebugCompanion.project;
 
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
+import com.github.minecraft_ta.totalDebugCompanion.session.MessageRoutes;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigLabels;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingLabels;
@@ -113,6 +121,28 @@ public final class ProjectScope implements AutoCloseable {
         this.resources = new ResourceEdits(this.pipeline, this.packs, new ResourceOriginals(paths().originals()),
                 this.configChanges.writes(), state);
         this.packSelections = new PackSelections(this.resources);
+    }
+
+    /**
+     * Takes the game's messages this project's owners handle, until the returned removal runs, as when another project
+     * becomes the current one: a project that is not current receives nothing.
+     */
+    public Runnable listen(MessageRoutes routes) {
+        List<Runnable> removals = List.of(
+                routes.on(ChangeResultMessage.class, message -> this.pipeline.answered(message.payload())),
+                routes.on(ReloadResultMessage.class, message -> this.pipeline.reloads().answered(message.payload())),
+                routes.on(PackStackMessage.class, message -> this.packs.named(message.payload())),
+                routes.on(DatapacksMessage.class, message -> this.packs.datapacks(message.world(), message.payload(), message.refusal())),
+                routes.on(PlayingMessage.class, message -> this.location.playing(message.payload())),
+                // The refused message and its correlation name the request together.
+                routes.on(RelayFailedMessage.class, message -> {
+                    switch (message.messageId()) {
+                        case CompanionProtocol.CHANGE -> this.pipeline.relayFailed(message.correlation(), message.reason());
+                        case CompanionProtocol.RELOAD -> this.pipeline.reloads().relayFailed(message.correlation(), message.reason());
+                        default -> { }
+                    }
+                }));
+        return () -> removals.forEach(Runnable::run);
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {
