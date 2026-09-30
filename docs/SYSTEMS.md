@@ -66,7 +66,7 @@ Owners:
 
 | Owner | Signals | Replaces |
 |---|---|---|
-| The application's projects | current project | the scope checks in `FileTreeView`, `CompanionApplication` and the UI |
+| The application's projects | current project (`CurrentProject`, whose `follows` moves to the next project and drops what the one before told) | the scope checks in `CompanionApplication`'s relays |
 | `PackCatalogService` | catalog | `addListener` |
 | `GamePacks` | resource packs, datapacks | `addListener(side)`, `addResourcePackListener`, `addDatapackListener` |
 | `ChangeRecord` | changes | `addListener` |
@@ -207,7 +207,7 @@ PRs on 1.21.1, stacked, each reviewed until clean. A shared mechanism comes with
 | 6 | The last watchers onto `FileWatch`: the Project tree's folders, told of entries only, and `ExternalEdits`, whose settle runs on the timer; `FileUtils`' pause for Companion's own moves becomes `FileWatch.pausing` | `FileUtils`, the watchers and schedulers of `ExternalEdits` |
 | 7 | All remaining pages on `page` and `follows`, the logs, configuration and resource packs pages reading whenever shown; the World tab's title from its owner; reads on the file workers | `ShownUpdates`, `whenShown`, `waitsWhileHidden` and `follow`, the pages' own subscriptions, the reads in constructors, the navigation refreshes |
 | 8a | The pipeline owning the write queue; the remaining executors and one-argument async calls onto `Workers` | `ConfigChanges`' executor, the UI classes' and `JsonStateWriter`'s executors, every use of the shared pool |
-| 8b | The current project as state, which the Project tree and the main window follow; no file checks on the Swing thread | the scope checks, the `CompanionUi` relays |
+| 8b | The current project as state (`CurrentProject`), whose signals the main window follows | the `CompanionUi` relays and their scope checks |
 | 8c | Owners noticing values put back outside Companion, on the write queue; connection numbers for waiting requests | `ChangeRecord.observed` from page reads and the Changes page's read whenever shown |
 
 After the messages, A4 continues with categories registering their pages and Modpack rows. Splitting `CompanionApplication` (the game connection and the MCP server into their own classes) and the mod's `CompanionAppClient` (launching Companion) is easier then and is decided at that point.
