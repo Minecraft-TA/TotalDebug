@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import java.nio.file.AccessDeniedException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -77,11 +78,23 @@ class KeyAssignmentsTest {
         }
     }
 
-    /** Writes {@code text} beside {@code file} and moves it over the file, as the game and Companion save it. */
+    /**
+     * Writes {@code text} beside {@code file} and moves it over the file, as an editor may save it. Windows refuses the move
+     * while the file is being read, as by the watch itself, so it is tried again for a moment.
+     */
     private static void replace(Path file, String text) throws Exception {
         Path staged = file.resolveSibling(file.getFileName() + ".tmp");
         Files.writeString(staged, text);
-        Files.move(staged, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        while (true) {
+            try {
+                Files.move(staged, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                return;
+            } catch (AccessDeniedException reading) {
+                if (System.nanoTime() > deadline) throw reading;
+                Thread.sleep(20);
+            }
+        }
     }
 
     private static void await(IntSupplier count, int expected) throws InterruptedException {

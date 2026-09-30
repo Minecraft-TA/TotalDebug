@@ -259,6 +259,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     handleDebugTarget(message);
                 }
             });
+            // The project reopened above came before the session: its messages reach it from now on.
+            synchronized (lifecycleLock) { makeCurrent(current); }
             scriptExecutions = new ScriptExecutionService(session, scriptCompiler, this::isConnected);
             executionRuns = new ExecutionRuns(session, scriptExecutions);
             editorRuns = new EditorScriptRunService(executionRuns, notifications);
