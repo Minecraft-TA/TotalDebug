@@ -77,7 +77,10 @@ public final class ResourceSnapshots {
             .name("TotalDebug resource snapshot")
             .unstarted(task));
     private CompletableFuture<Path> pending;
-    /** What the pending archive is prepared for: the resource manager's packs and the fluids' looks. */
+    /**
+     * What the pending archive is prepared for: the resource manager's packs and the fluids' looks. A reload opens the
+     * packs anew, so other packs than those prepared for last mean the game read their files since.
+     */
     private List<PackResources> pendingPacks = List.of();
     private byte[] pendingFluids = new byte[0];
     private long attemptedAt;
@@ -105,6 +108,9 @@ public final class ResourceSnapshots {
             return;
         }
         List<IconArchiveKey.Part> parts = parts(current);
+        // Only right after a reload does the resource manager hold what the files hold; a capture between reloads, as
+        // after a texture put in place, may miss a namespace, overlay or filter added since, so it is not kept by key.
+        boolean reloaded = !current.equals(this.pendingPacks);
         this.pendingPacks = current;
         this.pendingFluids = fluids;
         this.attemptedAt = System.nanoTime();
@@ -112,15 +118,18 @@ public final class ResourceSnapshots {
             try {
                 long started = System.nanoTime();
                 Optional<String> key = IconArchiveKey.of(VERSION, parts, fluids, Instant.now());
-                Optional<Path> kept = key.map(name -> this.directory.resolve(name + ".zip")).filter(ResourceSnapshots::complete);
-                if (kept.isPresent()) {
-                    used(kept.get());
+                Optional<Path> reused = key.map(name -> this.directory.resolve(name + ".zip")).filter(ResourceSnapshots::complete);
+                if (reused.isPresent()) {
+                    used(reused.get());
                     TotalDebug.LOGGER.info("Item icon archive unchanged; key taken in {} ms", (System.nanoTime() - started) / 1_000_000);
-                    return kept.get();
+                    return reused.get();
                 }
-                Path archive = capture(manager, current, fluids, key.orElseGet(() -> UUID.randomUUID().toString()));
+                Optional<String> kept = key.filter(ignored -> reloaded);
+                Path archive = capture(manager, current, fluids, kept.orElseGet(() -> UUID.randomUUID().toString()));
                 TotalDebug.LOGGER.info("Item icon archive captured in {} ms, {} KB{}", (System.nanoTime() - started) / 1_000_000,
-                        Files.size(archive) / 1024, key.isPresent() ? "" : "; a pack's files could not be told, so it is not kept by key");
+                        Files.size(archive) / 1024, kept.isPresent() ? "" : key.isEmpty()
+                                ? "; a pack's files could not be told, so it is not kept by key"
+                                : "; captured between reloads, so it is not kept by key");
                 return archive;
             } catch (IOException exception) {
                 throw new IllegalStateException("Unable to prepare item icons: " + exception.getMessage(), exception);
@@ -149,7 +158,8 @@ public final class ResourceSnapshots {
             } else if (id.startsWith("file/")) {
                 parts.add(new IconArchiveKey.Part(id, List.of(folder.resolve(id.substring("file/".length())))));
             } else if (id.startsWith("mod/")) {
-                IModFileInfo file = ModList.get().getModFileById(id.substring("mod/".length()).split(",")[0]);
+                // mod/a,b for a file of several mods; mod/a:resourcepacks/b for a pack a mod registers inside its file.
+                IModFileInfo file = ModList.get().getModFileById(id.substring("mod/".length()).split("[,:]")[0]);
                 parts.add(file == null ? IconArchiveKey.Part.unknown(id) : new IconArchiveKey.Part(id, resources(file)));
             } else if (id.equals("mod_resources")) {
                 parts.add(new IconArchiveKey.Part(id, ModList.get().getModFiles().stream().flatMap(file -> resources(file).stream()).toList()));
