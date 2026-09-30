@@ -83,40 +83,40 @@ class SystemsRulesTest {
             Map.entry("mcp/CodeModeJobService.java", new Allowed(2, "the MCP job service")),
             Map.entry("session/ProjectSelectionServer.java", new Allowed(2, "accepts connections")),
             Map.entry("inspection/ItemIconService.java", new Allowed(2, "the item icon renderer is confined to one thread")),
-            Map.entry("catalog/ConfigChanges.java", new Allowed(2, "the project's write queue, which the pipeline takes over in PR 3")),
-            Map.entry("storage/JsonStateWriter.java", new Allowed(2, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/catalog/TextureThumbnails.java", new Allowed(2, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/catalog/ModLogoIcons.java", new Allowed(2, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/editors/ResourceViewPanel.java", new Allowed(2, "moves onto Workers in PR 3")),
-            Map.entry("pack/ExternalEdits.java", new Allowed(3, "becomes an adoption in PR 5")),
-            Map.entry("util/FileUtils.java", new Allowed(1, "its watcher becomes a FileWatch follower in PR 5")),
+            Map.entry("catalog/ConfigChanges.java", new Allowed(2, "the project's write queue, which the pipeline takes over in PR 8")),
+            Map.entry("storage/JsonStateWriter.java", new Allowed(2, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/catalog/TextureThumbnails.java", new Allowed(2, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/catalog/ModLogoIcons.java", new Allowed(2, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/editors/ResourceViewPanel.java", new Allowed(2, "moves onto Workers in PR 8")),
+            Map.entry("pack/ExternalEdits.java", new Allowed(3, "becomes an adoption in PR 6")),
+            Map.entry("util/FileUtils.java", new Allowed(1, "its watcher becomes a FileWatch follower in PR 6")),
             Map.entry("util/Workers.java", new Allowed(6, "the file work, the owners' strands and the timer everything shares")),
             Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")));
 
-    // All move onto Workers' file work in PR 3.
+    // All move onto Workers' file work in PR 8.
     private static final Map<String, Allowed> SHARED_POOL = Map.ofEntries(
-            Map.entry("CompanionApplication.java", new Allowed(2, "moves onto Workers in PR 3")),
-            Map.entry("inspection/ItemIconService.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/inspection/DataView.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("inspection/InspectionSession.java", new Allowed(2, "moves onto Workers in PR 3")),
-            Map.entry("model/CodeView.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("navigation/NavigationService.java", new Allowed(2, "moves onto Workers in PR 3")),
-            Map.entry("pack/ExternalEdits.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("script/SnippetExpressionSupport.java", new Allowed(2, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/PageLoader.java", new Allowed(1, "reads on Workers' file work from PR 3")),
-            Map.entry("ui/components/catalog/ModPanel.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/editors/PackResourceEditor.java", new Allowed(2, "its saves move onto Workers in PR 3")),
-            Map.entry("ui/components/editors/ResourceTextEditor.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/editors/ScriptPanel.java", new Allowed(3, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/global/NotificationWidget.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/global/ProjectSelector.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/treeView/FileTreeView.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/treeView/ScriptFileActions.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("ui/components/treeView/lazyFileTree/LazyFileJTree.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("ui/views/PrismInstancePicker.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("ui/views/debugger/BreakpointsWindow.java", new Allowed(2, "moves onto Workers in PR 3")),
-            Map.entry("ui/views/debugger/DebuggerInspector.java", new Allowed(1, "moves onto Workers in PR 3")),
-            Map.entry("util/FileUtils.java", new Allowed(1, "moves onto Workers in PR 3")));
+            Map.entry("CompanionApplication.java", new Allowed(2, "moves onto Workers in PR 8")),
+            Map.entry("inspection/ItemIconService.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/inspection/DataView.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("inspection/InspectionSession.java", new Allowed(2, "moves onto Workers in PR 8")),
+            Map.entry("model/CodeView.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("navigation/NavigationService.java", new Allowed(2, "moves onto Workers in PR 8")),
+            Map.entry("pack/ExternalEdits.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("script/SnippetExpressionSupport.java", new Allowed(2, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/PageLoader.java", new Allowed(1, "reads on Workers' file work from PR 7")),
+            Map.entry("ui/components/catalog/ModPanel.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/editors/PackResourceEditor.java", new Allowed(2, "its saves move onto Workers in PR 8")),
+            Map.entry("ui/components/editors/ResourceTextEditor.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/editors/ScriptPanel.java", new Allowed(3, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/global/NotificationWidget.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/global/ProjectSelector.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/treeView/FileTreeView.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/treeView/ScriptFileActions.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("ui/components/treeView/lazyFileTree/LazyFileJTree.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("ui/views/PrismInstancePicker.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("ui/views/debugger/BreakpointsWindow.java", new Allowed(2, "moves onto Workers in PR 8")),
+            Map.entry("ui/views/debugger/DebuggerInspector.java", new Allowed(1, "moves onto Workers in PR 8")),
+            Map.entry("util/FileUtils.java", new Allowed(1, "moves onto Workers in PR 8")));
 
     // Signal itself; events inside a subsystem or a control, which are not state (section 1); owners not on signals yet.
     private static final Map<String, Allowed> LISTENER_LISTS = Map.ofEntries(
@@ -134,16 +134,13 @@ class SystemsRulesTest {
             Map.entry("ui/components/inspection/DataView.java", new Allowed(1, "speed search, an event")),
             Map.entry("ui/components/treeView/lazyFileTree/LazyFileJTree.java", new Allowed(1, "a double click, an event")),
             Map.entry("ui/theme/ThemeManager.java", new Allowed(1, "the theme, which stays as it is")),
-            Map.entry("game/GameLocation.java", new Allowed(1, "moves onto signals in PR 3")),
-            Map.entry("inspection/ItemIconService.java", new Allowed(1, "moves onto signals in PR 3")),
-            Map.entry("runtime/RuntimeIndexService.java", new Allowed(1, "moves onto signals in PR 3")),
-            Map.entry("util/FileUtils.java", new Allowed(1, "becomes FileWatch in PR 4")),
-            Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 5")));
+            Map.entry("util/FileUtils.java", new Allowed(1, "becomes FileWatch in PR 6")),
+            Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 6")));
 
     private static final Map<String, Allowed> WATCHERS = Map.ofEntries(
             Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")),
-            Map.entry("util/FileUtils.java", new Allowed(1, "becomes a FileWatch follower in PR 5")),
-            Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 5")));
+            Map.entry("util/FileUtils.java", new Allowed(1, "becomes a FileWatch follower in PR 6")),
+            Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 6")));
 
     @BeforeAll
     static void scan() throws IOException {

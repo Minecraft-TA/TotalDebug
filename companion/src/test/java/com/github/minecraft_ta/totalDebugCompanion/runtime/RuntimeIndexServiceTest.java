@@ -32,7 +32,7 @@ class RuntimeIndexServiceTest {
     @Test void forcedRebuildReportsMissingInventoryInsteadOfWaitingForIt() throws Exception {
         var failed = new CountDownLatch(1);
         try (var service = new RuntimeIndexService(new Object(), ignored -> { throw new AssertionError("No inventory"); })) {
-            service.addStatusListener(status -> { if (status.phase() == RuntimeIndexService.Phase.FAILED) failed.countDown(); });
+            IndexStatuses.follow(service, status -> { if (status.phase() == RuntimeIndexService.Phase.FAILED) failed.countDown(); });
             service.rebuild(temporaryDirectory, null);
             assertTrue(failed.await(5, TimeUnit.SECONDS));
             assertEquals(RuntimeIndexService.Phase.FAILED, service.status().phase());
@@ -61,7 +61,7 @@ class RuntimeIndexServiceTest {
                 else assertNotNull(snapshot.index().findClass(RuntimeInventoryTest.class.getName()));
             }
         })) {
-            service.addStatusListener(status -> {
+            IndexStatuses.follow(service, status -> {
                 if (status.phase() == RuntimeIndexService.Phase.FAILED) { loaded.countDown(); rebuilt.countDown(); }
                 if (status.phase() == RuntimeIndexService.Phase.READY) {
                     if (status.metrics().rebuilt()) rebuilt.countDown(); else loaded.countDown();
@@ -155,7 +155,7 @@ class RuntimeIndexServiceTest {
 
             AtomicBoolean inventoryAccepted = new AtomicBoolean();
             CountDownLatch settled = new CountDownLatch(1);
-            service.addStatusListener(status -> {
+            IndexStatuses.follow(service, status -> {
                 if (inventoryAccepted.get()
                         && (status.phase() == RuntimeIndexService.Phase.READY
                         || status.phase() == RuntimeIndexService.Phase.FAILED)) {
@@ -172,7 +172,7 @@ class RuntimeIndexServiceTest {
             var metrics = service.status().metrics();
             assertNotNull(metrics);
             var reconfirmed = new CountDownLatch(1);
-            service.addStatusListener(status -> {
+            IndexStatuses.follow(service, status -> {
                 if (status.phase() == RuntimeIndexService.Phase.READY && installations.get() == 2) reconfirmed.countDown();
             });
             service.waiting("Preparing inventory after reconnect");
@@ -203,7 +203,7 @@ class RuntimeIndexServiceTest {
                         .write(paths.inventory());
                 try (RuntimeIndexService service = new RuntimeIndexService(new Object(), snapshots::add)) {
                     CountDownLatch settled = new CountDownLatch(1);
-                    service.addStatusListener(status -> {
+                    IndexStatuses.follow(service, status -> {
                         if (status.phase() == RuntimeIndexService.Phase.READY || status.phase() == RuntimeIndexService.Phase.FAILED) {
                             settled.countDown();
                         }
@@ -361,7 +361,7 @@ class RuntimeIndexServiceTest {
             candidate.set(snapshot);
             throw new IllegalStateException("Rejected installation");
         })) {
-            service.addStatusListener(status -> { if (status.phase() == RuntimeIndexService.Phase.FAILED) failed.countDown(); });
+            IndexStatuses.follow(service, status -> { if (status.phase() == RuntimeIndexService.Phase.FAILED) failed.countDown(); });
             service.restore(paths.home());
             assertTrue(failed.await(5, TimeUnit.SECONDS));
             assertTrue(candidate.get().index().isDestroyed());
@@ -375,7 +375,7 @@ class RuntimeIndexServiceTest {
         var ready = new CountDownLatch(1);
         try {
             try (var service = new RuntimeIndexService(new Object(), candidate::set)) {
-                service.addStatusListener(status -> { if (status.phase() == RuntimeIndexService.Phase.READY) ready.countDown(); });
+                IndexStatuses.follow(service, status -> { if (status.phase() == RuntimeIndexService.Phase.READY) ready.countDown(); });
                 service.restore(paths.home());
                 assertTrue(ready.await(5, TimeUnit.SECONDS));
             }

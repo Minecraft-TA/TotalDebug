@@ -70,8 +70,8 @@ Owners:
 | `PackCatalogService` | catalog | `addListener` |
 | `GamePacks` | resource packs, datapacks | `addListener(side)`, `addResourcePackListener`, `addDatapackListener` |
 | `ChangeRecord` | changes | `addListener` |
-| `GameLocation` | connection (with the process), playing | `addListener(Consumer<Change>)` |
-| `CurrentWorld` (new) | world | `WorldReadings`, which is deleted: it reads the current world's `level.dat` itself |
+| `GameLocation` | connection, process, playing | `addListener(Consumer<Change>)` |
+| `WorldReading` (new) | world | `WorldReadings`, which is deleted: it reads the current world's folder itself |
 | `KeyAssignments` | assignments | its `addListener` and `KeyBindingControl.addAssignmentListener` |
 | `GameLogs` | the listed logs and crash reports | the Logs page's and the tree's own listing |
 | `ItemIconService` | icons | `addListener` |
@@ -195,17 +195,18 @@ The test lists each exception with its reason. Adding one is a decision recorded
 
 ## Order of work
 
-PRs on 1.21.1, stacked, each reviewed until clean. A shared mechanism comes with its first users; the PRs that carry risk are kept small, the ones that repeat a proven pattern move many users at once. A moved feature keeps no part of its old way. Until the last user of an old way has moved, the old way stays for those not moved yet, as `PageLoader`'s modes do; the PR that moves the last user deletes it. Decided on 2026-09-30 over a finer split of about 22 PRs, whose extra review rounds bought no safety for the mechanical moves. The files came before the remaining owners the same day: they carry most of the races the reviews found, and they are `Workers`' first users.
+PRs on 1.21.1, stacked, each reviewed until clean. A shared mechanism comes with its first users; the PRs that carry risk are kept small, the ones that repeat a proven pattern move many users at once. A moved feature keeps no part of its old way. Until the last user of an old way has moved, the old way stays for those not moved yet, as `PageLoader`'s modes do; the PR that moves the last user deletes it. Decided on 2026-09-30 over a finer split of about 22 PRs, whose extra review rounds bought no safety for the mechanical moves. The files came before the remaining owners the same day: they carry most of the races the reviews found, and they are `Workers`' first users. The owners still telling through their own listeners come before the pages, which can follow only signals.
 
 | PR | Content | Deletes |
 |---|---|---|
 | 1 (#112) | The slice: `Signal` and the new `PageLoader` (`page`, `follows`, `hold`), with `Tables.keepingSelection`; its first users the Key bindings page, which only shows, and the resource editor, which edits, with the owners they follow on signals (catalog, key assignments, change record, packs, resource edits), key assignments read again after Companion's own write; the architecture test with every exception of today listed | the two pages' own subscriptions, constructor reads, navigation refreshes and selection keeping, `KeyBindingControl.addAssignmentListener`, `PackResourceEditor`'s read and write counters and follow flags |
 | 2 (#113) | Game messages registered by their owners on the connection, in Companion and the mod | `CompanionSession.Listener`'s methods for the project's messages, their relay in `CompanionApplication`, the mod's setters and repeated guards |
-| 3 | `Workers` and `Strand`, `FileWatch` and `FileReading`, with `KeyAssignments` as first user | `KeyAssignments`' watcher, scheduler and counters |
-| 4 | The current world as a `FileReading` that follows `playing`, with the World page and the tree | `WorldReadings`, the World page's read whenever shown |
-| 5 | The remaining readings (`GameLogs`, the configuration folders, `saves` and `resourcepacks`) with their pages; `FileUtils`' watcher onto `FileWatch`; `ExternalEdits` as an adoption | the watchers and schedulers of `FileUtils` and `ExternalEdits`, the `readsWhenShown` mode |
-| 6 | All remaining pages, the Project tree and the tab strip; no file checks on the Swing thread | `ShownUpdates`, the old modes, the pages' own subscriptions, the reads in constructors, the navigation refreshes, the `CompanionUi` relays, `ChangeRecord.observed` from page reads |
-| 7 | The remaining owners on signals; the current project as state; connection numbers for waiting requests; the pipeline owning the write queue; the remaining executors onto `Workers` | the listener lists, `ConfigChanges`' executor, the scope checks, the UI classes' executors |
+| 3 (#114) | `Workers` and `Strand`, `FileWatch` and `FileReading`, with `KeyAssignments` as first user | `KeyAssignments`' watcher, scheduler and counters |
+| 4 (#115) | The current world as a `FileReading` that follows `playing`, with the World page and the tree | `WorldReadings`, the World page's read whenever shown |
+| 5 | The owners still telling through their own listeners on signals: `GameLocation`, `ItemIconService`, `RuntimeIndexService` | `GameLocation.Change` and the three listener lists |
+| 6 | The remaining readings (`GameLogs`, the configuration folders, `saves` and `resourcepacks`) with their pages; `FileUtils`' watcher onto `FileWatch`; `ExternalEdits` as an adoption | the watchers and schedulers of `FileUtils` and `ExternalEdits`, the `readsWhenShown` mode |
+| 7 | All remaining pages, the Project tree and the tab strip; no file checks on the Swing thread | `ShownUpdates`, the old modes, the pages' own subscriptions, the reads in constructors, the navigation refreshes, the `CompanionUi` relays, `ChangeRecord.observed` from page reads |
+| 8 | The current project as state; connection numbers for waiting requests; the pipeline owning the write queue; the remaining executors onto `Workers` | `ConfigChanges`' executor, the scope checks, the UI classes' executors |
 
 After the messages, A4 continues with categories registering their pages and Modpack rows. Splitting `CompanionApplication` (the game connection and the MCP server into their own classes) and the mod's `CompanionAppClient` (launching Companion) is easier then and is decided at that point.
 

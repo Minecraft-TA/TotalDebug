@@ -119,10 +119,10 @@ public final class Reloads {
 
     public Reloads(GameLocation location) {
         this.location = Objects.requireNonNull(location, "location");
-        location.addListener(change -> {
-            if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
-            else if (change == GameLocation.Change.PLAYING) leftWorld();
+        location.connectionChanged().subscribe(() -> {
+            if (location.connection() == null) gameDisconnected();
         });
+        location.playingChanged().subscribe(this::leftWorld);
     }
 
     /** A write is queued whose reload the next reloads wait for, so writes in quick succession take one reload. */

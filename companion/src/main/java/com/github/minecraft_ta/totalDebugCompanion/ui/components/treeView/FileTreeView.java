@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
-import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
@@ -273,8 +272,7 @@ public class FileTreeView extends JScrollPane {
             });
             Runnable removeRead = scope.world().changed().subscribe(refresh);
             // What the game plays also decides whether there is a World root at all.
-            Runnable removePlayed = scope.location().addListener(change -> {
-                if (change != GameLocation.Change.PLAYING) return;
+            Runnable removePlayed = scope.location().playingChanged().subscribe(() -> {
                 SwingUtilities.invokeLater(() -> {
                     if (this.disposed || project.get() != scope) return;
                     reloadProfile();

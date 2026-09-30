@@ -70,7 +70,12 @@ public final class WorldReading implements AutoCloseable {
                 () -> Workers.later(SETTLE_MILLIS, this.strand, this::follow));
         // Companion changed the datapacks, also in the level.dat of a world the game does not hold.
         this.stopFollowingDatapacks = packs.changed(ChangeRecord.PackSide.DATA).subscribe(() -> this.strand.execute(this::follow));
-        this.stopFollowingGame = location.addListener(change -> this.strand.execute(this::follow));
+        Runnable stopConnection = location.connectionChanged().subscribe(() -> this.strand.execute(this::follow));
+        Runnable stopPlaying = location.playingChanged().subscribe(() -> this.strand.execute(this::follow));
+        this.stopFollowingGame = () -> {
+            stopConnection.run();
+            stopPlaying.run();
+        };
         // Followed after the triggers are, so none is missed in between; on the strand, as every later look.
         CompletableFuture.runAsync(this::follow, this.strand).join();
     }

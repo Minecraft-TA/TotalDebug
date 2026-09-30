@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemModelId;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderBackend;
@@ -21,7 +22,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -54,7 +54,9 @@ public final class ItemIconService implements AutoCloseable {
             .daemon()
             .name("Companion item icons")
             .unstarted(task));
-    private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
+    private final Signal changed = new Signal();
+    /** Held while an adoption decides whether it is the newest. */
+    private final Object adoption = new Object();
     private final Map<Key, Optional<BufferedImage>> cache = new LinkedHashMap<>(64, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<Key, Optional<BufferedImage>> eldest) {
@@ -97,20 +99,20 @@ public final class ItemIconService implements AutoCloseable {
 
     /** Starts an adoption, superseding every earlier one that has not finished. */
     private long start() {
-        synchronized (this.listeners) {
+        synchronized (this.adoption) {
             return ++this.adoptions;
         }
     }
 
     /** Replaces the snapshot, unless a newer adoption started since {@code generation}. */
     private void adopt(long generation, Snapshot next) {
-        synchronized (this.listeners) {
+        synchronized (this.adoption) {
             if (this.closed || generation != this.adoptions || Objects.equals(next, this.snapshot)) {
                 return;
             }
             this.snapshot = next;
         }
-        SwingUtilities.invokeLater(() -> this.listeners.forEach(Runnable::run));
+        SwingUtilities.invokeLater(this.changed::fire);
     }
 
     static Snapshot newestSnapshot(Path directory) {
@@ -165,10 +167,9 @@ public final class ItemIconService implements AutoCloseable {
         return this.snapshot;
     }
 
-    /** Registers a listener for new snapshots and returns its removal. */
-    public Runnable addListener(Runnable listener) {
-        this.listeners.add(Objects.requireNonNull(listener, "listener"));
-        return () -> this.listeners.remove(listener);
+    /** Fires on the Swing thread after a newer snapshot was adopted, so views draw their icons again. */
+    public Signal changed() {
+        return this.changed;
     }
 
     /** Renders {@code model} (for example {@code minecraft:item/furnace}); empty when it cannot be drawn. */
@@ -312,7 +313,6 @@ public final class ItemIconService implements AutoCloseable {
             return;
         }
         this.closed = true;
-        this.listeners.clear();
         this.worker.execute(this::closeBackend);
         this.worker.shutdown();
     }

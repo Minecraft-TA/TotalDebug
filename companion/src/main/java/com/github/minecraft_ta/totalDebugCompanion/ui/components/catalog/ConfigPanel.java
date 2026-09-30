@@ -112,12 +112,10 @@ final class ConfigPanel extends JPanel {
                 failure -> showFailure("Could not list the worlds' copies: " + failure.getMessage()))
                 // A server configuration is shown from the world the game has open first; it follows the game to another
                 // world, unless its text has unsaved changes, which stay with the file they were made in.
-                .follow(listener -> this.location.addListener(change -> {
-                    if (change == GameLocation.Change.PLAYING) SwingUtilities.invokeLater(() -> {
-                        PackCatalog.ConfigFile file = selectedFile();
-                        if (file != null && file.type() == PackCatalog.ConfigType.SERVER && !this.textEditor.modified()) listener.run();
-                    });
-                }));
+                .follow(listener -> this.location.playingChanged().subscribe(() -> SwingUtilities.invokeLater(() -> {
+                    PackCatalog.ConfigFile file = selectedFile();
+                    if (file != null && file.type() == PackCatalog.ConfigType.SERVER && !this.textEditor.modified()) listener.run();
+                })));
         configureFiles();
         this.content.add(toolbar(), BorderLayout.NORTH);
         JPanel settings = new JPanel(new BorderLayout());

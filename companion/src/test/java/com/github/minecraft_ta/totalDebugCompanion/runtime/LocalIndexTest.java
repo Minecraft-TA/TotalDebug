@@ -44,7 +44,7 @@ class LocalIndexTest {
         var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
         var retry = new AtomicBoolean(true);
         try (var service = new RuntimeIndexService(new Object(), ready::complete)) {
-            service.addStatusListener(status -> {
+            IndexStatuses.follow(service, status -> {
                 if (status.phase() != RuntimeIndexService.Phase.FAILED) return;
                 if (!retry.getAndSet(false)) { ready.completeExceptionally(status.failure()); return; }
                 try {
@@ -147,7 +147,7 @@ class LocalIndexTest {
             } catch (Exception exception) { index.close(); throw new AssertionError(exception); }
             return index;
         })) {
-            service.addStatusListener(status -> {
+            IndexStatuses.follow(service, status -> {
                 if (status.phase() == RuntimeIndexService.Phase.FAILED) failure.complete(status);
             });
             service.restore(paths.home(), game);
@@ -275,7 +275,7 @@ class LocalIndexTest {
             catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
             return ClassIndex.fromFile(file);
         })) {
-            service.addStatusListener(status -> {
+            IndexStatuses.follow(service, status -> {
                 if (status.phase() == RuntimeIndexService.Phase.READY) readyStatus.complete(status);
             });
             synchronized (lifecycle) {
@@ -297,7 +297,7 @@ class LocalIndexTest {
     private RuntimeIndexService.ReadySnapshot open() throws Exception {
         var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
         try (var service = new RuntimeIndexService(new Object(), ready::complete)) {
-            service.addStatusListener(status -> {
+            IndexStatuses.follow(service, status -> {
                 if (status.phase() == RuntimeIndexService.Phase.FAILED) ready.completeExceptionally(status.failure());
             });
             var paths = InstancePaths.forGame(game);

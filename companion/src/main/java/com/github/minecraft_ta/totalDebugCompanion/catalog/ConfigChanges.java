@@ -56,12 +56,9 @@ public final class ConfigChanges {
         this.location = Objects.requireNonNull(location, "location");
         this.workspace = location.workspace();
         this.record = Objects.requireNonNull(record, "record");
-        location.addListener(change -> {
-            switch (change) {
-                case PROCESS -> gameProcess(location.process());
-                case DISCONNECTED -> gameDisconnected();
-                default -> { }
-            }
+        location.processChanged().subscribe(() -> gameProcess(location.process()));
+        location.connectionChanged().subscribe(() -> {
+            if (location.connection() == null) gameDisconnected();
         });
     }
 

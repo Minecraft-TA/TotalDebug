@@ -108,7 +108,7 @@ public final class DefinitionDetails {
             this.appearance = found.appearance();
             this.appearancePreviews = found.previews();
             showExtras();
-        }, failure -> { }).waitsWhileHidden(page).follow(services.icons()::addListener);
+        }, failure -> { }).waitsWhileHidden(page).follow(services.icons().changed()::subscribe);
         this.resourceLoader = new PageLoader<>(this::prepareResources, list -> {
             this.owned = list;
             this.matched = matching(this.owned, this.subject.namespace(), resourceName());

@@ -146,12 +146,11 @@ class GameStateTest {
         GameLocation location = new GameLocation(GAME, new Files(true, Set.of(WORLD), null));
         location.process(7);
         location.playing(new PlayingPayload.Singleplayer(WORLD.toString()));
-        List<GameLocation.Change> heard = new ArrayList<>();
-        location.addListener(heard::add);
+        List<String> heard = heard(location);
 
         location.connected(SEND);
 
-        assertEquals(List.of(GameLocation.Change.CONNECTED, GameLocation.Change.PROCESS, GameLocation.Change.PLAYING), heard,
+        assertEquals(List.of("connected", "process", "playing"), heard,
                 "what the game told before is heard as told now");
         location.process(7);
         location.playing(new PlayingPayload.Singleplayer(WORLD.toString()));
@@ -166,11 +165,19 @@ class GameStateTest {
         assertInstanceOf(Access.Refused.class, location.read().world(WORLD, "change its rules"));
     }
 
+    /** What {@code location}'s signals tell, in order: a connection change as connected or disconnected. */
+    private static List<String> heard(GameLocation location) {
+        List<String> heard = new ArrayList<>();
+        location.connectionChanged().subscribe(() -> heard.add(location.connection() != null ? "connected" : "disconnected"));
+        location.processChanged().subscribe(() -> heard.add("process"));
+        location.playingChanged().subscribe(() -> heard.add("playing"));
+        return heard;
+    }
+
     @Test
-    void listenersHearEachChangeOnce() {
+    void followersHearEachChangeOnce() {
         GameLocation location = new GameLocation(GAME, new Files(false, Set.of(), null));
-        List<GameLocation.Change> heard = new ArrayList<>();
-        location.addListener(heard::add);
+        List<String> heard = heard(location);
 
         location.process(7);
         location.playing(new PlayingPayload.Menu());
@@ -182,8 +189,7 @@ class GameStateTest {
         location.playing(new PlayingPayload.Menu());
         location.disconnected();
         location.disconnected();
-        assertEquals(List.of(GameLocation.Change.CONNECTED, GameLocation.Change.PROCESS, GameLocation.Change.PLAYING,
-                GameLocation.Change.DISCONNECTED), heard);
+        assertEquals(List.of("connected", "process", "playing", "disconnected"), heard);
         assertEquals(0, location.process());
         assertNull(location.connection());
         assertFalse(location.read().running());

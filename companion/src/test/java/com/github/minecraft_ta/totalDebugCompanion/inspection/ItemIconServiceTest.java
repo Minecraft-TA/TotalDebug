@@ -8,8 +8,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+
+import javax.swing.SwingUtilities;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -42,6 +45,20 @@ class ItemIconServiceTest {
             reads.getFirst().run();
 
             assertEquals(announced, icons.snapshot().archive());
+        }
+    }
+
+    @Test
+    void viewsAreToldOnceOnTheSwingThreadOnlyWhenTheSnapshotChanged(@TempDir Path directory) throws Exception {
+        Path archive = archive(directory.resolve("snapshot"));
+        List<Boolean> told = new CopyOnWriteArrayList<>();
+        try (ItemIconService icons = new ItemIconService()) {
+            icons.changed().subscribe(() -> told.add(SwingUtilities.isEventDispatchThread()));
+            icons.accept(archive);
+            icons.accept(archive);
+            SwingUtilities.invokeAndWait(() -> { });
+
+            assertEquals(List.of(true), told, "the same snapshot again tells nothing");
         }
     }
 
