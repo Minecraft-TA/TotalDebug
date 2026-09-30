@@ -25,6 +25,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 import javax.swing.Icon;
 import javax.imageio.ImageIO;
@@ -32,6 +33,7 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -230,6 +232,43 @@ class CatalogPanelsTest {
                     details[0].dispose();
                 });
             }
+        }
+    }
+
+    @Test
+    void keyBindingsKeepTheirSelectionWhenTheirKeysAreReadAgain() throws Exception {
+        PackCatalogService catalog = readyCatalog();
+        Files.writeString(this.directory.resolve("options.txt"), "key_key.drop:key.keyboard.q\n");
+        KeyBindingControl control = new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false),
+                ChangeRecord.inMemory(), Runnable::run), listener -> () -> { });
+        KeyBindingsPanel[] panel = new KeyBindingsPanel[1];
+        onEdt(() -> panel[0] = new KeyBindingsPanel(catalog, control, "", target -> { }));
+        try {
+            panel[0].loading().get(10, TimeUnit.SECONDS);
+            SwingUtilities.invokeAndWait(() -> { });
+            onEdt(() -> {
+                JTable table = panel[0].table();
+                int drop = -1;
+                for (int row = 0; row < table.getRowCount(); row++) {
+                    if (String.valueOf(table.getValueAt(row, 0)).contains("Drop Selected Item")) drop = row;
+                }
+                assertTrue(drop >= 0, "the binding is listed");
+                table.setRowSelectionInterval(drop, drop);
+            });
+
+            // As when the game saved a key rebound in its controls screen.
+            Files.writeString(this.directory.resolve("options.txt"), "key_key.drop:key.keyboard.g\n");
+            onEdt(panel[0]::load);
+            panel[0].loading().get(10, TimeUnit.SECONDS);
+            SwingUtilities.invokeAndWait(() -> { });
+            onEdt(() -> {
+                JTable table = panel[0].table();
+                assertEquals(1, table.getSelectedRowCount());
+                assertTrue(String.valueOf(table.getValueAt(table.getSelectedRow(), 0)).contains("Drop Selected Item"),
+                        "the binding stays selected when its keys are read again");
+            });
+        } finally {
+            onEdt(() -> panel[0].dispose());
         }
     }
 
