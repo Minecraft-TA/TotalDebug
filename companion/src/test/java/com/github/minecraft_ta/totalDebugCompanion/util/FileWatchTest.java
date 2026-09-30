@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.util;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -89,6 +91,7 @@ class FileWatchTest {
     }
 
     @Test
+    @EnabledOnOs(OS.WINDOWS)
     void aFolderReachedThroughALinkIsPausedAndWatchedAgain() throws Exception {
         Path real = Files.createDirectory(this.directory.resolve("real"));
         Path alias = this.directory.resolve("alias");

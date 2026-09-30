@@ -49,6 +49,8 @@ public final class ExternalEdits implements AutoCloseable {
         final List<BiConsumer<ResourceEdits.Saved, Throwable>> listeners = new CopyOnWriteArrayList<>();
         Runnable unwatch = () -> { };
         ScheduledFuture<?> pending;
+        /** Counts the writes seen, so a take handed on before a later write takes nothing. Under the edits' lock. */
+        long writes;
 
         Followed(String path, Path pack, byte[] before) {
             this.path = path;
@@ -123,12 +125,14 @@ public final class ExternalEdits implements AutoCloseable {
     private synchronized void settle(Followed file) {
         if (this.closed) return;
         if (file.pending != null) file.pending.cancel(false);
-        file.pending = Workers.later(SETTLE_MILLIS, this.strand, () -> take(file));
+        long write = ++file.writes;
+        file.pending = Workers.later(SETTLE_MILLIS, this.strand, () -> take(file, write));
     }
 
-    private void take(Followed file) {
+    private void take(Followed file, long write) {
         synchronized (this) {
-            if (this.closed) return;
+            // Another write came since, whose own settle takes the file.
+            if (this.closed || write != file.writes) return;
         }
         Path location = file.pack.resolve(file.path);
         byte[] seen;
