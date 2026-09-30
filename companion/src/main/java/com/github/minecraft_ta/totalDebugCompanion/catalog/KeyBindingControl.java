@@ -20,6 +20,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Puts key bindings on keys, as a category of the {@link ChangePipeline}: a binding is named as in {@code options.txt},
@@ -35,11 +36,24 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
 
     private final ChangePipeline pipeline;
     private final Path options;
+    private final Function<Runnable, Runnable> assignmentsChanged;
 
-    /** Changes the keys of the pipeline's game, in its {@code options.txt}. */
-    public KeyBindingControl(ChangePipeline pipeline) {
+    /**
+     * Changes the keys of the pipeline's game, in its {@code options.txt}. {@code assignmentsChanged} adds a listener for
+     * the keys that file assigns changing, whoever wrote it ({@link KeyAssignments}), and returns its removal.
+     */
+    public KeyBindingControl(ChangePipeline pipeline, Function<Runnable, Runnable> assignmentsChanged) {
         this.pipeline = Objects.requireNonNull(pipeline, "pipeline");
         this.options = pipeline.location().workspace().resolve("options.txt");
+        this.assignmentsChanged = Objects.requireNonNull(assignmentsChanged, "assignmentsChanged");
+    }
+
+    /**
+     * Runs {@code listener} when the keys {@code options.txt} assigns changed, such as a key rebound in the game's
+     * controls screen; returns its removal.
+     */
+    public Runnable addAssignmentListener(Runnable listener) {
+        return this.assignmentsChanged.apply(listener);
     }
 
     /** The change record the bindings' changes are entered in. */

@@ -103,7 +103,7 @@ class KeyBindingControlTest {
     void aRunningGameMakesTheChangeAndAnswers() throws Exception {
         GameLocation location = GameLocations.of(this.directory, true);
         ChangePipeline pipeline = new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run);
-        KeyBindingControl control = new KeyBindingControl(pipeline);
+        KeyBindingControl control = new KeyBindingControl(pipeline, listener -> () -> { });
         List<ChangePayload> sent = new ArrayList<>();
         location.connected(message -> {
             if (message instanceof ChangeMessage change) sent.add(change.payload());
@@ -138,7 +138,7 @@ class KeyBindingControlTest {
     void anAnswerAfterTheCallerStoppedWaitingIsStillRecorded() throws Exception {
         GameLocation location = GameLocations.of(this.directory, true);
         ChangePipeline pipeline = new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run);
-        KeyBindingControl control = new KeyBindingControl(pipeline);
+        KeyBindingControl control = new KeyBindingControl(pipeline, listener -> () -> { });
         List<ChangePayload> sent = new ArrayList<>();
         location.connected(message -> {
             if (message instanceof ChangeMessage change) sent.add(change.payload());
@@ -160,7 +160,7 @@ class KeyBindingControlTest {
     }
 
     private static KeyBindingControl control(GameLocation location) {
-        return new KeyBindingControl(new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run));
+        return new KeyBindingControl(new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run), listener -> () -> { });
     }
 
     private static String set(KeyBindingControl control, KeyBindingControl.Change... changes) throws Exception {

@@ -27,6 +27,7 @@ import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
+import javax.swing.JViewport;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
@@ -39,6 +40,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
+import java.awt.Point;
 import java.awt.event.ActionEvent;
 import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
@@ -55,6 +57,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -66,7 +69,7 @@ import java.util.function.Predicate;
  * does. A binding gets a new key by double-clicking it and pressing the key, or from its menu; the key is put on it in
  * the running game or, while the game is closed, in {@code options.txt}. Several bindings, or a whole category, are
  * reset, unbound or reverted together from the menu of the selection. Keys are read from {@code options.txt} whenever
- * the page is shown.
+ * the page is shown, and when its keys change while it is shown, such as a key rebound in the game.
  */
 public final class KeyBindingsPanel extends JPanel {
     private static final String PLACEHOLDER = "Filter by action, mod or key, such as ctrl+g";
@@ -160,7 +163,7 @@ public final class KeyBindingsPanel extends JPanel {
 
         this.loader = new PageLoader<>(this::prepareLoad, loaded -> show(loaded.index(), loaded.bindings(), ""),
                 failure -> show(this.catalog.index().orElse(null), null, "Could not read options.txt: " + failure.getMessage()))
-                .whenShown(this).follow(catalog::addListener);
+                .whenShown(this).follow(catalog::addListener).follow(control::addAssignmentListener);
         addHierarchyListener(event -> {
             if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !isShowing()) stopCapture();
         });
@@ -223,6 +226,16 @@ public final class KeyBindingsPanel extends JPanel {
     }
 
     /** Reads the keys again. */
+    /** The table, for tests. */
+    JTable table() {
+        return this.table;
+    }
+
+    /** The read of {@code options.txt} that runs or ran last, for tests. */
+    CompletableFuture<?> loading() {
+        return this.loader.current();
+    }
+
     public void load() {
         this.loader.load();
     }
@@ -270,6 +283,9 @@ public final class KeyBindingsPanel extends JPanel {
     }
 
     private void show(CatalogIndex index, KeyBindings bindings, String problem) {
+        // Read again, as after a key rebound in the game, the table keeps what was selected and where it was scrolled.
+        Set<String> selected = selectedRows();
+        Point scrolled = this.table.getParent() instanceof JViewport viewport ? viewport.getViewPosition() : null;
         this.index = index;
         this.bindings = bindings;
         this.problem = bindings == null ? "" : problem;
@@ -289,7 +305,31 @@ public final class KeyBindingsPanel extends JPanel {
         this.model.setRows(rows);
         this.unavailable = bindings == null ? problem : "";
         applyFilter();
+        if (this.selectAfterLoad == null) {
+            select(selected);
+            if (scrolled != null && this.table.getParent() instanceof JViewport viewport) viewport.setViewPosition(scrolled);
+        }
         selectPending();
+    }
+
+    /** The selected rows by what they show: a binding by its name, a category by its name. */
+    private Set<String> selectedRows() {
+        Set<String> selected = new HashSet<>();
+        for (int viewRow : this.table.getSelectedRows()) {
+            if (viewRow < this.model.shown.size()) selected.add(identity(this.model.shown.get(viewRow)));
+        }
+        return selected;
+    }
+
+    private void select(Set<String> rows) {
+        if (rows.isEmpty()) return;
+        for (int viewRow = 0; viewRow < this.model.shown.size(); viewRow++) {
+            if (rows.contains(identity(this.model.shown.get(viewRow)))) this.table.addRowSelectionInterval(viewRow, viewRow);
+        }
+    }
+
+    private static String identity(Row row) {
+        return row.binding() == null ? "category " + row.category() : "binding " + row.binding().spec().name();
     }
 
     /** A category's name as the game shows it, or its key when the game has no text for it. */

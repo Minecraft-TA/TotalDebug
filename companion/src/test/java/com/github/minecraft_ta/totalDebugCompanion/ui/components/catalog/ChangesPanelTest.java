@@ -63,7 +63,7 @@ class ChangesPanelTest {
                 Runnable::run, InstanceState.inMemory());
         ConfigSettings settings = ConfigSettingsFixture.of(GameLocations.of(this.directory, false), record);
         List<ChangeLabels> labels = List.of(new ConfigLabels(settings),
-                new KeyBindingLabels(new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run))),
+                new KeyBindingLabels(new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run), listener -> () -> { })),
                 new ResourceLabels(edits), new PackLabels(new PackSelections(edits)));
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, record, labels, target -> { }));
         try {
