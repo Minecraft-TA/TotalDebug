@@ -101,13 +101,17 @@ public final class KeyAssignments implements AutoCloseable {
         }
     }
 
-    /** Tries to watch the game's folder again after a while, then reads what the file assigns by then. */
+    /**
+     * Tries to watch the game's folder again after a while, and reads what the file assigns by then either way: while it
+     * cannot be watched, a key rebound in the game is found by these reads.
+     */
     private void registerLater(int attempt) {
         long delay = RETRY_MILLIS.get(Math.min(attempt, RETRY_MILLIS.size() - 1));
         try {
             this.timer.schedule(() -> {
-                if (register()) written();
-                else registerLater(attempt + 1);
+                boolean watchingNow = register();
+                written();
+                if (!watchingNow) registerLater(attempt + 1);
             }, delay, TimeUnit.MILLISECONDS);
         } catch (RuntimeException closed) {
             // Closed with the project.
