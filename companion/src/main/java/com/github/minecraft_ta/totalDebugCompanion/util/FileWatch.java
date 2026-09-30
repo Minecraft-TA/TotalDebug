@@ -186,7 +186,14 @@ public final class FileWatch {
                         }
                     }
                 }
-                tell.forEach(Runnable::run);
+                for (Runnable changed : tell) {
+                    try {
+                        changed.run();
+                    } catch (RuntimeException failure) {
+                        // One follower's failure does not stop the watch of every other.
+                        LOGGER.log(System.Logger.Level.WARNING, "A follower of a watched folder failed", failure);
+                    }
+                }
             }
         } catch (InterruptedException | ClosedWatchServiceException stopped) {
             // The application ends.

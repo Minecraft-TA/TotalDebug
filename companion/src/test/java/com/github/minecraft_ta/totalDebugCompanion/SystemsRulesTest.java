@@ -90,7 +90,7 @@ class SystemsRulesTest {
             Map.entry("ui/components/editors/ResourceViewPanel.java", new Allowed(2, "moves onto Workers in PR 3")),
             Map.entry("pack/ExternalEdits.java", new Allowed(3, "becomes an adoption in PR 5")),
             Map.entry("util/FileUtils.java", new Allowed(1, "its watcher becomes a FileWatch follower in PR 5")),
-            Map.entry("util/Workers.java", new Allowed(4, "the file work and the timer every owner shares")),
+            Map.entry("util/Workers.java", new Allowed(6, "the file work, the owners' strands and the timer everything shares")),
             Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")));
 
     // All move onto Workers' file work in PR 3.

@@ -57,7 +57,8 @@ public final class FileReading<T> implements AutoCloseable {
         this.reader = Objects.requireNonNull(reader, "reader");
         this.settleMillis = settle.toMillis();
         Path followed = Objects.requireNonNull(file, "file").toAbsolutePath().normalize();
-        this.strand.execute(() -> follow(followed));
+        long generation = this.generation.incrementAndGet();
+        this.strand.execute(() -> follow(followed, generation));
     }
 
     /** Fires on this reading's strand after a read found another value than the one before. */
@@ -101,7 +102,9 @@ public final class FileReading<T> implements AutoCloseable {
     /** Follows {@code file} from now on, as the current world after the game opened another; its value is read now. */
     public void moveTo(Path file) {
         Path followed = Objects.requireNonNull(file, "file").toAbsolutePath().normalize();
-        this.strand.execute(() -> follow(followed));
+        // A read of the file before gives way at once, so nothing it read is published after the move was asked for.
+        long generation = this.generation.incrementAndGet();
+        this.strand.execute(() -> follow(followed, generation));
     }
 
     /** Stops following the file; a read under way publishes nothing. */
@@ -114,13 +117,13 @@ public final class FileReading<T> implements AutoCloseable {
         });
     }
 
-    private void follow(Path followed) {
+    private void follow(Path followed, long generation) {
         if (this.closed) return;
         this.unwatch.run();
         this.file = followed;
         Path name = followed.getFileName();
         this.unwatch = FileWatch.shared().watch(followed.getParent(), name::equals, this::written);
-        read(0, this.generation.incrementAndGet());
+        read(0, generation);
     }
 
     /** A write of the file was seen: it is read once no other came for the settle time. Any thread. */
@@ -154,7 +157,8 @@ public final class FileReading<T> implements AutoCloseable {
         try {
             now = this.reader.read(this.file);
         } catch (IOException | RuntimeException failure) {
-            this.unreadable = true;
+            // A read another write overtook fails for nothing that is current: the next read is not told for it.
+            if (generation == 0 || generation == this.generation.get()) this.unreadable = true;
             throw failure instanceof IOException unreadable ? unreadable : new IOException(failure);
         }
         if (generation != 0 && generation != this.generation.get() || this.closed) return now;

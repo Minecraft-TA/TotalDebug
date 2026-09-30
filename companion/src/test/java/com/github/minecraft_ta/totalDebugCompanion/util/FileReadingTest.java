@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.util;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.CountDownLatch;
@@ -269,6 +271,113 @@ class FileReadingTest {
             second.close();
             write(file, "c");
             await(() -> direct.get() == 2);
+        }
+    }
+
+    @Test
+    void readingsAskedForTheirFirstValueFromEveryFileWorkerAtOnceAllRead() throws Exception {
+        List<CompletableFuture<String>> values = new ArrayList<>();
+        List<FileReading<String>> readings = new ArrayList<>();
+        try {
+            for (int each = 0; each < 8; each++) {
+                Path file = write(this.directory.resolve("file" + each + ".txt"), "v" + each);
+                FileReading<String> reading = new FileReading<>(file, FileReadingTest::text, SETTLE);
+                readings.add(reading);
+                // As pages whose reads run on the file work each ask for a value not read yet.
+                values.add(CompletableFuture.supplyAsync(() -> value(reading), Workers.files()));
+            }
+            for (int each = 0; each < 8; each++) assertEquals("v" + each, values.get(each).get(10, TimeUnit.SECONDS));
+        } finally {
+            readings.forEach(FileReading::close);
+        }
+    }
+
+    @Test
+    void aFollowerThatFailsDoesNotStopTheWatchOfOthers() throws Exception {
+        Path folder = Files.createDirectories(this.directory.resolve("game"));
+        AtomicInteger told = new AtomicInteger();
+        Runnable failing = FileWatch.shared().watch(folder, name -> true, () -> {
+            throw new IllegalStateException("a follower's bug");
+        });
+        Runnable counting = FileWatch.shared().watch(folder, name -> true, told::incrementAndGet);
+        try {
+            write(folder.resolve("first.txt"), "a");
+            await(() -> told.get() >= 1);
+            int before = told.get();
+            write(folder.resolve("second.txt"), "b");
+            await(() -> told.get() > before);
+        } finally {
+            failing.run();
+            counting.run();
+        }
+    }
+
+    @Test
+    void aFailedReadAnotherWriteOvertookDoesNotMakeTheNextOneTell() throws Exception {
+        Path file = write(this.directory.resolve("options.txt"), "a");
+        AtomicReference<CountDownLatch> gate = new AtomicReference<>();
+        CountDownLatch entered = new CountDownLatch(1);
+        AtomicInteger told = new AtomicInteger();
+        try (FileReading<String> reading = new FileReading<>(file, path -> {
+            CountDownLatch waiting = gate.getAndSet(null);
+            if (waiting != null) {
+                entered.countDown();
+                try {
+                    waiting.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+                throw new IOException("read while it was written");
+            }
+            return text(path);
+        }, SETTLE)) {
+            assertEquals("a", reading.value());
+            reading.changed().subscribe(told::incrementAndGet);
+            CountDownLatch release = new CountDownLatch(1);
+            gate.set(release);
+            write(file, "a");
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            // Written again, with the same text, while the read fails.
+            write(file, "a");
+            Thread.sleep(100);
+            release.countDown();
+            Thread.sleep(1_000);
+            assertEquals(0, told.get(), "the value is as it was, and the failure was of a read overtaken");
+        }
+    }
+
+    @Test
+    void aReadOfTheFileBeforeAMoveIsNotPublishedAfterIt() throws Exception {
+        Path first = write(this.directory.resolve("first/level.dat"), "first");
+        Path second = write(this.directory.resolve("second/level.dat"), "second");
+        AtomicReference<CountDownLatch> gate = new AtomicReference<>();
+        CountDownLatch entered = new CountDownLatch(1);
+        List<String> told = new CopyOnWriteArrayList<>();
+        try (FileReading<String> reading = new FileReading<>(first, path -> {
+            String read = text(path);
+            CountDownLatch waiting = gate.getAndSet(null);
+            if (waiting != null) {
+                entered.countDown();
+                try {
+                    waiting.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            return read;
+        }, SETTLE)) {
+            assertEquals("first", reading.value());
+            reading.changed().subscribe(() -> told.add(value(reading)));
+            CountDownLatch release = new CountDownLatch(1);
+            gate.set(release);
+            write(first, "first saved");
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            // The game opens the other world while the first is read.
+            reading.moveTo(second);
+            release.countDown();
+            await(() -> !told.isEmpty());
+            Thread.sleep(500);
+            assertEquals(List.of("second"), told, "what was read of the world before the move is not told");
         }
     }
 
