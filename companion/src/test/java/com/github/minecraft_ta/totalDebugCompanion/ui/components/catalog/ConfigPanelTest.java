@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigLabels;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettingsFixture;
@@ -42,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@UiTest
 class ConfigPanelTest {
     @TempDir Path directory;
 
@@ -100,6 +103,7 @@ class ConfigPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             panel[0] = new ConfigPanel("testmod", ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), target -> { });
             panel[0].setFiles(List.of(common));
+            UiTestScope.showPages(panel[0]);
         });
         ConfigSettingsTable table = component(panel[0], ConfigSettingsTable.class);
         awaitOnSwing(() -> table.getRowCount() == 3 && table.row(1).literal() != null);
@@ -165,6 +169,7 @@ class ConfigPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             panel[0] = new ConfigPanel("testmod", ConfigSettingsFixture.of(GameLocations.of(this.directory, false), record), target -> { });
             panel[0].setFiles(List.of(common));
+            UiTestScope.showPages(panel[0]);
         });
         ConfigSettingsTable table = component(panel[0], ConfigSettingsTable.class);
         RSyntaxTextArea area = component(component(panel[0], EditableTextPanel.class), RSyntaxTextArea.class);
@@ -206,6 +211,7 @@ class ConfigPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             panel[0] = new ConfigPanel("testmod", ConfigSettingsFixture.of(location, ChangeRecord.inMemory()), target -> { });
             panel[0].setFiles(List.of(FILE));
+            UiTestScope.showPages(panel[0]);
         });
         JComboBox<?> source = component(panel[0], JComboBox.class);
         awaitOnSwing(() -> source.getSelectedItem() != null && source.getSelectedItem().toString().equals("First"));
@@ -231,6 +237,7 @@ class ConfigPanelTest {
             panel[0] = new ConfigPanel("testmod", ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()),
                     target -> { });
             panel[0].setFiles(List.of(a));
+            UiTestScope.showPages(panel[0]);
         });
         ConfigSettingsTable table = component(panel[0], ConfigSettingsTable.class);
         RSyntaxTextArea area = component(component(panel[0], EditableTextPanel.class), RSyntaxTextArea.class);

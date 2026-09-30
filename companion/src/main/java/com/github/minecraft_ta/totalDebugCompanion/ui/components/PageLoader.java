@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 
 import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
@@ -17,7 +18,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * Reads what a page shows off the Swing thread and shows it on that thread (docs/SYSTEMS.md, section 3). One read runs
@@ -29,10 +29,8 @@ import java.util.function.Function;
  * first shown, and after a followed signal fires, at once while the page is shown, otherwise once it is shown again. A
  * page shown again with nothing changed reads nothing, unless its last read failed. While the page holds its reads
  * ({@link #hold}), as during a save, signals wait in the same way. The page never reads in its constructor or because a
- * navigation showed it.</p>
- *
- * <p>Pages not moved to {@link #page} yet use the older modes {@link #whenShown}, {@link #waitsWhileHidden} and
- * {@link #readsWhenShown} with {@link #follow}, and read in their constructors; the last of them to move deletes those.</p>
+ * navigation showed it. A page whose files others write and only it reads, such as the logs, reads whenever it is shown
+ * ({@link #readsWhenShown}); work that only redraws from memory waits the same way ({@link #updates}).</p>
  */
 public final class PageLoader<T> {
     /** What to read: prepared on the Swing thread, where the page's state is captured, then run off it. */
@@ -77,6 +75,11 @@ public final class PageLoader<T> {
      * chosen in the same step, and both read once.
      */
     private boolean showReadQueued;
+
+    /** A loader for {@code page}, which reads nothing and only redraws from memory ({@link #updates}). */
+    public static PageLoader<Void> redraws(JComponent page) {
+        return new PageLoader<Void>(() -> null, nothing -> { }, failure -> { }).page(page);
+    }
 
     /** {@code show} and {@code fail} run on the Swing thread with what a read returned or why it failed. */
     public PageLoader(Read<T> read, Consumer<T> show, Consumer<Throwable> fail) {
@@ -126,24 +129,6 @@ public final class PageLoader<T> {
     }
 
     /**
-     * Waits while {@code page} is hidden and reads every time it is shown, since what it shows may have changed while it
-     * was hidden without a source telling, such as a file the game writes.
-     */
-    public PageLoader<T> whenShown(JComponent page) {
-        this.page = Objects.requireNonNull(page, "page");
-        return readsWhenShown(page);
-    }
-
-    /**
-     * Waits while {@code page} is hidden: a followed change then reads once the page is shown again, and not at all when
-     * none came. For pages whose sources tell every change.
-     */
-    public PageLoader<T> waitsWhileHidden(JComponent page) {
-        this.page = Objects.requireNonNull(page, "page");
-        return watch(page, false);
-    }
-
-    /**
      * Reads every time {@code component} is shown, such as a tab listing files that change without telling. It may be a
      * part of the page, which then reads when that part is chosen.
      */
@@ -169,11 +154,39 @@ public final class PageLoader<T> {
     }
 
     /**
-     * Loads whenever a source changes, or once the page is shown again. {@code subscribe} adds a listener to the source
-     * and returns what removes it, as {@code catalog.changed()::subscribe} does; the listener may be called on any thread.
+     * Runs {@code update}, which only redraws from memory, such as icons again after new ones came, when {@code signal}
+     * fires: at once while the page is shown, otherwise once it is shown again, once however often it fired. Swing thread.
      */
-    public PageLoader<T> follow(Function<Runnable, Runnable> subscribe) {
-        this.unsubscribe.add(subscribe.apply(() -> SwingUtilities.invokeLater(() -> changed(ALWAYS))));
+    public PageLoader<T> updates(Signal signal, Runnable update) {
+        Objects.requireNonNull(update, "update");
+        boolean[] missed = {false};
+        this.unsubscribe.add(signal.subscribe(() -> SwingUtilities.invokeLater(() -> {
+            if (this.disposed) return;
+            if (this.page != null && !this.page.isShowing()) missed[0] = true;
+            else update.run();
+        })));
+        if (this.page != null) {
+            JComponent shown = this.page;
+            HierarchyListener listener = event -> {
+                if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !shown.isShowing() || !missed[0]) return;
+                missed[0] = false;
+                if (!this.disposed) update.run();
+            };
+            shown.addHierarchyListener(listener);
+            this.unwatch.add(() -> shown.removeHierarchyListener(listener));
+        }
+        return this;
+    }
+
+    /**
+     * Runs {@code redraw} on the Swing thread whenever {@code signal} fires, shown or not, for what shows outside the page
+     * from memory, such as the title of its tab.
+     */
+    public PageLoader<T> retitles(Signal signal, Runnable redraw) {
+        Objects.requireNonNull(redraw, "redraw");
+        this.unsubscribe.add(signal.subscribe(() -> SwingUtilities.invokeLater(() -> {
+            if (!this.disposed) redraw.run();
+        })));
         return this;
     }
 
@@ -253,7 +266,7 @@ public final class PageLoader<T> {
             } catch (Exception exception) {
                 throw new CompletionException(exception);
             }
-        }).whenComplete((value, failure) -> {
+        }, Workers.files()).whenComplete((value, failure) -> {
             // Completed off the Swing thread, so a wait on the Swing thread does not block what it waits for.
             finished.complete(null);
             SwingUtilities.invokeLater(() -> showRead(value, failure));

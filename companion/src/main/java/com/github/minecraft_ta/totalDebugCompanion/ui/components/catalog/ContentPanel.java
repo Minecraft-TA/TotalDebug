@@ -1,11 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -25,7 +25,7 @@ public final class ContentPanel extends JPanel {
     private final CatalogIcons icons;
     private final ContentBrowser browser;
     private final JLabel message = new JLabel();
-    private final Runnable removeCatalogListener;
+    private final PageLoader<Void> redraws;
     private CatalogIndex index;
 
     public ContentPanel(PackCatalogService catalog, ItemIconService icons, Consumer<NavigationTarget> navigator) {
@@ -35,7 +35,7 @@ public final class ContentPanel extends JPanel {
         this.browser = new ContentBrowser(this.icons, this::iconOf, Objects.requireNonNull(navigator, "navigator"),
                 entry -> this.index == null ? entry.namespace() : this.index.ownerName(entry.namespace()));
         this.message.setVerticalAlignment(JLabel.TOP);
-        this.removeCatalogListener = ShownUpdates.follow(this, catalog.changed()::subscribe, this::load);
+        this.redraws = PageLoader.redraws(this).updates(catalog.changed(), this::load);
         load();
     }
 
@@ -74,7 +74,7 @@ public final class ContentPanel extends JPanel {
     }
 
     public void dispose() {
-        this.removeCatalogListener.run();
+        this.redraws.dispose();
         this.icons.dispose();
     }
 }

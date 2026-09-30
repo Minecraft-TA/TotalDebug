@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettingsFixture;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
@@ -24,6 +26,7 @@ import java.util.function.BooleanSupplier;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@UiTest
 class PackConfigurationPanelTest {
     @TempDir Path directory;
 
@@ -42,6 +45,7 @@ class PackConfigurationPanelTest {
         catalog.accept(CatalogFixtures.INVENTORY, paths.catalog(), Runnable::run);
         PackConfigurationPanel[] panel = new PackConfigurationPanel[1];
         SwingUtilities.invokeAndWait(() -> panel[0] = new PackConfigurationPanel(catalog, ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), target -> { }));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(panel[0]));
         ConfigSettingsTable table = table(panel[0]);
         try {
             awaitOnSwing(() -> table.getRowCount() == 5 && "mode".equals(table.row(4).name()));

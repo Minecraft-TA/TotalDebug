@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.github.minecraft_ta.totalDebugCompanion.pack.GamePacks;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.List;
 import java.util.stream.Stream;
 import java.util.Comparator;
 import java.nio.file.attribute.FileTime;
@@ -68,6 +70,24 @@ class WorldReadingTest {
             LevelDatFixture.write(first, other);
             Thread.sleep(1_000);
             assertEquals(before, told.get(), "the world followed before tells nothing any more");
+        }
+    }
+
+    @Test
+    void whenTheGamePlaysAnotherWorldItsFollowersFindItsNamePublished() throws Exception {
+        Path first = LevelDatFixture.write(this.directory.resolve("saves/First"), LevelDatFixture.world("First")).getParent();
+        Path second = LevelDatFixture.write(this.directory.resolve("saves/Second"), LevelDatFixture.world("Second")).getParent();
+        GameLocation location = new GameLocation(this.directory);
+        List<String> named = new CopyOnWriteArrayList<>();
+        try (WorldReading reading = new WorldReading(location, new GamePacks(location))) {
+            location.connected(message -> true);
+            location.playing(new PlayingPayload.Singleplayer(first.toString()));
+            await(() -> first.equals(reading.value().directory()));
+            reading.changed().subscribe(() -> named.add(reading.publishedName().orElse("")));
+
+            location.playing(new PlayingPayload.Singleplayer(second.toString()));
+            await(() -> named.contains("Second"));
+            assertFalse(named.contains(""), "no follower is told before the world it is told of was read: " + named);
         }
     }
 

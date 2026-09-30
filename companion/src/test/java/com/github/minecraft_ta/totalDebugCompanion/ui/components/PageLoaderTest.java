@@ -12,14 +12,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 
 import static com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope.onEdt;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PageLoaderTest {
-    private final List<Runnable> source = new CopyOnWriteArrayList<>();
+    private final Signal source = new Signal();
     private final AtomicInteger prepared = new AtomicInteger();
 
     @Test
@@ -90,13 +89,8 @@ class PageLoaderTest {
         assertEquals("level.dat is locked", cause.get().getMessage(), "the read's own exception, not its wrapper");
 
         AtomicInteger shows = new AtomicInteger();
-        AtomicInteger listeners = new AtomicInteger();
         PageLoader<String> disposed = new PageLoader<String>(() -> () -> "read", value -> shows.incrementAndGet(), failure -> { })
-                .follow(listener -> {
-                    listeners.incrementAndGet();
-                    return listeners::decrementAndGet;
-                });
-        assertEquals(1, listeners.get());
+                .follows(this.source);
         SwingUtilities.invokeAndWait(() -> {
             disposed.load();
             disposed.dispose();
@@ -105,14 +99,15 @@ class PageLoaderTest {
         Thread.sleep(100);
         SwingUtilities.invokeAndWait(() -> { });
         assertEquals(0, shows.get(), "a read that finishes after the page closed shows nothing");
-        assertEquals(0, listeners.get(), "disposing removes the listeners on the sources");
+        changed();
+        assertEquals(1, (int) onEdt(disposed::reads), "a disposed page follows its signals no more");
     }
 
 
     @Test
     void aChangeWhileThePageIsHiddenIsReadOnceItIsShown() throws Exception {
         ShowablePage page = new ShowablePage();
-        PageLoader<String> loader = onEdt(() -> loader().waitsWhileHidden(page).follow(subscribe()));
+        PageLoader<String> loader = onEdt(() -> loader().page(page).follows(this.source));
 
         changed();
         assertEquals(0, this.prepared.get(), "a hidden page does not read");
@@ -130,7 +125,7 @@ class PageLoaderTest {
     @Test
     void aPageReadWheneverShownWaitsWhileHidden() throws Exception {
         ShowablePage page = new ShowablePage();
-        PageLoader<String> loader = onEdt(() -> loader().whenShown(page).follow(subscribe()));
+        PageLoader<String> loader = onEdt(() -> loader().page(page).readsWhenShown(page).follows(this.source));
 
         changed();
         assertEquals(0, this.prepared.get(), "a hidden page does not read");
@@ -144,14 +139,15 @@ class PageLoaderTest {
     void aPartOfThePageReadsWhenItIsChosenAndChangesFollowWhileThePageIsShown() throws Exception {
         ShowablePage page = new ShowablePage();
         ShowablePage tab = new ShowablePage();
-        PageLoader<String> loader = onEdt(() -> loader().waitsWhileHidden(page).readsWhenShown(tab).follow(subscribe()));
+        PageLoader<String> loader = onEdt(() -> loader().page(page).readsWhenShown(tab).follows(this.source));
 
         show(page, loader, true);
+        assertEquals(1, this.prepared.get(), "the page reads when first shown");
         changed();
         settle(loader);
-        assertEquals(1, this.prepared.get(), "a change reads while the page is shown, though its tab is not chosen");
+        assertEquals(2, this.prepared.get(), "a change reads while the page is shown, though its tab is not chosen");
         show(tab, loader, true);
-        assertEquals(2, this.prepared.get(), "choosing the tab reads what changed without telling, such as a folder");
+        assertEquals(3, this.prepared.get(), "choosing the tab reads what changed without telling, such as a folder");
 
         // Hidden with its tab, a change missed, and shown again with its tab in one event: one read.
         SwingUtilities.invokeAndWait(() -> {
@@ -164,12 +160,12 @@ class PageLoaderTest {
             tab.setShown(true);
         });
         settle(loader);
-        assertEquals(3, this.prepared.get(), "the page and its tab shown together read once");
+        assertEquals(4, this.prepared.get(), "the page and its tab shown together read once");
     }
 
     @Test
     void aLoaderWithoutAPageReadsEveryChange() throws Exception {
-        PageLoader<String> loader = onEdt(() -> loader().follow(subscribe()));
+        PageLoader<String> loader = onEdt(() -> loader().follows(this.source));
         changed();
         settle(loader);
         assertEquals(1, this.prepared.get());
@@ -356,6 +352,50 @@ class PageLoaderTest {
         assertEquals(1, asked.get(), "a hidden page keeps one question per source, however often it changed");
     }
 
+    @Test
+    void anUpdateFromMemoryWaitsWhileThePageIsHiddenAndRunsOnceWhenShown() throws Exception {
+        AtomicInteger updates = new AtomicInteger();
+        ShowablePage page = new ShowablePage();
+        PageLoader<Void> redraws = onEdt(() -> PageLoader.redraws(page).updates(this.source, updates::incrementAndGet));
+
+        changed();
+        changed();
+        assertEquals(0, updates.get(), "a hidden page does not update");
+        SwingUtilities.invokeAndWait(() -> page.setShown(true));
+        assertEquals(1, updates.get(), "shown, it updates once for the changes it missed");
+        SwingUtilities.invokeAndWait(() -> {
+            page.setShown(false);
+            page.setShown(true);
+        });
+        assertEquals(1, updates.get(), "shown again without a change, it does not update");
+        changed();
+        assertEquals(2, updates.get(), "a shown page updates at once");
+
+        // A change queued before the page closed does not update it.
+        SwingUtilities.invokeAndWait(() -> {
+            this.source.fire();
+            redraws.dispose();
+        });
+        SwingUtilities.invokeAndWait(() -> { });
+        changed();
+        assertEquals(2, updates.get());
+    }
+
+    @Test
+    void aTitleIsRedrawnWhileThePageIsHidden() throws Exception {
+        AtomicInteger titles = new AtomicInteger();
+        ShowablePage page = new ShowablePage();
+        PageLoader<Void> redraws = onEdt(() -> PageLoader.redraws(page).retitles(this.source, titles::incrementAndGet));
+        changed();
+        assertEquals(1, titles.get(), "the tab shows its title though the page is hidden");
+        onEdt(() -> {
+            redraws.dispose();
+            return null;
+        });
+        changed();
+        assertEquals(1, titles.get());
+    }
+
     /** Waits until {@code expected} reads were prepared, as a read that a slow machine starts late. */
     private void awaitPrepared(int expected, String message) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
@@ -375,16 +415,8 @@ class PageLoaderTest {
         }, read -> { }, failure -> { });
     }
 
-    private Function<Runnable, Runnable> subscribe() {
-        return listener -> {
-            this.source.add(listener);
-            return () -> this.source.remove(listener);
-        };
-    }
-
     private void changed() throws Exception {
-        this.source.forEach(Runnable::run);
-        SwingUtilities.invokeAndWait(() -> { });
+        fire(this.source);
     }
 
     /** Shows or hides {@code page}, and waits for a read that showing starts, which runs a Swing step later. */

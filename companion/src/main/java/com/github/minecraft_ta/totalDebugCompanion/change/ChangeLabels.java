@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.change;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -88,11 +89,11 @@ public interface ChangeLabels {
     CompletableFuture<String> revert(List<ChangeRecord.Change> changes, CatalogIndex index);
 
     /**
-     * Runs {@code listener} when the values the category's rows show may have changed outside the change record, such as
-     * a key rebound in the game; returns its removal. Most categories' values change only through the record.
+     * The signals of values the category's rows show that change outside the change record, such as a key rebound in the
+     * game. Most categories' values change only through the record.
      */
-    default Runnable follow(Runnable listener) {
-        return () -> { };
+    default List<Signal> follows() {
+        return List.of();
     }
 
     /**

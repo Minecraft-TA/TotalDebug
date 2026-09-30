@@ -124,6 +124,47 @@ class PageReadsTest {
         }
     }
 
+    @Test
+    void theWorldTabNamesTheWorldTheGamePlaysWhileItsPageIsHidden() throws Exception {
+        Path home = Files.createDirectory(this.directory.resolve("home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        Path game = Files.createDirectory(this.directory.resolve("game"));
+        Path first = LevelDatFixture.write(game.resolve("saves/First"), LevelDatFixture.world("First")).getParent();
+        Path second = LevelDatFixture.write(game.resolve("saves/Second"), LevelDatFixture.world("Second")).getParent();
+        try (CompanionApplication app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(game)).get(10, TimeUnit.SECONDS);
+            GameLocation location = app.currentScope().location();
+            location.connected(message -> true);
+            location.playing(new PlayingPayload.Singleplayer(first.toString()));
+            MainWindow window = UiTestScope.onEdt(app::createWindow);
+            UiTestScope.onEdt(() -> {
+                window.setSize(1280, 720);
+                UiTestScope.show(window);
+            });
+
+            open(window, new NavigationTarget.World(WorldTab.OVERVIEW));
+            WorldView view = UiTestScope.onEdt(() -> assertInstanceOf(WorldView.class, window.getEditorTabs().getSelectedEditor()));
+            WorldPanel panel = (WorldPanel) view.getComponent();
+            UiTestScope.await(() -> panel.reads() == 1);
+            settle();
+            assertEquals("First", tabTitle(window, view));
+
+            open(window, new NavigationTarget.Changes());
+            location.playing(new PlayingPayload.Singleplayer(second.toString()));
+            UiTestScope.await(() -> "Second".equals(tabTitle(window, view)));
+            assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "the hidden page does not read for its tab's title");
+        }
+    }
+
+    /** The title the tab strip shows for {@code view}. */
+    private static String tabTitle(MainWindow window, WorldView view) {
+        try {
+            return UiTestScope.onEdt(() -> window.getEditorTabs().getTitleAt(window.getEditorTabs().indexOfComponent(view.getComponent())));
+        } catch (Exception failed) {
+            throw new AssertionError(failed);
+        }
+    }
+
     private static void open(MainWindow window, NavigationTarget target) throws Exception {
         window.navigation().navigate(target, NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
         settle();

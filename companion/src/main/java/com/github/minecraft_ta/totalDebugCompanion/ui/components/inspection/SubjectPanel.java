@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
@@ -19,7 +20,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLab
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.PlateIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.values.ScriptResultTree;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
@@ -73,7 +73,7 @@ public final class SubjectPanel extends JPanel {
     private final ItemTabIcon tabIcon;
     private final JPanel sections = new JPanel();
     private final Set<String> collapsed = new HashSet<>();
-    private final Runnable removeIconListener;
+    private final PageLoader<Void> redraws;
     private final Live live;
     private final FactsPanel.Actions actions = new FactsPanel.Actions() {
         @Override
@@ -138,7 +138,7 @@ public final class SubjectPanel extends JPanel {
         showHeader();
         showSections();
         // The page draws its items once it is shown; the editor tabs draw the tab's (refreshTabIcon).
-        this.removeIconListener = ShownUpdates.follow(this, services.icons().changed()::subscribe, this::reloadPageIcons);
+        this.redraws = PageLoader.redraws(this).updates(services.icons().changed(), this::reloadPageIcons);
         reloadIcons();
     }
 
@@ -324,7 +324,7 @@ public final class SubjectPanel extends JPanel {
         this.disposed = true;
         if (this.live != null) this.live.dispose();
         this.details.dispose();
-        this.removeIconListener.run();
+        this.redraws.dispose();
     }
 
     private static JScrollPane scroll(JComponent content) {

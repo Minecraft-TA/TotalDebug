@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.util;
 
+import java.util.Optional;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.nio.file.Path;
@@ -80,6 +81,12 @@ public final class FileReading<T> implements AutoCloseable {
     /** Fires on this reading's strand after a read found another value than the one before. */
     public Signal changed() {
         return this.changed;
+    }
+
+    /** The value read last, as published, without reading; empty where none was read yet. */
+    public Optional<T> published() {
+        Read<T> held = this.last;
+        return held == null ? Optional.empty() : Optional.ofNullable(held.value());
     }
 
     /**

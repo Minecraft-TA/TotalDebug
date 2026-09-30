@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReading;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
@@ -15,7 +16,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.NoticeLine;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
@@ -90,8 +90,8 @@ public final class WorldPanel extends JPanel {
     private final PackCatalogService catalog;
     private final ItemIconService icons;
     private final WorldReading world;
+    private final GameLocation location;
     private final PageLoader<Loaded> loader;
-    private final Runnable removeCatalogListener;
     private final SubjectHeader header = new SubjectHeader();
     /** Why Show in Explorer could not show the world. */
     private final NoticeLine notice = new NoticeLine();
@@ -146,10 +146,6 @@ public final class WorldPanel extends JPanel {
         this.cards.add(page, PAGE_CARD);
         add(this.cards, BorderLayout.CENTER);
 
-        // Only the names of the mods behind datapacks come from the catalog.
-        this.removeCatalogListener = ShownUpdates.follow(this, catalog.changed()::subscribe, () -> {
-            if (!this.disposed && (this.saved != null || this.server != null)) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
-        });
         // The world's owner reads it when the game saves it or plays another; the datapacks the connected game names
         // come with its packs.
         this.loader = new PageLoader<>(() -> {
@@ -157,7 +153,14 @@ public final class WorldPanel extends JPanel {
             String refusal = edits.packs().worldRefusal();
             return () -> read(edits.location().read(), this.world, stack, refusal);
         }, this::show, failure -> show(Loaded.problem("The world could not be read: " + failure.getMessage())))
-                .page(this).follows(world.changed()).follows(edits.packs().changed(ChangeRecord.PackSide.DATA));
+                .page(this).follows(world.changed()).follows(edits.packs().changed(ChangeRecord.PackSide.DATA))
+                // Only the names of the mods behind datapacks come from the catalog.
+                .updates(catalog.changed(), () -> {
+                    if (this.saved != null || this.server != null) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
+                })
+                // The tab names the world the owner read, also while the page is hidden.
+                .retitles(world.changed(), this::refreshTitle).retitles(edits.location().playingChanged(), this::refreshTitle);
+        this.location = edits.location();
     }
 
     private static Loaded read(GameState game, WorldReading world, PackStackPayload stack, String refusal) throws IOException {
@@ -306,10 +309,10 @@ public final class WorldPanel extends JPanel {
         return WorldTab.OVERVIEW;
     }
 
-    /** The world's name once it is read, or the address of the server whose world is shown. */
+    /** The address of the server the game plays on, or the current world's name as its owner read it last. */
     public String title() {
-        if (this.server != null) return this.server.address();
-        return this.saved == null ? "World" : this.saved.name();
+        if (this.location.playing() instanceof PlayingPayload.Multiplayer server) return server.address();
+        return this.world.publishedName().orElse("World");
     }
 
     /** Shows a tab with its count, or hides it while it has nothing to show. */
@@ -347,7 +350,6 @@ public final class WorldPanel extends JPanel {
     public void dispose() {
         this.disposed = true;
         this.loader.dispose();
-        this.removeCatalogListener.run();
     }
 
     GameRulesPanel rules() {

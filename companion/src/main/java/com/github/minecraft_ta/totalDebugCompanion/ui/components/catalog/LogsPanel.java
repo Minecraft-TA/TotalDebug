@@ -12,7 +12,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Sidebar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
@@ -92,7 +91,6 @@ public final class LogsPanel extends JPanel {
 
     private final PackCatalogService catalog;
     private final Path workspace;
-    private final Runnable removeCatalogListener;
     private final Consumer<NavigationTarget> navigator;
     private final DefaultListModel<Listed> files = new DefaultListModel<>();
     private final JList<Listed> fileList = new JList<>(this.files);
@@ -172,13 +170,12 @@ public final class LogsPanel extends JPanel {
         this.rowLoader = new PageLoader<>(this::prepareRows, this::showRead, failure -> showMessage(
                 (this.rowsOf == null ? "The file" : this.rowsOf.name()) + " could not be read: " + failure.getMessage()));
         this.loader = new PageLoader<List<Listed>>(() -> this::listFiles, this::showFiles,
-                failure -> showMessage("The logs could not be listed: " + failure.getMessage())).whenShown(this);
-        // Rows name the mods behind frames and failures as the catalog knows them.
-        this.removeCatalogListener = ShownUpdates.follow(this, catalog.changed()::subscribe, () -> {
-            if (this.disposed) return;
-            this.rowsOf = null;
-            showRows();
-        });
+                failure -> showMessage("The logs could not be listed: " + failure.getMessage())).page(this).readsWhenShown(this)
+                // Rows name the mods behind frames and failures as the catalog knows them.
+                .updates(catalog.changed(), () -> {
+                    this.rowsOf = null;
+                    showRows();
+                });
     }
 
     private static PrimarySecondaryLabel label(JList<?> list, boolean selected, Icon icon, PrimarySecondaryText text, int indent) {
@@ -192,13 +189,21 @@ public final class LogsPanel extends JPanel {
         return label;
     }
 
-    /** Selects {@code file} the next time the files are listed; null keeps the selection. */
+    /**
+     * Selects {@code file}, or keeps the selection when null. A file the list does not hold yet, as a crash report written
+     * since it was read, is looked for by listing the files again.
+     */
     public void select(Path file) {
-        this.wanted = file == null ? null : file.toAbsolutePath().normalize();
-    }
-
-    /** Lists the logs and crash reports again, reading only files that changed, and keeps the selection. */
-    public void load() {
+        if (file == null) return;
+        Path wanted = file.toAbsolutePath().normalize();
+        List<Listed> listed = new ArrayList<>();
+        for (int index = 0; index < this.files.size(); index++) listed.add(this.files.get(index));
+        int index = index(listed, wanted);
+        if (index >= 0) {
+            this.fileList.setSelectedIndex(index);
+            return;
+        }
+        this.wanted = wanted;
         this.loader.load();
     }
 
@@ -439,6 +444,5 @@ public final class LogsPanel extends JPanel {
         this.disposed = true;
         this.loader.dispose();
         this.rowLoader.dispose();
-        this.removeCatalogListener.run();
     }
 }

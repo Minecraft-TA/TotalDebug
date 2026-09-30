@@ -107,15 +107,15 @@ final class ConfigPanel extends JPanel {
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.values = new PageLoader<>(this::prepareValues, read -> show(read.file(), read.values(),
                 read.values() == null ? "" : read.values().text(), read.problem()),
-                failure -> showFailure("Could not read the file: " + failure.getMessage())).whenShown(this);
+                failure -> showFailure("Could not read the file: " + failure.getMessage())).page(this).readsWhenShown(this);
         this.sources = new PageLoader<>(this::prepareSources, read -> showSources(read.file(), read.found(), true),
                 failure -> showFailure("Could not list the worlds' copies: " + failure.getMessage()))
                 // A server configuration is shown from the world the game has open first; it follows the game to another
                 // world, unless its text has unsaved changes, which stay with the file they were made in.
-                .follow(listener -> this.location.playingChanged().subscribe(() -> SwingUtilities.invokeLater(() -> {
+                .page(this).follows(this.location.playingChanged(), () -> {
                     PackCatalog.ConfigFile file = selectedFile();
-                    if (file != null && file.type() == PackCatalog.ConfigType.SERVER && !this.textEditor.modified()) listener.run();
-                })));
+                    return file != null && file.type() == PackCatalog.ConfigType.SERVER && !this.textEditor.modified();
+                });
         configureFiles();
         this.content.add(toolbar(), BorderLayout.NORTH);
         JPanel settings = new JPanel(new BorderLayout());
