@@ -99,7 +99,7 @@ class ConfigChangesTest {
         Files.writeString(options, "key_key.jump:key.keyboard.space\n");
         ChangeRecord record = ChangeRecord.inMemory();
         ConfigChanges changes = new ConfigChanges(this.location, record);
-        KeyBindingControl keys = new KeyBindingControl(new ChangePipeline(this.location, record, changes.writes()));
+        KeyBindingControl keys = new KeyBindingControl(new ChangePipeline(this.location, record, changes.writes()), listener -> () -> { });
         CountDownLatch release = new CountDownLatch(1);
         changes.write(() -> {
             try {

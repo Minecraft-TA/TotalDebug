@@ -20,6 +20,12 @@ import java.util.concurrent.CompletableFuture;
 public final class KeyBindingLabels implements ChangeLabels {
     private final KeyBindingControl keys;
 
+    /** A key rebound outside Companion, such as in the game, changes the key a row shows. */
+    @Override
+    public Runnable follow(Runnable listener) {
+        return this.keys.addAssignmentListener(listener);
+    }
+
     public KeyBindingLabels(KeyBindingControl keys) {
         this.keys = Objects.requireNonNull(keys, "keys");
     }

@@ -88,6 +88,14 @@ public interface ChangeLabels {
     CompletableFuture<String> revert(List<ChangeRecord.Change> changes, CatalogIndex index);
 
     /**
+     * Runs {@code listener} when the values the category's rows show may have changed outside the change record, such as
+     * a key rebound in the game; returns its removal. Most categories' values change only through the record.
+     */
+    default Runnable follow(Runnable listener) {
+        return () -> { };
+    }
+
+    /**
      * Reverts {@code changes} one after another with {@code revert}, each completing with why it was not, or empty;
      * completes with those reasons after "Not reverted: ", named by {@code name}, or empty.
      */

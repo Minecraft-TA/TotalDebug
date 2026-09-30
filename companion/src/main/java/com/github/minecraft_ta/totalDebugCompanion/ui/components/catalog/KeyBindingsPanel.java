@@ -66,7 +66,7 @@ import java.util.function.Predicate;
  * does. A binding gets a new key by double-clicking it and pressing the key, or from its menu; the key is put on it in
  * the running game or, while the game is closed, in {@code options.txt}. Several bindings, or a whole category, are
  * reset, unbound or reverted together from the menu of the selection. Keys are read from {@code options.txt} whenever
- * the page is shown.
+ * the page is shown, and when its keys change while it is shown, such as a key rebound in the game.
  */
 public final class KeyBindingsPanel extends JPanel {
     private static final String PLACEHOLDER = "Filter by action, mod or key, such as ctrl+g";
@@ -160,7 +160,7 @@ public final class KeyBindingsPanel extends JPanel {
 
         this.loader = new PageLoader<>(this::prepareLoad, loaded -> show(loaded.index(), loaded.bindings(), ""),
                 failure -> show(this.catalog.index().orElse(null), null, "Could not read options.txt: " + failure.getMessage()))
-                .whenShown(this).follow(catalog::addListener);
+                .whenShown(this).follow(catalog::addListener).follow(control::addAssignmentListener);
         addHierarchyListener(event -> {
             if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !isShowing()) stopCapture();
         });
