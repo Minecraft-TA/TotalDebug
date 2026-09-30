@@ -80,6 +80,8 @@ class ChangesPanelTest {
             Files.writeString(this.directory.resolve("options.txt"), "resourcePacks:[\"vanilla\",\"mod_resources\",\"file/Faithful\"]\n");
             record.changed(new ChangeRecord.PackSelection(ChangeRecord.PackSide.RESOURCES, this.directory.resolve("options.txt")),
                     "[\"vanilla\",\"mod_resources\"]", "[\"vanilla\",\"mod_resources\",\"file/Faithful\"]");
+            // No window shows the page here, and a hidden page reads a change once it is shown; this reads it now.
+            SwingUtilities.invokeAndWait(panel[0]::load);
             awaitOnSwing(() -> panel[0].rows("Packs").size() == 1);
             JTabbedPane tabs = SwingUtilities.getAncestorOfClass(JTabbedPane.class, table(panel[0], "Packs")) instanceof JTabbedPane pane ? pane : null;
             SwingUtilities.invokeAndWait(() -> tabs.setSelectedIndex(1));

@@ -222,6 +222,8 @@ public final class ChangeRecord implements AutoCloseable {
             Change earlier = this.changes.get(target);
             String original = earlier == null ? previous : earlier.original();
             if (sameValue.test(original, written)) {
+                // Unchanged before and after, such as a write of the value it held: nothing to record or tell.
+                if (earlier == null) return;
                 this.changes.remove(target);
             } else {
                 Instant now = this.clock.instant();
@@ -284,7 +286,10 @@ public final class ChangeRecord implements AutoCloseable {
         return this.changes.size();
     }
 
-    /** Runs {@code listener} after every change of the record, on the thread that changed it; returns its removal. */
+    /**
+     * Runs {@code listener} after every change of the record, on the thread that changed it, but not after a write that
+     * leaves it as it was; returns its removal.
+     */
     public Runnable addListener(Runnable listener) {
         this.listeners.add(listener);
         return () -> this.listeners.remove(listener);

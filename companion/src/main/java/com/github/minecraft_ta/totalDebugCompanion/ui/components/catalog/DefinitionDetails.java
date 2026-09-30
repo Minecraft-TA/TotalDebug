@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -74,6 +75,7 @@ public final class DefinitionDetails {
     private final Services services;
     private final Runnable changed;
     private final Runnable removeCatalogListener;
+    private final Runnable stopReadingFiles;
     private final JPanel extras = new JPanel();
     private PackCatalogService.State state;
     private CatalogIndex index;
@@ -88,7 +90,12 @@ public final class DefinitionDetails {
     private int labelWidth;
     private boolean disposed;
 
-    public DefinitionDetails(SubjectRef.Definition subject, Services services, Runnable changed) {
+    /**
+     * Reads {@code subject} for {@code page}, which shows it. A change of the catalog is read at once, since the page's
+     * tab names the definition whether the page is shown or not, and {@code changed} runs after it; the files it draws
+     * and lists are read again once the page is shown.
+     */
+    public DefinitionDetails(SubjectRef.Definition subject, Services services, JComponent page, Runnable changed) {
         this.subject = Objects.requireNonNull(subject, "subject");
         this.services = Objects.requireNonNull(services, "services");
         this.changed = Objects.requireNonNull(changed, "changed");
@@ -97,7 +104,7 @@ public final class DefinitionDetails {
             this.appearance = found.appearance();
             this.appearancePreviews = found.previews();
             showExtras();
-        }, failure -> { }).follow(services.icons()::addListener);
+        }, failure -> { }).waitsWhileHidden(page).follow(services.icons()::addListener);
         this.resourceLoader = new PageLoader<>(this::prepareResources, list -> {
             this.owned = list;
             this.matched = matching(this.owned, this.subject.namespace(), resourceName());
@@ -107,7 +114,8 @@ public final class DefinitionDetails {
             this.matched = List.of();
             showExtras();
         });
-        this.removeCatalogListener = services.catalog().addListener(this::reload);
+        this.removeCatalogListener = services.catalog().addListener(this::reread);
+        this.stopReadingFiles = ShownUpdates.follow(page, services.catalog()::addListener, this::readFiles);
         read();
         loadAppearance();
         loadResources();
@@ -187,12 +195,18 @@ public final class DefinitionDetails {
         this.entry = this.index == null ? null : this.index.entry(this.subject).orElse(null);
     }
 
-    private void reload() {
+    /** Looks the definition up in the catalog again; the catalog tells on the Swing thread. */
+    private void reread() {
         if (this.disposed) return;
         read();
+        this.changed.run();
+    }
+
+    /** Reads the files that draw the definition and its mod's files again. */
+    private void readFiles() {
+        if (this.disposed) return;
         loadAppearance();
         loadResources();
-        this.changed.run();
     }
 
     /**
@@ -394,5 +408,6 @@ public final class DefinitionDetails {
         this.appearanceLoader.dispose();
         this.resourceLoader.dispose();
         this.removeCatalogListener.run();
+        this.stopReadingFiles.run();
     }
 }

@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.NoticeLine;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
@@ -149,17 +150,18 @@ public final class WorldPanel extends JPanel {
         add(this.cards, BorderLayout.CENTER);
 
         // Only the names of the mods behind datapacks come from the catalog.
-        this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(() -> {
+        this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, () -> {
             if (!this.disposed && (this.saved != null || this.server != null)) this.datapacks.setPacks(this.datapackList, this.catalog.index().orElse(null));
-        }));
-        // The game saves the world while it runs, so the page reads it whenever it is shown.
-        // A change of the game's datapacks, or one Companion wrote, is read again at once.
+        });
+        // The game saves the world while it runs, so the page reads it whenever it is shown. A change of the datapacks,
+        // which also comes with another world or a disconnect, is read at once, shown or not: the tab names the world or
+        // server it reads.
         this.loader = new PageLoader<>(() -> {
             PackStackPayload stack = edits.packs().datapacks();
             String refusal = edits.packs().worldRefusal();
             return () -> read(edits.location().read(), stack, refusal);
         }, this::show, failure -> show(Loaded.problem("The world could not be read: " + failure.getMessage())))
-                .whenShown(this).follow(edits.packs()::addStackListener).follow(edits.record()::addListener);
+                .readsWhenShown(this).follow(edits.packs()::addDatapackListener);
     }
 
     private static Loaded read(GameState game, PackStackPayload stack, String refusal) {

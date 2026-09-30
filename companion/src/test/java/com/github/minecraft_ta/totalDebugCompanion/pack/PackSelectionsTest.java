@@ -33,6 +33,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -51,11 +52,15 @@ class PackSelectionsTest {
         Files.writeString(options, "version:3955\nresourcePacks:[\"vanilla\",\"mod_resources\",\"file/Old\"]\n"
                 + "incompatibleResourcePacks:[\"file/Old\"]\nlang:en_us\n");
         ChangeRecord record = ChangeRecord.inMemory();
-        PackSelections selections = selections(record, edits(record, false));
+        ResourceEdits edits = edits(record, false);
+        PackSelections selections = selections(record, edits);
+        AtomicInteger told = new AtomicInteger();
+        edits.packs().addResourcePackListener(told::incrementAndGet);
 
         PackSelections.Applied applied = selections.set(ChangeRecord.PackSide.RESOURCES, null,
                 List.of("vanilla", "file/New", "mod_resources")).get(5, TimeUnit.SECONDS);
         assertEquals(Effect.GAME_STARTS, applied.effect());
+        assertEquals(1, told.get(), "the views of the resource packs hear of the file written");
         assertEquals("version:3955\nresourcePacks:[\"vanilla\",\"file/New\",\"mod_resources\"]\n"
                 + "incompatibleResourcePacks:[\"file/New\"]\nlang:en_us\n", Files.readString(options),
                 "a pack enabled here is kept even if it was made for another version; one no longer enabled leaves that list");
@@ -66,6 +71,10 @@ class PackSelectionsTest {
         selections.revert(change).get(5, TimeUnit.SECONDS);
         assertEquals(List.of("vanilla", "mod_resources", "file/Old"), PackResources.enabledInOptions(options));
         assertEquals(0, record.size(), "back to the original, the change ends");
+        assertEquals(2, told.get());
+
+        selections.set(ChangeRecord.PackSide.RESOURCES, null, List.of("vanilla", "mod_resources", "file/Old")).get(5, TimeUnit.SECONDS);
+        assertEquals(2, told.get(), "a selection the file already holds writes nothing and tells nobody");
     }
 
     @Test

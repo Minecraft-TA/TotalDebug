@@ -56,8 +56,8 @@ public final class PackResourcesPanel extends JPanel {
         TypeToFilter.forwardTyping(this.tabs, () -> this.tabs.getSelectedComponent() == this.packs
                 ? this.packs.filterField() : this.browser.filterField());
         add(this.tabs, BorderLayout.CENTER);
-        // Joining every pack is too slow to repeat whenever the page is shown, so only a change in a source reads it again.
-        // A save or revert in the managed pack changes which copy wins, once it has enabled the pack.
+        // Joining every pack is too slow to repeat whenever the page is shown, so only a change in a source reads it again,
+        // once the page is shown. A save or revert in the managed pack changes which copy wins, once it has enabled the pack.
         this.loader = new PageLoader<>(this::prepareJoin, prepared -> {
             this.browser.setResources(prepared);
             this.browser.setMessage("");
@@ -66,7 +66,8 @@ public final class PackResourcesPanel extends JPanel {
             TabTitles.setUncounted(this.tabs, 0, ResourcesTab.FILES.title());
             this.browser.setResources(List.of());
             this.browser.setMessage("Resources could not be read: " + failure.getMessage());
-        }).follow(catalog::addListener).follow(edits.packs()::addStackListener).follow(edits::addEditListener);
+        }).waitsWhileHidden(this).follow(catalog::addListener).follow(edits.packs()::addResourcePackListener)
+                .follow(edits.packs()::addDatapackListener).follow(edits::addEditListener);
         this.packLoader = new PageLoader<>(() -> {
             PackStackPayload stack = this.edits.packs().resourcePacks();
             return () -> PackResources.resourcePacks(stack, this.workspace);
@@ -77,7 +78,9 @@ public final class PackResourcesPanel extends JPanel {
             TabTitles.setUncounted(this.tabs, 1, ResourcesTab.PACKS.title());
             this.packs.showFailure("The resource packs could not be listed: " + failure.getMessage());
         })
-                .whenShown(this.packs).follow(edits.packs()::addStackListener).follow(catalog::addListener).follow(edits.record()::addListener);
+                // Its count on the tab follows while the page is shown; the folders are read again when the tab is chosen.
+                .waitsWhileHidden(this).readsWhenShown(this.packs)
+                .follow(edits.packs()::addResourcePackListener).follow(catalog::addListener);
         load();
     }
 

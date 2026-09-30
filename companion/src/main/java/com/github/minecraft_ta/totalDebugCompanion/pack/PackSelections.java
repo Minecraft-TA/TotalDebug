@@ -86,8 +86,15 @@ public final class PackSelections {
      */
     private CompletableFuture<Applied> change(ChangePipeline.Edit<ChangeRecord.PackSelection, List<String>> edit) {
         ChangeRecord.PackSide side = edit.target().side();
-        return this.pipeline.change(category(side), List.of(edit)).thenApply(outcome -> new Applied(outcome.live() ? Effect.NOW
-                : side == ChangeRecord.PackSide.RESOURCES ? Effect.GAME_STARTS : Effect.WORLD_OPENS));
+        ChangeCategory<ChangeRecord.PackSelection, List<String>> category = category(side);
+        return this.pipeline.change(category, List.of(edit)).thenApply(outcome -> {
+            // A connected game names the packs it applied itself; a selection written to its file is told here, unless the
+            // file already held it and nothing was written.
+            boolean changed = outcome.applied().stream()
+                    .anyMatch(applied -> applied.before() == null || !category.same(applied.before(), applied.now()));
+            if (!outcome.live() && changed) this.edits.packs().written(side);
+            return new Applied(outcome.live() ? Effect.NOW : side == ChangeRecord.PackSide.RESOURCES ? Effect.GAME_STARTS : Effect.WORLD_OPENS);
+        });
     }
 
     private ChangeCategory<ChangeRecord.PackSelection, List<String>> category(ChangeRecord.PackSide side) {

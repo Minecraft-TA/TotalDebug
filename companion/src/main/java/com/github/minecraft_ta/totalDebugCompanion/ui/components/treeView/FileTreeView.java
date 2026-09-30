@@ -236,12 +236,7 @@ public class FileTreeView extends JScrollPane {
             rootItems.add(scripts);
         }
         boolean logs = GameLogs.any(scope.profile().workspaceDirectory());
-        var mods = new ModTreeItems.Root(() -> new ModTreeItems.Snapshot(scope.catalog().state(), scope.sources(),
-                scope.changes().size(), logs));
-        // Recorded changes alone keep the root, since Changes is where they are reverted; logs alone keep it for Logs.
-        if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent() || scope.changes().size() > 0 || logs) {
-            rootItems.add(mods);
-        }
+        if (hasModpack(scope, logs)) rootItems.add(modpack(scope, logs));
         // A server's world is on the server, so an instance without worlds of its own has one while it plays there.
         if (Files.isDirectory(scope.profile().workspaceDirectory().resolve("saves"))
                 || scope.location().playing() instanceof PlayingPayload.Multiplayer) {
@@ -286,7 +281,7 @@ public class FileTreeView extends JScrollPane {
                 });
             });
             // A server names its world's datapacks after the game joined it.
-            Runnable removeNamed = scope.packs().addStackListener(refresh);
+            Runnable removeNamed = scope.packs().addDatapackListener(refresh);
             this.removeWorldListener = () -> {
                 removeRead.run();
                 removePlayed.run();
@@ -294,6 +289,36 @@ public class FileTreeView extends JScrollPane {
             };
         }
         this.displayedProject = scope;
+    }
+
+    /**
+     * Updates the Modpack row and the rows under it, and with {@code below} every row loaded below them, as after the
+     * catalog changed; without, what is loaded below stays, as after the changes in effect changed. The other roots stay.
+     * A Modpack root that appears or goes rebuilds the roots.
+     */
+    public void refreshModpack(boolean below) {
+        var scope = project.get();
+        if (scope == null || this.displayedProject != scope) {
+            reloadProfile();
+            return;
+        }
+        boolean logs = GameLogs.any(scope.profile().workspaceDirectory());
+        boolean wanted = hasModpack(scope, logs);
+        if (wanted != this.tree.hasRootNode(ModTreeItems.ROOT)) {
+            reloadProfile();
+            return;
+        }
+        if (wanted) this.tree.refreshRoot(modpack(scope, logs), below);
+    }
+
+    /** Recorded changes alone keep the root, since Changes is where they are reverted; logs alone keep it for Logs. */
+    private static boolean hasModpack(ProjectScope scope, boolean logs) {
+        return !scope.sources().modules().isEmpty() || scope.catalog().index().isPresent() || scope.changes().size() > 0 || logs;
+    }
+
+    private static ModTreeItems.Root modpack(ProjectScope scope, boolean logs) {
+        return new ModTreeItems.Root(() -> new ModTreeItems.Snapshot(scope.catalog().state(), scope.sources(),
+                scope.changes().size(), logs));
     }
 
     static List<TreeItem> runtimeItems(RuntimeSourceCatalog catalog) {

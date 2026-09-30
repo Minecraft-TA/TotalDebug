@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Sidebar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
@@ -173,11 +174,11 @@ public final class LogsPanel extends JPanel {
         this.loader = new PageLoader<List<Listed>>(() -> this::listFiles, this::showFiles,
                 failure -> showMessage("The logs could not be listed: " + failure.getMessage())).whenShown(this);
         // Rows name the mods behind frames and failures as the catalog knows them.
-        this.removeCatalogListener = catalog.addListener(() -> SwingUtilities.invokeLater(() -> {
+        this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, () -> {
             if (this.disposed) return;
             this.rowsOf = null;
             showRows();
-        }));
+        });
     }
 
     private static PrimarySecondaryLabel label(JList<?> list, boolean selected, Icon icon, PrimarySecondaryText text, int indent) {

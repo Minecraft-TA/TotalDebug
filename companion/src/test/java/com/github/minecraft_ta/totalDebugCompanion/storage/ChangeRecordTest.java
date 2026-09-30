@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -41,6 +42,21 @@ class ChangeRecordTest {
         assertEquals(0, record.size(), "back at the original value, nothing is changed");
         assertNull(record.original(speed.file(), "speed"));
         assertEquals(3, events.size());
+    }
+
+    @Test
+    void aWriteThatLeavesTheRecordAsItWasTellsNobody() {
+        ChangeRecord record = ChangeRecord.inMemory();
+        AtomicInteger told = new AtomicInteger();
+        record.addListener(told::incrementAndGet);
+        ChangeRecord.Setting speed = setting("speed");
+
+        record.changed(speed, "9", "9");
+        assertEquals(0, told.get(), "a value written over itself changed nothing");
+        record.changed(speed, "9", "12");
+        record.changed(speed, "12", "9");
+        assertEquals(2, told.get(), "a change and its end are told");
+        assertTrue(record.changes().isEmpty());
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
 import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -16,8 +17,8 @@ import java.util.function.Function;
  * Reads what a page shows off the Swing thread and shows it on that thread (docs/UI_GUIDE.md, Building and checking).
  * One read runs at a time: asking again while one runs reads once more when it finishes, and the older read is not
  * shown, since it may predate what the new request is about, such as a write. So a page shows only what its last request
- * read, and the same files are never read twice at once. A page loads when it is shown and whenever a source it follows
- * changes.
+ * read, and the same files are never read twice at once. A page loads whenever a source it follows changes; with a page
+ * named, a change while the page is hidden loads once it is shown, so hidden pages do no work for what they cannot show.
  */
 public final class PageLoader<T> {
     /** What to read: prepared on the Swing thread, where the page's state is captured, then run off it. */
@@ -37,6 +38,17 @@ public final class PageLoader<T> {
     private boolean cancelled;
     private CompletableFuture<Void> current = CompletableFuture.completedFuture(null);
     private boolean disposed;
+    /** The page whose visibility decides when a followed change loads, or null to load at once. */
+    private JComponent page;
+    /** Whether a followed source changed while the page was hidden. */
+    private boolean stale;
+    /** Removes the listeners on the components whose showing this loader watches. */
+    private final List<Runnable> unwatch = new ArrayList<>();
+    /**
+     * Whether a read for a component being shown waits for the end of the Swing step. Showing a page shows the part of it
+     * chosen in the same step, and both read once.
+     */
+    private boolean showReadQueued;
 
     /** {@code show} and {@code fail} run on the Swing thread with what a read returned or why it failed. */
     public PageLoader(Read<T> read, Consumer<T> show, Consumer<Throwable> fail) {
@@ -45,21 +57,64 @@ public final class PageLoader<T> {
         this.fail = Objects.requireNonNull(fail, "fail");
     }
 
-    /** Loads whenever {@code page} becomes visible, since what it shows may have changed while it was hidden. */
+    /**
+     * Waits while {@code page} is hidden and reads every time it is shown, since what it shows may have changed while it
+     * was hidden without a source telling, such as a file the game writes.
+     */
     public PageLoader<T> whenShown(JComponent page) {
-        page.addHierarchyListener(event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && page.isShowing()) load();
-        });
+        this.page = Objects.requireNonNull(page, "page");
+        return readsWhenShown(page);
+    }
+
+    /**
+     * Waits while {@code page} is hidden: a followed change then reads once the page is shown again, and not at all when
+     * none came. For pages whose sources tell every change.
+     */
+    public PageLoader<T> waitsWhileHidden(JComponent page) {
+        this.page = Objects.requireNonNull(page, "page");
+        return watch(page, false);
+    }
+
+    /**
+     * Reads every time {@code component} is shown, such as a tab listing files that change without telling. It may be a
+     * part of the page, which then reads when that part is chosen.
+     */
+    public PageLoader<T> readsWhenShown(JComponent component) {
+        return watch(component, true);
+    }
+
+    /** Reads when {@code component} is shown: {@code always}, or only after a change it missed. */
+    private PageLoader<T> watch(JComponent component, boolean always) {
+        HierarchyListener listener = event -> {
+            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !component.isShowing()) return;
+            if (!always && !this.stale || this.showReadQueued) return;
+            this.showReadQueued = true;
+            SwingUtilities.invokeLater(() -> {
+                this.showReadQueued = false;
+                load();
+            });
+        };
+        component.addHierarchyListener(listener);
+        this.unwatch.add(() -> component.removeHierarchyListener(listener));
         return this;
     }
 
     /**
-     * Loads whenever a source changes. {@code subscribe} adds a listener to the source and returns what removes it, as
-     * {@code catalog::addListener} does; the listener may be called on any thread.
+     * Loads whenever a source changes, or once the page is shown again. {@code subscribe} adds a listener to the source
+     * and returns what removes it, as {@code catalog::addListener} does; the listener may be called on any thread.
      */
     public PageLoader<T> follow(Function<Runnable, Runnable> subscribe) {
-        this.unsubscribe.add(subscribe.apply(() -> SwingUtilities.invokeLater(this::load)));
+        this.unsubscribe.add(subscribe.apply(() -> SwingUtilities.invokeLater(this::changed)));
         return this;
+    }
+
+    /** A followed source changed: loads now, or marks a hidden page to load when shown. */
+    private void changed() {
+        if (this.page != null && !this.page.isShowing()) {
+            this.stale = true;
+            return;
+        }
+        load();
     }
 
     /** Reads again, now or once the running read has finished. */
@@ -69,6 +124,7 @@ public final class PageLoader<T> {
             return;
         }
         if (this.disposed) return;
+        this.stale = false;
         if (this.running) {
             this.again = true;
             return;
@@ -122,5 +178,8 @@ public final class PageLoader<T> {
         this.disposed = true;
         this.unsubscribe.forEach(Runnable::run);
         this.unsubscribe.clear();
+        // The page may outlive the loader, as a subject page outlives the details of a definition it replaced.
+        this.unwatch.forEach(Runnable::run);
+        this.unwatch.clear();
     }
 }

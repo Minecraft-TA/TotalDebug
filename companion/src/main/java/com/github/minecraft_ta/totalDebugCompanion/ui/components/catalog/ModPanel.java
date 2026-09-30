@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
@@ -80,6 +81,7 @@ public final class ModPanel extends JPanel {
     private final ItemIconService icons;
     private final CatalogIcons listIcons;
     private final Runnable removeCatalogListener;
+    private final Runnable removeTitleListener;
     private final SubjectHeader header = new SubjectHeader();
     private final JButton browseCode = new JButton("Browse Code", Icons.JAVA_CLASS);
     private final JTabbedPane tabs = new JTabbedPane();
@@ -142,7 +144,9 @@ public final class ModPanel extends JPanel {
         }
         add(this.tabs, BorderLayout.CENTER);
         TypeToFilter.forwardTyping(this.tabs, this::selectedFilter);
-        this.removeCatalogListener = catalog.addListener(this::rebuild);
+        // The tab strip names the mod whether its page is shown or not; the page follows once it is shown.
+        this.removeCatalogListener = ShownUpdates.follow(this, catalog::addListener, this::rebuild);
+        this.removeTitleListener = catalog.addListener(this::retitle);
         rebuild();
     }
 
@@ -232,6 +236,13 @@ public final class ModPanel extends JPanel {
         setTab(ModTab.CONFIGURATION, configFiles.size());
         setTab(ModTab.KEY_BINDINGS, this.index == null ? 0 : this.index.keyBindings(this.summary.id()).size());
         loadResources();
+        refreshTitle();
+    }
+
+    /** Names the tab of a hidden page as the catalog now does; a shown page rebuilds, which names it too. */
+    private void retitle() {
+        if (this.disposed || isShowing()) return;
+        this.summary = ModSummary.resolve(this.modId, PackCatalogService.shown(this.catalog.state()), this.sources.get()).orElse(null);
         refreshTitle();
     }
 
@@ -435,9 +446,11 @@ public final class ModPanel extends JPanel {
         this.disposed = true;
         this.resourceLoader.dispose();
         this.removeCatalogListener.run();
+        this.removeTitleListener.run();
         this.listIcons.dispose();
         this.resources.dispose();
         this.keyBindings.dispose();
+        this.configs.dispose();
     }
 
     JTabbedPane tabs() {

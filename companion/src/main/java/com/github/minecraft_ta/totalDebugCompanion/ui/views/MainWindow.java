@@ -268,11 +268,12 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.projectSelector.refresh();
     }
     @Override public void changesRecorded() {
-        this.fileTreeView.reloadProfile();
+        // Only the Changes row counts the changes in effect.
+        this.fileTreeView.refreshModpack(false);
     }
 
     @Override public void catalogChanged() {
-        this.fileTreeView.reloadProfile();
+        this.fileTreeView.refreshModpack(true);
         if (this.searchEverywherePopup != null) this.searchEverywherePopup.catalogChanged();
     }
     @Override public void runtimeChanged() { statusBar.refreshContext(); editorTabs.astCache().refreshEnvironment(); navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }
