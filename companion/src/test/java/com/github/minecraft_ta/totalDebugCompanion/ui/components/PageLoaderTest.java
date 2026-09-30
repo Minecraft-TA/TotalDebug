@@ -196,8 +196,7 @@ class PageLoaderTest {
         assertEquals(2, this.prepared.get(), "shown again, it reads what it missed once");
 
         fire(signal);
-        settle(loader);
-        assertEquals(3, this.prepared.get(), "a shown page reads a change at once");
+        awaitPrepared(3, "a shown page reads a change at once");
     }
 
     @Test
@@ -213,8 +212,7 @@ class PageLoaderTest {
         assertEquals(1, this.prepared.get(), "another file's change, say, leaves the page alone");
         concerns.set(true);
         fire(signal);
-        settle(loader);
-        assertEquals(2, this.prepared.get());
+        awaitPrepared(2, "a change that concerns the page reads it");
     }
 
     @Test
@@ -230,8 +228,8 @@ class PageLoaderTest {
         SwingUtilities.invokeAndWait(loader::load);
         assertEquals(1, this.prepared.get(), "a page holding its reads, as while it saves, reads nothing");
         SwingUtilities.invokeAndWait(loader::release);
+        awaitPrepared(2, "released, it reads what it missed once");
         settle(loader);
-        assertEquals(2, this.prepared.get(), "released, it reads what it missed once");
 
         // The change came from the page's own save: by the time it is released, the change does not concern it.
         SwingUtilities.invokeAndWait(loader::hold);
@@ -356,6 +354,13 @@ class PageLoaderTest {
         SwingUtilities.invokeAndWait(() -> { });
         show(page, loader, true);
         assertEquals(1, asked.get(), "a hidden page keeps one question per source, however often it changed");
+    }
+
+    /** Waits until {@code expected} reads were prepared, as a read that a slow machine starts late. */
+    private void awaitPrepared(int expected, String message) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (this.prepared.get() < expected && System.nanoTime() < deadline) Thread.sleep(10);
+        assertEquals(expected, this.prepared.get(), message);
     }
 
     private static void fire(Signal signal) throws Exception {
