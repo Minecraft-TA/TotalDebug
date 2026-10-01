@@ -8,7 +8,9 @@ import com.github.minecraft_ta.totalDebugCompanion.util.FileReading;
 import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -21,8 +23,11 @@ import java.util.Optional;
  * read as it is made, so the World tab names the world also while its page was never shown.
  */
 public final class WorldReading implements AutoCloseable {
-    /** The current world: its folder and what its level.dat holds, or why there is nothing to show. */
-    public record World(Path directory, CurrentWorld.Saved saved, String problem) {
+    /**
+     * The current world: its folder, what its level.dat holds and when its icon was written, so a new icon is a change too;
+     * all null where no world was played yet.
+     */
+    public record World(Path directory, CurrentWorld.Saved saved, FileTime icon) {
     }
 
     private final FileReading<World> reading;
@@ -49,23 +54,26 @@ public final class WorldReading implements AutoCloseable {
         return this.reading.published().map(World::saved).map(CurrentWorld.Saved::name);
     }
 
-    /** The current world as read last; read now where it was not read yet. Blocking then. */
-    public World value() {
-        try {
-            return this.reading.value();
-        } catch (IOException stopped) {
-            // The reader tells a world it cannot read as a problem: only a read interrupted gets here.
-            return new World(null, null, "The world could not be read: " + stopped.getMessage());
-        }
+    /**
+     * The current world as read last; read now where it was not read yet, which fails where it cannot be read. A read
+     * that fails later, as while the game writes level.dat, keeps the world read before. Blocking then.
+     */
+    public World value() throws IOException {
+        return this.reading.value();
     }
 
-    private static World read(GameState game) {
+    private static World read(GameState game) throws IOException {
         Path directory = CurrentWorld.directory(game).orElse(null);
-        if (directory == null) return new World(null, null, "No world has been played in this instance yet.");
+        if (directory == null) return new World(null, null, null);
+        return new World(directory, CurrentWorld.read(game, directory), iconWritten(directory));
+    }
+
+    /** When the world's icon was written, or null without one. */
+    private static FileTime iconWritten(Path world) {
         try {
-            return new World(directory, CurrentWorld.read(game, directory), "");
-        } catch (IOException unreadable) {
-            return new World(directory, null, "The world " + directory.getFileName() + " could not be read: " + unreadable.getMessage());
+            return Files.getLastModifiedTime(world.resolve("icon.png"));
+        } catch (IOException none) {
+            return null;
         }
     }
 

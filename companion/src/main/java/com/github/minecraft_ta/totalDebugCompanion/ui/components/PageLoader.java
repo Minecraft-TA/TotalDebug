@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.WindowFocus;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 
@@ -136,8 +137,8 @@ public final class PageLoader<T> {
      * when that part is chosen.
      */
     public PageLoader<T> readsWhenShown(JComponent component) {
-        this.unsubscribe.add(WindowFocus.returned().subscribe(() -> SwingUtilities.invokeLater(() -> {
-            if (!this.disposed && component.isShowing()) load();
+        this.unsubscribe.add(WindowFocus.returned().subscribe(() -> UIUtils.onEdt(() -> {
+            if (!this.disposed) readShown(component, true);
         })));
         return watch(component, true);
     }
@@ -145,18 +146,25 @@ public final class PageLoader<T> {
     /** Reads when {@code component} is shown: {@code always}, or only what the page missed. */
     private PageLoader<T> watch(JComponent component, boolean always) {
         HierarchyListener listener = event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !component.isShowing()) return;
-            if (!always && this.missed.isEmpty() || this.showReadQueued) return;
-            this.showReadQueued = true;
-            SwingUtilities.invokeLater(() -> {
-                this.showReadQueued = false;
-                if (always) load();
-                else resume();
-            });
+            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0) readShown(component, always);
         };
         component.addHierarchyListener(listener);
         this.unwatch.add(() -> component.removeHierarchyListener(listener));
         return this;
+    }
+
+    /**
+     * Reads at the end of the Swing step while {@code component} is shown: {@code always}, or only what the page missed.
+     * Whatever asks in the same step, as the window shown again and taking the focus, reads once. Swing thread.
+     */
+    private void readShown(JComponent component, boolean always) {
+        if (!component.isShowing() || !always && this.missed.isEmpty() || this.showReadQueued) return;
+        this.showReadQueued = true;
+        SwingUtilities.invokeLater(() -> {
+            this.showReadQueued = false;
+            if (always) load();
+            else resume();
+        });
     }
 
     /**

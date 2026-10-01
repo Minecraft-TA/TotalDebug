@@ -168,7 +168,7 @@ public final class WorldPanel extends JPanel {
         Optional<PlayingPayload.Multiplayer> server = game.server();
         if (server.isPresent()) return readServer(game, server.get(), stack, refusal);
         WorldReading.World current = world.value();
-        if (current.saved() == null) return Loaded.problem(current.problem());
+        if (current.directory() == null) return Loaded.problem("No world has been played in this instance yet.");
         CurrentWorld.Saved saved = current.saved();
         return new Loaded(saved, null, PackResources.worldDatapacks(stack, saved), icon(current.directory().resolve("icon.png")), "");
     }

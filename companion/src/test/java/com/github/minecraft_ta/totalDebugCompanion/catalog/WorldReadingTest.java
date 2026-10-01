@@ -16,11 +16,11 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The current world, read by its one owner, which the World page and the Project tree show. */
@@ -98,9 +98,31 @@ class WorldReadingTest {
     }
 
     @Test
-    void withoutAWorldThePageIsToldWhy() {
+    void withoutAWorldThereIsNone() throws Exception {
         try (WorldReading reading = reading()) {
-            assertEquals("No world has been played in this instance yet.", reading.value().problem());
+            assertNull(reading.value().directory());
+        }
+    }
+
+    @Test
+    void aReadThatFailsKeepsTheWorldReadBeforeAndTellsNothing() throws Exception {
+        Path world = LevelDatFixture.write(this.directory.resolve("saves/World"), LevelDatFixture.world("World")).getParent();
+        AtomicInteger told = new AtomicInteger();
+        try (WorldReading reading = reading()) {
+            WorldReading.World before = reading.value();
+            reading.changed().subscribe(told::incrementAndGet);
+
+            // Caught while the game writes level.dat: the World page keeps the world and the datapacks staged for it.
+            Files.write(world.resolve("level.dat"), new byte[]{1, 2, 3});
+            WindowFocus.returned().fire();
+            Thread.sleep(300);
+            assertEquals(0, told.get());
+            assertEquals(before, reading.value());
+
+            LevelDatFixture.write(world, LevelDatFixture.world("World"));
+            WindowFocus.returned().fire();
+            await(() -> told.get() == 1);
+            assertEquals("World", reading.value().saved().name());
         }
     }
 
@@ -170,15 +192,35 @@ class WorldReadingTest {
         }
     }
 
+    @Test
+    void aNewIconOfTheWorldIsAChange() throws Exception {
+        Path world = LevelDatFixture.write(this.directory.resolve("saves/World"), LevelDatFixture.world("World")).getParent();
+        AtomicInteger told = new AtomicInteger();
+        try (WorldReading reading = reading()) {
+            reading.value();
+            reading.changed().subscribe(told::incrementAndGet);
+
+            Files.write(world.resolve("icon.png"), new byte[]{1, 2, 3});
+            WindowFocus.returned().fire();
+            await(() -> told.get() == 1);
+        }
+    }
+
     /** The current world of a game Companion is not connected to. */
     private WorldReading reading() {
         GameLocation location = new GameLocation(this.directory);
         return new WorldReading(location, new GamePacks(location));
     }
 
-    private static void await(BooleanSupplier condition) throws InterruptedException {
+    /** A condition on what the reading holds, which reads it. */
+    @FunctionalInterface
+    private interface Condition {
+        boolean holds() throws Exception;
+    }
+
+    private static void await(Condition condition) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-        while (!condition.getAsBoolean() && System.nanoTime() < deadline) Thread.sleep(10);
-        assertTrue(condition.getAsBoolean(), "timed out");
+        while (!condition.holds() && System.nanoTime() < deadline) Thread.sleep(10);
+        assertTrue(condition.holds(), "timed out");
     }
 }

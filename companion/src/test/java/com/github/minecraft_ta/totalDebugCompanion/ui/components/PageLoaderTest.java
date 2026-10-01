@@ -151,9 +151,19 @@ class PageLoaderTest {
             settle(loader);
             assertEquals(2, this.prepared.get(), "coming back reads the shown page again");
 
+            // Shown again and taking the focus in one step, as a window restored from the taskbar.
+            SwingUtilities.invokeAndWait(() -> page.setShown(false));
+            SwingUtilities.invokeAndWait(() -> {
+                page.setShown(true);
+                WindowFocus.returned().fire();
+            });
+            SwingUtilities.invokeAndWait(() -> { });
+            settle(loader);
+            assertEquals(3, this.prepared.get(), "showing and coming back at once read once");
+
             onEdt(loader::dispose);
             fire(WindowFocus.returned());
-            assertEquals(2, this.prepared.get(), "a disposed page reads no more");
+            assertEquals(3, this.prepared.get(), "a disposed page reads no more");
         } finally {
             onEdt(loader::dispose);
         }

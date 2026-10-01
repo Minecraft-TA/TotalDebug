@@ -81,6 +81,8 @@ class FileReadingTest {
         reading.close();
         Files.writeString(file, "three");
         WindowFocus.returned().fire();
+        // As a key change that completes after its project closed.
+        reading.refresh();
         settle(reading);
         assertEquals(1, told.get(), "a closed reading reads no more");
         assertEquals("two", reading.value());

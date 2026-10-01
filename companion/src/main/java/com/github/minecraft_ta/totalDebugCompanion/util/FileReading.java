@@ -34,6 +34,8 @@ public final class FileReading<T> implements AutoCloseable {
     private volatile Read<T> last;
     /** Whether the last read failed, so the next one that succeeds is told: a page may show the failure. Strand only. */
     private boolean failed;
+    /** Set once the reading closes, so a refresh asked for before or after reads nothing. */
+    private volatile boolean closed;
 
     public FileReading(Reader<T> reader) {
         this.reader = Objects.requireNonNull(reader, "reader");
@@ -84,6 +86,7 @@ public final class FileReading<T> implements AutoCloseable {
      */
     public void refresh() {
         this.strand.execute(() -> {
+            if (this.closed) return;
             try {
                 read(true);
             } catch (IOException | RuntimeException unreadable) {
@@ -112,9 +115,10 @@ public final class FileReading<T> implements AutoCloseable {
         return now;
     }
 
-    /** Stops reading when the user comes back; the value stays published. */
+    /** Refreshes no more, whoever asks; the value stays published. */
     @Override
     public void close() {
+        this.closed = true;
         this.stopFollowingFocus.run();
     }
 }
