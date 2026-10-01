@@ -657,7 +657,7 @@ public final class NavigationService {
                     () -> CodeView.read(existing(path)),
                     code -> new CodeView(editorContext, path, code),
                     (view, opened) -> opened || offset <= 0 ? view.navigateToOffset(offset, wanted)
-                            : readAgain(context, () -> CodeView.read(existing(path)), view::replaceCode)
+                            : readAgain(context, view, () -> CodeView.read(existing(path)), view::replaceCode)
                                     .thenCompose(ignored -> view.navigateToOffset(offset, wanted)));
         }
         // A mod's configuration file is edited, with the checks its Configuration tab applies.
@@ -701,7 +701,7 @@ public final class NavigationService {
                     if (offset <= 0) return CompletableFuture.completedFuture(null);
                     if (opened || !view.showsReadOnlyText()) return view.navigateToOffset(offset, wanted);
                     // A log the game writes on is read again, so the offset points into what it holds now.
-                    return readAgain(context, () -> ResourceView.readText(source), view::replaceText)
+                    return readAgain(context, view, () -> ResourceView.readText(source), view::replaceText)
                             .thenCompose(ignored -> view.navigateToOffset(offset, wanted));
                 });
     }
@@ -741,10 +741,14 @@ public final class NavigationService {
         return null;
     }
 
-    /** Reads an open read-only tab's text again on file work and shows it, as before an offset is placed in it. */
-    private <R> CompletableFuture<Void> readAgain(Context context, Callable<R> read, Consumer<R> show) {
+    /**
+     * Reads the text of {@code tab}, an open read-only tab, again on file work and shows it, as before an offset is placed
+     * in it; a tab closed meanwhile shows nothing, and the navigation ends as cancelled.
+     */
+    private <R> CompletableFuture<Void> readAgain(Context context, IEditorPanel tab, Callable<R> read, Consumer<R> show) {
         return CompletableFuture.supplyAsync(() -> call(read), Workers.files()).thenAcceptAsync(content -> {
             if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+            if (!this.tabs.editors().contains(tab)) throw new CancellationException("The tab closed");
             show.accept(content);
         }, SwingUtilities::invokeLater);
     }

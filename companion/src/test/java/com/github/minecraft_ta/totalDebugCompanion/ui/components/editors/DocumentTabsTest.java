@@ -37,6 +37,7 @@ import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -339,6 +340,25 @@ class DocumentTabsTest {
             window.navigation().goBack().get(10, TimeUnit.SECONDS);
             settle();
             UiTestScope.await(() -> caret(window) == 5);
+        });
+    }
+
+    @Test
+    void aTabClosedWhileItsTextIsReadAgainEndsTheNavigationAsCancelled() throws Exception {
+        withWindow((app, window, game) -> {
+            Path log = Files.writeString(Files.createDirectories(game.resolve("logs")).resolve("latest.log"), "first line\n");
+            open(window, new NavigationTarget.LocalFile(log, 3));
+            CompletableFuture<Void> again;
+            try (var held = holdFileWorkers()) {
+                again = window.navigation().navigate(new NavigationTarget.LocalFile(log, 5), NavigationService.Activation.KEEP_CURRENT_WINDOW);
+                settle();
+                // The user closes the tab while its text is read again.
+                UiTestScope.onEdt(() -> window.getEditorTabs().closeMatching(editor -> editor instanceof ResourceView));
+            }
+            ExecutionException ended = assertThrows(ExecutionException.class, () -> again.get(10, TimeUnit.SECONDS));
+            Throwable cause = ended.getCause();
+            while (cause.getCause() != null) cause = cause.getCause();
+            assertInstanceOf(CancellationException.class, cause, "a closed tab cancels, it does not fail");
         });
     }
 
