@@ -146,8 +146,8 @@ public final class WorldPanel extends JPanel {
         this.cards.add(page, PAGE_CARD);
         add(this.cards, BorderLayout.CENTER);
 
-        // The world's owner reads it when the game saves it or plays another; the datapacks the connected game names
-        // come with its packs.
+        // The world's owner reads it when the game plays another and when the user comes back to Companion; the
+        // datapacks the connected game names come with its packs.
         this.loader = new PageLoader<>(() -> {
             PackStackPayload stack = edits.packs().datapacks();
             String refusal = edits.packs().worldRefusal();

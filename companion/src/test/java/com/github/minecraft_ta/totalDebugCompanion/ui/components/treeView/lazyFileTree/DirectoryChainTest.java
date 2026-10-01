@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
-import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
@@ -19,13 +18,11 @@ import java.awt.Cursor;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
@@ -41,14 +38,14 @@ class DirectoryChainTest {
 
     @AfterEach void close() throws Exception { edt(() -> { trees.forEach(LazyFileJTree::setRootNodes); return null; }); }
 
-    private LazyFileJTree tree(boolean watch) throws Exception {
+    private LazyFileJTree tree() throws Exception {
         Path root = Files.createDirectories(directory.resolve("scripts"));
         return edt(() -> {
             ThemeManager.installTheme(CompanionTheme.ISLANDS_DARK);
             var tree = new LazyFileJTree();
             tree.setRowHeight(24);
             tree.setSize(900, 600);
-            tree.setRootNodes(tree.getItemFactory().createFileSystemDirectoryItem(root, watch));
+            tree.setRootNodes(tree.getItemFactory().createFileSystemDirectoryItem(root));
             trees.add(tree);
             return tree;
         });
@@ -61,7 +58,7 @@ class DirectoryChainTest {
 
     @Test void chainRetainsRealSegmentsAndRevealCanStopInTheMiddle() throws Exception {
         Path file = file();
-        var tree = tree(false);
+        var tree = tree();
         reveal(tree, "modules", "client", "items", "Test.tdscript");
         var row = edt(() -> (LazyTreeNode) tree.getSelectionPath().getParentPath().getLastPathComponent());
         assertEquals("modules/client/items", row.getUserObject().getPresentation().primary());
@@ -84,7 +81,7 @@ class DirectoryChainTest {
     @ParameterizedTest @ValueSource(ints = {0, 1, 2})
     void splittingAndJoiningAtEveryPositionPreservesTheSelectedFile(int position) throws Exception {
         Path file = file();
-        var tree = tree(false);
+        var tree = tree();
         reveal(tree, "modules", "client", "items", "Test.tdscript");
         var original = edt(() -> firstFolder(tree));
         Path changed = directory.resolve("scripts").resolve(List.of("modules", "modules/client", "modules/client/items").get(position));
@@ -101,7 +98,7 @@ class DirectoryChainTest {
 
     @Test void selectedIntermediateDirectorySurvivesRegrouping() throws Exception {
         file();
-        var tree = tree(false);
+        var tree = tree();
         reveal(tree, "modules", "client");
         Path target = directory.resolve("scripts/modules/client");
         Files.writeString(directory.resolve("scripts/modules/marker"), "");
@@ -115,7 +112,7 @@ class DirectoryChainTest {
     @Test void aCollapsedChainStillExpandsAfterItsEndpointChanges() throws Exception {
         file();
         Files.writeString(directory.resolve("scripts/Other.tdscript"), "");
-        var tree = tree(false);
+        var tree = tree();
         reveal(tree, "Other.tdscript");
         assertFalse(edt(() -> firstFolder(tree).areChildrenLoaded()));
         Path middle = directory.resolve("scripts/modules/client");
@@ -127,7 +124,7 @@ class DirectoryChainTest {
 
     @Test void popupTriggerOnReleaseUsesTheClickedSegmentOfAnUnselectedRow() throws Exception {
         file();
-        var tree = tree(false);
+        var tree = tree();
         reveal(tree, "modules", "client", "items", "Test.tdscript");
         var menuTarget = new AtomicReference<TreeItem>();
         edt(() -> {
@@ -147,7 +144,7 @@ class DirectoryChainTest {
 
     @Test void ctrlClickWithMinorMouseMovementKeepsThePressedSegment() throws Exception {
         file();
-        var tree = tree(false);
+        var tree = tree();
         reveal(tree, "modules", "client", "items", "Test.tdscript");
         edt(() -> {
             tree.setDragEnabled(true);
@@ -165,7 +162,7 @@ class DirectoryChainTest {
 
     @Test void regroupingDiscardsAnObsoleteHoveredSegment() throws Exception {
         file();
-        var tree = tree(false);
+        var tree = tree();
         reveal(tree, "modules", "client", "items");
         edt(() -> {
             Point point = segmentPoint(tree, tree.getSelectionPath(), 2);
@@ -181,51 +178,6 @@ class DirectoryChainTest {
             try { assertDoesNotThrow(() -> tree.printAll(graphics)); } finally { graphics.dispose(); }
             return null;
         });
-    }
-
-    @Test void aChangeBeforeDiscoveryPublishesIsReprobedEvenIfItsWatcherFoundNoRow() throws Exception {
-        Path file = file();
-        Path middle = file.getParent().getParent();
-        var probed = new CountDownLatch(1);
-        var release = new CountDownLatch(1);
-        var callback = new CountDownLatch(1);
-        var holdOnce = new AtomicBoolean(true);
-        LazyFileJTree tree = edt(() -> {
-            var result = new LazyFileJTree() {
-                @Override public CompletableFuture<Void> refreshDirectory(Path path) {
-                    var refreshed = super.refreshDirectory(path);
-                    if (path.equals(middle)) callback.countDown();
-                    return refreshed;
-                }
-            };
-            result.setItemFactory(new FileTreeItemFactory() {
-                @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path, boolean watch) {
-                    return new FileSystemDirectoryItem(result, path, watch) {
-                        @Override public DirectoryTreeItem singleDirectoryChild() throws IOException {
-                            var child = super.singleDirectoryChild();
-                            if (path.equals(middle) && holdOnce.getAndSet(false)) {
-                                probed.countDown();
-                                try { if (!release.await(5, TimeUnit.SECONDS)) throw new IOException("Probe timed out"); }
-                                catch (InterruptedException failure) { throw new IOException(failure); }
-                            }
-                            return child;
-                        }
-                    };
-                }
-            });
-            result.setRootNodes(result.getItemFactory().createFileSystemDirectoryItem(directory.resolve("scripts"), true));
-            trees.add(result);
-            return result;
-        });
-        var revealing = tree.revealItemPath("scripts", List.of("modules", "client", "items", "Test.tdscript"));
-        try {
-            assertTrue(probed.await(5, TimeUnit.SECONDS));
-            Files.writeString(middle.resolve("marker"), "");
-            assertTrue(callback.await(5, TimeUnit.SECONDS));
-            release.countDown();
-            assertTrue(revealing.get(5, TimeUnit.SECONDS));
-            reveal(tree, "modules", "client", "marker");
-        } finally { release.countDown(); }
     }
 
     @Test void aDescendantReadFailureDoesNotEraseHealthySiblings() throws Exception {
@@ -259,8 +211,8 @@ class DirectoryChainTest {
         var tree = edt(() -> {
             var result = new LazyFileJTree();
             result.setItemFactory(new FileTreeItemFactory() {
-                @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path, boolean watch) {
-                    return new FileSystemDirectoryItem(result, path, false) {
+                @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path) {
+                    return new FileSystemDirectoryItem(result, path) {
                         @Override public List<TreeItem> loadChildren() {
                             if (failReads.get() && path.equals(file.getParent())) throw new IllegalStateException("Unreadable items");
                             return super.loadChildren();
@@ -268,7 +220,7 @@ class DirectoryChainTest {
                     };
                 }
             });
-            result.setRootNodes(result.getItemFactory().createFileSystemDirectoryItem(directory.resolve("scripts"), false));
+            result.setRootNodes(result.getItemFactory().createFileSystemDirectoryItem(directory.resolve("scripts")));
             trees.add(result);
             return result;
         });
@@ -290,8 +242,8 @@ class DirectoryChainTest {
         var tree = edt(() -> {
             var result = new LazyFileJTree();
             result.setItemFactory(new FileTreeItemFactory() {
-                @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path, boolean watch) {
-                    return new FileSystemDirectoryItem(result, path, false) {
+                @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path) {
+                    return new FileSystemDirectoryItem(result, path) {
                         @Override public List<TreeItem> loadChildren() {
                             if (path.equals(middle) && hold.getAndSet(false)) {
                                 loading.countDown();
@@ -303,7 +255,7 @@ class DirectoryChainTest {
                     };
                 }
             });
-            result.setRootNodes(result.getItemFactory().createFileSystemDirectoryItem(directory.resolve("scripts"), false));
+            result.setRootNodes(result.getItemFactory().createFileSystemDirectoryItem(directory.resolve("scripts")));
             trees.add(result);
             return result;
         });
@@ -322,7 +274,7 @@ class DirectoryChainTest {
 
     @Test void revealThroughANamedContainerConsumesItsCompactedSegments() throws Exception {
         Path file = file();
-        var tree = tree(false);
+        var tree = tree();
         assertTrue(tree.revealItemPath("scripts", "modules", List.of("client", "items", "Test.tdscript")).get(5, TimeUnit.SECONDS));
         assertEquals(file, edt(() -> selected(tree)));
     }
@@ -339,7 +291,7 @@ class DirectoryChainTest {
 
     @Test void emptyTerminalAndHiddenFileDoNotDisappear() throws Exception {
         Path leaf = Files.createDirectories(directory.resolve("scripts/folder.with.dots/space folder/empty"));
-        var tree = tree(false);
+        var tree = tree();
         reveal(tree, "folder.with.dots", "space folder", "empty");
         assertTrue(edt(() -> ((LazyTreeNode) tree.getSelectionPath().getLastPathComponent()).isLeaf()));
         Files.writeString(leaf.getParent().resolve(".hidden"), "");
@@ -351,7 +303,7 @@ class DirectoryChainTest {
 
     @Test void segmentPaintingAndMouseTargetsAgreeInBothThemes() throws Exception {
         file();
-        var tree = tree(false);
+        var tree = tree();
         reveal(tree, "modules", "client", "items");
         edt(() -> {
             for (var theme : CompanionTheme.available()) {
@@ -379,21 +331,17 @@ class DirectoryChainTest {
         });
     }
 
-    @Test void watchersCoverMiddleSegmentsAndAreReleasedAfterRefresh() throws Exception {
+    @Test void aRefreshRegroupsAChainAroundAChangedMiddleFolder() throws Exception {
         file();
-        int baseline = subscriptions();
-        var tree = tree(true);
+        var tree = tree();
         reveal(tree, "modules", "client", "items", "Test.tdscript");
-        await(() -> subscriptions() == baseline + 4);
         Path middle = directory.resolve("scripts/modules/client");
         Files.writeString(middle.resolve("marker"), "");
+        tree.refreshDirectory(middle).get(5, TimeUnit.SECONDS);
         await(() -> firstFolder(tree).getUserObject().getPresentation().primary().equals("modules/client"));
         Files.delete(middle.resolve("marker"));
+        tree.refreshDirectory(middle).get(5, TimeUnit.SECONDS);
         await(() -> firstFolder(tree).getUserObject().getPresentation().primary().equals("modules/client/items"));
-        for (int i = 0; i < 8; i++) tree.refreshDirectory(middle).get(5, TimeUnit.SECONDS);
-        await(() -> subscriptions() == baseline + 4);
-        edt(() -> { tree.setRootNodes(); return null; });
-        await(() -> subscriptions() == baseline);
     }
 
     @Test void repeatedDirectoryIdentityStopsDiscoveryAndDisposesEveryDescriptorOnce() {
@@ -410,16 +358,6 @@ class DirectoryChainTest {
         DirectoryChain.compactChildren(List.of(new Cycle())).forEach(TreeItem::dispose);
         assertEquals(2, created.get());
         assertEquals(created.get(), disposed.get());
-    }
-
-    private static int subscriptions() {
-        FileWatch watch = FileWatch.shared();
-        synchronized (watch) {
-            try {
-                var field = FileWatch.class.getDeclaredField("watched"); field.setAccessible(true);
-                return ((List<?>) field.get(watch)).size();
-            } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
-        }
     }
 
     private static LazyTreeNode firstFolder(LazyFileJTree tree) {

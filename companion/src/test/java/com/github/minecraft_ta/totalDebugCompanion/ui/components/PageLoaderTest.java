@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
+import com.github.minecraft_ta.totalDebugCompanion.util.WindowFocus;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.SwingUtilities;
@@ -133,6 +134,29 @@ class PageLoaderTest {
         show(page, loader, false);
         show(page, loader, true);
         assertEquals(2, this.prepared.get(), "it reads every time it is shown, for what changed without telling");
+    }
+
+    @Test
+    void aPageReadWheneverShownReadsWhenTheUserComesBackWhileItIsShown() throws Exception {
+        ShowablePage page = new ShowablePage();
+        PageLoader<String> loader = onEdt(() -> loader().page(page).readsWhenShown(page));
+        try {
+            fire(WindowFocus.returned());
+            assertEquals(0, this.prepared.get(), "a hidden page does not read");
+            show(page, loader, true);
+            assertEquals(1, this.prepared.get());
+
+            // An editor wrote the page's file while the user was in it.
+            fire(WindowFocus.returned());
+            settle(loader);
+            assertEquals(2, this.prepared.get(), "coming back reads the shown page again");
+
+            onEdt(loader::dispose);
+            fire(WindowFocus.returned());
+            assertEquals(2, this.prepared.get(), "a disposed page reads no more");
+        } finally {
+            onEdt(loader::dispose);
+        }
     }
 
     @Test

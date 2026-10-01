@@ -368,7 +368,7 @@ class ScriptFileActionsTest {
             Path folder = window.editorContext().project().scriptFiles().create(
                     window.editorContext().project().scriptFiles().root(), "Folder.tdscript", true, "");
             FileTreeView files = find(window, FileTreeView.class);
-            var item = files.tree().getItemFactory().createFileSystemDirectoryItem(folder, false);
+            var item = files.tree().getItemFactory().createFileSystemDirectoryItem(folder);
             edt(() -> { files.tree().setRootNodes(item); files.tree().setSelectionRow(0); return null; });
             // A loaded row still describes its folder when the backing filesystem is unavailable.
             Files.delete(folder);
@@ -547,9 +547,9 @@ class ScriptFileActionsTest {
                 var menu = treeView.createContextMenu(((LazyTreeNode) tree.getSelectionPath().getLastPathComponent()).getUserObject());
                 assertEquals(List.of("Rename", "Move to...", "Duplicate script", "Copy Path", "Delete file"), labels(menu));
                 assertEquals(KeyStroke.getKeyStroke("F2"), ((JMenuItem) menu.getComponent(0)).getAccelerator());
-                var folderMenu = treeView.createContextMenu(tree.getItemFactory().createFileSystemDirectoryItem(root.resolve("One"), false));
+                var folderMenu = treeView.createContextMenu(tree.getItemFactory().createFileSystemDirectoryItem(root.resolve("One")));
                 assertEquals(List.of("New Script", "New Folder", "Rename", "Move to...", "Copy Path", "Delete folder"), labels(folderMenu));
-                var rootMenu = treeView.createContextMenu(tree.getItemFactory().createFileSystemDirectoryItem(root, false));
+                var rootMenu = treeView.createContextMenu(tree.getItemFactory().createFileSystemDirectoryItem(root));
                 assertEquals(List.of("New Script", "New Folder", "Copy Path"), labels(rootMenu));
                 return null;
             });

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilationResult;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilerDiagnostic;
@@ -30,6 +31,7 @@ public final class CompanionDecompilationService implements AutoCloseable {
     private final ExecutorService cacheReaders;
     private final Map<String, CompletableFuture<DecompiledSource>> inFlightRequests = new HashMap<>();
     private final Object publicationLock = new Object();
+    private final Signal cached = new Signal();
     private volatile boolean closed;
 
     public CompanionDecompilationService(
@@ -109,6 +111,11 @@ public final class CompanionDecompilationService implements AutoCloseable {
         return this.sourceStore.directory();
     }
 
+    /** Fires after a class was decompiled and its source cached ({@link #cachedClasses()}). */
+    public Signal cached() {
+        return this.cached;
+    }
+
     public List<String> cachedClasses() throws IOException {
         // A retired tree may finish refreshing after its runtime has been replaced.
         return this.closed ? List.of() : this.sourceStore.cachedClasses();
@@ -145,11 +152,14 @@ public final class CompanionDecompilationService implements AutoCloseable {
         this.bytecodeSource.requireCurrent();
         SourceDocument document = new SourceDocument(binaryName, result.source(), result.lineMap(), result.variableNames(), result.symbols());
         document.prepare();
+        DecompiledSource source;
         synchronized (this.publicationLock) {
             ensureOpen();
             Path path = this.sourceStore.write(document);
-            return new DecompiledSource(path, document, this.bytecodeSource.findClassOrigin(binaryName));
+            source = new DecompiledSource(path, document, this.bytecodeSource.findClassOrigin(binaryName));
         }
+        this.cached.fire();
+        return source;
     }
 
     private DecompiledSource readStoredSource(String binaryName) throws IOException {

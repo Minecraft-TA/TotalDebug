@@ -14,7 +14,6 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigLabels;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingLabels;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyAssignments;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangeLabels;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
@@ -85,7 +84,6 @@ public final class ProjectScope implements AutoCloseable {
     private final ChangePipeline pipeline;
     /** The one path of the changes Companion makes to values the game keeps. */
     public ChangePipeline pipeline() { return pipeline; }
-    private final KeyAssignments keyAssignments;
     private final KeyBindingControl keyBindings;
     /** Puts the instance's key bindings on keys, in the running game or in options.txt. */
     public KeyBindingControl keyBindings() { return keyBindings; }
@@ -118,8 +116,7 @@ public final class ProjectScope implements AutoCloseable {
         this.configChanges = new ConfigChanges(this.location, changes);
         this.pipeline = new ChangePipeline(this.location, changes, this.writes);
         this.configSettings = new ConfigSettings(this.configChanges, this.pipeline);
-        this.keyAssignments = new KeyAssignments(profile.workspaceDirectory().resolve("options.txt"));
-        this.keyBindings = new KeyBindingControl(this.pipeline, this.keyAssignments);
+        this.keyBindings = new KeyBindingControl(this.pipeline);
         this.packs = new GamePacks(this.location);
         this.world = new WorldReading(this.location, this.packs);
         this.resources = new ResourceEdits(this.pipeline, this.packs, new ResourceOriginals(paths().originals()),
@@ -230,7 +227,7 @@ public final class ProjectScope implements AutoCloseable {
             pending.clear();
         }
         // Writes still queued finish first, so each is recorded before the change record closes.
-        try { keyAssignments.close(); world.close(); resources.close(); writes.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
+        try { keyBindings.close(); world.close(); resources.close(); writes.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
     }
 
     public String loadBreakpointScript(String name) {

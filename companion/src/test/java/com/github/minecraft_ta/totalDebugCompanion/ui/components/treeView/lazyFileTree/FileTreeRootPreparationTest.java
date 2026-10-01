@@ -117,10 +117,10 @@ class FileTreeRootPreparationTest {
         final CompletableFuture<Void> disposed = new CompletableFuture<>();
         final AtomicInteger calls = new AtomicInteger();
 
-        @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path, boolean watch) {
-            assertFalse(SwingUtilities.isEventDispatchThread(), "Filesystem validation and watcher registration must run off the EDT");
+        @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path) {
+            assertFalse(SwingUtilities.isEventDispatchThread(), "Filesystem validation must run off the EDT");
             calls.incrementAndGet();
-            var item = new FileSystemDirectoryItem(tree, path, watch) {
+            var item = new FileSystemDirectoryItem(tree, path) {
                 @Override public void dispose() { super.dispose(); disposed.complete(null); }
             };
             prepared.complete(null);

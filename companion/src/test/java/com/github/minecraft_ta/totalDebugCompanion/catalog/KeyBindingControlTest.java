@@ -1,10 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
-import org.junit.jupiter.api.AfterEach;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totalDebugCompanion.util.WindowFocus;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,20 +27,6 @@ class KeyBindingControlTest {
     private static final KeyBindings.Assignment G = new KeyBindings.Assignment("key.keyboard.g", "NONE");
 
     @TempDir Path directory;
-
-    private final List<KeyAssignments> assignments = new ArrayList<>();
-
-    @AfterEach
-    void closeAssignments() {
-        this.assignments.forEach(KeyAssignments::close);
-    }
-
-    /** The key assignments of the test's {@code options.txt}, watched until the test ends. */
-    private KeyAssignments assignments() {
-        KeyAssignments assignments = new KeyAssignments(this.directory.resolve("options.txt"));
-        this.assignments.add(assignments);
-        return assignments;
-    }
 
     @Test
     void aClosedGameGetsItsKeysInOptions() throws Exception {
@@ -118,7 +105,7 @@ class KeyBindingControlTest {
     void aRunningGameMakesTheChangeAndAnswers() throws Exception {
         GameLocation location = GameLocations.of(this.directory, true);
         ChangePipeline pipeline = new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run);
-        KeyBindingControl control = new KeyBindingControl(pipeline, assignments());
+        KeyBindingControl control = new KeyBindingControl(pipeline);
         List<ChangePayload> sent = new ArrayList<>();
         location.connected(message -> {
             if (message instanceof ChangeMessage change) sent.add(change.payload());
@@ -153,7 +140,7 @@ class KeyBindingControlTest {
     void anAnswerAfterTheCallerStoppedWaitingIsStillRecorded() throws Exception {
         GameLocation location = GameLocations.of(this.directory, true);
         ChangePipeline pipeline = new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run);
-        KeyBindingControl control = new KeyBindingControl(pipeline, assignments());
+        KeyBindingControl control = new KeyBindingControl(pipeline);
         List<ChangePayload> sent = new ArrayList<>();
         location.connected(message -> {
             if (message instanceof ChangeMessage change) sent.add(change.payload());
@@ -174,8 +161,32 @@ class KeyBindingControlTest {
         assertEquals(new KeyBindings.Assignment("key.keyboard.e", "SHIFT"), KeyBindings.Assignment.decode("key.keyboard.e:SHIFT"));
     }
 
+    @Test
+    void aKeyReboundInTheGameIsToldWhenTheUserComesBackAndAnotherOptionIsNot() throws Exception {
+        Path options = this.directory.resolve("options.txt");
+        Files.writeString(options, "soundCategory_master:1.0\nkey_key.jump:key.keyboard.space\n");
+        AtomicInteger told = new AtomicInteger();
+        try (KeyBindingControl control = control(GameLocations.of(this.directory, false))) {
+            control.assignmentsChanged().subscribe(told::incrementAndGet);
+            assertEquals(SPACE, control.assignments().get("key.jump"));
+
+            Files.writeString(options, "soundCategory_master:0.4\nkey_key.jump:key.keyboard.space\n");
+            WindowFocus.returned().fire();
+            Thread.sleep(300);
+            assertEquals(0, told.get(), "the volume changed; no key did");
+
+            // The game saved a key rebound in its controls screen, and the user comes back to Companion.
+            Files.writeString(options, "soundCategory_master:0.4\nkey_key.jump:key.keyboard.g\n");
+            WindowFocus.returned().fire();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (told.get() == 0 && System.nanoTime() < deadline) Thread.sleep(10);
+            assertEquals(1, told.get());
+            assertEquals(G, control.assignments().get("key.jump"));
+        }
+    }
+
     private KeyBindingControl control(GameLocation location) {
-        return new KeyBindingControl(new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run), assignments());
+        return new KeyBindingControl(new ChangePipeline(location, ChangeRecord.inMemory(), Runnable::run));
     }
 
     private static String set(KeyBindingControl control, KeyBindingControl.Change... changes) throws Exception {

@@ -90,8 +90,7 @@ public final class ExternalEdits implements AutoCloseable {
             if (this.closed) throw new IOException("The project is closing");
             if (!this.followed.containsKey(file)) {
                 Followed followed = new Followed(path, pack, Files.readAllBytes(file));
-                Path name = file.getFileName();
-                followed.unwatch = FileWatch.shared().watch(file.getParent(), name::equals, () -> settle(followed));
+                followed.unwatch = FileWatch.shared().watch(file, () -> settle(followed));
                 this.followed.put(file, followed);
             }
         }

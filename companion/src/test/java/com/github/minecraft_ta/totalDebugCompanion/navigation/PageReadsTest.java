@@ -17,6 +17,7 @@ import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.KeyBindingsPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import com.github.minecraft_ta.totalDebugCompanion.util.WindowFocus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -79,7 +80,7 @@ class PageReadsTest {
     }
 
     @Test
-    void theWorldPageReadsOnceWhenOpenedAndAgainOnlyAfterTheGameSavedTheWorld() throws Exception {
+    void theWorldPageReadsOnceWhenOpenedAndAgainOnlyAfterTheUserCameBackFromAGameThatSavedIt() throws Exception {
         Path home = Files.createDirectory(this.directory.resolve("home"));
         GlobalConfig.getInstance().loadFrom(home);
         Path game = Files.createDirectory(this.directory.resolve("game"));
@@ -107,10 +108,11 @@ class PageReadsTest {
             assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "navigating to the page it shows reads nothing");
 
             open(window, new NavigationTarget.Changes());
-            // The game saves the world it plays.
+            // The game saves the world it plays, and the user comes back to Companion.
             Map<String, Object> saved = LevelDatFixture.world("World");
             ((Map<String, Object>) saved.get("GameRules")).put("keepInventory", "false");
             LevelDatFixture.write(world, saved);
+            UiTestScope.onEdt(() -> WindowFocus.returned().fire());
             Thread.sleep(1_500);
             assertEquals(1, (int) UiTestScope.onEdt(panel::reads), "a hidden page does not read, though the game saved the world");
             open(window, new NavigationTarget.World(WorldTab.OVERVIEW));

@@ -2,18 +2,15 @@ package com.github.minecraft_ta.totalDebugCompanion.change;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindings;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyAssignments;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -28,16 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WriteQueueTest {
     @TempDir Path directory;
     private GameLocation location;
-    private final List<KeyAssignments> assignments = new ArrayList<>();
-
     @BeforeEach
     void location() {
         this.location = new GameLocation(this.directory);
-    }
-
-    @AfterEach
-    void closeAssignments() {
-        this.assignments.forEach(KeyAssignments::close);
     }
 
     @Test
@@ -135,7 +125,7 @@ class WriteQueueTest {
         ChangeRecord record = ChangeRecord.inMemory();
         WriteQueue writes = new WriteQueue();
         ChangePipeline changes = new ChangePipeline(this.location, record, writes);
-        KeyBindingControl keys = new KeyBindingControl(changes, assignments());
+        KeyBindingControl keys = new KeyBindingControl(changes);
         CountDownLatch release = new CountDownLatch(1);
         changes.write(() -> {
             try {
@@ -158,9 +148,4 @@ class WriteQueueTest {
                 "the key change is recorded before the record could close");
     }
 
-    private KeyAssignments assignments() {
-        KeyAssignments assignments = new KeyAssignments(this.directory.resolve("options.txt"));
-        this.assignments.add(assignments);
-        return assignments;
-    }
 }

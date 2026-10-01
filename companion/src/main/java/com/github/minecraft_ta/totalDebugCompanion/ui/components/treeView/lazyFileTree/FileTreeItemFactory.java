@@ -10,8 +10,8 @@ public class FileTreeItemFactory {
         return new TreeItem("", true);
     }
 
-    public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path, boolean watch) {
-        return new FileSystemDirectoryItem(tree, path, watch);
+    public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path) {
+        return new FileSystemDirectoryItem(tree, path);
     }
 
     public FileSystemFileItem createFileSystemFileItem(Path path) {

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
+import com.github.minecraft_ta.totalDebugCompanion.util.WindowFocus;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 
 import javax.swing.JComponent;
@@ -30,7 +31,8 @@ import java.util.function.Consumer;
  * page shown again with nothing changed reads nothing, unless its last read failed. While the page holds its reads
  * ({@link #hold}), as during a save, signals wait in the same way. The page never reads in its constructor or because a
  * navigation showed it. A page whose files others write and only it reads, such as the logs, reads whenever it is shown
- * ({@link #readsWhenShown}); work that only redraws from memory waits the same way ({@link #updates}).</p>
+ * and when the user comes back to Companion while it is shown ({@link #readsWhenShown}); work that only redraws from
+ * memory waits the same way ({@link #updates}).</p>
  */
 public final class PageLoader<T> {
     /** What to read: prepared on the Swing thread, where the page's state is captured, then run off it. */
@@ -129,10 +131,14 @@ public final class PageLoader<T> {
     }
 
     /**
-     * Reads every time {@code component} is shown, such as a tab listing files that change without telling. It may be a
-     * part of the page, which then reads when that part is chosen.
+     * Reads every time {@code component} is shown, and when the user comes back to Companion from another program while it
+     * is shown, such as a tab listing files that change without telling. It may be a part of the page, which then reads
+     * when that part is chosen.
      */
     public PageLoader<T> readsWhenShown(JComponent component) {
+        this.unsubscribe.add(WindowFocus.returned().subscribe(() -> SwingUtilities.invokeLater(() -> {
+            if (!this.disposed && component.isShowing()) load();
+        })));
         return watch(component, true);
     }
 

@@ -343,12 +343,7 @@ public class LazyFileJTree extends JTree {
                 items.forEach(TreeItem::dispose);
                 return loadItemsForNode(node);
             }
-            if (items.stream().anyMatch(DirectoryChain::changedDuringDiscovery)) {
-                items.forEach(TreeItem::dispose);
-                node.markChildrenStale();
-                return loadItemsForNode(node);
-            }
-            // Filesystem notifications concern this directory; its loaded subfolders can stay cached, as they do for a
+            // A refresh of a folder concerns that folder; its loaded subfolders can stay cached, as they do for a
             // refresh of the rows only.
             boolean rows = this.rowsOnly.remove(node);
             return updateChildren(node, items, node.refreshDescendants()

@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
-import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
@@ -13,14 +12,13 @@ import java.util.List;
 /** Shows cached source units, not their storage metadata or generation directories. */
 final class DecompiledSourcesTreeItem extends DirectoryTreeItem {
     private final CompanionDecompilationService service;
-    private final Runnable stopWatching;
+    private final Runnable stopFollowing;
 
     DecompiledSourcesTreeItem(LazyFileJTree tree, CompanionDecompilationService service) {
         super("decompiled-files");
         this.service = service;
         setIcon(Icons.FOLDER);
-        this.stopWatching = FileWatch.shared().watchEntries(service.cacheDirectory(),
-                () -> tree.loadItemsForTopLevelItem(this));
+        this.stopFollowing = service.cached().subscribe(() -> tree.loadItemsForTopLevelItem(this));
     }
 
     @Override
@@ -34,7 +32,7 @@ final class DecompiledSourcesTreeItem extends DirectoryTreeItem {
 
     @Override
     public void dispose() {
-        this.stopWatching.run();
+        this.stopFollowing.run();
     }
 
     static final class SourceItem extends TreeItem {

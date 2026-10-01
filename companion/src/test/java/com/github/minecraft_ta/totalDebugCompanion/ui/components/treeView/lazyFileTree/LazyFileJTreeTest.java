@@ -38,28 +38,11 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 class LazyFileJTreeTest {
 
-    @Test void aChangeBeforeAttachmentInvalidatesAnEmptyFolderSnapshot(@TempDir Path directory) throws Exception {
-        Path folder = Files.createDirectory(directory.resolve("Empty"));
-        var tree = new LazyFileJTree();
-        var root = tree.getItemFactory().createFileSystemDirectoryItem(directory, true);
-        var child = (FileSystemDirectoryItem) root.loadChildren().getFirst();
-        try {
-            assertTrue(child.isInitiallyEmpty());
-            Files.writeString(folder.resolve("First.tdscript"), "");
-            awaitOnEdt(() -> !child.isInitiallyEmpty());
-            SwingUtilities.invokeAndWait(() -> {
-                var node = new LazyTreeNode(child);
-                assertFalse(node.areChildrenLoaded(), "The detached snapshot must not hide a newly created file");
-                assertFalse(node.isLeaf());
-            });
-        } finally { child.dispose(); root.dispose(); }
-    }
-
     @Test void newEmptyFolderIsALeafFromItsFirstModelEvent(@TempDir Path directory) throws Exception {
         Path scripts = Files.createDirectory(directory.resolve("scripts"));
         Files.writeString(scripts.resolve("Existing.tdscript"), "");
         var tree = new LazyFileJTree();
-        SwingUtilities.invokeAndWait(() -> tree.setRootNodes(tree.getItemFactory().createFileSystemDirectoryItem(scripts, true)));
+        SwingUtilities.invokeAndWait(() -> tree.setRootNodes(tree.getItemFactory().createFileSystemDirectoryItem(scripts)));
         try {
             assertTrue(tree.revealItemPath("scripts", List.of("Existing.tdscript")).get(3, TimeUnit.SECONDS));
             var observations = new ArrayList<Boolean>();
@@ -83,6 +66,7 @@ class LazyFileJTreeTest {
                 assertTrue(observations.stream().allMatch(Boolean::booleanValue), "Empty folder briefly advertised children: " + observations);
             });
             Files.writeString(folder.resolve("First.tdscript"), "");
+            tree.refreshDirectory(folder).get(3, TimeUnit.SECONDS);
             awaitOnEdt(() -> {
                 var root = (LazyTreeNode) ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0);
                 var child = (LazyTreeNode) root.getChildAt(0);
@@ -193,13 +177,13 @@ class LazyFileJTreeTest {
         Files.createDirectories(directory.resolve("nested"));
         Files.writeString(directory.resolve("nested/Old.tdscript"), "");
         LazyFileJTree tree = new LazyFileJTree();
-        var root = tree.getItemFactory().createFileSystemDirectoryItem(directory, false);
+        var root = tree.getItemFactory().createFileSystemDirectoryItem(directory);
         SwingUtilities.invokeAndWait(() -> tree.setRootNodes(root));
         assertTrue(tree.revealItemPath(root.getName(), List.of("nested", "Old.tdscript")).get(3, TimeUnit.SECONDS));
         var folder = tree.getSelectionPath().getParentPath();
         Files.writeString(directory.resolve("nested/New.tdscript"), "");
         SwingUtilities.invokeAndWait(() -> tree.refreshRootNodes(
-                tree.getItemFactory().createFileSystemDirectoryItem(directory, false)));
+                tree.getItemFactory().createFileSystemDirectoryItem(directory)));
         awaitOnEdt(() -> ((LazyTreeNode) folder.getLastPathComponent()).getChildCount() == 2);
         SwingUtilities.invokeAndWait(() -> assertTrue(tree.isExpanded(folder)));
     }
@@ -280,7 +264,7 @@ class LazyFileJTreeTest {
     }
 
     @Test
-    void atomicSaveWatcherKeepsTheSelectedFileAndExpandedFolder(@TempDir Path directory) throws Exception {
+    void refreshingAfterAnAtomicSaveKeepsTheSelectedFileAndExpandedFolder(@TempDir Path directory) throws Exception {
         Files.createDirectories(directory.resolve("nested"));
         Files.writeString(directory.resolve("nested/Selected.tdscript"), "return 1;");
         Path saved = directory.resolve("Saved.tdscript");
@@ -289,8 +273,8 @@ class LazyFileJTreeTest {
         var scans = new AtomicInteger();
         var nestedScans = new AtomicInteger();
         tree.setItemFactory(new FileTreeItemFactory() {
-            @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path, boolean watch) {
-                return new FileSystemDirectoryItem(tree, path, watch) {
+            @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path) {
+                return new FileSystemDirectoryItem(tree, path) {
                     @Override public List<TreeItem> loadChildren() {
                         nestedScans.incrementAndGet();
                         return super.loadChildren();
@@ -298,7 +282,7 @@ class LazyFileJTreeTest {
                 };
             }
         });
-        var root = new FileSystemDirectoryItem(tree, directory, true) {
+        var root = new FileSystemDirectoryItem(tree, directory) {
             @Override public List<TreeItem> loadChildren() {
                 scans.incrementAndGet();
                 return super.loadChildren();
@@ -309,6 +293,7 @@ class LazyFileJTreeTest {
             assertTrue(tree.revealItemPath(root.getName(), List.of("nested", "Selected.tdscript")).get(3, TimeUnit.SECONDS));
             var selected = tree.getSelectionPath();
             AtomicFiles.writeString(saved, "return 2;");
+            tree.refreshDirectory(directory).get(3, TimeUnit.SECONDS);
             awaitOnEdt(() -> scans.get() > 1);
             assertTrue(tree.revealItemPath(root.getName(), List.of("nested", "Selected.tdscript")).get(3, TimeUnit.SECONDS));
             SwingUtilities.invokeAndWait(() -> {
@@ -427,7 +412,7 @@ class LazyFileJTreeTest {
             }
         });
         Files.createFile(directory.resolve(".decompiled-staged.tmp"));
-        FileSystemDirectoryItem root = tree.getItemFactory().createFileSystemDirectoryItem(directory, false);
+        FileSystemDirectoryItem root = tree.getItemFactory().createFileSystemDirectoryItem(directory);
 
         assertTrue(assertDoesNotThrow(root::loadChildren).isEmpty());
     }
@@ -473,37 +458,39 @@ class LazyFileJTreeTest {
         assertTrue(tree.isExpanded(tree.getSelectionPath()));
     }
 
-    @Test void externalChangesRefreshCollapsedButLoadedNestedFolder(@TempDir Path directory) throws Exception {
+    @Test void aRefreshUpdatesACollapsedButLoadedNestedFolder(@TempDir Path directory) throws Exception {
         Path scripts = Files.createDirectories(directory.resolve("scripts"));
         Path nested = Files.createDirectories(scripts.resolve("nested"));
         Files.writeString(nested.resolve("First.tdscript"), "");
         var tree = new LazyFileJTree();
-        SwingUtilities.invokeAndWait(() -> tree.setRootNodes(tree.getItemFactory().createFileSystemDirectoryItem(scripts, true)));
+        SwingUtilities.invokeAndWait(() -> tree.setRootNodes(tree.getItemFactory().createFileSystemDirectoryItem(scripts)));
         try {
             assertTrue(tree.revealItemPath("scripts", List.of("nested", "First.tdscript")).get(3, TimeUnit.SECONDS));
             TreePath folder = tree.getSelectionPath().getParentPath();
             SwingUtilities.invokeAndWait(() -> tree.collapsePath(folder));
             Files.writeString(nested.resolve("Second.tdscript"), "");
+            tree.refreshDirectory(nested).get(3, TimeUnit.SECONDS);
             awaitOnEdt(() -> ((LazyTreeNode) folder.getLastPathComponent()).getChildCount() == 2);
             SwingUtilities.invokeAndWait(() -> assertFalse(tree.isExpanded(folder)));
             Files.delete(nested.resolve("First.tdscript"));
+            tree.refreshDirectory(nested).get(3, TimeUnit.SECONDS);
             awaitOnEdt(() -> ((LazyTreeNode) folder.getLastPathComponent()).getChildCount() == 1);
         } finally { SwingUtilities.invokeAndWait(tree::setRootNodes); }
     }
 
-    @Test void failedEnumerationDisposesAlreadyConstructedWatchedChildren(@TempDir Path directory) throws Exception {
+    @Test void failedEnumerationDisposesAlreadyConstructedChildren(@TempDir Path directory) throws Exception {
         Files.createDirectories(directory.resolve("a")); Files.createDirectories(directory.resolve("b"));
         var tree = new LazyFileJTree();
         var count = new AtomicInteger(); var disposed = new AtomicInteger();
         tree.setItemFactory(new FileTreeItemFactory() {
-            @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path, boolean watch) {
-                if (count.incrementAndGet() == 2) throw new IllegalStateException("Simulated registration failure");
-                return new FileSystemDirectoryItem(tree, path, watch) {
+            @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path) {
+                if (count.incrementAndGet() == 2) throw new IllegalStateException("Simulated creation failure");
+                return new FileSystemDirectoryItem(tree, path) {
                     @Override public void dispose() { super.dispose(); disposed.incrementAndGet(); }
                 };
             }
         });
-        var root = new FileSystemDirectoryItem(tree, directory, true);
+        var root = new FileSystemDirectoryItem(tree, directory);
         try {
             assertThrows(IllegalStateException.class, root::loadChildren);
             assertEquals(1, disposed.get());

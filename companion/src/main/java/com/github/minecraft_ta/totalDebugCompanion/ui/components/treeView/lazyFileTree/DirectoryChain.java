@@ -26,9 +26,6 @@ public final class DirectoryChain extends DirectoryTreeItem {
 
     public static TreeItem first(TreeItem item) { return segments(item).getFirst(); }
     public static TreeItem last(TreeItem item) { return segments(item).getLast(); }
-    static boolean changedDuringDiscovery(TreeItem item) {
-        return segments(item).stream().anyMatch(part -> part instanceof FileSystemDirectoryItem folder && folder.changedDuringDiscovery());
-    }
     public String separator() { return separator; }
     public boolean supportsSegmentSelection() { return segments.getFirst() instanceof FileSystemDirectoryItem; }
     @Override public Icon getIcon() { return segments.getFirst().getIcon(); }
