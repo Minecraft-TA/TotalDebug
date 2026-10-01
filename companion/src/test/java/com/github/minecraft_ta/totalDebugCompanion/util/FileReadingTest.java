@@ -128,6 +128,40 @@ class FileReadingTest {
     }
 
     @Test
+    void refreshesAskedForWhileOneWaitsReadOnceAndAClosedReadingStartsNone() throws Exception {
+        Path file = Files.writeString(this.directory.resolve("options.txt"), "one");
+        CountDownLatch paused = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger reads = new AtomicInteger();
+        FileReading<String> reading = new FileReading<>(() -> {
+            if (reads.incrementAndGet() == 2) {
+                paused.countDown();
+                try {
+                    release.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    throw new IOException(interrupted);
+                }
+            }
+            return Files.readString(file);
+        });
+        reading.value();
+        reading.refresh();
+        assertTrue(paused.await(5, TimeUnit.SECONDS));
+        // While that read runs, the game plays another world: its packs and what it plays both ask.
+        reading.refresh();
+        reading.refresh();
+        WindowFocus.returned().fire();
+        release.countDown();
+        settle(reading);
+        assertEquals(3, reads.get(), "the requests made while one waited are one read");
+
+        reading.close();
+        reading.refresh();
+        settle(reading);
+        assertEquals(3, reads.get(), "a closed reading starts no read");
+    }
+
+    @Test
     void aFailedReadKeepsTheValueAndTheNextOneThatSucceedsIsTold() throws Exception {
         Path file = Files.writeString(this.directory.resolve("options.txt"), "one");
         AtomicInteger told = new AtomicInteger();

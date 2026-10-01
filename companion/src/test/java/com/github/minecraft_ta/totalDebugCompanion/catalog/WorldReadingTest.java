@@ -206,6 +206,24 @@ class WorldReadingTest {
         }
     }
 
+    @Test
+    void anotherWorldThatCannotBeReadIsCurrentWithoutWhatItHolds() throws Exception {
+        Path first = LevelDatFixture.write(this.directory.resolve("saves/First"), LevelDatFixture.world("First")).getParent();
+        Path second = LevelDatFixture.write(this.directory.resolve("saves/Second"), LevelDatFixture.world("Second")).getParent();
+        Files.write(second.resolve("level.dat"), new byte[]{1, 2, 3});
+        GameLocation location = new GameLocation(this.directory);
+        try (WorldReading reading = new WorldReading(location, new GamePacks(location))) {
+            location.connected(message -> true);
+            location.playing(new PlayingPayload.Singleplayer(first.toString()));
+            await(() -> first.equals(reading.value().directory()) && reading.value().saved() != null);
+
+            // The game opens the second world while its level.dat is being written.
+            location.playing(new PlayingPayload.Singleplayer(second.toString()));
+            await(() -> second.equals(reading.value().directory()));
+            assertNull(reading.value().saved(), "the world before is not shown or changed as if it were current");
+        }
+    }
+
     /** The current world of a game Companion is not connected to. */
     private WorldReading reading() {
         GameLocation location = new GameLocation(this.directory);

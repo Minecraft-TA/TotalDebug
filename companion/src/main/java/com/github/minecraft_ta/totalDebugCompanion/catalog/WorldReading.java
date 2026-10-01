@@ -25,7 +25,7 @@ import java.util.Optional;
 public final class WorldReading implements AutoCloseable {
     /**
      * The current world: its folder, what its level.dat holds and when its icon was written, so a new icon is a change too;
-     * all null where no world was played yet.
+     * without what it holds where it could not be read, and all null where no world was played yet.
      */
     public record World(Path directory, CurrentWorld.Saved saved, FileTime icon) {
     }
@@ -62,10 +62,20 @@ public final class WorldReading implements AutoCloseable {
         return this.reading.value();
     }
 
-    private static World read(GameState game) throws IOException {
+    /**
+     * Reads the current world. A world read before that fails to read now, as while the game writes its level.dat, fails,
+     * so the world read before stays; another world that fails to read is published without what it holds, so nothing
+     * shows or changes the world before as if it were current.
+     */
+    private World read(GameState game) throws IOException {
         Path directory = CurrentWorld.directory(game).orElse(null);
         if (directory == null) return new World(null, null, null);
-        return new World(directory, CurrentWorld.read(game, directory), iconWritten(directory));
+        try {
+            return new World(directory, CurrentWorld.read(game, directory), iconWritten(directory));
+        } catch (IOException unreadable) {
+            if (this.reading.published().map(World::directory).filter(directory::equals).isPresent()) throw unreadable;
+            return new World(directory, null, null);
+        }
     }
 
     /** When the world's icon was written, or null without one. */

@@ -121,6 +121,35 @@ class ExternalEditsTest {
     }
 
     @Test
+    void aTextureWhoseFolderWasMadeAgainIsFollowedOnceOpenedAgain() throws Exception {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ResourceEdits edits = edits(record);
+        Path pack = edits.save(TEXTURE, png(0xFF112233)).get(5, TimeUnit.SECONDS).pack();
+        BlockingQueue<Object> taken = new LinkedBlockingQueue<>();
+        try {
+            edits.external().follow(TEXTURE, pack);
+            edits.external().addListener(TEXTURE, pack, (saved, failure) -> taken.add(failure != null ? failure : saved));
+            // A tool removes the texture's folder and makes it again, which ends the folder's watch.
+            Path folder = pack.resolve(TEXTURE).getParent();
+            Files.delete(pack.resolve(TEXTURE));
+            Files.delete(folder);
+            Files.createDirectory(folder);
+            Files.write(pack.resolve(TEXTURE), png(0xFF112233));
+            Thread.sleep(500);
+            taken.clear();
+
+            edits.external().follow(TEXTURE, pack);
+            byte[] drawn = png(0xFF778899);
+            Files.write(pack.resolve(TEXTURE), drawn);
+            Object result = taken.poll(10, TimeUnit.SECONDS);
+            assertEquals(ResourceEdits.Saved.class, result == null ? null : result.getClass(), String.valueOf(result));
+            assertEquals(ResourceOriginals.hash(drawn), record.change(new ChangeRecord.Resource(TEXTURE, pack)).current());
+        } finally {
+            edits.close();
+        }
+    }
+
+    @Test
     void aClosedProjectTakesNoSaveAndHoldsNoFolderOfThePack() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);

@@ -169,6 +169,7 @@ public final class WorldPanel extends JPanel {
         if (server.isPresent()) return readServer(game, server.get(), stack, refusal);
         WorldReading.World current = world.value();
         if (current.directory() == null) return Loaded.problem("No world has been played in this instance yet.");
+        if (current.saved() == null) return Loaded.problem("The world " + current.directory().getFileName() + " could not be read.");
         CurrentWorld.Saved saved = current.saved();
         return new Loaded(saved, null, PackResources.worldDatapacks(stack, saved), icon(current.directory().resolve("icon.png")), "");
     }

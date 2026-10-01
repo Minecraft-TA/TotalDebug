@@ -441,10 +441,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     @Override
     public void eventDispatched(AWTEvent event) {
         if (event instanceof WindowEvent windowEvent) {
-            // A window of Companion took the focus from another program, which may have written the files Companion shows.
-            if (windowEvent.getID() == WindowEvent.WINDOW_GAINED_FOCUS && windowEvent.getOppositeWindow() == null) {
-                WindowFocus.returned().fire();
-            }
+            WindowFocus.changed(windowEvent);
             return;
         }
         if (event instanceof MouseEvent mouseEvent) {
