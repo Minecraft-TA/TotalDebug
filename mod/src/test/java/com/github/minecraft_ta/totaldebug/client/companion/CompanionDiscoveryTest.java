@@ -87,7 +87,7 @@ class CompanionDiscoveryTest {
             return CompanionDiscovery.Result.CONNECTED;
         }, connected::get, () -> true, () -> { })) {
             discovery.start();
-            await(() -> attempts.get() >= 2);
+            await(() -> attempts.get() >= 2 && connected.get());
             assertTrue(connected.get());
         }
     }
@@ -113,7 +113,7 @@ class CompanionDiscoveryTest {
             assertEquals(1, attempts.get());
             assertFalse(connected.get());
             enabled.set(true);
-            await(() -> attempts.get() == 2);
+            await(() -> attempts.get() == 2 && connected.get());
             assertTrue(connected.get());
         }
     }

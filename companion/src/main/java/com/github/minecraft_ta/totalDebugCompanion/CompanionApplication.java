@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProject;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
@@ -90,6 +91,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private final CompanionLaunchConfiguration launchConfiguration;
     private final Object lifecycleLock = new Object();
     private volatile ProjectScope current;
+    /** The current project as the window follows it; {@link #makeCurrent} is the one place that changes it. */
+    private final CurrentProject projectState = new CurrentProject();
     /** Removes the current project's routes of the game's messages; under the lifecycle lock. */
     private Runnable currentMessages = () -> { };
     private final InstanceState emptyState = InstanceState.inMemory();
@@ -772,6 +775,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         this.currentMessages = () -> { };
         current = scope;
         if (scope != null && session != null) this.currentMessages = scope.listen(session);
+        this.projectState.set(scope);
     }
 
     private void reportCleanupFailure(String description, Exception failure) {
@@ -790,12 +794,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
     /** Shows the project's saved pack catalog and item icons, which stay browsable without a game connection. */
     private void restoreCatalog(ProjectScope scope) {
-        scope.catalog().changed().subscribe(() -> {
-            if (currentScope() == scope) onUi(CompanionUi::catalogChanged);
-        });
-        scope.changes().changed().subscribe(() -> {
-            if (currentScope() == scope) onUi(CompanionUi::changesRecorded);
-        });
         itemIcons.setItemLookup(itemId -> scope.catalog().index().flatMap(index -> index.itemIcon(itemId)));
         // Independent tasks: unreadable icon archives must not keep the catalog from loading.
         itemIcons.restore(scope.paths().previews());
@@ -1085,7 +1083,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     public MainWindow createWindow() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Create the window on the EDT");
         synchronized (lifecycleLock) { checkWindowCreation(); }
-        MainWindow window = new MainWindow(this::currentScope, getDebuggerController(), codeInsightService,
+        MainWindow window = new MainWindow(this.projectState, getDebuggerController(), codeInsightService,
                 scriptExecutions, executionRuns, notifications, editorRuns, runtimeIndexService, this::openDebugFrame, this::exit, this, this::setMcpEnabled, itemIcons);
         List<PendingNavigation> queued;
         try {

@@ -66,7 +66,7 @@ Owners:
 
 | Owner | Signals | Replaces |
 |---|---|---|
-| The application's projects | current project | the scope checks in `FileTreeView`, `CompanionApplication` and the UI |
+| The application's projects | current project (`CurrentProject`, whose `follows` moves to the next project and drops what the one before told) | the scope checks in `CompanionApplication`'s relays |
 | `PackCatalogService` | catalog | `addListener` |
 | `GamePacks` | resource packs, datapacks | `addListener(side)`, `addResourcePackListener`, `addDatapackListener` |
 | `ChangeRecord` | changes | `addListener` |
@@ -129,7 +129,7 @@ this.loader = new PageLoader<>(this::read, this::show, this::fail)
 - **A write checks where it goes when it is made**, not by what the page last read: the resource editor's save refuses a pack the tab no longer saves into, as the change pipeline refuses a copy changed since.
 - **A page that writes holds its reads** (`hold`, `release`): while its save runs, a read under way is not shown, since it may predate the write, and followed changes wait as while the page is hidden; released, the page reads once what concerned it meanwhile. A page with unsaved changes that must not be replaced by a read (`ConfigPanel`) holds its reads the same way while they last. A page does not read again because it saved; it hears the owner's signal like every other follower.
 - **A follow may say whether a change concerns the page**, asked when the page would read: the resource editor follows the whole change record, but only its own file's entry, and not its own save's. A read's preparation may also ask which followed signals led to it (`fired`): the resource editor lets Save wait only for a read after a pack change, which may move it to another pack, not for one after an edit elsewhere.
-- **A read never changes an owner.** What the Changes page's labels do today with `ChangeRecord.observed` moves to the owners, which notice a value put back outside Companion on their own readings, on the write queue.
+- **A read never changes an owner**, with one exception: the Changes page's read drops a change whose file holds its original value again, put back outside Companion (`ChangeRecord.observed`), and reads whenever it is shown. The configuration and resource files have no owner that reads them, so an owner would notice only when this page asked it to read anyway. Decided on 2026-09-30 instead of a step that moved the check into the owners.
 - A part of a page that reads on its own, such as the resources of a definition, has its own loader with that part as its page.
 - Work that only redraws from values in memory, such as icons again after new ones came, uses `loader.updates(signal, redraw)`: the same waiting and merging, with no read. A page with nothing to read has a loader that only redraws (`PageLoader.redraws(page)`). What shows outside the page, such as its tab's title, is redrawn from the owners' published values whenever their signal fires, shown or not (`retitles`).
 
@@ -207,8 +207,7 @@ PRs on 1.21.1, stacked, each reviewed until clean. A shared mechanism comes with
 | 6 | The last watchers onto `FileWatch`: the Project tree's folders, told of entries only, and `ExternalEdits`, whose settle runs on the timer; `FileUtils`' pause for Companion's own moves becomes `FileWatch.pausing` | `FileUtils`, the watchers and schedulers of `ExternalEdits` |
 | 7 | All remaining pages on `page` and `follows`, the logs, configuration and resource packs pages reading whenever shown; the World tab's title from its owner; reads on the file workers | `ShownUpdates`, `whenShown`, `waitsWhileHidden` and `follow`, the pages' own subscriptions, the reads in constructors, the navigation refreshes |
 | 8a | The pipeline owning the write queue; the remaining executors and one-argument async calls onto `Workers` | `ConfigChanges`' executor, the UI classes' and `JsonStateWriter`'s executors, every use of the shared pool |
-| 8b | The current project as state, which the Project tree and the main window follow; no file checks on the Swing thread | the scope checks, the `CompanionUi` relays |
-| 8c | Owners noticing values put back outside Companion, on the write queue; connection numbers for waiting requests | `ChangeRecord.observed` from page reads and the Changes page's read whenever shown |
+| 8b | The current project as state (`CurrentProject`), whose signals the main window follows | the `CompanionUi` relays and their scope checks |
 
 After the messages, A4 continues with categories registering their pages and Modpack rows. Splitting `CompanionApplication` (the game connection and the MCP server into their own classes) and the mod's `CompanionAppClient` (launching Companion) is easier then and is decided at that point.
 

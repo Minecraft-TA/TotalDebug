@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import java.util.List;
+import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProject;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
@@ -90,6 +92,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private boolean disposed;
     private final Consumer<CompanionTheme> themeListener = this::updateWindowIcon;
     private final Supplier<ProjectScope> project;
+    private final List<Runnable> stopFollowingProject;
     private final DebuggerSessionController debugger;
     private final CodeInsightService insights;
     private final ItemIconService itemIcons;
@@ -102,7 +105,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private final ProjectControls projects;
     private boolean gameConnected;
 
-    public MainWindow(Supplier<ProjectScope> project, DebuggerSessionController debugger, CodeInsightService insights,
+    public MainWindow(CurrentProject currentProject, DebuggerSessionController debugger, CodeInsightService insights,
                       ScriptExecutionService scripts, ExecutionRuns executions, NotificationCenter notifications, EditorScriptRunService editorRuns, RuntimeIndexService indexLoader, FrameNavigation frameNavigation, Runnable exit,
                       ProjectControls projects, Consumer<Boolean> toggleMcp, ItemIconService itemIcons) {
         this.projects = projects;
@@ -110,7 +113,10 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.notifications = notifications;
         this.editorRuns = editorRuns;
         this.projectSelector = new ProjectSelector(projects, notifications);
-        this.project = project;
+        this.project = currentProject::scope;
+        // The current project's catalog and change record, whichever project that is.
+        this.stopFollowingProject = List.of(currentProject.follows(scope -> scope.catalog().changed(), this::catalogChanged),
+                currentProject.follows(scope -> scope.changes().changed(), this::changesRecorded));
         this.debugger = debugger;
         this.insights = insights;
         this.scripts = scripts;
@@ -243,6 +249,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     @Override public void dispose() {
         if (!disposed) {
             disposed = true;
+            stopFollowingProject.forEach(Runnable::run);
             if (debuggerPopup != null) debuggerPopup.setVisible(false);
             projectSelector.dispose();
             fileTreeView.dispose();
@@ -269,12 +276,12 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         refreshActions();
         this.projectSelector.refresh();
     }
-    @Override public void changesRecorded() {
+    private void changesRecorded() {
         // Only the Changes row counts the changes in effect.
         this.fileTreeView.refreshModpack(false);
     }
 
-    @Override public void catalogChanged() {
+    private void catalogChanged() {
         this.fileTreeView.refreshModpack(true);
         this.editorTabs.refreshTabIdentities();
         if (this.searchEverywherePopup != null) this.searchEverywherePopup.catalogChanged();
