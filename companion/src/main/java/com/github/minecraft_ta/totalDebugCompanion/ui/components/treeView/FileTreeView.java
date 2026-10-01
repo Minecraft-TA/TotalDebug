@@ -65,11 +65,15 @@ public class FileTreeView extends JScrollPane {
         return null;
     }
 
-    /** Lists the loaded folders of Scripts again, which an editor may have changed while the user was away. */
+    /**
+     * Lists the loaded folders of Scripts again, which an editor may have changed while the user was away, or adds the
+     * Scripts root where the folder was made meanwhile.
+     */
     private void refreshScripts() {
         if (disposed) return;
         var scripts = scriptsRoot(project.get());
         if (scripts != null) tree.refreshRoot(scripts, true);
+        else ensureScriptsRoot();
     }
 
     /** Creation can introduce Scripts after profile loading; prepare only that new root off the EDT. */

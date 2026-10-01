@@ -95,6 +95,42 @@ class FileTreeRefreshTest {
         }
     }
 
+    @Test
+    void comingBackToCompanionAddsAScriptsFolderMadeMeanwhile() throws Exception {
+        var scope = ProjectScope.open(new Object(), CompanionProfile.forGame(directory));
+        FileTreeView[] view = new FileTreeView[1];
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                view[0] = new FileTreeView(() -> scope, ignored -> {});
+                view[0].reloadProfile();
+            });
+            var tree = (LazyFileJTree) view[0].getViewport().getView();
+            boolean[] before = new boolean[1];
+            SwingUtilities.invokeAndWait(() -> before[0] = tree.hasRootNode("scripts"));
+            assertFalse(before[0], "no Scripts folder, no root");
+
+            // A tool makes the Scripts folder while the user is away.
+            Path scripts = Files.createDirectories(scope.paths().scripts());
+            Files.writeString(scripts.resolve("Made.tdscript"), "");
+            SwingUtilities.invokeAndWait(() -> WindowFocus.returned().fire());
+            assertTrue(awaitRevealed(tree), "coming back adds the root");
+        } finally {
+            SwingUtilities.invokeAndWait(() -> { if (view[0] != null) view[0].dispose(); });
+            scope.retire();
+            scope.close();
+        }
+    }
+
+    /** Tries to reveal the script for a while, as the root is prepared off the Swing thread. */
+    private static boolean awaitRevealed(LazyFileJTree tree) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            if (tree.revealItemPath("scripts", List.of("Made.tdscript")).get(5, TimeUnit.SECONDS)) return true;
+            Thread.sleep(50);
+        }
+        return false;
+    }
+
     /** The names of the rows under Scripts, or under its loaded folder {@code folder}. */
     private static List<String> names(LazyFileJTree tree, String... folder) throws Exception {
         List<String> names = new ArrayList<>();
