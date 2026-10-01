@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
@@ -69,7 +70,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.LinkedHashMap;
@@ -799,7 +799,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         itemIcons.setItemLookup(itemId -> scope.catalog().index().flatMap(index -> index.itemIcon(itemId)));
         // Independent tasks: unreadable icon archives must not keep the catalog from loading.
         itemIcons.restore(scope.paths().previews());
-        CompletableFuture.runAsync(scope.catalog()::restore);
+        CompletableFuture.runAsync(scope.catalog()::restore, Workers.files());
     }
 
     private void handlePackCatalog(PreparedFilePayload message) {
@@ -811,7 +811,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (scope == null || !scope.isActive()) return;
         switch (message.state()) {
             case PREPARING -> scope.catalog().capturing();
-            case READY -> scope.catalog().accept(message.inventoryId(), Path.of(message.file()), ForkJoinPool.commonPool());
+            case READY -> scope.catalog().accept(message.inventoryId(), Path.of(message.file()), Workers.files());
             case FAILED -> scope.catalog().failed(message.detail());
         }
     }

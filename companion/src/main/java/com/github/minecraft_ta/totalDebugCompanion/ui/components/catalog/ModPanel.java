@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
@@ -359,7 +360,7 @@ public final class ModPanel extends JPanel {
     }
 
     private void loadLogo(List<ModLogoIcons.Source> logo) {
-        CompletableFuture.supplyAsync(() -> readLogo(logo)).thenAccept(image -> SwingUtilities.invokeLater(() -> {
+        CompletableFuture.supplyAsync(() -> readLogo(logo), Workers.files()).thenAccept(image -> SwingUtilities.invokeLater(() -> {
             if (!this.disposed && this.summary != null && image != null) this.header.setIcon(image);
         }));
     }

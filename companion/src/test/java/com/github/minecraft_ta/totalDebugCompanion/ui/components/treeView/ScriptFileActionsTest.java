@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import javax.swing.JMenuItem;
 import javax.swing.Action;
 import javax.swing.JPopupMenu;
@@ -41,6 +42,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -54,6 +56,55 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @UiTest
 class ScriptFileActionsTest {
+    @Test
+    void movingWaitsForPendingSavesWithoutHoldingTheirWorker() throws Exception {
+        Path home = Files.createDirectories(directory.resolve("home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            Path script = window.editorContext().project().scriptFiles().create(
+                    window.editorContext().project().scriptFiles().root(), "Pending", false, "return 1;");
+            CompletableFuture<Void> pending = new CompletableFuture<>();
+            CountDownLatch observed = new CountDownLatch(1);
+            ScriptView view = new ScriptView(window.editorContext(), script) {
+                @Override public CompletableFuture<Void> pendingSave() {
+                    observed.countDown();
+                    return pending;
+                }
+            };
+            edt(() -> window.getEditorTabs().openEditorTab(view)).get(10, TimeUnit.SECONDS);
+            CountDownLatch busy = new CountDownLatch(3);
+            CountDownLatch release = new CountDownLatch(1);
+            CompletableFuture<Void> moving = null;
+            try {
+                for (int index = 0; index < 3; index++) {
+                    Workers.files().execute(() -> {
+                        busy.countDown();
+                        try {
+                            release.await(10, TimeUnit.SECONDS);
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread().interrupt();
+                        }
+                    });
+                }
+                assertTrue(busy.await(5, TimeUnit.SECONDS));
+                Path renamed = script.resolveSibling("Renamed.tdscript");
+                moving = edt(() -> window.scriptFileActions().rename(script, renamed));
+                assertTrue(observed.await(5, TimeUnit.SECONDS));
+                Workers.files().execute(() -> pending.complete(null));
+                moving.get(5, TimeUnit.SECONDS);
+                assertEquals("return 1;", Files.readString(renamed));
+                assertEquals(renamed, edt(view::getPath));
+            } finally {
+                pending.complete(null);
+                release.countDown();
+                if (moving != null) moving.handle((ignored, failure) -> null).get(10, TimeUnit.SECONDS);
+                edt(() -> { window.dispose(); return null; });
+            }
+        }
+    }
+
     @ParameterizedTest @ValueSource(strings = {"create", "duplicate"})
     void recreatingAnExternallyDeletedOpenScriptPreservesItsDraft(String command) throws Exception {
         Path home = Files.createDirectories(directory.resolve("home"));

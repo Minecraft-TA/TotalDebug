@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.pack.JsonFormat;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
@@ -127,7 +128,7 @@ final class ResourceTextEditor extends PackResourceEditor<String> {
         // Before the working pack's copy is read, the text on screen is not what a save would write over.
         if (!this.text.editorPane.isEditable() || this.formatting != null) return;
         String shown = this.text.text();
-        CompletableFuture<String> task = CompletableFuture.supplyAsync(() -> JsonFormat.format(shown));
+        CompletableFuture<String> task = CompletableFuture.supplyAsync(() -> JsonFormat.format(shown), Workers.files());
         this.formatting = task;
         task.whenComplete((formatted, failure) -> SwingUtilities.invokeLater(() -> {
             this.formatting = null;

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.GroupedRowCell;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.SegmentedToggle;
@@ -92,7 +93,7 @@ final class DataView extends JPanel {
     private final SpeedSearch speedSearch;
 
     DataView() {
-        this(ForkJoinPool.commonPool());
+        this(Workers.files());
     }
 
     /** {@code decoder} decodes the data of each read; a large read must not hold up the Swing thread. */

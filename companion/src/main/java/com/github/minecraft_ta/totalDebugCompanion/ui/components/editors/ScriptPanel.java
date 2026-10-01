@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
@@ -50,7 +51,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ForkJoinPool;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.border.CompoundBorder;
@@ -166,7 +166,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         setupLogPanel();
         setupSaveBehavior();
         this.completion = new ScriptCompletionController(editorPane, scriptView.compilationName(), codeCompletionPopup,
-                ForkJoinPool.commonPool(), analysis::completionAccepted);
+                Workers.files(), analysis::completionAccepted);
         setupSignatureHelp();
         setupFormatting();
         var format = new JButton(this.editorPane.getActionMap().get("formatFile"));
@@ -469,7 +469,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         var generated = JavaSnippetSource.body(scriptView.compilationName(), UIUtils.getText(editorPane));
         int caret = generated.sourceMap().toGeneratedOffset(editorPane.getCaretPosition());
         if (caret < 0) { hideSignatureHelp(); return; }
-        CompletableFuture.supplyAsync(() -> SignatureHelp.find(scriptView.compilationName(), generated.source(), caret))
+        CompletableFuture.supplyAsync(() -> SignatureHelp.find(scriptView.compilationName(), generated.source(), caret), Workers.files())
                 .whenComplete((help, failure) -> SwingUtilities.invokeLater(() -> {
                     if (disposed || request != signatureRequest || !signatureHelpActive || !editorPane.isFocusOwner()) return;
                     if (failure != null) LOGGER.log(System.Logger.Level.WARNING, "Unable to load parameter information", failure);
@@ -538,7 +538,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         var write = saveTail.handle((ignored, failure) -> null).thenRunAsync(() -> {
             try { scriptView.persist(text); }
             catch (IOException failure) { throw new CompletionException(failure); }
-        });
+        }, Workers.files());
         var published = new CompletableFuture<Void>();
         saveTail = published;
         write.whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {

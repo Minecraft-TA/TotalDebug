@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -358,7 +359,7 @@ final class NotificationWidget extends JButton implements AutoCloseable {
                 return;
             }
             openSource.setToolTipText("Checking source");
-            CompletableFuture.supplyAsync(() -> directory ? Files.isDirectory(path) : Files.isRegularFile(path)).whenComplete((exists, failure) -> UIUtils.onEdt(() -> {
+            CompletableFuture.supplyAsync(() -> directory ? Files.isDirectory(path) : Files.isRegularFile(path), Workers.files()).whenComplete((exists, failure) -> UIUtils.onEdt(() -> {
                 if (closed || request != sourceRequest || !expanded) return;
                 String currentReason = unavailable.apply(entry.source());
                 if (currentReason == null && (failure != null || !Boolean.TRUE.equals(exists))) currentReason = "The source is no longer available";

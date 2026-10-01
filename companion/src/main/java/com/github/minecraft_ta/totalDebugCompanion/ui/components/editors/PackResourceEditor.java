@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackFolders;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -442,7 +443,7 @@ abstract class PackResourceEditor<V> extends JPanel {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }).whenComplete((held, failure) -> SwingUtilities.invokeLater(() -> {
+        }, Workers.files()).whenComplete((held, failure) -> SwingUtilities.invokeLater(() -> {
             // The reads go on afterwards, whatever happens here, unless a save takes the hold over.
             boolean savingAgain = false;
             try {
@@ -501,7 +502,7 @@ abstract class PackResourceEditor<V> extends JPanel {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }).thenCompose(bytes -> this.edits.save(this.path, into, bytes, alongside, expected))
+        }, Workers.files()).thenCompose(bytes -> this.edits.save(this.path, into, bytes, alongside, expected))
                 .whenComplete((saved, failure) -> SwingUtilities.invokeLater(() -> {
                     // The reads go on afterwards, whatever happens here, unless another save takes the hold over.
                     boolean savingAgain = false;

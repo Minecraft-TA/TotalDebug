@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
@@ -280,7 +281,7 @@ public final class InspectionSession {
             } catch (Exception exception) {
                 throw new IllegalStateException(exception.getMessage(), exception);
             }
-        }).whenComplete((path, failure) -> SwingUtilities.invokeLater(() -> {
+        }, Workers.files()).whenComplete((path, failure) -> SwingUtilities.invokeLater(() -> {
             if (failure == null) refresh();
         }));
     }
@@ -365,7 +366,7 @@ public final class InspectionSession {
             done.complete(null);
             return done;
         }
-        CompletableFuture.supplyAsync(this::loadTools).whenComplete((loaded, failure) -> SwingUtilities.invokeLater(() -> {
+        CompletableFuture.supplyAsync(this::loadTools, Workers.files()).whenComplete((loaded, failure) -> SwingUtilities.invokeLater(() -> {
             if (this.disposed || current != this.toolRevision) {
                 done.complete(null);
                 return;

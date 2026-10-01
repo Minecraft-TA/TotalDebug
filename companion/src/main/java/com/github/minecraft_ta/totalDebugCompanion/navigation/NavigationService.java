@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
 import com.github.minecraft_ta.totalDebugCompanion.model.ChangesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ConfigFileView;
@@ -585,7 +586,7 @@ public final class NavigationService {
     public CompletableFuture<Void> relocatePreview(IEditorPanel previous, Path path) {
         if (path.getFileName().toString().endsWith(ScriptView.FILE_EXTENSION)) {
             EditorContext context = editors.get();
-            return CompletableFuture.supplyAsync(() -> new ScriptView(context, path)).thenComposeAsync(replacement -> {
+            return CompletableFuture.supplyAsync(() -> new ScriptView(context, path), Workers.files()).thenComposeAsync(replacement -> {
                 // A pending switch may still be vetoed by this active file operation.
                 if (project != context.project() || context.project().phase() == ProjectScope.Phase.RETIRED) {
                     replacement.dispose();
@@ -604,7 +605,7 @@ public final class NavigationService {
         EditorContext context = editors.get();
         if (context.project() != expected || project != expected || expected.phase() == ProjectScope.Phase.RETIRED)
             return CompletableFuture.failedFuture(new CancellationException("Project changed while creating the script"));
-        return captureCurrentEntry().thenCompose(origin -> CompletableFuture.supplyAsync(() -> new ScriptView(context, path))
+        return captureCurrentEntry().thenCompose(origin -> CompletableFuture.supplyAsync(() -> new ScriptView(context, path), Workers.files())
                 .thenComposeAsync(script -> {
                     if (project != expected || expected.phase() == ProjectScope.Phase.RETIRED) {
                         script.dispose();

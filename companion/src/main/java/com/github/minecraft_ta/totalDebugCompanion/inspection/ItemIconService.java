@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemModelId;
@@ -25,7 +26,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ForkJoinPool;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -89,7 +89,7 @@ public final class ItemIconService implements AutoCloseable {
      * newest restore adopts its result, and a snapshot announced meanwhile supersedes it.
      */
     public CompletableFuture<Void> restore(Path directory) {
-        return restore(directory, ForkJoinPool.commonPool());
+        return restore(directory, Workers.files());
     }
 
     CompletableFuture<Void> restore(Path directory, Executor reader) {

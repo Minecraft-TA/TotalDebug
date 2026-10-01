@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Strand;
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureAnimation;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureImages;
@@ -18,8 +20,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipFile;
 
@@ -33,12 +33,9 @@ final class TextureThumbnails {
     static final int MAX_TEXTURE_BYTES = 4 * 1024 * 1024;
 
     private final int size;
-    private final ExecutorService loader = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "Texture thumbnails");
-        thread.setDaemon(true);
-        return thread;
-    });
-    /** Loader thread only. */
+    /** Where the previews are read, one at a time, as the archives are open there. */
+    private final Strand loader = Workers.fileStrand();
+    /** On the loader only. */
     private final Map<Path, ZipFile> archives = new HashMap<>();
     private final IconLoader<ModResources.Resource> icons;
     /** Previews requested and not yet finished; the archives close when none remain. */
@@ -106,6 +103,5 @@ final class TextureThumbnails {
     void dispose() {
         this.icons.clear();
         this.loader.execute(this::closeArchives);
-        this.loader.shutdown();
     }
 }

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourcePaths;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
@@ -23,16 +24,8 @@ import java.awt.*;
 import java.awt.event.FocusEvent;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public final class ResourceViewPanel extends JPanel {
-
-    private static final ExecutorService LOADER = Executors.newFixedThreadPool(2, runnable -> {
-        Thread thread = new Thread(runnable, "Resource viewer loader");
-        thread.setDaemon(true);
-        return thread;
-    });
 
     private final NavigationService navigation;
     private final ContentSource source;
@@ -90,7 +83,7 @@ public final class ResourceViewPanel extends JPanel {
             } catch (Exception exception) {
                 throw new CompletionException(exception);
             }
-        }, LOADER);
+        }, Workers.files());
         this.loadTask = task;
         task.whenComplete((opened, failure) -> SwingUtilities.invokeLater(() -> {
             if (this.disposed || this.loadTask != task) {

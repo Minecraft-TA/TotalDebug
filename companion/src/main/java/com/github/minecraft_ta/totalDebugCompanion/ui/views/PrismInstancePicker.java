@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.formdev.flatlaf.util.UIScale;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
@@ -141,7 +142,7 @@ public final class PrismInstancePicker extends JDialog {
                     return new Entry(profile, ProjectRegistry.defaultName(profile), description, artwork(details.icon()), selected);
                 }).sorted(Comparator.comparing(Entry::current).reversed().thenComparing(Entry::name, String.CASE_INSENSITIVE_ORDER)).toList();
             } catch (IOException failure) { throw new CompletionException(failure); }
-        }).whenComplete((loaded, failure) -> UIUtils.onEdt(() -> {
+        }, Workers.files()).whenComplete((loaded, failure) -> UIUtils.onEdt(() -> {
             if (disposed) return;
             loading = false;
             if (failure != null) {

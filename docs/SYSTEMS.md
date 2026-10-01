@@ -143,20 +143,20 @@ The Swing thread runs Swing, and nothing that waits or grows with the data: no f
 
 | Worker | For | Instead of |
 |---|---|---|
-| File work (a bounded pool of platform threads) | Reads for pages and readings | The shared pool in `PageLoader` and the one-argument `supplyAsync` calls; `ResourceViewPanel`'s pool |
-| Serial workers (one thread each, by name) | Components whose state is confined to one thread, or whose order matters | The own executors of `TextureThumbnails`, `ModLogoIcons`, the item icon renderer, `JsonStateWriter` |
-| The project's write queue (a serial worker the pipeline owns) | Every write of the pipeline, adoptions, and owners noticing values put back | `ConfigChanges`' executor, which every category borrows today |
-| Timers (one scheduler) | Settle delays, retries, timeouts; a timer only hands work to another worker | `KeyAssignments`' and `ExternalEdits`' schedulers, `JsonStateWriter`'s scheduled flush |
+| File work (`Workers.files()`, a bounded pool of platform threads) | Reads for pages and readings, and other short work off the Swing thread | The shared pool in `PageLoader` and the one-argument `supplyAsync` calls; `ResourceViewPanel`'s pool |
+| Serial paths (`Workers.strand()` for owners, `Workers.fileStrand()` for file work), each a `Strand` over the shared threads | Owners, and components whose state stays on one thread or whose order matters, as open archives | The own executors of `TextureThumbnails` and `ModLogoIcons` |
+| The project's write queue (`WriteQueue`, with its own serial worker from `Workers.projectWrites()`) | Every write of the pipeline, independent of unrelated reads, so closing can finish its writes | `ConfigChanges`' executor, which every category borrowed |
+| Timers (`Workers.later`, one scheduler) | Settle delays, retries, timeouts; a timer only hands work to another worker | `KeyAssignments`' and `ExternalEdits`' schedulers, `JsonStateWriter`'s scheduled flush |
 
 - Platform threads, not virtual ones: on Java 21 a virtual thread is pinned inside `synchronized` and by `ZipFile`, which most reads use.
 - Swing timers stay for delays and animations on the Swing thread.
-- **Allowed own threads**, each owned by a service that closes it: the debugger (`DebuggerSessionQueue`, `DebuggerEvaluationRunner`), the editor's Java analysis, script compilation, decompilation, search (also `SearchEverywherePopup`'s) and the runtime index, the MCP job service, `CompanionApplication`'s project switching and MCP lifecycle, and `ProjectSelectionServer`. The list lives in the architecture test; adding to it is a decision recorded here.
+- **Allowed own threads**, each owned by a service that closes it: the debugger (`DebuggerSessionQueue`, `DebuggerEvaluationRunner`), the editor's Java analysis, script compilation, decompilation, search (also `SearchEverywherePopup`'s) and the runtime index, the MCP job service, `CompanionApplication`'s project switching and MCP lifecycle, `ProjectSelectionServer`, and the item icon renderer, which its graphics library confines to one thread. The list lives in the architecture test; adding to it is a decision recorded here.
 
 ## 5. Writes
 
 The change pipeline ([CHANGE_PIPELINE.md](CHANGE_PIPELINE.md)) stays the one way to change the game's and the packs' files and what the running game keeps.
 
-- **The pipeline owns the project's write queue.** `ConfigChanges` stops creating it; `ResourceEdits` gets it from the pipeline.
+- **The pipeline owns the project's write queue.** The project makes one `WriteQueue` for its pipeline and closes it before its change record; `ConfigChanges` makes none, and `ResourceEdits` and configuration settings write through the pipeline's. Its worker is separate from the shared file pool, so unrelated reads cannot delay writes or closing an empty queue.
 - **A category may write beside its value inside its own write task**, as `ResourceEdits` enables the managed pack in `options.txt` and writes its `pack.mcmeta`. Nothing writes the game's or the packs' files outside a write task.
 - **Companion's own files** (its state, script files, originals, decompiled sources) are not the pipeline's; they are written by their owners on serial workers.
 - **After a write, the category's owner fires its signal** if the value differs.
@@ -206,7 +206,9 @@ PRs on 1.21.1, stacked, each reviewed until clean. A shared mechanism comes with
 | 5 | The owners still telling through their own listeners on signals: `GameLocation`, `ItemIconService`, `RuntimeIndexService` | `GameLocation.Change` and the three listener lists |
 | 6 | The last watchers onto `FileWatch`: the Project tree's folders, told of entries only, and `ExternalEdits`, whose settle runs on the timer; `FileUtils`' pause for Companion's own moves becomes `FileWatch.pausing` | `FileUtils`, the watchers and schedulers of `ExternalEdits` |
 | 7 | All remaining pages on `page` and `follows`, the logs, configuration and resource packs pages reading whenever shown; the World tab's title from its owner; reads on the file workers | `ShownUpdates`, `whenShown`, `waitsWhileHidden` and `follow`, the pages' own subscriptions, the reads in constructors, the navigation refreshes |
-| 8 | The current project as state, which the Project tree and the main window follow; connection numbers for waiting requests; the pipeline owning the write queue, where owners notice values put back outside Companion; no file checks on the Swing thread; the remaining executors onto `Workers` | `ConfigChanges`' executor, the scope checks, the `CompanionUi` relays, `ChangeRecord.observed` from page reads and the Changes page's read whenever shown, the UI classes' executors |
+| 8a | The pipeline owning the write queue; the remaining executors and one-argument async calls onto `Workers` | `ConfigChanges`' executor, the UI classes' and `JsonStateWriter`'s executors, every use of the shared pool |
+| 8b | The current project as state, which the Project tree and the main window follow; no file checks on the Swing thread | the scope checks, the `CompanionUi` relays |
+| 8c | Owners noticing values put back outside Companion, on the write queue; connection numbers for waiting requests | `ChangeRecord.observed` from page reads and the Changes page's read whenever shown |
 
 After the messages, A4 continues with categories registering their pages and Modpack rows. Splitting `CompanionApplication` (the game connection and the MCP server into their own classes) and the mod's `CompanionAppClient` (launching Companion) is easier then and is decided at that point.
 
