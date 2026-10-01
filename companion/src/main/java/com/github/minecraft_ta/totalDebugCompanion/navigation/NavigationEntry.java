@@ -32,6 +32,7 @@ record NavigationEntry(
             case NavigationTarget.PackConfiguration ignored -> false;
             case NavigationTarget.PackResources ignored -> false;
             case NavigationTarget.Logs ignored -> false;
+            case NavigationTarget.Mixins ignored -> false;
             case NavigationTarget.Changes ignored -> false;
             case NavigationTarget.KeyBindings ignored -> false;
             case NavigationTarget.World ignored -> false;

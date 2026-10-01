@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.ClassBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
 public final class RuntimeBinding implements AutoCloseable {
     private final RuntimeIndexService.ReadySnapshot snapshot;
     private final RuntimeSourceCatalog sources;
+    private final RuntimeSnapshotBytecodeSource bytecode;
     private final CompanionDecompilationService decompiler;
     private final ReferenceSearchService references;
     private final String classpath;
@@ -32,6 +34,7 @@ public final class RuntimeBinding implements AutoCloseable {
         this.compiler = compiler;
         this.insights = insights;
         this.sources = new RuntimeSourceCatalog(snapshot.sources());
+        this.bytecode = bytecode;
         this.classpath = snapshot.isRuntime() ? snapshot.sources().stream().map(source -> source.path().toString())
                 .collect(Collectors.joining(File.pathSeparator)) : null;
         try {
@@ -59,6 +62,8 @@ public final class RuntimeBinding implements AutoCloseable {
     public RuntimeIndexService.ReadySnapshot snapshot() { return snapshot; }
     public RuntimeSourceCatalog sources() { return sources; }
     public CompanionDecompilationService decompiler() { return decompiler; }
+    /** The runtime's class files, which the decompiler owns and closes. */
+    public ClassBytecodeSource bytecode() { return bytecode; }
     public ReferenceSearchService references() { return references; }
     public String classpath() { return classpath; }
 

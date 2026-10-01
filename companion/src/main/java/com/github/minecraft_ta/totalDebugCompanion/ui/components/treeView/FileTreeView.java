@@ -410,6 +410,11 @@ public class FileTreeView extends JScrollPane {
         return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.LOGS));
     }
 
+    /** Selects the Mixins row of the Modpack tree. */
+    public CompletableFuture<Boolean> revealMixins() {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.MIXINS));
+    }
+
     /** Whether the game has written logs or crash reports into its directory. */
     /** Selects the Key bindings row of the Modpack tree. */
     public CompletableFuture<Boolean> revealKeyBindings() {

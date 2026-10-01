@@ -55,6 +55,7 @@ public final class CatalogIndex {
     private final List<Entry> entries;
     private final List<String> otherNamespaces;
     private final Map<String, List<PackCatalog.KeyBinding>> keyBindingsByMod = new HashMap<>();
+    private volatile Boolean mixins;
 
     public CatalogIndex(PackCatalog catalog) {
         this(catalog, List.of());
@@ -136,6 +137,16 @@ public final class CatalogIndex {
 
     public PackCatalog catalog() {
         return this.catalog;
+    }
+
+    /** Whether any mod declares mixins; read from the mod files once, which the catalog's loader does off the Swing thread. */
+    public boolean declaresMixins() {
+        Boolean known = this.mixins;
+        if (known == null) {
+            known = Mixins.declared(this);
+            this.mixins = known;
+        }
+        return known;
     }
 
     /** Installed mods ordered by name. */

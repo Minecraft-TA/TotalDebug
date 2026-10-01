@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.catalog;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -20,8 +21,20 @@ public final class CatalogFixtures {
     public static Path modJar(Path directory) throws IOException {
         Path jar = directory.resolve("testmod.jar");
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
+            // A mixin configuration with two mixins, one of them only on the client.
+            write(zip, "META-INF/neoforge.mods.toml", "modLoader=\"javafml\"\n[[mods]]\nmodId=\"testmod\"\n"
+                    + "[[mixins]]\nconfig=\"testmod.mixins.json\"\n");
+            write(zip, "testmod.mixins.json", "{\"package\":\"testmod.mixin\",\"mixins\":[\"LevelMixin\"],\"client\":[\"ScreenMixin\"]}");
+            zip.putNextEntry(new ZipEntry("testmod/mixin/LevelMixin.class"));
+            zip.write(MixinFixtures.mixinClass("testmod/mixin/LevelMixin", "net.minecraft.world.level.Level", 1000, List.of(
+                    new MixinFixtures.Method("onTick", "Lorg/spongepowered/asm/mixin/injection/Inject;", "method", "tick()V"),
+                    new MixinFixtures.Method("explode", "Lorg/spongepowered/asm/mixin/Overwrite;", null, null))));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("testmod/mixin/ScreenMixin.class"));
+            zip.write(MixinFixtures.mixinClass("testmod/mixin/ScreenMixin", "net.minecraft.client.gui.screens.Screen", 1100, List.of(
+                    new MixinFixtures.Method("wrapRender", "Lcom/llamalad7/mixinextras/injector/wrapoperation/WrapOperation;", "method", "render"))));
+            zip.closeEntry();
             for (String entry : List.of(
-                    "META-INF/neoforge.mods.toml",
                     "testmod/Widget.class",
                     "assets/testmod/lang/en_us.json",
                     "assets/testmod/models/item/widget.json",
@@ -36,6 +49,12 @@ public final class CatalogFixtures {
             }
         }
         return jar;
+    }
+
+    private static void write(ZipOutputStream zip, String entry, String text) throws IOException {
+        zip.putNextEntry(new ZipEntry(entry));
+        zip.write(text.getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
     }
 
     public static final String CONTEXT_IN_GAME = "net.neoforged.neoforge.client.settings.KeyConflictContext.IN_GAME";
