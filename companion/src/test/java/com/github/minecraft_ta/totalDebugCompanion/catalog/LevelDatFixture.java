@@ -1,11 +1,16 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -115,6 +120,38 @@ public final class LevelDatFixture {
                 output.writeByte(0);
             }
             default -> throw new IllegalArgumentException("No NBT type for " + value);
+        }
+    }
+
+    /** A running game that holds {@code world}, as the game's lock and the world's session lock say, until closed. */
+    public static Held hold(Path world) throws IOException {
+        Path game = world.getParent().getParent();
+        Path gameLock = InstancePaths.forGame(game).gameLock();
+        Files.createDirectories(gameLock.getParent());
+        return new Held(FileChannel.open(gameLock, StandardOpenOption.CREATE, StandardOpenOption.WRITE),
+                FileChannel.open(world.resolve("session.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE));
+    }
+
+    /** The two locks a running game holding a world keeps. */
+    public static final class Held implements AutoCloseable {
+        private final FileChannel game;
+        private final FileChannel world;
+        private final FileLock gameLock;
+        private final FileLock worldLock;
+
+        Held(FileChannel game, FileChannel world) throws IOException {
+            this.game = game;
+            this.world = world;
+            this.gameLock = game.lock();
+            this.worldLock = world.lock();
+        }
+
+        @Override
+        public void close() throws IOException {
+            this.worldLock.release();
+            this.gameLock.release();
+            this.world.close();
+            this.game.close();
         }
     }
 }

@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReading;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
@@ -17,8 +17,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecond
 
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
-import java.io.IOException;
-import java.nio.file.Path;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,9 +24,8 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * The World tree: the current world, which opens its page, with rows for its game rules and datapacks. The world is
- * read when the tree loads its rows, in the background; the tree loads them again when the World page read something
- * else (see {@link WorldReadings}).
+ * The World tree: the current world, which opens its page, with rows for its game rules and datapacks, as the world's
+ * owner read it ({@link WorldReading}); the tree loads its rows again when that changed.
  */
 final class WorldTreeItems {
     static final String ROOT = "world";
@@ -43,13 +40,13 @@ final class WorldTreeItems {
 
     static final class Root extends DirectoryTreeItem implements NavigableTreeItem {
         private final GameLocation location;
-        private final WorldReadings readings;
+        private final WorldReading world;
         private final GamePacks packs;
 
-        Root(GameLocation location, WorldReadings readings, GamePacks packs) {
+        Root(GameLocation location, WorldReading world, GamePacks packs) {
             super(ROOT);
             this.location = location;
-            this.readings = readings;
+            this.world = world;
             this.packs = packs;
             setPresentation(PrimarySecondaryText.primary("World"));
             setIcon(Icons.WORLD);
@@ -78,17 +75,10 @@ final class WorldTreeItems {
                 // The server's world, as the server names its datapacks.
                 PackStackPayload datapacks = this.packs.datapacks();
                 int count = datapacks == null || !server.get().totalDebug() ? 0 : PackResources.serverDatapacks(datapacks).size();
-                this.readings.shown(new WorldReadings.Summary(game.serverWorld(server.get()), 0, count));
                 return count == 0 ? List.of() : List.of(new Tab(WorldTab.DATAPACKS, count));
             }
-            Optional<Path> world = CurrentWorld.directory(game);
-            CurrentWorld.Saved saved = null;
-            try {
-                if (world.isPresent()) saved = CurrentWorld.read(game, world.get());
-            } catch (IOException | RuntimeException unreadable) {
-                // The page says why the world could not be read.
-            }
-            this.readings.shown(WorldReadings.Summary.of(saved));
+            // As its owner read it last; the page says why a world could not be read.
+            CurrentWorld.Saved saved = this.world.value().saved();
             if (saved == null) return List.of();
             List<TreeItem> children = new ArrayList<>();
             if (!saved.gameRules().isEmpty()) children.add(new Tab(WorldTab.GAME_RULES, saved.gameRules().size()));

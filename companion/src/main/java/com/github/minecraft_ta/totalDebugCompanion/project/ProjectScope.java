@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.project;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReading;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
@@ -11,7 +12,6 @@ import com.github.minecraft_ta.totalDebugCompanion.session.MessageRoutes;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigLabels;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingLabels;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReadings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyAssignments;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
@@ -90,9 +90,9 @@ public final class ProjectScope implements AutoCloseable {
     /** The packs the game uses, as it names them or its files enable them. */
     public GamePacks packs() { return packs; }
     private final ResourceEdits resources;
-    private final WorldReadings world = new WorldReadings();
-    /** What was last read of the current world, which the World page and the Project tree follow. */
-    public WorldReadings world() { return world; }
+    private final WorldReading world;
+    /** The current world, which the World page and the Project tree show. */
+    public WorldReading world() { return world; }
     /** Writes edited resources into the packs Companion manages and reloads them in the running game. */
     public ResourceEdits resources() { return resources; }
     private final PackSelections packSelections;
@@ -118,6 +118,7 @@ public final class ProjectScope implements AutoCloseable {
         this.keyAssignments = new KeyAssignments(profile.workspaceDirectory().resolve("options.txt"));
         this.keyBindings = new KeyBindingControl(this.pipeline, this.keyAssignments);
         this.packs = new GamePacks(this.location);
+        this.world = new WorldReading(this.location, this.packs);
         this.resources = new ResourceEdits(this.pipeline, this.packs, new ResourceOriginals(paths().originals()),
                 this.configChanges.writes(), state);
         this.packSelections = new PackSelections(this.resources);
@@ -226,7 +227,7 @@ public final class ProjectScope implements AutoCloseable {
             pending.clear();
         }
         // Writes still queued finish first, so each is recorded before the change record closes.
-        try { keyAssignments.close(); resources.close(); configChanges.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
+        try { keyAssignments.close(); world.close(); resources.close(); configChanges.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
     }
 
     public String loadBreakpointScript(String name) {
