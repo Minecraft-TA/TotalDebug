@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.FileReading;
 import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangeCategory;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
@@ -29,33 +30,34 @@ import java.util.function.Consumer;
  * in {@code options.txt}, which the game reads when it starts. Writing that file while the game runs would be undone the
  * next time the game saves its options, so a game running without a connection is asked to connect first.
  */
-public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyBinding, String> {
+public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyBinding, String>, AutoCloseable {
     /** A change to make: the binding {@code name}, the key it had when the change was made, and its new key. */
     public record Change(String name, KeyBindings.Assignment shown, KeyBindings.Assignment assignment) {
     }
 
     private final ChangePipeline pipeline;
     private final Path options;
-    private final KeyAssignments assignments;
+    /** The keys {@code options.txt} assigns, whoever writes the file: the game, Companion or an editor. */
+    private final FileReading<Map<String, KeyBindings.Assignment>> assignments;
 
-    /**
-     * Changes the keys of the pipeline's game, in its {@code options.txt}, whose keys {@code assignments} follows, whoever
-     * writes the file.
-     */
-    public KeyBindingControl(ChangePipeline pipeline, KeyAssignments assignments) {
+    /** Changes the keys of the pipeline's game, in its {@code options.txt}. */
+    public KeyBindingControl(ChangePipeline pipeline) {
         this.pipeline = Objects.requireNonNull(pipeline, "pipeline");
         this.options = pipeline.location().workspace().resolve("options.txt");
-        this.assignments = Objects.requireNonNull(assignments, "assignments");
+        this.assignments = new FileReading<>(() -> KeyBindings.readOptions(this.options));
     }
 
-    /** Fires when the keys {@code options.txt} assigns changed, such as a key rebound in the game's controls screen. */
+    /**
+     * Fires when the keys {@code options.txt} assigns changed, as read after Companion changed them or when the user came
+     * back to Companion, such as from the game's controls screen; another option written, such as the volume, tells nobody.
+     */
     public Signal assignmentsChanged() {
         return this.assignments.changed();
     }
 
-    /** The keys {@code options.txt} assigns now ({@link KeyAssignments#assignments()}). Blocking. */
+    /** The keys {@code options.txt} assigns, as read last; read now where none were read yet. Blocking then. */
     public Map<String, KeyBindings.Assignment> assignments() throws IOException {
-        return this.assignments.assignments();
+        return this.assignments.value();
     }
 
     /** The change record the bindings' changes are entered in. */
@@ -75,8 +77,8 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
     public CompletableFuture<String> set(List<Change> changes) {
         List<ChangePipeline.Edit<ChangeRecord.KeyBinding, String>> edits = changes.stream().map(change -> new ChangePipeline.Edit<>(
                 new ChangeRecord.KeyBinding(change.name()), change.shown().encode(), change.assignment().encode())).toList();
-        // The game saved options.txt before it answered, or Companion wrote it: the owner of the keys reads what changed.
-        return this.pipeline.change(this, edits).whenComplete((done, failure) -> this.assignments.readNow())
+        // The game saved options.txt before it answered, or Companion wrote it: the keys are read again.
+        return this.pipeline.change(this, edits).whenComplete((done, failure) -> this.assignments.refresh())
                 .handle((done, failure) -> failure == null ? "" : message(failure));
     }
 
@@ -143,5 +145,10 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
         missing.forEach((target, value) -> lines.add("key_" + target.name() + ":" + value));
         Files.write(this.options, lines, StandardCharsets.UTF_8);
         writes.forEach(write -> landed.accept(write.target()));
+    }
+
+    @Override
+    public void close() {
+        this.assignments.close();
     }
 }

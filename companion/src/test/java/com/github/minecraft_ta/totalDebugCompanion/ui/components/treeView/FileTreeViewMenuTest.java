@@ -36,7 +36,7 @@ class FileTreeViewMenuTest {
             var fileMenu = view.createContextMenu(tree.getItemFactory().createFileSystemFileItem(file));
             assertEquals(file.toString(), item(fileMenu, "Copy Path").getActionCommand());
             assertEquals(1, fileMenu.getComponentCount(), "Unowned local files remain read-only");
-            var folderMenu = view.createContextMenu(tree.getItemFactory().createFileSystemDirectoryItem(directory, false));
+            var folderMenu = view.createContextMenu(tree.getItemFactory().createFileSystemDirectoryItem(directory));
             assertEquals(1, folderMenu.getComponentCount());
             assertEquals(directory.toString(), item(folderMenu, "Copy Path").getActionCommand());
             var root = new ZipFileRootItem(archive);

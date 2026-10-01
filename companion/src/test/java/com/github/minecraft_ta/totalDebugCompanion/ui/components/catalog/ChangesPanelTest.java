@@ -2,8 +2,6 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
-import org.junit.jupiter.api.AfterEach;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyAssignments;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigLabels;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettingsFixture;
@@ -48,20 +46,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ChangesPanelTest {
     @TempDir Path directory;
 
-    private final List<KeyAssignments> assignments = new ArrayList<>();
-
-    @AfterEach
-    void closeAssignments() {
-        this.assignments.forEach(KeyAssignments::close);
-    }
-
-    /** The key assignments of the test's {@code options.txt}, watched until the test ends. */
-    private KeyAssignments assignments() {
-        KeyAssignments assignments = new KeyAssignments(this.directory.resolve("options.txt"));
-        this.assignments.add(assignments);
-        return assignments;
-    }
-
     @Test
     void listsRecordedChangesUntilTheFileHoldsTheOriginalAgain() throws Exception {
         Path jar = CatalogFixtures.modJar(this.directory);
@@ -82,7 +66,7 @@ class ChangesPanelTest {
                 Runnable::run, InstanceState.inMemory());
         ConfigSettings settings = ConfigSettingsFixture.of(GameLocations.of(this.directory, false), record);
         List<ChangeLabels> labels = List.of(new ConfigLabels(settings),
-                new KeyBindingLabels(new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run), assignments())),
+                new KeyBindingLabels(new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run))),
                 new ResourceLabels(edits), new PackLabels(new PackSelections(edits)));
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, record, labels, target -> { }));
         SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(panel[0]));

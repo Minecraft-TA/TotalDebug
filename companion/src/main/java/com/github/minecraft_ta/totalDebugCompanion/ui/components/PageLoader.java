@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
+import com.github.minecraft_ta.totalDebugCompanion.util.WindowFocus;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 
 import javax.swing.JComponent;
@@ -30,7 +32,8 @@ import java.util.function.Consumer;
  * page shown again with nothing changed reads nothing, unless its last read failed. While the page holds its reads
  * ({@link #hold}), as during a save, signals wait in the same way. The page never reads in its constructor or because a
  * navigation showed it. A page whose files others write and only it reads, such as the logs, reads whenever it is shown
- * ({@link #readsWhenShown}); work that only redraws from memory waits the same way ({@link #updates}).</p>
+ * and when the user comes back to Companion while it is shown ({@link #readsWhenShown}); work that only redraws from
+ * memory waits the same way ({@link #updates}).</p>
  */
 public final class PageLoader<T> {
     /** What to read: prepared on the Swing thread, where the page's state is captured, then run off it. */
@@ -129,28 +132,39 @@ public final class PageLoader<T> {
     }
 
     /**
-     * Reads every time {@code component} is shown, such as a tab listing files that change without telling. It may be a
-     * part of the page, which then reads when that part is chosen.
+     * Reads every time {@code component} is shown, and when the user comes back to Companion from another program while it
+     * is shown, such as a tab listing files that change without telling. It may be a part of the page, which then reads
+     * when that part is chosen.
      */
     public PageLoader<T> readsWhenShown(JComponent component) {
+        this.unsubscribe.add(WindowFocus.returned().subscribe(() -> UIUtils.onEdt(() -> {
+            if (!this.disposed) readShown(component, true);
+        })));
         return watch(component, true);
     }
 
     /** Reads when {@code component} is shown: {@code always}, or only what the page missed. */
     private PageLoader<T> watch(JComponent component, boolean always) {
         HierarchyListener listener = event -> {
-            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !component.isShowing()) return;
-            if (!always && this.missed.isEmpty() || this.showReadQueued) return;
-            this.showReadQueued = true;
-            SwingUtilities.invokeLater(() -> {
-                this.showReadQueued = false;
-                if (always) load();
-                else resume();
-            });
+            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0) readShown(component, always);
         };
         component.addHierarchyListener(listener);
         this.unwatch.add(() -> component.removeHierarchyListener(listener));
         return this;
+    }
+
+    /**
+     * Reads at the end of the Swing step while {@code component} is shown: {@code always}, or only what the page missed.
+     * Whatever asks in the same step, as the window shown again and taking the focus, reads once. Swing thread.
+     */
+    private void readShown(JComponent component, boolean always) {
+        if (!component.isShowing() || !always && this.missed.isEmpty() || this.showReadQueued) return;
+        this.showReadQueued = true;
+        SwingUtilities.invokeLater(() -> {
+            this.showReadQueued = false;
+            if (always) load();
+            else resume();
+        });
     }
 
     /**

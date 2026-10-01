@@ -343,12 +343,7 @@ public class LazyFileJTree extends JTree {
                 items.forEach(TreeItem::dispose);
                 return loadItemsForNode(node);
             }
-            if (items.stream().anyMatch(DirectoryChain::changedDuringDiscovery)) {
-                items.forEach(TreeItem::dispose);
-                node.markChildrenStale();
-                return loadItemsForNode(node);
-            }
-            // Filesystem notifications concern this directory; its loaded subfolders can stay cached, as they do for a
+            // A refresh of a folder concerns that folder; its loaded subfolders can stay cached, as they do for a
             // refresh of the rows only.
             boolean rows = this.rowsOnly.remove(node);
             return updateChildren(node, items, node.refreshDescendants()
@@ -783,12 +778,12 @@ public class LazyFileJTree extends JTree {
      * Puts {@code item} in place of the top-level root of its name, and loads the rows under it again when they were
      * loaded: with {@code below}, also every row loaded below them; otherwise only the rows directly under it, for a root
      * whose rows count what a source holds, such as the changes in effect. The other roots are left alone. Swing thread
-     * only.
+     * only. Completes once the rows under it are loaded again.
      */
-    public void refreshRoot(DirectoryTreeItem item, boolean below) {
+    public CompletableFuture<Void> refreshRoot(DirectoryTreeItem item, boolean below) {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Tree roots must be refreshed on the Swing event thread");
         LazyTreeNode root = findTopLevelNode(item.getName());
-        if (root == null) return;
+        if (root == null) return CompletableFuture.completedFuture(null);
         TreeItem previous = root.getUserObject();
         if (previous != item) {
             previous.dispose();
@@ -796,12 +791,12 @@ public class LazyFileJTree extends JTree {
             getModel().nodeChanged(root);
         }
         boolean loading = this.activeLoads.containsKey(root);
-        if (!root.areChildrenLoaded() && !loading) return;
+        if (!root.areChildrenLoaded() && !loading) return CompletableFuture.completedFuture(null);
         // A load already running may be one that refreshes what is below, which this must not narrow.
         if (below) this.rowsOnly.remove(root);
         else if (!loading) this.rowsOnly.add(root);
         root.markChildrenStale(below);
-        loadItemsForNode(root);
+        return loadItemsForNode(root);
     }
 
     public CompletableFuture<Void> restoreItemPath(String rootName, List<String> segments, boolean select) {

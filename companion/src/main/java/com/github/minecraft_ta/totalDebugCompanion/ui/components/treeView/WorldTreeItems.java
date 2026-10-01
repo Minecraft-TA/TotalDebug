@@ -17,6 +17,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecond
 
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -78,7 +79,12 @@ final class WorldTreeItems {
                 return count == 0 ? List.of() : List.of(new Tab(WorldTab.DATAPACKS, count));
             }
             // As its owner read it last; the page says why a world could not be read.
-            CurrentWorld.Saved saved = this.world.value().saved();
+            CurrentWorld.Saved saved;
+            try {
+                saved = this.world.value().saved();
+            } catch (IOException unreadable) {
+                return List.of();
+            }
             if (saved == null) return List.of();
             List<TreeItem> children = new ArrayList<>();
             if (!saved.gameRules().isEmpty()) children.add(new Tab(WorldTab.GAME_RULES, saved.gameRules().size()));

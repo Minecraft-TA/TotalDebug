@@ -84,7 +84,7 @@ class SystemsRulesTest {
             Map.entry("session/ProjectSelectionServer.java", new Allowed(2, "accepts connections")),
             Map.entry("inspection/ItemIconService.java", new Allowed(2, "the item icon renderer is confined to one thread")),
             Map.entry("util/Workers.java", new Allowed(8, "the shared file work, owners and timer, and each project's write worker")),
-            Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")));
+            Map.entry("util/FileWatch.java", new Allowed(1, "the watch of files handed to another program")));
 
     // Every async task names its worker.
     private static final Map<String, Allowed> SHARED_POOL = Map.of();
@@ -108,7 +108,7 @@ class SystemsRulesTest {
             Map.entry("pack/ExternalEdits.java", new Allowed(1, "an external save's result, an event")));
 
     private static final Map<String, Allowed> WATCHERS = Map.ofEntries(
-            Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")));
+            Map.entry("util/FileWatch.java", new Allowed(1, "the watch of files handed to another program")));
 
     @BeforeAll
     static void scan() throws IOException {

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.WindowFocus;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
@@ -50,13 +51,28 @@ public class FileTreeView extends JScrollPane {
     }
 
     private boolean hasScriptsRoot(ProjectScope scope) {
-        if (scope == null) return false;
+        return scriptsRoot(scope) != null;
+    }
+
+    /** The Scripts root of {@code scope}'s tree, or null. Swing thread only. */
+    private FileSystemDirectoryItem scriptsRoot(ProjectScope scope) {
+        if (scope == null) return null;
         var root = (LazyTreeNode) tree.getModel().getRoot();
         for (int i = 0; i < root.getChildCount(); i++) {
             var item = ((LazyTreeNode) root.getChildAt(i)).getUserObject();
-            if (item instanceof FileSystemDirectoryItem folder && folder.getPath().equals(scope.paths().scripts())) return true;
+            if (item instanceof FileSystemDirectoryItem folder && folder.getPath().equals(scope.paths().scripts())) return folder;
         }
-        return false;
+        return null;
+    }
+
+    /**
+     * Lists the loaded folders of Scripts again, which an editor may have changed while the user was away, or adds the
+     * Scripts root where the folder was made meanwhile; completes once listed. Swing thread only.
+     */
+    private CompletableFuture<Void> refreshScripts() {
+        if (disposed) return CompletableFuture.completedFuture(null);
+        var scripts = scriptsRoot(project.get());
+        return scripts != null ? tree.refreshRoot(scripts, true) : ensureScriptsRoot();
     }
 
     /** Creation can introduce Scripts after profile loading; prepare only that new root off the EDT. */
@@ -69,7 +85,7 @@ public class FileTreeView extends JScrollPane {
         var factory = tree.getItemFactory();
         var loading = CompletableFuture.supplyAsync(() -> {
             if (!Files.isDirectory(scope.paths().scripts())) return null;
-            var scripts = factory.createFileSystemDirectoryItem(scope.paths().scripts(), true);
+            var scripts = factory.createFileSystemDirectoryItem(scope.paths().scripts());
             scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
             return scripts;
         }, Workers.files()).thenAcceptAsync(scripts -> {
@@ -91,17 +107,19 @@ public class FileTreeView extends JScrollPane {
         }, SwingUtilities::invokeLater);
         return loading;
     }
-    public void dispose() { disposed = true; removeWorldListener.run(); tree.setRootNodes(); }
+    public void dispose() { disposed = true; stopFollowingFocus.run(); removeWorldListener.run(); tree.setRootNodes(); }
 
 
     private final Supplier<ProjectScope> project;
     private ProjectScope displayedProject;
     private Runnable removeWorldListener = () -> { };
+    private final Runnable stopFollowingFocus;
 
     public FileTreeView(Supplier<ProjectScope> project, Consumer<NavigationTarget> navigator) {
         super();
         this.project = project;
         Objects.requireNonNull(navigator, "navigator");
+        this.stopFollowingFocus = WindowFocus.returned().subscribe(() -> SwingUtilities.invokeLater(this::refreshScripts));
 
         this.tree = new LazyFileJTree();
         ContextMenus.installTree(this.tree, path -> createContextMenu(path != null && path.getLastPathComponent() instanceof LazyTreeNode node
@@ -232,7 +250,7 @@ public class FileTreeView extends JScrollPane {
         RuntimeSourceCatalog catalog = scope.sources();
         List<DirectoryTreeItem> rootItems = new ArrayList<>();
         if (Files.isDirectory(scope.paths().scripts())) {
-            var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(scope.paths().scripts(), true);
+            var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(scope.paths().scripts());
             scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
             rootItems.add(scripts);
         }
@@ -452,7 +470,12 @@ public class FileTreeView extends JScrollPane {
             if (!target.equals(root)) {
                 for (Path segment : root.relativize(target)) relative.add(segment.toString());
             }
-            return this.tree.revealItemPath(root.getFileName().toString(), relative);
+            String name = root.getFileName().toString();
+            // A script Companion made beside the tree's own actions, as a tool from the Tools menu, is listed first.
+            return this.tree.revealItemPath(name, relative).thenComposeAsync(revealed -> revealed
+                    ? CompletableFuture.completedFuture(true)
+                    : refreshScripts().handle((ignored, failure) -> null).thenCompose(ignored -> this.tree.revealItemPath(name, relative)),
+                    SwingUtilities::invokeLater);
         }
         return CompletableFuture.completedFuture(false);
     }

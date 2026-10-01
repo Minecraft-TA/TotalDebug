@@ -1,10 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
-import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 
-import javax.swing.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,29 +14,17 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
 
     private final LazyFileJTree tree;
     private final Path path;
-    private final Runnable stopWatching;
-    private final boolean watch;
     private boolean initiallyEmpty;
-    private volatile boolean changed;
     public Path getPath() { return path; }
-    boolean changedDuringDiscovery() { return changed; }
 
-    FileSystemDirectoryItem(LazyFileJTree lazyFileJTree, Path path, boolean watch) {
+    FileSystemDirectoryItem(LazyFileJTree lazyFileJTree, Path path) {
         super(path.getFileName().toString());
         this.tree = lazyFileJTree;
-        this.watch = watch;
         if (!Files.isDirectory(path))
             throw new IllegalArgumentException("Not a directory");
 
         this.path = path;
         setIcon(Icons.FOLDER);
-
-        this.stopWatching = watch
-                ? FileWatch.shared().watchEntries(path, () -> {
-                    changed = true;
-                    SwingUtilities.invokeLater(() -> lazyFileJTree.refreshDirectory(path));
-                })
-                : () -> {};
     }
 
     @Override
@@ -60,7 +46,7 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
     private TreeItem createChildIfPresent(Path child) {
         try {
             if (Files.isDirectory(child)) {
-                var item = tree.getItemFactory().createFileSystemDirectoryItem(child, watch);
+                var item = tree.getItemFactory().createFileSystemDirectoryItem(child);
                 // This runs in the parent's background scan. Peek once, without loading descendants.
                 try (var entries = Files.newDirectoryStream(child)) {
                     item.initiallyEmpty = !entries.iterator().hasNext();
@@ -79,8 +65,7 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
 
     @Override
     protected boolean isInitiallyEmpty() {
-        // A watcher notification before attachment invalidates the initial snapshot too.
-        return initiallyEmpty && !changed;
+        return initiallyEmpty;
     }
 
     @Override public String compactSeparator() { return "/"; }
@@ -95,11 +80,6 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
         if (child instanceof DirectoryTreeItem directory) return directory;
         if (child != null) child.dispose();
         return null;
-    }
-
-    @Override
-    public void dispose() {
-        this.stopWatching.run();
     }
 
     @Override

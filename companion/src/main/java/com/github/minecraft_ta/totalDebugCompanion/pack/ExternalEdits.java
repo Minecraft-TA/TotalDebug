@@ -88,12 +88,14 @@ public final class ExternalEdits implements AutoCloseable {
         if (!Files.isRegularFile(file)) throw new IOException(file + " does not exist");
         synchronized (this) {
             if (this.closed) throw new IOException("The project is closing");
-            if (!this.followed.containsKey(file)) {
-                Followed followed = new Followed(path, pack, Files.readAllBytes(file));
-                Path name = file.getFileName();
-                followed.unwatch = FileWatch.shared().watch(file.getParent(), name::equals, () -> settle(followed));
-                this.followed.put(file, followed);
-            }
+            Followed known = this.followed.get(file);
+            Followed followed = known != null ? known : new Followed(path, pack, Files.readAllBytes(file));
+            // Watched anew at every opening, so a file whose folder was removed and made again is followed again; followed
+            // only once watched, so a watch that fails leaves nothing behind.
+            Runnable before = followed.unwatch;
+            followed.unwatch = FileWatch.shared().watch(file, () -> settle(followed));
+            before.run();
+            this.followed.putIfAbsent(file, followed);
         }
         return file;
     }

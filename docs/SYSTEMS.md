@@ -26,9 +26,9 @@ Each way was reasonable where it was added. Together they are the edge cases: a 
 State moves one way. A page learns of a change only through a signal, and reads only through its loader.
 
 ```text
-game message ─────────────────────┐
-file on disk ─► watch ─► reading ─┼─► owner compares ─► signal (if different) ─► page loader ─► read ─► show
-pipeline write ───────────────────┘
+game message ──────────────────────────────────┐
+file on disk ─► reading (shown, user back) ─────┼─► owner compares ─► signal (if different) ─► page loader ─► read ─► show
+pipeline write ─────────────────────────────────┘
 
 page action ─► change pipeline ─► project's write queue ─► owner ─► signal
 ```
@@ -60,7 +60,7 @@ public final class Signal {
 - **Connection-bound work compares connections.** `GameLocation`'s connection value includes the connection's number and the game's process. A request waiting for an answer keeps the number of the connection it was sent on, and is failed when the connection signal shows another. This replaces reacting to `DISCONNECTED` as an event, which a quick reconnect can hide.
 - **The current project is state too.** The application owns it and signals a switch. UI that outlives a project (the tab strip, the Project tree, the status bar, search) follows "the current project's catalog" through its loader, which subscribes again on a switch. This deletes the `project.get() != scope` and `currentScope() == scope` checks.
 
-**Newest wins, where it is the same read.** A page loader runs one read at a time: a request during a read makes one more read after it, and the older result is dropped. A file reading needs no such bookkeeping: its reads run on its strand, one after the other, and a read waiting for a write to settle gives way to a later write. It does not replace an owner's protection between requests of different kinds, where a later request must win over an earlier one that finishes last: `ItemIconService` adopting an archive the game announced over restoring the newest from disk, `PackCatalogService` taking a prepared catalog over a restore. Those counters stay in their owners; a signal counts changes, a counter of requests tells which answer is the newest, and they are different jobs.
+**Newest wins, where it is the same read.** A page loader runs one read at a time: a request during a read makes one more read after it, and the older result is dropped. A file reading does the same: its reads run on its strand, one after the other, and a read under way when another is asked for publishes nothing. It does not replace an owner's protection between requests of different kinds, where a later request must win over an earlier one that finishes last: `ItemIconService` adopting an archive the game announced over restoring the newest from disk, `PackCatalogService` taking a prepared catalog over a restore. Those counters stay in their owners; a signal counts changes, a counter of requests tells which answer is the newest, and they are different jobs.
 
 Owners:
 
@@ -72,7 +72,7 @@ Owners:
 | `ChangeRecord` | changes | `addListener` |
 | `GameLocation` | connection, process, playing | `addListener(Consumer<Change>)` |
 | `WorldReading` (new) | world | `WorldReadings`, which is deleted: it reads the current world's folder itself |
-| `KeyAssignments` | assignments | its `addListener` and `KeyBindingControl.addAssignmentListener` |
+| `KeyBindingControl` | assignments | `KeyAssignments`, folded into it, and `KeyBindingControl.addAssignmentListener` |
 | `GameLogs` | the listed logs and crash reports | the Logs page's and the tree's own listing |
 | `ItemIconService` | icons | `addListener` |
 | `ResourceEdits` | edits, working pack | `addEditListener`, `addWorkingPackListener` |
@@ -82,33 +82,40 @@ Owners:
 
 ## 2. Files on disk
 
-Files Companion shows that others write are followed by an owner through a `FileReading`: a watch, a reader, the last value, a comparison and a signal. It is what `KeyAssignments` is today, made once for all.
+Nothing watches the files others write, apart from one case. Who wrote a file decides how Companion learns of it:
+
+| Who wrote it | How Companion learns of it |
+|---|---|
+| The connected game | Its messages: packs, `PLAYING`, the answers to changes and reloads (section 6) |
+| Companion | The owner reads again after the write and fires if the value differs (section 5) |
+| Another program, or a game without a connection | What shows the file reads it when it is shown, and again when the user comes back to Companion from another program (`WindowFocus.returned()`: a window of Companion taking the focus after Companion lost it to another program, which the main window tells of; Companion's first window opening is no return) |
+| A program Companion opened a file in | `FileWatch`, which takes its saves at once (below) |
+
+A value that others than its page need is held by its owner in a `FileReading`: a reader, the last value, a comparison and a signal.
 
 ```java
-FileReading<Map<String, Assignment>> reading = new FileReading<>(
-        options,                          // the file, which may not exist yet
-        KeyBindings::readOptions,         // reads the whole file into a domain value; a missing file is a value too
-        Duration.ofMillis(300));          // settle: read once writes stopped for this long
-reading.changed();                        // fires only when a read found another value
-reading.value();                          // the published snapshot; read now, on the strand, where none was read yet
-reading.readNow();                        // after Companion's own write
-reading.moveTo(otherFile);                // a folder that moves, as the current world
+FileReading<Map<String, Assignment>> assignments = new FileReading<>(
+        () -> KeyBindings.readOptions(options));  // reads the whole value; a missing file is a value too
+assignments.changed();                           // fires only when a read found another value
+assignments.value();                             // the published snapshot; read now, on the strand, where none was read yet
+assignments.refresh();                           // after Companion's own write, or when the game told of a change
 ```
 
-- **Every read and every change of the value runs on the reading's strand**, whoever asks: the watch, a retry, Companion's own write, a page. So a page that asks before the first read gets the value later changes are told against.
-- **One `FileWatch` for the application** does the watching, with one thread. A registration lives until its reading closes or stops watching (`watch(false)`); a reading that does not watch keeps its value and reads only when its owner asks (`readNow`).
-- **A folder that does not exist yet** is watched through its nearest existing ancestor, and watched itself once it appears, as a game's folder before it first ran; one removed while watched is watched that way again.
-- **Where a folder cannot be watched at all**, as without file watching or on some network drives, it is tried again after 1 and 5 seconds and every 30 seconds after, and the reading reads each time.
-- **Events are filtered by name**, so `latest.log` growing beside `options.txt` does not read `options.txt`. A listing of a folder, as the Project tree's, is told only of entries created or removed (`watchEntries`).
-- **A read that fails is retried** after 1, 5 and 30 seconds, as a file written in place can be read half written; the next read that succeeds is told, since a page may show the failure. Overflowing events read once.
-- **Folders that move are the owner's.** The current world follows `playing` and moves its reading to the world the game plays, or with the game closed, the last played.
-- **Windows renames.** On Windows a folder cannot be renamed or deleted while a folder inside it is watched. Registrations sit on the smallest folders that answer the question. The current world's folder and its `datapacks` are watched only while the connected game plays it, which the game tells once it let go of the world, so its Delete World works; a world the game does not play is looked at again when the game connects or plays another world, when a world of `saves` is created or removed, and after Companion changed its datapacks. A game Companion is not connected to has its worlds read then, not watched. Companion's own moves of watched folders, as of script folders, run in `FileWatch.pausing`, which lets go of every watch on or inside them for the move and watches them again after.
-- **A reading's value is a domain value with a meaningful equality**, such as parsed assignments or a list of names; the reader supplies it.
-- **What each reading holds decides what fires**, such as parsed assignments rather than the file's bytes.
-- **Readings replace "read whenever shown" where others than the page need the value:** `options.txt` and the current world, which the Project tree, the tab strip and the change pipeline use too. The Logs page, the configuration pages and the resource packs listing are the only readers of their files, and the game writes its logs the whole time it runs: they read whenever they are shown (`readsWhenShown`), which a reading would only repeat with a watch. Decided on 2026-09-30, when the watchers moved onto `FileWatch`.
+Its whole contract, which `FileReading`'s documentation states the same way:
+
+- **Reads run one at a time, in order, on the reading's strand**, whoever asks. `value()` returns the value published last, or reads it now where none was, so a page that asks first gets the value later changes are told against.
+- **`refresh()` reads once after it was asked**; requests made while one waits are that one, so the game playing another world, which both `playing` and the datapacks tell of, reads the world once. A read under way when a request is made publishes nothing, since the read asked for is newer: the world the game left is never shown as current after it left. The first value a refresh reads is told, for followers that show it without asking, as the World tab's title.
+- **The user coming back refreshes a value read before**; a value nobody asked for stays unread.
+- **A read that fails keeps the value read before**, and the next read that succeeds is told, since a page may show the failure. Nothing retries on a timer: the next return or request reads again.
+- **Once closed, no read starts and none publishes.**
+- **A reading's value is a domain value with a meaningful equality**, such as parsed assignments, and what it holds decides what fires: the volume changing in `options.txt` fires nothing.
+- **What moves is the reader's.** The current world's reader asks the game location which world is current at each read, and its owner asks it to read again when the game connects, plays another world or leaves one, and after Companion changed the datapacks. Keeping the value read before is for the same world read again: another world that fails to read is published without what it holds, so nothing shows or changes the world before as if it were current.
+- **Two readings:** the keys `options.txt` assigns (`KeyBindingControl`) and the current world (`WorldReading`), which the Project tree, the World tab's title and the change pipeline use beside their pages. A page that is the only reader of its files, as the logs, the configuration files, the resource packs and the Changes page, reads whenever it is shown and when the user comes back while it is shown (`readsWhenShown`). The Project tree lists its loaded Scripts folders again then; the decompiled sources follow the decompiler's `cached` signal.
 - **Caches are allowed where keyed by what they cache**, a file's size and time or its hash, as `TextureThumbnails`, `CatalogIcons` and the parsed logs are. A cache is never the truth another part reads.
 
-**Adopting a file is a write, not a reading.** A texture saved in an external editor is taken into the pack: `ExternalEdits` registers with `FileWatch`, keeps its baseline and checks that the image is complete, and its adoption runs on the project's write queue through the pipeline. Before it records a change or asks for a reload, the adoption compares the saved content with what the pack already holds, by hash, and does nothing when they are the same: a notification of content Companion itself wrote, or a second notification of one save, must not record or reload again. Deduplication happens before side effects, in the owner, never after them in a page. The watchers of `FileUtils`, `ExternalEdits` and `KeyAssignments` become registrations.
+**Adopting a file is a write, not a reading.** A texture opened in another program from Companion is taken into the pack as that program saves it, while the user stays in the editor and looks at the game. This is the one watch: `FileWatch` tells `ExternalEdits` that a followed file was written, on its one thread; `ExternalEdits` keeps the file's baseline, waits until writes stopped, checks that the image is complete, and adopts it on the project's write queue through the pipeline. Before it records a change or asks for a reload, the adoption compares the saved content with what the pack already holds, by hash, and does nothing when they are the same: a notification of content Companion itself wrote, or a second notification of one save, must not record or reload again. Deduplication happens before side effects, in the owner, never after them in a page. A file whose folder cannot be watched is not opened, and the user is told why. Every opening watches the file anew, so one whose folder was removed and made again is followed again.
+
+**Why nothing else is watched.** Decided on 2026-10-01, after #114 to #117 moved every watch onto one watcher. Watching folders that others own needed watches of ancestors for folders not there yet, real paths for links, retries, pauses so that Windows can rename or delete a watched folder (the game's Delete World), and settle times for files written in parts; most review findings of those PRs were about these. Reading when shown and when the user comes back answers the same question with none of them. A change that must show while Companion keeps the focus, as a key rebound in the game while Companion is visible beside it, comes as a game message, not as a watch.
 
 ## 3. Pages
 
@@ -150,7 +157,7 @@ The Swing thread runs Swing, and nothing that waits or grows with the data: no f
 
 - Platform threads, not virtual ones: on Java 21 a virtual thread is pinned inside `synchronized` and by `ZipFile`, which most reads use.
 - Swing timers stay for delays and animations on the Swing thread.
-- **Allowed own threads**, each owned by a service that closes it: the debugger (`DebuggerSessionQueue`, `DebuggerEvaluationRunner`), the editor's Java analysis, script compilation, decompilation, search (also `SearchEverywherePopup`'s) and the runtime index, the MCP job service, `CompanionApplication`'s project switching and MCP lifecycle, `ProjectSelectionServer`, and the item icon renderer, which its graphics library confines to one thread. The list lives in the architecture test; adding to it is a decision recorded here.
+- **Allowed own threads**, each owned by a service that closes it: the debugger (`DebuggerSessionQueue`, `DebuggerEvaluationRunner`), the editor's Java analysis, script compilation, decompilation, search (also `SearchEverywherePopup`'s) and the runtime index, the MCP job service, `CompanionApplication`'s project switching and MCP lifecycle, `ProjectSelectionServer`, the item icon renderer, which its graphics library confines to one thread, and `FileWatch`'s one thread. The list lives in the architecture test; adding to it is a decision recorded here.
 
 ## 5. Writes
 
@@ -184,7 +191,7 @@ These go into [AGENTS.md](../AGENTS.md) and are checked by an architecture test 
 1. State Companion shows has one owner, which compares and fires a `Signal` only on a change. No other listener lists for state; outcomes go through the action's future.
 2. A page reads and shows through `PageLoader` and follows signals only through it: no subscriptions, file reads or threads of its own, no reads in constructors or on navigation, and a read never changes an owner.
 3. Threads, executors and schedulers come from `Workers`, except the listed ones; no one-argument `supplyAsync` or `runAsync`.
-4. Only `FileWatch` watches files. A file others write is followed through a `FileReading`; caches are keyed by what they cache and are never the truth.
+4. Only `FileWatch` watches files, and only files Companion opened in another program. A file others write is read when it is shown and when the user comes back to Companion, through a `FileReading` where others than its page need the value; caches are keyed by what they cache and are never the truth.
 5. The game's and the packs' files are written only inside a pipeline write task, on the project's write queue.
 6. A game message is registered by the owners that handle it, on the connection.
 7. The Swing thread does nothing that waits or grows with the data.
@@ -208,6 +215,7 @@ PRs on 1.21.1, stacked, each reviewed until clean. A shared mechanism comes with
 | 7 | All remaining pages on `page` and `follows`, the logs, configuration and resource packs pages reading whenever shown; the World tab's title from its owner; reads on the file workers | `ShownUpdates`, `whenShown`, `waitsWhileHidden` and `follow`, the pages' own subscriptions, the reads in constructors, the navigation refreshes |
 | 8a | The pipeline owning the write queue; the remaining executors and one-argument async calls onto `Workers` | `ConfigChanges`' executor, the UI classes' and `JsonStateWriter`'s executors, every use of the shared pool |
 | 8b | The current project as state (`CurrentProject`), whose signals the main window follows | the `CompanionUi` relays and their scope checks |
+| 9 | Files read when shown and when the user comes back to Companion; `FileWatch` only for files opened in another program; the decompiled sources on a signal | `KeyAssignments`; the watches of `options.txt`, `saves`, the current world, its datapacks, the Project tree's folders and the decompiled sources; `FileReading`'s watch, settle, retries and counter; `FileWatch`'s ancestors, links, retries and pauses |
 
 After the messages, A4 continues with categories registering their pages and Modpack rows. Splitting `CompanionApplication` (the game connection and the MCP server into their own classes) and the mod's `CompanionAppClient` (launching Companion) is easier then and is decided at that point.
 
@@ -215,8 +223,8 @@ UI work that follows no system, such as every page's loading, empty and failed s
 
 ## Tests
 
-- `Signal`: listeners in order, removal of one subscription. `FileReading`: a write in parts read once, a value asked before the first read, a folder that appears later, a failed read retried, reads never at once, a reading moved to another file, a closed reading.
-- `FileReading` and `FileWatch`, through a clock the test advances instead of real waits: settle and maximum wait, a folder that appears later, a linked folder, overflow, a failed read retried, a pause for a rename, a reading whose value did not change.
+- `Signal`: listeners in order, removal of one subscription. `FileReading`: read when first asked, not before; told only on another value; read again when the user comes back, not once closed; a failed read keeping the value and the next success told; reads never at once, with one paused mid-flight.
+- `FileWatch`: a write of the followed file told and one of its neighbour not, two files of one folder, a stopped watch, a folder that cannot be watched.
 - `PageLoader`: hidden and shown, a signal during a read, several while hidden, a change that does not concern the page, a held page, a read under way when the page holds, a part of a page. The old modes' tests go with the modes.
 - Messages: two handlers in order, a handler of a detached scope not called, an answer to another connection not taken, a request without a handler refused, an unauthenticated message refused in the mod.
 - The architecture test: no listener list, thread, executor, watcher or one-argument async call outside the owners and exceptions it lists.

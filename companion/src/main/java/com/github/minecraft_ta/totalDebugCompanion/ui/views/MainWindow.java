@@ -25,6 +25,7 @@ import java.util.function.Consumer;
 import java.util.concurrent.CompletableFuture;
 import com.github.minecraft_ta.totalDebugCompanion.ui.CompanionUi;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
+import com.github.minecraft_ta.totalDebugCompanion.util.WindowFocus;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -242,7 +243,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
         Toolkit.getDefaultToolkit().addAWTEventListener(
                 this,
-                AWTEvent.KEY_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK
+                AWTEvent.KEY_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK | AWTEvent.WINDOW_FOCUS_EVENT_MASK
         );
     }
 
@@ -439,6 +440,10 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     @Override
     public void eventDispatched(AWTEvent event) {
+        if (event instanceof WindowEvent windowEvent) {
+            WindowFocus.changed(windowEvent);
+            return;
+        }
         if (event instanceof MouseEvent mouseEvent) {
             handleHistoryMouseButton(mouseEvent);
             return;
