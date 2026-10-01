@@ -62,6 +62,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -118,21 +119,29 @@ public final class CompanionAppClient implements AutoCloseable {
     private volatile CompanionDiscovery discovery;
     private volatile BooleanSupplier companionEnabled = () -> true;
 
-    private volatile Consumer<RunScriptMessage> scriptRequestHandler = message -> TotalDebug.LOGGER.warn(
-            "Ignoring companion script request {} because no handler is installed",
-            message.scriptId()
-    );
-    private volatile IntConsumer stopScriptHandler = scriptId -> TotalDebug.LOGGER.warn(
-            "Ignoring companion stop-script request {} because no handler is installed",
-            scriptId
-    );
+    /**
+     * What handles each of Companion's requests, with the number of the connection that sent it: the answers below until
+     * the game installs its own ({@link #on}).
+     */
+    private final Map<Class<? extends AbstractMessage>, ObjIntConsumer<? extends AbstractMessage>> requests = new ConcurrentHashMap<>();
+
+    {
+        on(RunScriptMessage.class, (message, companion) -> TotalDebug.LOGGER.warn(
+                "Ignoring companion script request {} because no handler is installed", message.scriptId()));
+        on(StopScriptMessage.class, (message, companion) -> TotalDebug.LOGGER.warn(
+                "Ignoring companion stop-script request {} because no handler is installed", message.scriptId()));
+        on(ChangeMessage.class, (message, companion) -> sendChangeResult(companion, new ChangeResultMessage(
+                ChangeResultPayload.refused(message.payload().requestId(), "The game is not ready to change anything yet"))));
+        on(ReloadMessage.class, (message, companion) -> sendReloadResult(companion, new ReloadResultMessage(
+                new ReloadResultPayload(message.payload().requestId(), 0, List.of(), "The game is not ready to reload resources yet"))));
+        on(ToServerMessage.class, (message, companion) -> sendRelayFailed(companion, message.payload(),
+                "The game's relay to the server is not ready"));
+        on(RetryRuntimeInventoryMessage.class, (message, companion) -> startRuntimeInventoryPreparation(true));
+    }
+
     private volatile IntConsumer sessionClosedHandler = number -> { };
     private volatile Runnable sessionOpenedHandler = () -> { };
     private volatile BiConsumer<String, Map<String, String>> packCatalogHandler = (inventoryId, modules) -> { };
-    private volatile ObjIntConsumer<ChangeMessage> changeHandler = (message, companion) -> sendChangeResult(companion,
-            new ChangeResultMessage(ChangeResultPayload.refused(message.payload().requestId(), "The game is not ready to change anything yet")));
-    private volatile ObjIntConsumer<ReloadMessage> reloadHandler = (message, companion) -> sendReloadResult(companion,
-            new ReloadResultMessage(new ReloadResultPayload(message.payload().requestId(), 0, List.of(), "The game is not ready to reload resources yet")));
     private volatile RuntimeInventoryPublisher.PublishedInventory publishedInventory;
     private volatile Consumer<CompanionStartupProgress> progressListener = progress -> { };
     private volatile boolean closing;
@@ -243,12 +252,13 @@ public final class CompanionAppClient implements AutoCloseable {
         }
     }
 
-    public void setScriptRequestHandler(Consumer<RunScriptMessage> handler) {
-        this.scriptRequestHandler = Objects.requireNonNull(handler, "handler");
-    }
-
-    public void setStopScriptHandler(IntConsumer handler) {
-        this.stopScriptHandler = Objects.requireNonNull(handler, "handler");
+    /**
+     * Handles Companion's requests of {@code type}, with the number of the connection that sent them, on the connection
+     * thread, replacing what handled them before. A request that comes before its connection's handshake completed fails
+     * that session instead, whatever its type (docs/SYSTEMS.md, section 6).
+     */
+    public <M extends AbstractMessage> void on(Class<M> type, ObjIntConsumer<M> handler) {
+        this.requests.put(Objects.requireNonNull(type, "type"), Objects.requireNonNull(handler, "handler"));
     }
 
     /** Runs once for each connection that ended, with its number, or 0 when it never authenticated. */
@@ -278,22 +288,9 @@ public final class CompanionAppClient implements AutoCloseable {
         }
     }
 
-    /**
-     * Receives Companion's changes of values the game keeps, such as key bindings, with its connection's number; runs on
-     * the connection thread.
-     */
-    public void setChangeHandler(ObjIntConsumer<ChangeMessage> handler) {
-        this.changeHandler = Objects.requireNonNull(handler, "handler");
-    }
-
     /** Answers a change of Companion connection {@code companion}, and no connection opened since. */
     public void sendChangeResult(int companion, ChangeResultMessage message) {
         send(companion, message);
-    }
-
-    /** Receives Companion's requests to reload resources, with its connection's number; runs on the connection thread. */
-    public void setReloadHandler(ObjIntConsumer<ReloadMessage> handler) {
-        this.reloadHandler = Objects.requireNonNull(handler, "handler");
     }
 
     /** Answers a reload of Companion connection {@code companion}, and no connection opened since. */
@@ -311,14 +308,6 @@ public final class CompanionAppClient implements AutoCloseable {
 
     public void setProgressListener(Consumer<CompanionStartupProgress> listener) {
         this.progressListener = Objects.requireNonNull(listener, "listener");
-    }
-
-    private volatile ObjIntConsumer<RelayedMessage> toServerHandler = (message, companion) -> sendRelayFailed(
-            companion, message, "The game's relay to the server is not ready");
-
-    /** Receives the messages Companion addressed to the server with its connection's number; runs on the connection thread. */
-    public void setToServerHandler(ObjIntConsumer<RelayedMessage> handler) {
-        this.toServerHandler = Objects.requireNonNull(handler, "handler");
     }
 
     /** Hands Companion connection {@code companion} a message the server sent it, unread. */
@@ -378,6 +367,31 @@ public final class CompanionAppClient implements AutoCloseable {
         this.foregroundHandoff.transfer(descriptor.processId(), beforeTransfer, sendRequest);
     }
 
+    /**
+     * Hands each request of {@code type} on {@code attempt} to what handles it now; one before the handshake completed
+     * fails the session, whatever its type.
+     */
+    @SuppressWarnings("unchecked")
+    private <M extends AbstractMessage> void listenAuthenticated(Connection attempt, Class<M> type) {
+        attempt.client.getMessageBus().listenAlways(type, message -> {
+            if (!attempt.authenticated()) {
+                failSession(attempt, "Companion sent " + type.getSimpleName() + " before authentication", null);
+                return;
+            }
+            if (message instanceof RunScriptMessage run && !compiledForThisInventory(run)) return;
+            ((ObjIntConsumer<M>) this.requests.get(type)).accept(message, attempt.number);
+        });
+    }
+
+    /** Whether {@code run} was compiled against the runtime inventory the game has; answers it where it was not. */
+    private boolean compiledForThisInventory(RunScriptMessage run) {
+        var inventory = this.runtimeInventoryState;
+        if (inventory.state() == PreparedFilePayload.State.READY && inventory.inventoryId().equals(run.inventoryId())) return true;
+        sendExecutionResult(run.scriptId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
+                "The script was compiled against a different runtime inventory. Wait for Companion to load the current index."));
+        return false;
+    }
+
     private void registerProtocol(Connection attempt) {
         var transport = attempt.client;
         transport.setMessageBus(new DefaultMessageBus() {
@@ -389,7 +403,6 @@ public final class CompanionAppClient implements AutoCloseable {
         transport.getMessageProcessor().setMaxStringLength(DefaultMessageProcessor.DEFAULT_MAX_STRING_LENGTH);
         ProtocolBindings.registerMod(transport.getMessageProcessor());
         transport.getMessageBus().listenAlways(ServerHelloMessage.class, message -> handleServerHello(attempt, message));
-        transport.getMessageBus().listenAlways(RetryRuntimeInventoryMessage.class, message -> startRuntimeInventoryPreparation(true));
         transport.getMessageBus().listenAlways(ReadyMessage.class, message -> {
             if (!attempt.authenticated()) {
                 failSession(attempt, "Companion sent Ready before the session handshake completed", null);
@@ -397,47 +410,7 @@ public final class CompanionAppClient implements AutoCloseable {
             }
             attempt.ready.complete(null);
         });
-        transport.getMessageBus().listenAlways(ToServerMessage.class, message -> {
-            if (!attempt.authenticated()) {
-                failSession(attempt, "Companion sent a message for the server before authentication", null);
-                return;
-            }
-            this.toServerHandler.accept(message.payload(), attempt.number);
-        });
-        transport.getMessageBus().listenAlways(RunScriptMessage.class, message -> {
-            if (!attempt.authenticated()) {
-                failSession(attempt, "Companion sent a script request before authentication", null);
-                return;
-            }
-            var inventory = this.runtimeInventoryState;
-            if (inventory.state() != PreparedFilePayload.State.READY || !inventory.inventoryId().equals(message.inventoryId())) {
-                sendExecutionResult(message.scriptId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
-                        "The script was compiled against a different runtime inventory. Wait for Companion to load the current index."));
-                return;
-            }
-            this.scriptRequestHandler.accept(message);
-        });
-        transport.getMessageBus().listenAlways(ChangeMessage.class, message -> {
-            if (!attempt.authenticated()) {
-                failSession(attempt, "Companion sent a change before authentication", null);
-                return;
-            }
-            this.changeHandler.accept(message, attempt.number);
-        });
-        transport.getMessageBus().listenAlways(ReloadMessage.class, message -> {
-            if (!attempt.authenticated()) {
-                failSession(attempt, "Companion sent a reload request before authentication", null);
-                return;
-            }
-            this.reloadHandler.accept(message, attempt.number);
-        });
-        transport.getMessageBus().listenAlways(StopScriptMessage.class, message -> {
-            if (!attempt.authenticated()) {
-                failSession(attempt, "Companion sent a stop-script request before authentication", null);
-                return;
-            }
-            this.stopScriptHandler.accept(message.scriptId());
-        });
+        for (Class<? extends AbstractMessage> type : this.requests.keySet()) listenAuthenticated(attempt, type);
         transport.addConnectionListener(new IConnectionListener() {
             @Override public void onConnected() {
                 if (closing || connection != attempt) { transport.close(); return; }

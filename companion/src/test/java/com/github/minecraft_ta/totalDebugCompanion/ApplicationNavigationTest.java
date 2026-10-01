@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totalDebugCompanion.ui.HtmlText;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
@@ -19,6 +22,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import org.junit.jupiter.api.io.TempDir;
+import java.util.List;
 import java.nio.file.Files;
 import java.net.Socket;
 import java.awt.Container;
@@ -229,6 +233,36 @@ class ApplicationNavigationTest {
             });
             app.renameProject(app.currentProject().id(), "Renamed pack").get(3, TimeUnit.SECONDS);
             SwingUtilities.invokeAndWait(() -> assertEquals("Renamed pack", name.get().getText()));
+        }
+    }
+
+    @Test void theProjectReopenedAtStartupTakesTheGamesMessages() throws Exception {
+        var configuration = new CompanionLaunchConfiguration(directory);
+        var profile = CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")));
+        try (var first = new CompanionApplication(configuration, "test-token")) {
+            first.openProject(profile).get(3, TimeUnit.SECONDS);
+        }
+        var game = new Client();
+        try (var app = new CompanionApplication(configuration, "test-token")) {
+            assertEquals(profile.id(), app.currentProject().id(), "Companion reopens the project it had open");
+            app.session().bindAndPublish(configuration);
+            ProtocolBindings.registerMod(game.getMessageProcessor());
+            var ready = new CompletableFuture<Void>();
+            game.getMessageBus().listenAlways(ReadyMessage.class, message -> ready.complete(null));
+            int port = CompanionSessionDescriptor.read(configuration.descriptorFile(), CompanionProtocol.VERSION).port();
+            assertTrue(game.connect(new InetSocketAddress("127.0.0.1", port)));
+            game.getMessageProcessor().enqueueMessage(new ClientHelloMessage(CompanionProtocol.VERSION, "test-token", profile.id(),
+                    profile.dataDirectory().toString(), profile.workspaceDirectory().toString()));
+            ready.get(3, TimeUnit.SECONDS);
+
+            // The game names its resource packs once it connected.
+            var stack = new PackStackPayload(34, List.of(new PackStackPayload.Pack("file/Faithful", "Faithful", "")));
+            game.getMessageProcessor().enqueueMessage(new PackStackMessage(new ClientPacksPayload(stack, 48)));
+            long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+            while (app.currentScope().packs().resourcePacks() == null && System.nanoTime() < until) Thread.sleep(10);
+            assertEquals(stack, app.currentScope().packs().resourcePacks(), "the reopened project takes the game's messages");
+        } finally {
+            game.close();
         }
     }
 

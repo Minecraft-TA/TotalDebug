@@ -33,10 +33,6 @@ import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
@@ -94,6 +90,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private final CompanionLaunchConfiguration launchConfiguration;
     private final Object lifecycleLock = new Object();
     private volatile ProjectScope current;
+    /** Removes the current project's routes of the game's messages; under the lifecycle lock. */
+    private Runnable currentMessages = () -> { };
     private final InstanceState emptyState = InstanceState.inMemory();
     private final CodeInsightService codeInsightService = new CodeInsightService(
             () -> { throw new IllegalStateException("Runtime class index is not ready"); }, RuntimeSourceCatalog.empty());
@@ -217,34 +215,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 }
 
                 @Override
-                public void changeResult(ChangeResultMessage message) {
-                    ProjectScope scope = current;
-                    if (scope != null) scope.pipeline().answered(message.payload());
-                }
-
-                @Override
-                public void packStack(PackStackMessage message) {
-                    ProjectScope scope = current;
-                    if (scope != null) scope.packs().named(message.payload());
-                }
-
-                @Override
-                public void datapacks(DatapacksMessage message) {
-                    ProjectScope scope = current;
-                    if (scope != null) scope.packs().datapacks(message.world(), message.payload(), message.refusal());
-                }
-
-                @Override
                 public void playing(PlayingMessage message) {
-                    ProjectScope scope = current;
-                    if (scope != null) scope.location().playing(message.payload());
+                    // The current project's game location takes it too, through its own route.
                     requestServerScripts(message.payload());
-                }
-
-                @Override
-                public void reloadResult(ReloadResultMessage message) {
-                    ProjectScope scope = current;
-                    if (scope != null) scope.pipeline().reloads().answered(message.payload());
                 }
 
                 @Override public void failed(String detail, ClientHelloMessage hello) {
@@ -267,14 +240,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                         case CompanionProtocol.RUN_SCRIPT, CompanionProtocol.STOP_SCRIPT -> {
                             if (executionRuns != null) executionRuns.relayFailed(message.correlation(), message.reason());
                         }
-                        case CompanionProtocol.RELOAD -> {
-                            ProjectScope scope = current;
-                            if (scope != null) scope.pipeline().reloads().relayFailed(message.correlation(), message.reason());
-                        }
-                        case CompanionProtocol.CHANGE -> {
-                            ProjectScope scope = current;
-                            if (scope != null) scope.pipeline().relayFailed(message.correlation(), message.reason());
-                        }
+                        // A change's or reload's reaches the current project's pipeline through its own route.
                         default -> { }
                     }
                 }
@@ -293,6 +259,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     handleDebugTarget(message);
                 }
             });
+            // The project reopened above came before the session: its messages reach it from now on.
+            synchronized (lifecycleLock) { makeCurrent(current); }
             scriptExecutions = new ScriptExecutionService(session, scriptCompiler, this::isConnected);
             executionRuns = new ExecutionRuns(session, scriptExecutions);
             editorRuns = new EditorScriptRunService(executionRuns, notifications);
@@ -361,7 +329,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             synchronized (lifecycleLock) {
                 scope = current;
                 if (scope != null) scope.retire();
-                current = null;
+                makeCurrent(null);
             }
             if (scope != null) {
                 if (scope.runtime() != null) CompanionClassIndex.clear();
@@ -725,7 +693,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             }
             synchronized (lifecycleLock) {
                 if (old != null) old.retire();
-                current = null;
+                makeCurrent(null);
                 if (runtimeIndexService != null) runtimeIndexService.clear();
             }
             // Retirement is terminal. Attempt every detach and install the prepared replacement even if
@@ -742,7 +710,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 try { old.close(); }
                 catch (IOException | RuntimeException failure) { reportCleanupFailure("Close retired project", failure); }
             }
-            synchronized (lifecycleLock) { current = replacement; }
+            synchronized (lifecycleLock) { makeCurrent(replacement); }
             installed = true;
             restoreCatalog(replacement);
             runCleanup("Restore debugger preferences", () -> restoreProjectState(replacement));
@@ -793,6 +761,17 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         catch (RuntimeException failure) { reportCleanupFailure(description, failure); }
     }
 
+    /**
+     * Makes {@code scope} the current project, or none: the game's messages for a project reach only the current one's
+     * owners. Under the lifecycle lock.
+     */
+    private void makeCurrent(ProjectScope scope) {
+        this.currentMessages.run();
+        this.currentMessages = () -> { };
+        current = scope;
+        if (scope != null && session != null) this.currentMessages = scope.listen(session);
+    }
+
     private void reportCleanupFailure(String description, Exception failure) {
         System.getLogger(CompanionApplication.class.getName()).log(System.Logger.Level.WARNING,
                 description + " failed", failure);
@@ -801,7 +780,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private void activateProfile(CompanionProfile requested) throws IOException {
         validateProfile(requested);
         ProjectScope replacement = ProjectScope.open(lifecycleLock, requested);
-        synchronized (lifecycleLock) { current = replacement; }
+        synchronized (lifecycleLock) { makeCurrent(replacement); }
         restoreCatalog(replacement);
         restoreProjectState(replacement);
         if (runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory(), requested.workspaceDirectory());

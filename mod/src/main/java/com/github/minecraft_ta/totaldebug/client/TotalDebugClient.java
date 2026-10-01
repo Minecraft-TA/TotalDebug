@@ -1,5 +1,10 @@
 package com.github.minecraft_ta.totaldebug.client;
 
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
 import com.github.minecraft_ta.totaldebug.change.ChangeTable;
 import com.github.minecraft_ta.totaldebug.client.catalog.KeyBindingEdits;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogCapture;
@@ -99,9 +104,9 @@ public final class TotalDebugClient {
         });
         ChangeTable changes = new ChangeTable(Map.of(KeyBindingEdits.CATEGORY, new KeyBindingEdits(),
                 ResourcePackEdits.CATEGORY, new ResourcePackEdits()), Minecraft.getInstance());
-        companionApp.setChangeHandler((message, companion) -> Minecraft.getInstance().execute(() -> changes.apply(message.payload())
+        companionApp.on(ChangeMessage.class, (message, companion) -> Minecraft.getInstance().execute(() -> changes.apply(message.payload())
                 .thenAccept(result -> companionApp.sendChangeResult(companion, new ChangeResultMessage(result)))));
-        companionApp.setReloadHandler((message, companion) -> Minecraft.getInstance().execute(() ->
+        companionApp.on(ReloadMessage.class, (message, companion) -> Minecraft.getInstance().execute(() ->
                 ResourceReloads.reload(message.payload(), result -> answerReload(companion, result))));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
@@ -127,10 +132,11 @@ public final class TotalDebugClient {
                 this.keptStacks);
         ClientRelay relay = new ClientRelay(companionApp, () -> this.playing.identity());
         this.relay = relay;
-        companionApp.setToServerHandler((message, companion) -> Minecraft.getInstance().execute(() -> relay.toServer(companion, message)));
+        companionApp.on(ToServerMessage.class, (message, companion) -> Minecraft.getInstance().execute(() ->
+                relay.toServer(companion, message.payload())));
         TotalDebug.get().network().setCompanionReceiver(relay::fromServer);
-        companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
-        companionApp.setStopScriptHandler(this.scripts::stopScript);
+        companionApp.on(RunScriptMessage.class, (message, companion) -> this.scripts.handleRunRequest(message));
+        companionApp.on(StopScriptMessage.class, (message, companion) -> this.scripts.stopScript(message.scriptId()));
         companionApp.setSessionClosedHandler(companion -> {
             this.scripts.close();
             if (companion != 0) Minecraft.getInstance().execute(() -> relay.companionLeft(companion));

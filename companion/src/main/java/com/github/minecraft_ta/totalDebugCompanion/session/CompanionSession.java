@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
@@ -14,10 +15,6 @@ import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
@@ -41,10 +38,11 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-public final class CompanionSession implements AutoCloseable {
+public final class CompanionSession implements AutoCloseable, MessageRoutes {
     private final List<BiConsumer<Side, ExecutionResultMessage>> serverResultListeners = new CopyOnWriteArrayList<>();
     private enum State {
         WAITING_FOR_HELLO,
@@ -62,16 +60,6 @@ public final class CompanionSession implements AutoCloseable {
     public interface Listener {
 
         default void inspectSubject(InspectSubjectMessage message) { }
-
-        /** The game answered a change of values it keeps. */
-        default void changeResult(ChangeResultMessage message) { }
-
-        default void packStack(PackStackMessage message) { }
-
-        /** The server of the world the game plays named its datapacks. */
-        default void datapacks(DatapacksMessage message) { }
-
-        default void reloadResult(ReloadResultMessage message) { }
 
         default void focusWindow() { }
 
@@ -162,6 +150,21 @@ public final class CompanionSession implements AutoCloseable {
     public void removeExecutionResultListener(BiConsumer<Side, ExecutionResultMessage> listener) {
         this.server.getMessageBus().unregister(ExecutionResultMessage.class, listener);
         this.serverResultListeners.remove(listener);
+    }
+
+    @Override
+    public <M extends AbstractMessage> Runnable on(Class<M> type, Consumer<M> handler) {
+        // A key of its own, so removing it never removes another registration of the same handler.
+        Object key = new Object();
+        // A message the bus is handing out while the route is removed is not handed to it any more.
+        AtomicBoolean active = new AtomicBoolean(true);
+        this.server.getMessageBus().listenAlways(type, key, message -> {
+            if (active.get()) handler.accept(message);
+        });
+        return () -> {
+            active.set(false);
+            this.server.getMessageBus().unregister(type, key);
+        };
     }
 
     public void setProjectSelectionHandler(AttachmentHandler handler) {
@@ -278,10 +281,6 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageBus().listenAlways(PlayingMessage.class, this.listener::playing);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
         this.server.getMessageBus().listenAlways(InspectSubjectMessage.class, this.listener::inspectSubject);
-        this.server.getMessageBus().listenAlways(ChangeResultMessage.class, this.listener::changeResult);
-        this.server.getMessageBus().listenAlways(PackStackMessage.class, this.listener::packStack);
-        this.server.getMessageBus().listenAlways(DatapacksMessage.class, this.listener::datapacks);
-        this.server.getMessageBus().listenAlways(ReloadResultMessage.class, this.listener::reloadResult);
         this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->
                 SwingUtilities.invokeLater(this.listener::focusWindow));
         this.server.addConnectionListener(new IConnectionListener() {
