@@ -67,13 +67,12 @@ public class FileTreeView extends JScrollPane {
 
     /**
      * Lists the loaded folders of Scripts again, which an editor may have changed while the user was away, or adds the
-     * Scripts root where the folder was made meanwhile.
+     * Scripts root where the folder was made meanwhile; completes once listed. Swing thread only.
      */
-    private void refreshScripts() {
-        if (disposed) return;
+    private CompletableFuture<Void> refreshScripts() {
+        if (disposed) return CompletableFuture.completedFuture(null);
         var scripts = scriptsRoot(project.get());
-        if (scripts != null) tree.refreshRoot(scripts, true);
-        else ensureScriptsRoot();
+        return scripts != null ? tree.refreshRoot(scripts, true) : ensureScriptsRoot();
     }
 
     /** Creation can introduce Scripts after profile loading; prepare only that new root off the EDT. */
@@ -471,7 +470,12 @@ public class FileTreeView extends JScrollPane {
             if (!target.equals(root)) {
                 for (Path segment : root.relativize(target)) relative.add(segment.toString());
             }
-            return this.tree.revealItemPath(root.getFileName().toString(), relative);
+            String name = root.getFileName().toString();
+            // A script Companion made beside the tree's own actions, as a tool from the Tools menu, is listed first.
+            return this.tree.revealItemPath(name, relative).thenComposeAsync(revealed -> revealed
+                    ? CompletableFuture.completedFuture(true)
+                    : refreshScripts().handle((ignored, failure) -> null).thenCompose(ignored -> this.tree.revealItemPath(name, relative)),
+                    SwingUtilities::invokeLater);
         }
         return CompletableFuture.completedFuture(false);
     }

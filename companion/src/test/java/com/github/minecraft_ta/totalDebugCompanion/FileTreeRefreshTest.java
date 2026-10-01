@@ -121,6 +121,30 @@ class FileTreeRefreshTest {
         }
     }
 
+    @Test
+    void aToolMadeFromTheToolsMenuIsShownInTheLoadedTree() throws Exception {
+        var scope = ProjectScope.open(new Object(), CompanionProfile.forGame(directory));
+        FileTreeView[] view = new FileTreeView[1];
+        try {
+            Path scripts = Files.createDirectories(scope.paths().scripts());
+            Files.writeString(scripts.resolve("Existing.tdscript"), "");
+            SwingUtilities.invokeAndWait(() -> {
+                view[0] = new FileTreeView(() -> scope, ignored -> {});
+                view[0].reloadProfile();
+            });
+            var tree = (LazyFileJTree) view[0].getViewport().getView();
+            assertTrue(tree.revealItemPath("scripts", List.of("Existing.tdscript")).get(5, TimeUnit.SECONDS));
+
+            // The Tools menu makes the tools folder and a script in it, then navigates to the script.
+            Path tool = scope.scriptFiles().create(scope.scriptFiles().create(scripts, "tools", true, ""), "Gear", false, "");
+            assertTrue(view[0].revealLocalPath(tool).get(5, TimeUnit.SECONDS), "the new script is listed and shown");
+        } finally {
+            SwingUtilities.invokeAndWait(() -> { if (view[0] != null) view[0].dispose(); });
+            scope.retire();
+            scope.close();
+        }
+    }
+
     /** Tries to reveal the script for a while, as the root is prepared off the Swing thread. */
     private static boolean awaitRevealed(LazyFileJTree tree) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);

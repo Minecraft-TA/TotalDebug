@@ -8,6 +8,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -159,6 +161,39 @@ class FileReadingTest {
         reading.refresh();
         settle(reading);
         assertEquals(3, reads.get(), "a closed reading starts no read");
+    }
+
+    @Test
+    void aReadOvertakenByARequestMadeWhileItRanPublishesNothing() throws Exception {
+        Path file = Files.writeString(this.directory.resolve("level.dat"), "First");
+        CountDownLatch paused = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger reads = new AtomicInteger();
+        List<String> published = new CopyOnWriteArrayList<>();
+        try (FileReading<String> reading = new FileReading<>(() -> {
+            String read = Files.readString(file);
+            if (reads.incrementAndGet() == 2) {
+                paused.countDown();
+                try {
+                    release.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    throw new IOException(interrupted);
+                }
+            }
+            return read;
+        })) {
+            reading.changed().subscribe(() -> published.add(reading.published().orElse("")));
+            reading.value();
+            Files.writeString(file, "Second");
+            reading.refresh();
+            assertTrue(paused.await(5, TimeUnit.SECONDS));
+            // The game plays a third world while the second is read.
+            Files.writeString(file, "Third");
+            reading.refresh();
+            release.countDown();
+            await(() -> published.contains("Third"));
+            assertEquals(List.of("Third"), published, "the world read before the request is never shown");
+        }
     }
 
     @Test

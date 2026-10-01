@@ -14,7 +14,8 @@ import java.util.concurrent.ExecutionException;
  *     <li>Reads run one at a time, in order, on the reading's strand.</li>
  *     <li>{@link #value()} returns the value published last, or reads it now where none was.</li>
  *     <li>{@link #refresh()} reads once after it was asked, as after Companion wrote the file or the game told of a change;
- *     requests made while one waits are that one. The first value it reads is told, for followers that show it without
+ *     requests made while one waits are that one, and a read under way when one is made publishes nothing, since the
+ *     one it waits for is newer. The first value it reads is told, for followers that show it without
  *     asking, such as a tab's title.</li>
  *     <li>The user coming back to Companion from another program ({@link WindowFocus#returned()}) refreshes a value read
  *     before; a value nobody asked for stays unread.</li>
@@ -132,6 +133,10 @@ public final class FileReading<T> implements AutoCloseable {
             throw failure instanceof IOException unreadable ? unreadable : new IOException(failure);
         }
         if (this.closed) return now;
+        synchronized (this) {
+            // A request made while this read ran reads again and publishes: the newest wins, as in the page loader.
+            if (this.queued) return now;
+        }
         Read<T> before = this.last;
         boolean tell = this.failed || (before == null ? tellFirst : !Objects.equals(before.value(), now));
         this.last = new Read<>(now);
