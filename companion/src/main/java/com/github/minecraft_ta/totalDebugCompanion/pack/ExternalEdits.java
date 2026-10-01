@@ -1,18 +1,15 @@
 package com.github.minecraft_ta.totalDebugCompanion.pack;
 
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
+import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
+import com.github.minecraft_ta.totalDebugCompanion.util.Strand;
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 
 import java.awt.Desktop;
 import java.io.IOException;
 import java.lang.ProcessBuilder.Redirect;
-import java.nio.file.ClosedWatchServiceException;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardWatchEventKinds;
-import java.nio.file.WatchEvent;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -22,10 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 /**
@@ -43,10 +37,8 @@ public final class ExternalEdits implements AutoCloseable {
     private final ResourceEdits edits;
     /** The files followed, by absolute file. */
     private final Map<Path, Followed> followed = new ConcurrentHashMap<>();
-    /** The folders watched, by folder. */
-    private final Map<Path, WatchKey> folders = new ConcurrentHashMap<>();
-    private WatchService watcher;
-    private ScheduledExecutorService settle;
+    /** Where a save is taken, one at a time, as it is adopted in order. */
+    private final Strand strand = Workers.strand();
     private boolean closed;
 
     /** A followed file, what it held when a program first opened it, and who hears about its saves. */
@@ -55,7 +47,10 @@ public final class ExternalEdits implements AutoCloseable {
         final Path pack;
         final byte[] before;
         final List<BiConsumer<ResourceEdits.Saved, Throwable>> listeners = new CopyOnWriteArrayList<>();
+        Runnable unwatch = () -> { };
         ScheduledFuture<?> pending;
+        /** Counts the writes seen, so a take handed on before a later write takes nothing. Under the edits' lock. */
+        long writes;
 
         Followed(String path, Path pack, byte[] before) {
             this.path = path;
@@ -79,7 +74,7 @@ public final class ExternalEdits implements AutoCloseable {
             launch(program, file);
         } catch (IOException | RuntimeException failed) {
             // Nothing was opened, so nothing else's saves are taken: only a file followed before stays followed.
-            if (!followedBefore) this.followed.remove(file);
+            if (!followedBefore) stopFollowing(file);
             throw failed;
         }
     }
@@ -93,14 +88,12 @@ public final class ExternalEdits implements AutoCloseable {
         if (!Files.isRegularFile(file)) throw new IOException(file + " does not exist");
         synchronized (this) {
             if (this.closed) throw new IOException("The project is closing");
-            if (this.watcher == null) start();
-            // A folder deleted and made again since lost its watch, which is registered anew.
-            Path folder = file.getParent();
-            if (!this.folders.containsKey(folder)) {
-                this.folders.put(folder, folder.register(this.watcher, StandardWatchEventKinds.ENTRY_CREATE,
-                        StandardWatchEventKinds.ENTRY_MODIFY));
+            if (!this.followed.containsKey(file)) {
+                Followed followed = new Followed(path, pack, Files.readAllBytes(file));
+                Path name = file.getFileName();
+                followed.unwatch = FileWatch.shared().watch(file.getParent(), name::equals, () -> settle(followed));
+                this.followed.put(file, followed);
             }
-            if (!this.followed.containsKey(file)) this.followed.put(file, new Followed(path, pack, Files.readAllBytes(file)));
         }
         return file;
     }
@@ -121,51 +114,26 @@ public final class ExternalEdits implements AutoCloseable {
         return this.followed.containsKey(pack.resolve(path).toAbsolutePath().normalize());
     }
 
-    private void start() throws IOException {
-        this.watcher = FileSystems.getDefault().newWatchService();
-        this.settle = Executors.newSingleThreadScheduledExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "TotalDebug external edits");
-            thread.setDaemon(true);
-            return thread;
-        });
-        WatchService watching = this.watcher;
-        Thread thread = new Thread(() -> watch(watching), "TotalDebug external edit watcher");
-        thread.setDaemon(true);
-        thread.start();
-    }
-
-    private void watch(WatchService watching) {
-        while (true) {
-            WatchKey key;
-            try {
-                key = watching.take();
-            } catch (InterruptedException | ClosedWatchServiceException stopped) {
-                return;
-            }
-            Path folder = (Path) key.watchable();
-            for (WatchEvent<?> event : key.pollEvents()) {
-                if (event.kind() == StandardWatchEventKinds.OVERFLOW) {
-                    // Which files changed is lost: every followed file of the folder is looked at.
-                    this.followed.forEach((file, followedFile) -> {
-                        if (file.getParent().equals(folder)) settle(followedFile);
-                    });
-                } else if (event.context() instanceof Path name) {
-                    Followed file = this.followed.get(folder.resolve(name));
-                    if (file != null) settle(file);
-                }
-            }
-            if (!key.reset()) this.folders.remove(folder);
-        }
+    private synchronized void stopFollowing(Path file) {
+        Followed followed = this.followed.remove(file);
+        if (followed == null) return;
+        followed.unwatch.run();
+        if (followed.pending != null) followed.pending.cancel(false);
     }
 
     /** Takes the file once it stayed unchanged for a moment. */
     private synchronized void settle(Followed file) {
         if (this.closed) return;
         if (file.pending != null) file.pending.cancel(false);
-        file.pending = this.settle.schedule(() -> take(file), SETTLE_MILLIS, TimeUnit.MILLISECONDS);
+        long write = ++file.writes;
+        file.pending = Workers.later(SETTLE_MILLIS, this.strand, () -> take(file, write));
     }
 
-    private void take(Followed file) {
+    private void take(Followed file, long write) {
+        synchronized (this) {
+            // Another write came since, whose own settle takes the file.
+            if (this.closed || write != file.writes) return;
+        }
         Path location = file.pack.resolve(file.path);
         byte[] seen;
         try {
@@ -177,7 +145,12 @@ public final class ExternalEdits implements AutoCloseable {
             // Still being written; the program's next write comes as another event.
             return;
         }
-        this.edits.adopt(file.path, file.pack, file.before, seen).whenComplete((saved, failure) -> {
+        CompletableFuture<ResourceEdits.Saved> adopted;
+        synchronized (this) {
+            if (this.closed || write != file.writes) return;
+            adopted = this.edits.adopt(file.path, file.pack, file.before, seen);
+        }
+        adopted.whenComplete((saved, failure) -> {
             if (saved == null && failure == null) return;
             Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
             file.listeners.forEach(listener -> listener.accept(saved, cause));
@@ -234,21 +207,12 @@ public final class ExternalEdits implements AutoCloseable {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        });
+        }, Workers.files());
     }
 
     @Override
     public synchronized void close() {
         this.closed = true;
-        this.followed.clear();
-        this.folders.clear();
-        if (this.settle != null) this.settle.shutdownNow();
-        if (this.watcher != null) {
-            try {
-                this.watcher.close();
-            } catch (IOException ignored) {
-                // Closing only stops the watch.
-            }
-        }
+        List.copyOf(this.followed.keySet()).forEach(this::stopFollowing);
     }
 }

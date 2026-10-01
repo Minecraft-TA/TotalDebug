@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.util.FileUtils;
 
 import javax.swing.*;
 import java.io.IOException;
@@ -34,7 +34,7 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
         setIcon(Icons.FOLDER);
 
         this.stopWatching = watch
-                ? FileUtils.startNewDirectoryWatcher(path, () -> {
+                ? FileWatch.shared().watchEntries(path, () -> {
                     changed = true;
                     SwingUtilities.invokeLater(() -> lazyFileJTree.refreshDirectory(path));
                 })
