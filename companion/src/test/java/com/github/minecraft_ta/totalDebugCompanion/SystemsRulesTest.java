@@ -100,7 +100,6 @@ class SystemsRulesTest {
             Map.entry("model/CodeView.java", new Allowed(1, "moves onto Workers in PR 8")),
             Map.entry("navigation/NavigationService.java", new Allowed(2, "moves onto Workers in PR 8")),
             Map.entry("script/SnippetExpressionSupport.java", new Allowed(2, "moves onto Workers in PR 8")),
-            Map.entry("ui/components/PageLoader.java", new Allowed(1, "reads on Workers' file work from PR 7")),
             Map.entry("ui/components/catalog/ModPanel.java", new Allowed(1, "moves onto Workers in PR 8")),
             Map.entry("ui/components/editors/PackResourceEditor.java", new Allowed(2, "its saves move onto Workers in PR 8")),
             Map.entry("ui/components/editors/ResourceTextEditor.java", new Allowed(1, "moves onto Workers in PR 8")),

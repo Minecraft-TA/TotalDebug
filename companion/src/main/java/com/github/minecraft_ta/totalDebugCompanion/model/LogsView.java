@@ -18,10 +18,9 @@ public final class LogsView implements IEditorPanel {
                 context.navigation()::navigate);
     }
 
-    /** Lists the logs and crash reports again, selecting {@code file} when it is not null. */
+    /** Selects {@code file} among the logs and crash reports when it is not null. */
     public void show(Path file) {
         this.panel.select(file);
-        this.panel.load();
     }
 
     @Override

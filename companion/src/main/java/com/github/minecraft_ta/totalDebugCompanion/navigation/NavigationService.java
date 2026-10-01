@@ -317,7 +317,7 @@ public final class NavigationService {
                         PackConfigurationView.class,
                         view -> true,
                         () -> new PackConfigurationView(editors.get())
-                ).thenAccept(PackConfigurationView::refresh), activation);
+                ).thenAccept(view -> { }), activation);
                 case NavigationTarget.PackResources resources -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         PackResourcesView.class,
                         view -> true,
@@ -332,7 +332,7 @@ public final class NavigationService {
                         ChangesView.class,
                         view -> true,
                         () -> new ChangesView(editors.get())
-                ).thenAccept(ChangesView::refresh), activation);
+                ).thenAccept(view -> { }), activation);
                 case NavigationTarget.Content content -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         ContentView.class,
                         view -> true,

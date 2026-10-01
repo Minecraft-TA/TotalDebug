@@ -223,9 +223,10 @@ public final class ChangesPanel extends JPanel {
 
         this.loader = new PageLoader<>(this::prepareLoad, this::show,
                 failure -> setStatus("Could not read the changes: " + failure.getMessage()))
-                .whenShown(this).follow(this.record.changed()::subscribe).follow(this.catalog.changed()::subscribe);
-        for (ChangeLabels labels : categories) this.loader.follow(labels::follow);
-        load();
+                .page(this).follows(this.record.changed()).follows(this.catalog.changed())
+                // Until the owners notice values put back outside Companion, the labels read the files whenever shown.
+                .readsWhenShown(this);
+        for (ChangeLabels labels : categories) labels.follows().forEach(this.loader::follows);
     }
 
     public void load() {

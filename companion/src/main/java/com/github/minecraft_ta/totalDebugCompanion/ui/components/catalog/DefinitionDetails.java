@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
@@ -16,7 +17,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -52,7 +52,6 @@ import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -62,11 +61,11 @@ import java.util.function.Supplier;
  */
 public final class DefinitionDetails {
     /**
-     * What the details are read from, and where their links lead. {@code resourcesRead} adds a listener for the game
-     * reading its resources again, as after each reload, which may have changed a mod's files, and returns its removal.
+     * What the details are read from, and where their links lead. {@code resourcesRead} fires after the game read its
+     * resources again, as after each reload, which may have changed a mod's files.
      */
     public record Services(PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources, ItemIconService icons,
-                           Consumer<NavigationTarget> navigator, Function<Runnable, Runnable> resourcesRead) {
+                           Consumer<NavigationTarget> navigator, Signal resourcesRead) {
         public Services {
             Objects.requireNonNull(catalog, "catalog");
             Objects.requireNonNull(sources, "sources");
@@ -79,7 +78,6 @@ public final class DefinitionDetails {
     private final SubjectRef.Definition subject;
     private final Services services;
     private final Runnable changed;
-    private final Runnable removeCatalogListener;
     private final JPanel extras = new JPanel();
     private PackCatalogService.State state;
     private CatalogIndex index;
@@ -108,7 +106,9 @@ public final class DefinitionDetails {
             this.appearance = found.appearance();
             this.appearancePreviews = found.previews();
             showExtras();
-        }, failure -> { }).waitsWhileHidden(page).follow(services.icons().changed()::subscribe);
+        }, failure -> { }).page(page).follows(services.icons().changed())
+                // The catalog is in memory: the definition is looked up again, then its appearance read.
+                .updates(services.catalog().changed(), this::reload);
         this.resourceLoader = new PageLoader<>(this::prepareResources, list -> {
             this.owned = list;
             this.matched = matching(this.owned, this.subject.namespace(), resourceName());
@@ -117,11 +117,8 @@ public final class DefinitionDetails {
             this.owned = List.of();
             this.matched = List.of();
             showExtras();
-        }).waitsWhileHidden(page).follow(services.resourcesRead());
-        this.removeCatalogListener = ShownUpdates.follow(page, services.catalog().changed()::subscribe, this::reload);
+        }).page(page).follows(services.resourcesRead());
         read();
-        loadAppearance();
-        loadResources();
     }
 
     public SubjectRef.Definition subject() {
@@ -411,6 +408,5 @@ public final class DefinitionDetails {
         this.disposed = true;
         this.appearanceLoader.dispose();
         this.resourceLoader.dispose();
-        this.removeCatalogListener.run();
     }
 }

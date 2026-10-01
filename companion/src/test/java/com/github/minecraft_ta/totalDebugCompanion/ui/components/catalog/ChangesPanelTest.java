@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import org.junit.jupiter.api.AfterEach;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyAssignments;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigLabels;
@@ -42,6 +44,7 @@ import java.util.function.BooleanSupplier;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@UiTest
 class ChangesPanelTest {
     @TempDir Path directory;
 
@@ -82,6 +85,7 @@ class ChangesPanelTest {
                 new KeyBindingLabels(new KeyBindingControl(new ChangePipeline(GameLocations.of(this.directory, false), record, Runnable::run), assignments())),
                 new ResourceLabels(edits), new PackLabels(new PackSelections(edits)));
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, record, labels, target -> { }));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(panel[0]));
         try {
             awaitOnSwing(() -> panel[0].rows("Configuration").size() == 1);
             SwingUtilities.invokeAndWait(() -> {

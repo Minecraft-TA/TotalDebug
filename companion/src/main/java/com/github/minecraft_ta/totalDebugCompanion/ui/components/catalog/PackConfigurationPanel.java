@@ -96,10 +96,10 @@ public final class PackConfigurationPanel extends JPanel {
         this.writer.bindUndo(this.table);
         this.loader = new PageLoader<>(this::prepareLoad, loaded -> show(loaded, ""),
                 failure -> show(new Loaded(List.of(), Map.of(), Map.of(), List.of()), "Could not read the configuration files: " + failure.getMessage()))
-                .whenShown(this).follow(catalog.changed()::subscribe)
+                // Configuration files are read whenever the page is shown (docs/SYSTEMS.md, section 2).
+                .page(this).readsWhenShown(this).follows(catalog.changed())
                 // A server configuration is shown from the copy of the world the game has open, which changes with it.
-                .follow(this.location.connectionChanged()::subscribe).follow(this.location.playingChanged()::subscribe);
-        load();
+                .follows(this.location.connectionChanged()).follows(this.location.playingChanged());
     }
 
     /** Reads every file again. */

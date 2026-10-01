@@ -18,9 +18,6 @@ public final class PackConfigurationView implements IEditorPanel {
     }
 
     /** Reads the configuration files again. */
-    public void refresh() {
-        this.panel.load();
-    }
 
     @Override
     public String getTitle() {

@@ -63,7 +63,7 @@ public final class PackPanel extends JPanel {
             this.header.setSubtitle(List.of());
             this.browser.setResources(List.of());
             this.browser.setMessage(PackFolders.title(file) + " could not be read: " + failure.getMessage());
-        }).whenShown(this);
+        }).page(this).readsWhenShown(this);
     }
 
     private static Loaded read(Path file) throws IOException {

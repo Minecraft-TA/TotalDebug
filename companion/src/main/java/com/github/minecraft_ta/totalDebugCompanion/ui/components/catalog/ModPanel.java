@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.ShownUpdates;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
@@ -61,7 +61,6 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -81,7 +80,6 @@ public final class ModPanel extends JPanel {
     private final Consumer<NavigationTarget> navigator;
     private final ItemIconService icons;
     private final CatalogIcons listIcons;
-    private final Runnable removeCatalogListener;
     private final SubjectHeader header = new SubjectHeader();
     private final JButton browseCode = new JButton("Browse Code", Icons.JAVA_CLASS);
     private final JTabbedPane tabs = new JTabbedPane();
@@ -105,7 +103,7 @@ public final class ModPanel extends JPanel {
      */
     public ModPanel(String modId, PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources,
                     ItemIconService icons, Path workspace, ConfigSettings configSettings, KeyBindingControl keyControl,
-                    Consumer<NavigationTarget> navigator, Function<Runnable, Runnable> resourcesRead) {
+                    Consumer<NavigationTarget> navigator, Signal resourcesRead) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
@@ -122,7 +120,9 @@ public final class ModPanel extends JPanel {
             this.resources.setResources(List.of());
             this.resources.setMessage("Resources could not be read: " + failure.getMessage());
             setTab(ModTab.RESOURCES, 1);
-        }).waitsWhileHidden(this).follow(resourcesRead);
+        }).page(this).follows(resourcesRead)
+                // The catalog is in memory: the page is built again from it, and lists the mod's files again where it has any.
+                .updates(catalog.changed(), this::rebuild);
         this.configs = new ConfigPanel(modId, configSettings, navigator);
         this.keyBindings = new KeyBindingsPanel(catalog, keyControl, modId, navigator);
         this.content = new ContentBrowser(this.listIcons, this::iconOf, navigator, null);
@@ -146,7 +146,6 @@ public final class ModPanel extends JPanel {
         }
         add(this.tabs, BorderLayout.CENTER);
         TypeToFilter.forwardTyping(this.tabs, this::selectedFilter);
-        this.removeCatalogListener = ShownUpdates.follow(this, catalog.changed()::subscribe, this::rebuild);
         rebuild();
     }
 
@@ -439,7 +438,6 @@ public final class ModPanel extends JPanel {
     public void dispose() {
         this.disposed = true;
         this.resourceLoader.dispose();
-        this.removeCatalogListener.run();
         this.listIcons.dispose();
         this.resources.dispose();
         this.keyBindings.dispose();

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangeLabels;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -22,8 +23,8 @@ public final class KeyBindingLabels implements ChangeLabels {
 
     /** A key rebound outside Companion, such as in the game, changes the key a row shows. */
     @Override
-    public Runnable follow(Runnable listener) {
-        return this.keys.assignmentsChanged().subscribe(listener);
+    public List<Signal> follows() {
+        return List.of(this.keys.assignmentsChanged());
     }
 
     public KeyBindingLabels(KeyBindingControl keys) {

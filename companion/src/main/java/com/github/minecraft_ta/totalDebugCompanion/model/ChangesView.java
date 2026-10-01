@@ -17,11 +17,6 @@ public final class ChangesView implements IEditorPanel {
                 context.navigation()::navigate);
     }
 
-    /** Reads the changed files again. */
-    public void refresh() {
-        this.panel.load();
-    }
-
     @Override
     public String getTitle() {
         return "Changes";

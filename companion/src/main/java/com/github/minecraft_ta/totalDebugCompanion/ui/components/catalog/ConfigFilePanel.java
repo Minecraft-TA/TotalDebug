@@ -49,8 +49,7 @@ public final class ConfigFilePanel extends JPanel {
         add(bar, BorderLayout.NORTH);
         add(this.editor.component(), BorderLayout.CENTER);
         this.loader = new PageLoader<>(() -> this::readFile, this.editor::load,
-                failure -> setStatus("Could not read " + this.file.getFileName() + ": " + failure.getMessage())).whenShown(this);
-        load();
+                failure -> setStatus("Could not read " + this.file.getFileName() + ": " + failure.getMessage())).page(this).readsWhenShown(this);
     }
 
     public Path file() {

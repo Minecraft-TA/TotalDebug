@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.InspectionSession;
@@ -238,7 +239,7 @@ class SubjectPanelTest {
                 SubjectPanel panel = SubjectPanel.occurrence(subject,
                         () -> { throw new IllegalStateException("Tests run no snippets"); },
                         () -> { throw new IllegalStateException("Tests have no project"); },
-                        new DefinitionDetails.Services(catalog, RuntimeSourceCatalog::empty, icons, navigator, listener -> () -> { }));
+                        new DefinitionDetails.Services(catalog, RuntimeSourceCatalog::empty, icons, navigator, new Signal()));
                 try {
                     test.accept(panel);
                 } catch (Throwable throwable) {

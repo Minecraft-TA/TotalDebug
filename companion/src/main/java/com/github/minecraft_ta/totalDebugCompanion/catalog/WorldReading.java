@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.nio.file.attribute.FileTime;
 import com.github.minecraft_ta.totalDebugCompanion.util.FileWatch;
@@ -85,6 +86,13 @@ public final class WorldReading implements AutoCloseable {
         return this.changed;
     }
 
+    /** The name of the current world as read last, without reading; empty where none was read yet. */
+    public Optional<String> publishedName() {
+        Followed now = this.followed;
+        if (now.reading() == null) return Optional.empty();
+        return now.reading().published().map(read -> read.saved().name());
+    }
+
     /** The current world as read last; read now where it was not read yet. Blocking then. */
     public World value() {
         Followed now = this.followed;
@@ -128,8 +136,18 @@ public final class WorldReading implements AutoCloseable {
                 reading.close();
             };
             this.followed = new Followed(current, reading);
+            // Told once the new world's first read landed, so its followers find it published, as the tab its name.
+            Workers.files().execute(() -> {
+                try {
+                    reading.value();
+                } catch (IOException unreadable) {
+                    // The World page shows why.
+                }
+                this.changed.fire();
+            });
+            return;
         }
-        if (before.directory() != null || current != null) this.changed.fire();
+        if (before.directory() != null) this.changed.fire();
     }
 
     /** Watches the datapacks folder of {@code world}, which the game plays, or none; a change there reads it again. */

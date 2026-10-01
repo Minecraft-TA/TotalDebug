@@ -23,7 +23,7 @@ public final class InspectionView implements IEditorPanel {
         this.subject = Objects.requireNonNull(subject, "subject");
         this.panel = SubjectPanel.occurrence(subject, context.snippets(), () -> context.project().scriptFiles(),
                 new DefinitionDetails.Services(context.project().catalog(), () -> context.project().sources(),
-                        context.itemIcons(), context.navigation()::navigate, context.project().packs().changed(ChangeRecord.PackSide.RESOURCES)::subscribe));
+                        context.itemIcons(), context.navigation()::navigate, context.project().packs().changed(ChangeRecord.PackSide.RESOURCES)));
     }
 
     public InspectSubjectPayload subject() {
