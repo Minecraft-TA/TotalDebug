@@ -143,7 +143,7 @@ class RuntimeIndexRecoveryTest {
 
     private static void await(RuntimeIndexService service, InstancePaths paths, boolean restore) throws Exception {
         CountDownLatch settled = new CountDownLatch(1);
-        service.addStatusListener(status -> {
+        IndexStatuses.follow(service, status -> {
             if (status.phase() == RuntimeIndexService.Phase.READY || status.phase() == RuntimeIndexService.Phase.FAILED) {
                 settled.countDown();
             }

@@ -20,7 +20,7 @@ public final class CatalogIcons {
         this.size = size;
         this.icons = new IconLoader<>(4_096, 8, item -> service.render(item.model(), item.tints(), size)
                 .thenApply(image -> image.<Icon>map(ImageIcon::new)));
-        this.removeListener = service.addListener(this.icons::clear);
+        this.removeListener = service.changed().subscribe(this.icons::clear);
     }
 
     public int size() {

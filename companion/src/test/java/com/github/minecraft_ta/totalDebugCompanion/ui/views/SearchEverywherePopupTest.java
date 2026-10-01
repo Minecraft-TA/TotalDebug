@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
@@ -107,7 +108,7 @@ class SearchEverywherePopupTest {
 
     @Test
     void disposedPopupUnsubscribesAndIgnoresQueuedRuntimeStatus() throws Exception {
-        var listenersField = RuntimeIndexService.class.getDeclaredField("listeners");
+        var listenersField = Signal.class.getDeclaredField("listeners");
         listenersField.setAccessible(true);
         var messageField = SearchEverywherePopup.class.getDeclaredField("messageLabel");
         messageField.setAccessible(true);
@@ -117,7 +118,7 @@ class SearchEverywherePopupTest {
                 SwingUtilities.invokeAndWait(() -> {
                     var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, () -> null, new ItemIconService(), target -> {});
                     try {
-                        assertEquals(1, ((Collection<?>) listenersField.get(service)).size());
+                        assertEquals(1, ((Collection<?>) listenersField.get(service.statusChanged())).size());
                         label.set((JLabel) messageField.get(popup));
                         label.get().setText("unchanged after disposal");
                         service.waiting("queued before disposal");
@@ -125,7 +126,7 @@ class SearchEverywherePopupTest {
                     finally { popup.dispose(); }
                 });
                 SwingUtilities.invokeAndWait(() -> assertEquals("unchanged after disposal", label.get().getText()));
-                assertTrue(((Collection<?>) listenersField.get(service)).isEmpty());
+                assertTrue(((Collection<?>) listenersField.get(service.statusChanged())).isEmpty());
                 service.waiting("sent after disposal");
                 SwingUtilities.invokeAndWait(() -> assertEquals("unchanged after disposal", label.get().getText()));
             }

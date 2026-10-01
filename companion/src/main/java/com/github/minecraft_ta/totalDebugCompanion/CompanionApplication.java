@@ -151,7 +151,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         try {
             JDTHacks.init(configuration.paths().jdtCache());
             runtimeIndexService = new RuntimeIndexService(lifecycleLock, this::installRuntimeSnapshot);
-            runtimeIndexService.addStatusListener(this::updateRuntimeIndexUi);
+            RuntimeIndexService index = runtimeIndexService;
+            index.statusChanged().subscribe(() -> updateRuntimeIndexUi(index.status()));
+            updateRuntimeIndexUi(index.status());
             debuggerController = createDebuggerController();
             debuggerController.addListener(new DebuggerSessionController.Listener() {
                 private Throwable lastFailure;

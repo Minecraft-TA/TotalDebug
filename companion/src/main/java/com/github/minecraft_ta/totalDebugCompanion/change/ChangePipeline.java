@@ -74,8 +74,8 @@ public final class ChangePipeline {
         this.record = Objects.requireNonNull(record, "record");
         this.writes = Objects.requireNonNull(writes, "writes");
         this.reloads = new Reloads(location);
-        location.addListener(change -> {
-            if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
+        location.connectionChanged().subscribe(() -> {
+            if (location.connection() == null) gameDisconnected();
         });
     }
 

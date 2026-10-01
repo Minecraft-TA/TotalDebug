@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
@@ -24,7 +25,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.zip.ZipFile;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -114,7 +114,7 @@ public final class RuntimeIndexService implements AutoCloseable {
     private final Object lifecycleLock;
     private final Consumer<ReadySnapshot> readyHandler;
     private final Function<String, ClassIndex> indexLoader;
-    private final CopyOnWriteArrayList<Consumer<Status>> listeners = new CopyOnWriteArrayList<>();
+    private final Signal statusChanged = new Signal();
     private volatile Status status = new Status(Phase.WAITING, "Waiting for runtime inventory", null);
     private String activeInventoryId;
     private Metrics activeMetrics;
@@ -166,10 +166,9 @@ public final class RuntimeIndexService implements AutoCloseable {
         return this.status;
     }
 
-    public void addStatusListener(Consumer<Status> listener) {
-        Consumer<Status> checked = Objects.requireNonNull(listener, "listener");
-        this.listeners.add(checked);
-        checked.accept(this.status);
+    /** Fires after {@link #status()} changed, on the thread that changed it, under the lifecycle lock. */
+    public Signal statusChanged() {
+        return this.statusChanged;
     }
 
     public void waiting(String detail) {
@@ -183,10 +182,6 @@ public final class RuntimeIndexService implements AutoCloseable {
             this.activeMetrics = null;
             update(new Status(Phase.WAITING, detail, null));
         }
-    }
-
-    public void removeStatusListener(Consumer<Status> listener) {
-        this.listeners.remove(listener);
     }
 
     public void restore(Path dataDirectory) {
@@ -608,9 +603,10 @@ public final class RuntimeIndexService implements AutoCloseable {
     }
 
     private void update(Status replacement) {
-        this.status = replacement;
-        for (Consumer<Status> listener : this.listeners) {
-            listener.accept(replacement);
+        // Under the lock, so what the followers read of the status is this one.
+        synchronized (this.lifecycleLock) {
+            this.status = replacement;
+            this.statusChanged.fire();
         }
     }
 

@@ -54,20 +54,20 @@ public final class GamePacks {
     public GamePacks(GameLocation location) {
         this.location = Objects.requireNonNull(location, "location");
         this.workspace = location.workspace();
-        location.addListener(change -> {
-            if (change == GameLocation.Change.DISCONNECTED) gameDisconnected();
-            else if (change == GameLocation.Change.PLAYING) {
-                // The datapacks the server named belong to the world it played; its next world's server is asked.
-                synchronized (this) {
-                    if (!Objects.equals(this.datapacksFor, location.playing())) {
-                        this.datapacks = null;
-                        this.worldRefusal = "";
-                    }
+        location.connectionChanged().subscribe(() -> {
+            if (location.connection() == null) gameDisconnected();
+        });
+        location.playingChanged().subscribe(() -> {
+            // The datapacks the server named belong to the world it played; its next world's server is asked.
+            synchronized (this) {
+                if (!Objects.equals(this.datapacksFor, location.playing())) {
+                    this.datapacks = null;
+                    this.worldRefusal = "";
                 }
-                askForDatapacks();
-                // Without datapacks named yet, the world's own files stand for them, and they are another world's now.
-                tell(ChangeRecord.PackSide.DATA);
             }
+            askForDatapacks();
+            // Without datapacks named yet, the world's own files stand for them, and they are another world's now.
+            tell(ChangeRecord.PackSide.DATA);
         });
     }
 

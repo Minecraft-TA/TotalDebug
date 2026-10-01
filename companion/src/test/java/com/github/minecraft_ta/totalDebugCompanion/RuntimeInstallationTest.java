@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexStatuses;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
@@ -111,12 +112,12 @@ class RuntimeInstallationTest {
         Consumer<RuntimeIndexService.Status> listener = status -> {
             if (!status.active() && status.phase() != RuntimeIndexService.Phase.WAITING) finished.complete(status);
         };
-        service.addStatusListener(listener);
+        Runnable stop = IndexStatuses.follow(service, listener);
         try {
             var status = finished.get(10, TimeUnit.SECONDS);
             assertEquals(RuntimeIndexService.Phase.EMPTY, status.phase(), status.detail());
         } finally {
-            service.removeStatusListener(listener);
+            stop.run();
         }
     }
 

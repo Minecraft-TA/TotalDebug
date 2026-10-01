@@ -123,7 +123,7 @@ public class SearchEverywherePopup extends JFrame {
     private final ModuleFilterPopup moduleFilterPopup;
     private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
 
-    private final Consumer<RuntimeIndexService.Status> indexStatusListener = this::indexStatusChanged;
+    private Runnable stopFollowingIndex = () -> { };
 
     private void indexStatusChanged(RuntimeIndexService.Status status) {
         SwingUtilities.invokeLater(() -> {
@@ -205,7 +205,8 @@ public class SearchEverywherePopup extends JFrame {
                     JComponent.WHEN_IN_FOCUSED_WINDOW);
         }
 
-        indexLoader.addStatusListener(this.indexStatusListener);
+        this.stopFollowingIndex = indexLoader.statusChanged().subscribe(() -> indexStatusChanged(indexLoader.status()));
+        indexStatusChanged(indexLoader.status());
 
         ((JPanel) getContentPane()).setBorder(PopupChrome.border());
         setUndecorated(true);
@@ -255,7 +256,7 @@ public class SearchEverywherePopup extends JFrame {
     public void dispose() {
         this.catalogIcons.dispose();
         this.modLogos.clear();
-        indexLoader.removeStatusListener(this.indexStatusListener);
+        this.stopFollowingIndex.run();
         ThemeManager.removeThemeChangeListener(this.themeListener);
         this.searchGeneration.incrementAndGet();
         if (this.pendingSearch != null) {

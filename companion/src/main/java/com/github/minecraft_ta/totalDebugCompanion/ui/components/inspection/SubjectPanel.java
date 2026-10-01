@@ -138,7 +138,7 @@ public final class SubjectPanel extends JPanel {
         showHeader();
         showSections();
         // The page draws its items once it is shown; the editor tabs draw the tab's (refreshTabIcon).
-        this.removeIconListener = ShownUpdates.follow(this, services.icons()::addListener, this::reloadPageIcons);
+        this.removeIconListener = ShownUpdates.follow(this, services.icons().changed()::subscribe, this::reloadPageIcons);
         reloadIcons();
     }
 
