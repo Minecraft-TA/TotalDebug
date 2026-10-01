@@ -52,11 +52,13 @@ public final class ClientLifecycleEvents {
     }
 
     /**
-     * The Resource Packs screen rescans the pack folders while it is open. Closing it without changing the selection
-     * starts no resource reload, so the packs it found are told here. It selected the packs before it closes.
+     * A screen that changed key bindings, as the game's or a mod's controls screen, has Companion told. The Resource
+     * Packs screen rescans the pack folders while it is open; closing it without changing the selection starts no
+     * resource reload, so the packs it found are told here. It selected the packs before it closes.
      */
     @SubscribeEvent
     static void onScreenClosing(ScreenEvent.Closing event) {
+        TotalDebugClient.current().ifPresent(TotalDebugClient::screenClosing);
         if (!(event.getScreen() instanceof PackSelectionScreen)) return;
         ResourceReloads.selected();
         TotalDebugClient.current().ifPresent(TotalDebugClient::packsChanged);

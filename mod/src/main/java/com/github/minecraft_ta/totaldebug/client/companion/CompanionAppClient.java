@@ -19,6 +19,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyAssignmentsMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
@@ -304,6 +305,11 @@ public final class CompanionAppClient implements AutoCloseable {
 
     public void sendPlaying(PlayingMessage message) {
         send(message);
+    }
+
+    /** Tells Companion that the game saved changed key bindings in {@code options.txt}. */
+    public void sendKeyAssignments() {
+        send(new KeyAssignmentsMessage());
     }
 
     public void setProgressListener(Consumer<CompanionStartupProgress> listener) {

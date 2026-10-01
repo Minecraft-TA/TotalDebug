@@ -48,11 +48,17 @@ public final class KeyBindingControl implements ChangeCategory<ChangeRecord.KeyB
     }
 
     /**
-     * Fires when the keys {@code options.txt} assigns changed, as read after Companion changed them or when the user came
-     * back to Companion, such as from the game's controls screen; another option written, such as the volume, tells nobody.
+     * Fires when the keys {@code options.txt} assigns changed, as read after Companion changed them, after the game told
+     * it saved changed keys, or when the user came back to Companion; another option written, such as the volume, tells
+     * nobody.
      */
     public Signal assignmentsChanged() {
         return this.assignments.changed();
+    }
+
+    /** The game saved changed keys in {@code options.txt}, as after its controls screen closed: they are read again. */
+    public void saved() {
+        this.assignments.refresh();
     }
 
     /** The keys {@code options.txt} assigns, as read last; read now where none were read yet. Blocking then. */

@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 41;
+    public static final int VERSION = 42;
 
     public static final short READY = 1;
     // 2 was the game opening a class, which the /decompile command used.
@@ -37,6 +37,7 @@ public final class CompanionProtocol {
     public static final short CHANGE_RESULT = 49;
     public static final short DATAPACKS = 50;
     public static final short DATAPACKS_REQUEST = 51;
+    public static final short KEY_ASSIGNMENTS = 52;
 
     private CompanionProtocol() {
     }

@@ -64,6 +64,8 @@ public final class TotalDebugClient {
     private volatile boolean snapshotRequested;
     /** What the game last told Companion it plays, whose world every world-bound request must name. Client thread writes. */
     private volatile PlayingPayload playing = new PlayingPayload.Menu();
+    /** The key bindings when a screen closed last, as {@code options.txt} saves them; null before. Client thread only. */
+    private Map<String, String> keys;
 
     private TotalDebugClient(Path gameDirectory) {
         Path totalDebugDirectory = gameDirectory
@@ -195,6 +197,19 @@ public final class TotalDebugClient {
      */
     public void packsChanged() {
         this.packStacks.publish();
+    }
+
+    /**
+     * A screen closes. Where the key bindings differ from those when a screen closed before, as after the controls screen,
+     * Companion is told once the screen saved {@code options.txt}: the game saves it as the screen is removed, after this
+     * event. Client thread only.
+     */
+    public void screenClosing() {
+        Map<String, String> assigned = KeyBindingEdits.assigned();
+        if (assigned.equals(this.keys)) return;
+        this.keys = assigned;
+        // Queued rather than run now, as Minecraft.execute would on this thread.
+        Minecraft.getInstance().tell(this.companionApp::sendKeyAssignments);
     }
 
     /** The player joined a singleplayer world or a server. Client thread only. */
