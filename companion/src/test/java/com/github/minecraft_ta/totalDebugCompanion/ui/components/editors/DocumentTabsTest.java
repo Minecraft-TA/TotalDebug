@@ -362,6 +362,37 @@ class DocumentTabsTest {
         });
     }
 
+    @Test
+    void aSupersededOpenDoesNotReadItsFile() throws Exception {
+        withWindow((app, window, game) -> {
+            Path first = Files.writeString(game.resolve("first.txt"), "first");
+            Path second = Files.writeString(game.resolve("second.txt"), "second");
+            Path capture = this.directory.resolve("superseded-open.jfr");
+            CompletableFuture<Void> stale;
+            CompletableFuture<Void> current;
+            try (var recording = new Recording()) {
+                recording.enable("jdk.FileRead").withThreshold(Duration.ZERO);
+                recording.start();
+                try (var held = holdFileWorkers()) {
+                    stale = window.navigation().navigate(new NavigationTarget.LocalFile(first), NavigationService.Activation.KEEP_CURRENT_WINDOW);
+                    settle();
+                    // A newer navigation replaces the first while its read still waits for a worker.
+                    current = window.navigation().navigate(new NavigationTarget.LocalFile(second), NavigationService.Activation.KEEP_CURRENT_WINDOW);
+                    settle();
+                }
+                current.get(10, TimeUnit.SECONDS);
+                stale.handle((ignored, failure) -> null).get(10, TimeUnit.SECONDS);
+                recording.stop();
+                recording.dump(capture);
+            }
+            var reads = RecordingFile.readAllEvents(capture).stream()
+                    .filter(event -> event.getEventType().getName().equals("jdk.FileRead"))
+                    .filter(event -> first.toString().equals(event.getString("path"))).toList();
+            assertTrue(reads.isEmpty(), "an open a newer navigation replaced does not read its file");
+            assertEquals("second", UiTestScope.onEdt(() -> text(window)));
+        });
+    }
+
     /** Writes a mod's configuration file and the catalog that names it; returns the file. */
     private Path configured(CompanionApplication app, Path game) throws Exception {
         ProjectScope scope = app.currentScope();

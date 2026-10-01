@@ -718,7 +718,7 @@ public final class NavigationService {
         return dispatchNavigation(() -> {
             T open = focusOpen(type, matches);
             if (open != null) return place.apply(open, false);
-            return CompletableFuture.supplyAsync(() -> call(read), Workers.files()).thenComposeAsync(content -> {
+            return CompletableFuture.supplyAsync(() -> readWhileCurrent(context, read), Workers.files()).thenComposeAsync(content -> {
                 if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
                 requireNavigationAdmission(context);
                 T opened = focusOpen(type, matches);
@@ -746,7 +746,7 @@ public final class NavigationService {
      * in it; a tab closed meanwhile shows nothing, and the navigation ends as cancelled.
      */
     private <R> CompletableFuture<Void> readAgain(Context context, IEditorPanel tab, Callable<R> read, Consumer<R> show) {
-        return CompletableFuture.supplyAsync(() -> call(read), Workers.files()).thenAcceptAsync(content -> {
+        return CompletableFuture.supplyAsync(() -> readWhileCurrent(context, read), Workers.files()).thenAcceptAsync(content -> {
             if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
             if (!this.tabs.editors().contains(tab)) throw new CancellationException("The tab closed");
             show.accept(content);
@@ -757,6 +757,15 @@ public final class NavigationService {
     private static Path existing(Path path) {
         if (!Files.isRegularFile(path)) throw new IllegalArgumentException("File does not exist: " + path);
         return path;
+    }
+
+    /**
+     * Runs {@code read} for a navigation, unless a newer navigation replaced it while the read waited for a file worker:
+     * clicking a large file several times reads it once for the last click, and keeps the workers for other reads.
+     */
+    private <T> T readWhileCurrent(Context context, Callable<T> read) {
+        if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+        return call(read);
     }
 
     private static <T> T call(Callable<T> read) {
