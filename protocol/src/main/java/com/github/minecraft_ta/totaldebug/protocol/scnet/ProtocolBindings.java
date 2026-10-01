@@ -29,6 +29,7 @@ public final class ProtocolBindings {
         processor.registerOutgoing(CompanionProtocol.PREPARED_FILE, PreparedFileMessage.class);
         processor.registerIncoming(CompanionProtocol.CHANGE, ChangeMessage.class, ChangeMessage::new);
         processor.registerOutgoing(CompanionProtocol.CHANGE_RESULT, ChangeResultMessage.class);
+        processor.registerOutgoing(CompanionProtocol.KEY_ASSIGNMENTS, KeyAssignmentsMessage.class);
     }
 
     public static void registerCompanion(IMessageProcessor processor) {
@@ -52,5 +53,6 @@ public final class ProtocolBindings {
         processor.registerIncoming(CompanionProtocol.PREPARED_FILE, PreparedFileMessage.class, PreparedFileMessage::new);
         processor.registerOutgoing(CompanionProtocol.CHANGE, ChangeMessage.class);
         processor.registerIncoming(CompanionProtocol.CHANGE_RESULT, ChangeResultMessage.class, ChangeResultMessage::new);
+        processor.registerIncoming(CompanionProtocol.KEY_ASSIGNMENTS, KeyAssignmentsMessage.class, KeyAssignmentsMessage::new);
     }
 }

@@ -6,6 +6,8 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.client.settings.KeyModifier;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -19,7 +21,17 @@ public final class KeyBindingEdits implements ChangeTable.Category {
 
     @Override
     public String read(String name) {
-        KeyMapping mapping = mapping(name);
+        return value(mapping(name));
+    }
+
+    /** Every binding's key, as {@code options.txt} saves it, by the binding's name. */
+    public static Map<String, String> assigned() {
+        Map<String, String> assigned = new HashMap<>();
+        for (KeyMapping mapping : Minecraft.getInstance().options.keyMappings) assigned.put(mapping.getName(), value(mapping));
+        return assigned;
+    }
+
+    private static String value(KeyMapping mapping) {
         KeyModifier modifier = mapping.getKeyModifier();
         return mapping.getKey().getName() + (modifier == KeyModifier.NONE ? "" : ":" + modifier.name());
     }

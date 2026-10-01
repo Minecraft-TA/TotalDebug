@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.project;
 import com.github.minecraft_ta.totalDebugCompanion.change.WriteQueue;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReading;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyAssignmentsMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
@@ -135,6 +136,7 @@ public final class ProjectScope implements AutoCloseable {
                 routes.on(PackStackMessage.class, message -> this.packs.named(message.payload())),
                 routes.on(DatapacksMessage.class, message -> this.packs.datapacks(message.world(), message.payload(), message.refusal())),
                 routes.on(PlayingMessage.class, message -> this.location.playing(message.payload())),
+                routes.on(KeyAssignmentsMessage.class, message -> this.keyBindings.saved()),
                 // The refused message and its correlation name the request together.
                 routes.on(RelayFailedMessage.class, message -> {
                     switch (message.messageId()) {

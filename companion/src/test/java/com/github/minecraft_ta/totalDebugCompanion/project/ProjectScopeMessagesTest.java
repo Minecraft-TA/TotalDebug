@@ -4,14 +4,18 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.MessageRoutes;
 import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyAssignmentsMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.tth05.scnet.message.AbstractMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,6 +39,32 @@ class ProjectScopeMessagesTest {
             routes.deliver(new PackStackMessage(new ClientPacksPayload(stack("file/Other"), 48)));
             assertEquals(faithful, scope.packs().resourcePacks(), "a project that is not current takes nothing");
             assertEquals(0, routes.handlers.size(), "and leaves no route behind");
+        } finally {
+            scope.retire();
+            scope.close();
+        }
+    }
+
+    @Test
+    void theGameSavingChangedKeysHasTheKeysReadAgain() throws Exception {
+        Routes routes = new Routes();
+        ProjectScope scope = ProjectScope.open(new Object(), CompanionProfile.forGame(this.directory));
+        try {
+            Path options = scope.profile().workspaceDirectory().resolve("options.txt");
+            Files.writeString(options, "key_key.jump:key.keyboard.space\n");
+            Runnable stop = scope.listen(routes);
+            AtomicInteger told = new AtomicInteger();
+            scope.keyBindings().assignmentsChanged().subscribe(told::incrementAndGet);
+            assertEquals("key.keyboard.space", scope.keyBindings().assignments().get("key.jump").encode());
+
+            // The player rebinds jump in the game's controls screen, which saves options.txt as it closes.
+            Files.writeString(options, "key_key.jump:key.keyboard.g\n");
+            routes.deliver(new KeyAssignmentsMessage());
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (told.get() == 0 && System.nanoTime() < deadline) Thread.sleep(10);
+            assertEquals(1, told.get(), "the Key bindings page and the change labels hear of it");
+            assertEquals("key.keyboard.g", scope.keyBindings().assignments().get("key.jump").encode());
+            stop.run();
         } finally {
             scope.retire();
             scope.close();
