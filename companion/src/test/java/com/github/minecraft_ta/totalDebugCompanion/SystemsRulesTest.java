@@ -88,9 +88,10 @@ class SystemsRulesTest {
             Map.entry("ui/components/catalog/TextureThumbnails.java", new Allowed(2, "moves onto Workers in PR 3")),
             Map.entry("ui/components/catalog/ModLogoIcons.java", new Allowed(2, "moves onto Workers in PR 3")),
             Map.entry("ui/components/editors/ResourceViewPanel.java", new Allowed(2, "moves onto Workers in PR 3")),
-            Map.entry("catalog/KeyAssignments.java", new Allowed(3, "becomes a file reading in PR 4")),
             Map.entry("pack/ExternalEdits.java", new Allowed(3, "becomes an adoption in PR 5")),
-            Map.entry("util/FileUtils.java", new Allowed(1, "its watcher becomes FileWatch in PR 4")));
+            Map.entry("util/FileUtils.java", new Allowed(1, "its watcher becomes a FileWatch follower in PR 5")),
+            Map.entry("util/Workers.java", new Allowed(6, "the file work, the owners' strands and the timer everything shares")),
+            Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")));
 
     // All move onto Workers' file work in PR 3.
     private static final Map<String, Allowed> SHARED_POOL = Map.ofEntries(
@@ -141,8 +142,8 @@ class SystemsRulesTest {
             Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 5")));
 
     private static final Map<String, Allowed> WATCHERS = Map.ofEntries(
-            Map.entry("util/FileUtils.java", new Allowed(1, "becomes FileWatch in PR 4")),
-            Map.entry("catalog/KeyAssignments.java", new Allowed(1, "becomes a file reading in PR 4")),
+            Map.entry("util/FileWatch.java", new Allowed(1, "the one watcher of the folders Companion follows")),
+            Map.entry("util/FileUtils.java", new Allowed(1, "becomes a FileWatch follower in PR 5")),
             Map.entry("pack/ExternalEdits.java", new Allowed(1, "becomes an adoption in PR 5")));
 
     @BeforeAll

@@ -35,7 +35,11 @@ page action ─► change pipeline ─► project's write queue ─► owner ─
 
 ## 1. Owners and signals
 
-Every piece of state Companion shows has one owner: a service of the project scope or of the application. The owner holds the current value and compares every new one with it. It fires a `Signal` only when the value differs, so everything downstream can trust that a signal means a change. The comparison is the owner's, of its domain values (parsed assignments, the enabled packs, the catalog), which have a meaningful equality; nothing compares what a page shows, such as images or editor models.
+Every piece of state Companion shows has one owner: a service of the project scope or of the application.
+
+> Each state owner updates its state through one serialized path and publishes immutable snapshots. Background reads return results to that path; they never modify owner state directly. Consumers use published snapshots. External changes are rechecked before writes.
+
+The serialized path is a `Strand`: the owner's tasks run one at a time and in order, on the shared threads of `Workers`, not on a thread of its own. It rules out races within Companion, such as a page's read and the owner's own read disagreeing about which one the next change is told against. It does not stop the game or an editor from changing a file meanwhile: a published snapshot is consistent but can become outdated, so conflict checks at the write, incomplete files and superseded results are still handled, once, in the owner. The owner holds the current value and compares every new one with it. It fires a `Signal` only when the value differs, so everything downstream can trust that a signal means a change. The comparison is the owner's, of its domain values (parsed assignments, the enabled packs, the catalog), which have a meaningful equality; nothing compares what a page shows, such as images or editor models.
 
 ```java
 public final class Signal {
@@ -56,7 +60,7 @@ public final class Signal {
 - **Connection-bound work compares connections.** `GameLocation`'s connection value includes the connection's number and the game's process. A request waiting for an answer keeps the number of the connection it was sent on, and is failed when the connection signal shows another. This replaces reacting to `DISCONNECTED` as an event, which a quick reconnect can hide.
 - **The current project is state too.** The application owns it and signals a switch. UI that outlives a project (the tab strip, the Project tree, the status bar, search) follows "the current project's catalog" through its loader, which subscribes again on a switch. This deletes the `project.get() != scope` and `currentScope() == scope` checks.
 
-**Newest wins, where it is the same read.** A page loader runs one read at a time: a request during a read makes one more read after it, and the older result is dropped. When file readings (section 2) need the same, it moves into a class of its own, `LatestRead`, that both use, which also removes `KeyAssignments.generation`. It does not replace an owner's protection between requests of different kinds, where a later request must win over an earlier one that finishes last: `ItemIconService` adopting an archive the game announced over restoring the newest from disk, `PackCatalogService` taking a prepared catalog over a restore. Those counters stay in their owners; a signal counts changes, a counter of requests tells which answer is the newest, and they are different jobs.
+**Newest wins, where it is the same read.** A page loader runs one read at a time: a request during a read makes one more read after it, and the older result is dropped. A file reading needs no such bookkeeping: its reads run on its strand, one after the other, and a read waiting for a write to settle gives way to a later write. It does not replace an owner's protection between requests of different kinds, where a later request must win over an earlier one that finishes last: `ItemIconService` adopting an archive the game announced over restoring the newest from disk, `PackCatalogService` taking a prepared catalog over a restore. Those counters stay in their owners; a signal counts changes, a counter of requests tells which answer is the newest, and they are different jobs.
 
 Owners:
 
@@ -81,20 +85,25 @@ Owners:
 Files Companion shows that others write are followed by an owner through a `FileReading`: a watch, a reader, the last value, a comparison and a signal. It is what `KeyAssignments` is today, made once for all.
 
 ```java
-FileReading<Assignments> assignments = files.reading(
-        options,                         // the file or folder, resolved to one path form
-        Assignments::read,               // reads the whole file; runs on file work
-        Duration.ofMillis(300));         // settle: read once writes stopped for this long
+FileReading<Map<String, Assignment>> reading = new FileReading<>(
+        options,                          // the file, which may not exist yet
+        KeyBindings::readOptions,         // reads the whole file into a domain value; a missing file is a value too
+        Duration.ofMillis(300));          // settle: read once writes stopped for this long
+reading.changed();                        // fires only when a read found another value
+reading.value();                          // the published snapshot; read now, on the strand, where none was read yet
+reading.readNow();                        // after Companion's own write
+reading.moveTo(otherFile);                // a folder that moves, as the current world
 ```
 
-- **One `FileWatch` for the application** does the watching. A registration lives only while its reading has a follower.
-- **A folder that does not exist yet** is watched through its nearest existing ancestor, and moves down when it appears: a new world's datapacks, `crash-reports`, `config`.
-- **One path form.** Every registration resolves to the real path of its nearest existing ancestor plus the rest, so a linked folder is not watched twice or missed.
-- **Settle and maximum wait.** A reading waits until writes stopped for its settle time, but at most a maximum wait, so a file written without pause still reads.
-- **A read that fails is retried** after 1, 5 and 30 seconds, as a file written in place can be read half written, and a watch that fails or overflows reads everything it follows once.
-- **Folders that move are the owner's.** `CurrentWorld` follows `playing` and moves its reading to the world the game plays, or with the game closed, the last played.
-- **Windows renames.** A watched folder and its ancestors cannot be renamed while watched. `FileWatch` pauses around Companion's own renames; registrations sit on the smallest folders that answer the question, and readings of a world are dropped when the game leaves it. Whether the game deleting or renaming a world while it is followed works is tested on Windows in the step that adds world readings.
-- **A reading's value is a domain value with a meaningful equality**, such as parsed assignments or a list of names; the reader supplies it, and a reading whose value cannot be compared fires on every change.
+- **Every read and every change of the value runs on the reading's strand**, whoever asks: the watch, a retry, Companion's own write, a page. So a page that asks before the first read gets the value later changes are told against.
+- **One `FileWatch` for the application** does the watching, with one thread. A registration lives until its reading closes.
+- **A folder that does not exist yet** is watched through its nearest existing ancestor, and watched itself once it appears, as a game's folder before it first ran; one removed while watched is watched that way again.
+- **Where a folder cannot be watched at all**, as without file watching or on some network drives, it is tried again after 1 and 5 seconds and every 30 seconds after, and the reading reads each time.
+- **Events are filtered by name**, so `latest.log` growing beside `options.txt` does not read `options.txt`.
+- **A read that fails is retried** after 1, 5 and 30 seconds, as a file written in place can be read half written; the next read that succeeds is told, since a page may show the failure. Overflowing events read once.
+- **Folders that move are the owner's.** The current world follows `playing` and moves its reading to the world the game plays, or with the game closed, the last played.
+- **Windows renames.** A watched folder and its ancestors cannot be renamed while watched. Registrations sit on the smallest folders that answer the question, and readings of a world move when the game leaves it. `FileUtils`' pause around Companion's own renames joins `FileWatch` when its watcher moves there.
+- **A reading's value is a domain value with a meaningful equality**, such as parsed assignments or a list of names; the reader supplies it.
 - **What each reading holds decides what fires.** The logs' reading holds the names of the logs and crash reports, not their sizes, so `latest.log` growing does not fire; the Logs page reads the log a row shows when the row is shown. A configuration folder's reading ignores Companion's own `*.totaldebug-original` files.
 - **Readings replace every "read whenever shown":** `options.txt`, configuration files, logs and crash reports, the current world's `level.dat` and icon, the `saves` and `resourcepacks` folders.
 - **Caches are allowed where keyed by what they cache**, a file's size and time or its hash, as `TextureThumbnails`, `CatalogIcons` and the parsed logs are. A cache is never the truth another part reads.
@@ -186,18 +195,17 @@ The test lists each exception with its reason. Adding one is a decision recorded
 
 ## Order of work
 
-Six PRs on 1.21.1, each reviewed until clean. A shared mechanism comes with its first users; the PRs that carry risk (1, 2 and 4) are kept small, the ones that repeat a proven pattern (3, 5 and 6) move many users at once. A moved feature keeps no part of its old way. Until the last user of an old way has moved, the old way stays for those not moved yet, as `PageLoader`'s modes do; the PR that moves the last user deletes it. Decided on 2026-09-30 over a finer split of about 22 PRs, whose extra review rounds bought no safety for the mechanical moves.
+PRs on 1.21.1, stacked, each reviewed until clean. A shared mechanism comes with its first users; the PRs that carry risk are kept small, the ones that repeat a proven pattern move many users at once. A moved feature keeps no part of its old way. Until the last user of an old way has moved, the old way stays for those not moved yet, as `PageLoader`'s modes do; the PR that moves the last user deletes it. Decided on 2026-09-30 over a finer split of about 22 PRs, whose extra review rounds bought no safety for the mechanical moves. The files came before the remaining owners the same day: they carry most of the races the reviews found, and they are `Workers`' first users.
 
 | PR | Content | Deletes |
 |---|---|---|
-| 1 | The slice: `Signal` and the new `PageLoader` (`page`, `follows`, `hold`), with `Tables.keepingSelection`; its first users the Key bindings page, which only shows, and the resource editor, which edits, with the owners they follow on signals (catalog, key assignments, change record, packs, resource edits), key assignments read again after Companion's own write; the architecture test with every exception of today listed | the two pages' own subscriptions, constructor reads, navigation refreshes and selection keeping, `KeyBindingControl.addAssignmentListener`, `PackResourceEditor`'s read and write counters and follow flags |
-| 2 | Game messages registered by their owners on the connection, in Companion and the mod | `CompanionSession.Listener`'s message methods, the relay and scope checks in `CompanionApplication`, the `RELAY_FAILED` switch, the mod's setters and repeated guards |
-| 3 | The remaining owners on signals; the current project as state; connection numbers for waiting requests; the pipeline owning the write queue; the remaining executors onto `Workers` | the listener lists, `ConfigChanges`' executor, the scope checks, the UI classes' executors |
-| 4 | `Workers`' timers, `FileWatch` and `FileReading`, with `KeyAssignments` and `CurrentWorld` (the World page and the tree) as first users | the watchers and schedulers of `FileUtils` and `KeyAssignments`, `WorldReadings` |
-| 5 | The remaining readings (`GameLogs`, the configuration folders, `saves` and `resourcepacks`) with their pages; `ExternalEdits` as an adoption | `ExternalEdits`' watcher and scheduler, the `readsWhenShown` mode |
+| 1 (#112) | The slice: `Signal` and the new `PageLoader` (`page`, `follows`, `hold`), with `Tables.keepingSelection`; its first users the Key bindings page, which only shows, and the resource editor, which edits, with the owners they follow on signals (catalog, key assignments, change record, packs, resource edits), key assignments read again after Companion's own write; the architecture test with every exception of today listed | the two pages' own subscriptions, constructor reads, navigation refreshes and selection keeping, `KeyBindingControl.addAssignmentListener`, `PackResourceEditor`'s read and write counters and follow flags |
+| 2 (#113) | Game messages registered by their owners on the connection, in Companion and the mod | `CompanionSession.Listener`'s methods for the project's messages, their relay in `CompanionApplication`, the mod's setters and repeated guards |
+| 3 | `Workers` and `Strand`, `FileWatch` and `FileReading`, with `KeyAssignments` as first user | `KeyAssignments`' watcher, scheduler and counters |
+| 4 | The current world as a `FileReading` that follows `playing`, with the World page and the tree | `WorldReadings`, the World page's read whenever shown |
+| 5 | The remaining readings (`GameLogs`, the configuration folders, `saves` and `resourcepacks`) with their pages; `FileUtils`' watcher onto `FileWatch`; `ExternalEdits` as an adoption | the watchers and schedulers of `FileUtils` and `ExternalEdits`, the `readsWhenShown` mode |
 | 6 | All remaining pages, the Project tree and the tab strip; no file checks on the Swing thread | `ShownUpdates`, the old modes, the pages' own subscriptions, the reads in constructors, the navigation refreshes, the `CompanionUi` relays, `ChangeRecord.observed` from page reads |
-
-If PR 1 shows a flaw, the design is revised here before anything else moves. PR 3 needs `Workers` before PR 4; it brings the file work and serial workers, PR 4 the timers.
+| 7 | The remaining owners on signals; the current project as state; connection numbers for waiting requests; the pipeline owning the write queue; the remaining executors onto `Workers` | the listener lists, `ConfigChanges`' executor, the scope checks, the UI classes' executors |
 
 After the messages, A4 continues with categories registering their pages and Modpack rows. Splitting `CompanionApplication` (the game connection and the MCP server into their own classes) and the mod's `CompanionAppClient` (launching Companion) is easier then and is decided at that point.
 
@@ -205,12 +213,12 @@ UI work that follows no system, such as every page's loading, empty and failed s
 
 ## Tests
 
-- `Signal`: listeners in order, removal of one subscription. `LatestRead`, with PR 4: a request during a read, several during one, a failure.
+- `Signal`: listeners in order, removal of one subscription. `FileReading`: a write in parts read once, a value asked before the first read, a folder that appears later, a failed read retried, reads never at once, a reading moved to another file, a closed reading.
 - `FileReading` and `FileWatch`, through a clock the test advances instead of real waits: settle and maximum wait, a folder that appears later, a linked folder, overflow, a failed read retried, a pause for a rename, a reading whose value did not change.
 - `PageLoader`: hidden and shown, a signal during a read, several while hidden, a change that does not concern the page, a held page, a read under way when the page holds, a part of a page. The old modes' tests go with the modes.
 - Messages: two handlers in order, a handler of a detached scope not called, an answer to another connection not taken, a request without a handler refused, an unauthenticated message refused in the mod.
 - The architecture test: no listener list, thread, executor, watcher or one-argument async call outside the owners and exceptions it lists.
-- **Each moved page is tested along the user's path**, not only through its parts: the page built as the application builds it, opened through `NavigationService` as a click opens it, then shown. The test counts the reads: one when it opens; none when it is shown again with nothing changed; one after a signal while it was hidden; none when navigating to it while it is showing, apart from the selection asked for. `LatestRead` passing its own tests does not show that opening a page reads once.
+- **Each moved page is tested along the user's path**, not only through its parts: the page built as the application builds it, opened through `NavigationService` as a click opens it, then shown. The test counts the reads: one when it opens; none when it is shown again with nothing changed; one after a signal while it was hidden; none when navigating to it while it is showing, apart from the selection asked for. The loader passing its own tests does not show that opening a page reads once.
 - Each migration PR keeps the tests of what it moves.
 
 ## Not in this
