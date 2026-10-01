@@ -9,9 +9,9 @@ import java.util.concurrent.ExecutionException;
 
 /**
  * An owner's value read from files others write, such as the keys {@code options.txt} assigns (docs/SYSTEMS.md, section
- * 2). Nothing watches the files: the value is read when first asked for, and again when the user comes back to Companion
- * from another program ({@link WindowFocus#returned()}) and when the owner asks ({@link #refresh()}), as after Companion
- * wrote the file or the game told of a change. Reads run one at a time, in order, on the reading's strand, and
+ * 2). Nothing watches the files: the value is read when first asked for or when the owner asks ({@link #refresh()}), as
+ * after Companion wrote the file or the game told of a change; a value read before is read again when the user comes
+ * back to Companion from another program ({@link WindowFocus#returned()}). Reads run one at a time, in order, on the reading's strand, and
  * {@link #changed()} fires only when a read found another value than the one before, or published the first value
  * without being asked for it.
  */
@@ -34,12 +34,15 @@ public final class FileReading<T> implements AutoCloseable {
     private volatile Read<T> last;
     /** Whether the last read failed, so the next one that succeeds is told: a page may show the failure. Strand only. */
     private boolean failed;
-    /** Set once the reading closes, so a refresh asked for before or after reads nothing. */
+    /** Set once the reading closes, so no read publishes from then on, also one under way. */
     private volatile boolean closed;
 
     public FileReading(Reader<T> reader) {
         this.reader = Objects.requireNonNull(reader, "reader");
-        this.stopFollowingFocus = WindowFocus.returned().subscribe(this::refresh);
+        // A value nobody asked for yet stays unread.
+        this.stopFollowingFocus = WindowFocus.returned().subscribe(() -> this.strand.execute(() -> {
+            if (this.last != null || this.failed) readAgain();
+        }));
     }
 
     /** Fires on this reading's strand after a read found another value than the one before. */
@@ -85,14 +88,16 @@ public final class FileReading<T> implements AutoCloseable {
      * such as a tab's title.
      */
     public void refresh() {
-        this.strand.execute(() -> {
-            if (this.closed) return;
-            try {
-                read(true);
-            } catch (IOException | RuntimeException unreadable) {
-                // The value read before stays; the next read that succeeds is told.
-            }
-        });
+        this.strand.execute(this::readAgain);
+    }
+
+    /** Reads on the strand where a failure only keeps the value read before; the next read that succeeds is told. */
+    private void readAgain() {
+        try {
+            read(true);
+        } catch (IOException | RuntimeException unreadable) {
+            // Told by the next read that succeeds.
+        }
     }
 
     /**
@@ -107,6 +112,7 @@ public final class FileReading<T> implements AutoCloseable {
             this.failed = true;
             throw failure instanceof IOException unreadable ? unreadable : new IOException(failure);
         }
+        if (this.closed) return now;
         Read<T> before = this.last;
         boolean tell = this.failed || (before == null ? tellFirst : !Objects.equals(before.value(), now));
         this.last = new Read<>(now);

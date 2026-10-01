@@ -102,7 +102,7 @@ assignments.refresh();                           // after Companion's own write,
 ```
 
 - **Every read runs on the reading's strand**, whoever asks: the user coming back, the owner, a page. A page that asks before the first read gets the value later changes are told against.
-- **It reads again when the user comes back to Companion and when its owner asks.** A value nobody asked for yet is not read.
+- **It reads again when its owner asks, and when the user comes back to Companion where it was read before.** A value nobody asked for yet stays unread on return; the owner's refresh reads it and tells its first value, as the current world does when it is made, for the World tab's title. Once closed, no read publishes, also one under way.
 - **A read that fails keeps the value read before**; the next read that succeeds is told, since a page may show the failure. Nothing retries on a timer: the next return or request reads again.
 - **A reading's value is a domain value with a meaningful equality**, such as parsed assignments, and what it holds decides what fires: the volume changing in `options.txt` fires nothing.
 - **What moves is the reader's.** The current world's reader asks the game location which world is current at each read, and its owner asks it to read again when the game connects, plays another world or leaves one, and after Companion changed the datapacks.

@@ -69,8 +69,15 @@ class FileReadingTest {
     void comingBackToCompanionReadsAgainUntilTheReadingCloses() throws Exception {
         Path file = Files.writeString(this.directory.resolve("options.txt"), "one");
         AtomicInteger told = new AtomicInteger();
-        FileReading<String> reading = new FileReading<>(() -> Files.readString(file));
+        AtomicInteger reads = new AtomicInteger();
+        FileReading<String> reading = new FileReading<>(() -> {
+            reads.incrementAndGet();
+            return Files.readString(file);
+        });
         reading.changed().subscribe(told::incrementAndGet);
+        WindowFocus.returned().fire();
+        settle(reading);
+        assertEquals(0, reads.get(), "coming back reads no value nobody asked for yet");
         reading.value();
 
         // The game saved the file while the user was in it.
@@ -86,6 +93,38 @@ class FileReadingTest {
         settle(reading);
         assertEquals(1, told.get(), "a closed reading reads no more");
         assertEquals("two", reading.value());
+    }
+
+    @Test
+    void aReadUnderWayWhenTheReadingClosesPublishesNothing() throws Exception {
+        Path file = Files.writeString(this.directory.resolve("options.txt"), "one");
+        CountDownLatch paused = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger told = new AtomicInteger();
+        AtomicInteger reads = new AtomicInteger();
+        FileReading<String> reading = new FileReading<>(() -> {
+            if (reads.incrementAndGet() == 2) {
+                paused.countDown();
+                try {
+                    release.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    throw new IOException(interrupted);
+                }
+            }
+            return Files.readString(file);
+        });
+        reading.changed().subscribe(told::incrementAndGet);
+        reading.value();
+
+        Files.writeString(file, "two");
+        reading.refresh();
+        assertTrue(paused.await(5, TimeUnit.SECONDS));
+        // The project closes while the read is under way.
+        reading.close();
+        release.countDown();
+        settle(reading);
+        assertEquals(0, told.get());
+        assertEquals(Optional.of("one"), reading.published());
     }
 
     @Test
