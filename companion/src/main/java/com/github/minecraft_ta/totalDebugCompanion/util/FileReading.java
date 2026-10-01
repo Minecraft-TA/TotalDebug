@@ -98,7 +98,6 @@ public final class FileReading<T> implements AutoCloseable {
     /** Asks for one read on the strand, which reads a value nobody asked for only where {@code firstToo}. */
     private void request(boolean firstToo) {
         synchronized (this) {
-            if (this.closed) return;
             this.first |= firstToo;
             if (this.queued) return;
             this.queued = true;
@@ -110,7 +109,7 @@ public final class FileReading<T> implements AutoCloseable {
                 readFirst = this.first;
                 this.first = false;
             }
-            if (this.closed || this.last == null && !this.failed && !readFirst) return;
+            if (this.last == null && !this.failed && !readFirst) return;
             try {
                 read(true);
             } catch (IOException | RuntimeException unreadable) {
@@ -124,6 +123,7 @@ public final class FileReading<T> implements AutoCloseable {
      * first. On the strand only.
      */
     private T read(boolean tellFirst) throws IOException {
+        if (this.closed) throw new IOException("The project closed");
         T now;
         try {
             now = this.reader.read();

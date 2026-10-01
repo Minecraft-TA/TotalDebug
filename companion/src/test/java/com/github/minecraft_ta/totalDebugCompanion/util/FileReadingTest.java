@@ -162,6 +162,16 @@ class FileReadingTest {
     }
 
     @Test
+    void aValueAskedForOfAClosedReadingIsNotRead() throws Exception {
+        AtomicInteger reads = new AtomicInteger();
+        FileReading<String> reading = new FileReading<>(() -> "read " + reads.incrementAndGet());
+        // A page's first read races the project closing.
+        reading.close();
+        assertThrows(IOException.class, reading::value);
+        assertEquals(0, reads.get());
+    }
+
+    @Test
     void aFailedReadKeepsTheValueAndTheNextOneThatSucceedsIsTold() throws Exception {
         Path file = Files.writeString(this.directory.resolve("options.txt"), "one");
         AtomicInteger told = new AtomicInteger();
