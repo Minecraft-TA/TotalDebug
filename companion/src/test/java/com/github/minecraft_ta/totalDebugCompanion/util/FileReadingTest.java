@@ -10,7 +10,10 @@ import java.nio.file.Path;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -279,6 +282,86 @@ class FileReadingTest {
             await(() -> reading.published().orElse("").equals("two"));
             assertEquals(0, overlapped.get());
         }
+    }
+
+    @Test
+    void aRefreshCompletesWithTheValueItsReadFoundAlsoWhenUnchanged() throws Exception {
+        Path file = Files.writeString(this.directory.resolve("options.txt"), "First");
+        try (FileReading<String> reading = new FileReading<>(() -> Files.readString(file))) {
+            assertEquals("First", reading.refresh().get(5, TimeUnit.SECONDS));
+            assertEquals("First", reading.refresh().get(5, TimeUnit.SECONDS), "an unchanged value answers too");
+            Files.writeString(file, "Second");
+            assertEquals("Second", reading.refresh().get(5, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    void aRefreshOvertakenByANewerRequestIsAnsweredByTheNewerRead() throws Exception {
+        Path file = Files.writeString(this.directory.resolve("level.dat"), "First");
+        CountDownLatch paused = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger reads = new AtomicInteger();
+        try (FileReading<String> reading = new FileReading<>(() -> {
+            String read = Files.readString(file);
+            if (reads.incrementAndGet() == 2) {
+                paused.countDown();
+                try {
+                    release.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    throw new IOException(interrupted);
+                }
+            }
+            return read;
+        })) {
+            reading.value();
+            Files.writeString(file, "Second");
+            CompletableFuture<String> overtaken = reading.refresh();
+            assertTrue(paused.await(5, TimeUnit.SECONDS));
+            Files.writeString(file, "Third");
+            CompletableFuture<String> newer = reading.refresh();
+            release.countDown();
+            assertEquals("Third", newer.get(5, TimeUnit.SECONDS));
+            assertEquals("Third", overtaken.get(5, TimeUnit.SECONDS), "the newer read answers the overtaken refresh");
+        }
+    }
+
+    @Test
+    void aRefreshWhoseReadFailsFails() throws Exception {
+        try (FileReading<String> reading = new FileReading<>(() -> {
+            throw new IOException("Written while read");
+        })) {
+            ExecutionException failed = assertThrows(ExecutionException.class, () -> reading.refresh().get(5, TimeUnit.SECONDS));
+            assertEquals("Written while read", failed.getCause().getMessage());
+        }
+    }
+
+    @Test
+    void closingCancelsARefreshItsReadWouldAnswerAndPublishesNothing() throws Exception {
+        Path file = Files.writeString(this.directory.resolve("options.txt"), "First");
+        CountDownLatch paused = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger reads = new AtomicInteger();
+        FileReading<String> reading = new FileReading<>(() -> {
+            String read = Files.readString(file);
+            if (reads.incrementAndGet() == 2) {
+                paused.countDown();
+                try {
+                    release.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    throw new IOException(interrupted);
+                }
+            }
+            return read;
+        });
+        reading.value();
+        Files.writeString(file, "Second");
+        CompletableFuture<String> waiting = reading.refresh();
+        assertTrue(paused.await(5, TimeUnit.SECONDS));
+        reading.close();
+        release.countDown();
+        assertThrows(CancellationException.class, () -> waiting.get(5, TimeUnit.SECONDS));
+        assertEquals(Optional.of("First"), reading.published(), "a read the closing overtook publishes nothing");
+        assertTrue(reading.refresh().isCancelled(), "a closed reading answers no refresh");
     }
 
     /** Gives the reads asked for so far time to run, for a test that nothing more happens. */
