@@ -4,14 +4,20 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
+import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
+import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ResourceViewPanel;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
 
 import javax.swing.Icon;
 import java.awt.Component;
@@ -27,17 +33,43 @@ public final class ResourceView implements IEditorPanel {
     private final ResourceFileType fileType;
     private final ResourceViewPanel panel;
 
-    public ResourceView(EditorContext context, ContentSource source, RuntimeBinding runtimeBinding) {
+    /** Reads {@code source} to open it, on file work. */
+    public static ResourceViewPanel.Opened read(EditorContext context, ContentSource source) throws IOException {
+        return ResourceViewPanel.read(source, FileTypeResolver.resolve(source.displayName()), context.project().resources());
+    }
+
+    /** Shows what {@link #read} read; it reads nothing itself. */
+    public ResourceView(EditorContext context, ContentSource source, RuntimeBinding runtimeBinding, ResourceViewPanel.Opened opened) {
         this.runtimeBinding = runtimeBinding;
         this.context = context;
         this.source = Objects.requireNonNull(source, "source");
         this.fileType = FileTypeResolver.resolve(source.displayName());
-        this.panel = new ResourceViewPanel(source, this.fileType, context.navigation(), context.project().resources());
+        this.panel = new ResourceViewPanel(source, this.fileType, context.navigation(), context.project().resources(), opened);
     }
 
-    /** Shows the text at {@code offset} once it has loaded, reading a local file again when it changed. */
-    public void navigateToOffset(int offset) {
-        this.panel.navigateToOffset(offset);
+    /** Whether the tab shows text read-only, which a navigation to an offset reads again first ({@link #readText}). */
+    public boolean showsReadOnlyText() {
+        return this.panel.showsReadOnlyText();
+    }
+
+    /** Reads the text of {@code source} again, on file work, as before a navigation places an offset in it. */
+    public static LoadedResource.Text readText(ContentSource source) throws IOException {
+        LoadedResource content = ResourceLoader.load(source, FileTypeResolver.resolve(source.displayName()));
+        if (content instanceof LoadedResource.Image image) {
+            image.value().flush();
+            throw new IOException(source.displayName() + " no longer holds text");
+        }
+        return (LoadedResource.Text) content;
+    }
+
+    /** Shows {@code text}, read again by {@link #readText}, in place of the text shown. */
+    public void replaceText(LoadedResource.Text text) {
+        this.panel.replaceText(text);
+    }
+
+    /** Places the caret at {@code offset} in the text shown, if {@code stillWanted} still holds then. */
+    public CompletableFuture<Void> navigateToOffset(int offset, BooleanSupplier stillWanted) {
+        return this.panel.navigateToOffset(offset, stillWanted);
     }
 
     public ContentSource source() {
@@ -95,6 +127,16 @@ public final class ResourceView implements IEditorPanel {
             case LocalFileSource file -> new NavigationTarget.LocalFile(file.path());
             default -> null;
         };
+    }
+
+    @Override
+    public NavigationViewState captureNavigationViewState() {
+        return this.panel.captureNavigationViewState();
+    }
+
+    @Override
+    public void restoreNavigationViewState(NavigationViewState state) {
+        this.panel.restoreNavigationViewState(state);
     }
 
     @Override

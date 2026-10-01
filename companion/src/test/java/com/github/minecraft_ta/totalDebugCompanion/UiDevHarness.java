@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.model.OpenedTabs;
 import javax.swing.JLabel;
 
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
@@ -421,15 +422,6 @@ public final class UiDevHarness {
                                 editor.getLineStartOffset(line),
                                 editor.getLineEndOffset(line) - editor.getLineStartOffset(line)
                         ).strip();
-                        detail += " readyDone=" + codeView.ready().isDone()
-                                + " readyExceptional=" + codeView.ready().isCompletedExceptionally();
-                        if (codeView.ready().isCompletedExceptionally()) {
-                            try {
-                                codeView.ready().join();
-                            } catch (CompletionException failure) {
-                                detail += " readyFailure=" + failure.getCause();
-                            }
-                        }
                     }
                     throw new IllegalStateException(
                             "Method navigation did not place the caret on ThemeSampleImpl.apply; " + detail
@@ -850,7 +842,7 @@ public final class UiDevHarness {
         Path sampleArchive = mods.resolve("companion-ui-sample.jar");
         writeSampleArchive(sampleArchive);
         Path sample = writeSampleSource(root.resolve("decompiled-files").resolve("ThemeSample.java"));
-        String sampleSource = CodeView.readCode(sample);
+        String sampleSource = CodeView.read(sample);
         int sampleEntryLine = sampleSource.substring(0, sampleSource.indexOf("double ratio"))
                 .split("\\n", -1).length;
         DecompiledSource decompiledSample = new DecompiledSource(sample, new SourceDocument("sample.ThemeSample", sampleSource, SourceLineMap.fromOriginalToDisplayed(new int[]{sampleEntryLine, sampleEntryLine}), SourceVariableNames.empty(), List.of()), null);
@@ -914,42 +906,41 @@ public final class UiDevHarness {
             if (argument(args, "--project-reference=").isPresent()) mainWindow.setTitle("Companion project selector preview");
             FlatInspector.install("F9");
             FlatUIDefaultsInspector.install("F10");
-            mainWindow.getEditorTabs().openEditorTab(new CodeView(mainWindow.editorContext(), 
+            mainWindow.getEditorTabs().openEditorTab(new CodeView(mainWindow.editorContext(),
                     decompiledSample,
-                    0,
                     EditorLocation.forRuntimeClass(
                             "com.github.minecraft_ta.totaldebug.ThemeSample",
                             sampleClasses.toUri().toASCIIString()
                     ), mainWindow.editorContext().project().runtime()
             ));
-            mainWindow.getEditorTabs().openEditorTab(new ResourceView(mainWindow.editorContext(), 
+            mainWindow.getEditorTabs().openEditorTab(OpenedTabs.resource(mainWindow.editorContext(),
                     new ArchiveEntrySource(sampleArchive, "META-INF/MANIFEST.MF", -1), mainWindow.editorContext().project().runtime()
             ));
-            mainWindow.getEditorTabs().openEditorTab(new ResourceView(mainWindow.editorContext(), 
+            mainWindow.getEditorTabs().openEditorTab(OpenedTabs.resource(mainWindow.editorContext(),
                     new ArchiveEntrySource(sampleArchive, "docs/NOTICE.custom", -1), mainWindow.editorContext().project().runtime()
             ));
-            mainWindow.getEditorTabs().openEditorTab(new ResourceView(mainWindow.editorContext(), 
+            mainWindow.getEditorTabs().openEditorTab(OpenedTabs.resource(mainWindow.editorContext(),
                     new ArchiveEntrySource(sampleArchive, "config/defaults.toml", -1), mainWindow.editorContext().project().runtime()
             ));
-            mainWindow.getEditorTabs().openEditorTab(new ResourceView(mainWindow.editorContext(), 
+            mainWindow.getEditorTabs().openEditorTab(OpenedTabs.resource(mainWindow.editorContext(),
                     new ArchiveEntrySource(sampleArchive, "assets/sample/textures/gui/debug.png", -1), mainWindow.editorContext().project().runtime()
             ));
             if (interactionVerification) {
                 SwingUtilities.invokeLater(() -> mainWindow.getEditorTabs().setSelectedIndex(0));
             }
             if (Arrays.asList(args).contains("--verify-code-vision-click")) {
-                scheduleCodeVisionClickVerification(CodeView.readCode(sample));
+                scheduleCodeVisionClickVerification(sampleSource);
             }
             if (Arrays.asList(args).contains("--verify-gutter-click")) {
-                scheduleGutterClickVerification(CodeView.readCode(sample));
+                scheduleGutterClickVerification(sampleSource);
             }
             if (Arrays.asList(args).contains("--verify-gutter-direct")) {
-                scheduleSingleGutterNavigationVerification(CodeView.readCode(sample));
+                scheduleSingleGutterNavigationVerification(sampleSource);
             }
             boolean verifyGutterHover = Arrays.asList(args).contains("--verify-gutter-hover");
             boolean verifyHierarchyRowLayout = Arrays.asList(args).contains("--verify-hierarchy-row-layout");
             if (verifyGutterHover || verifyHierarchyRowLayout) {
-                String source = CodeView.readCode(sample);
+                String source = sampleSource;
                 int declarationOffset = verifyHierarchyRowLayout
                         ? source.indexOf(
                                 "public void overrideMe(",
@@ -984,7 +975,7 @@ public final class UiDevHarness {
                     null
             ));
             if (!interactionVerification) {
-                new UiScenarioDriver(mainWindow, UiDevHarness::finishHarness).schedule(scenario, CodeView.readCode(sample), screenshot);
+                new UiScenarioDriver(mainWindow, UiDevHarness::finishHarness).schedule(scenario, sampleSource, screenshot);
             }
         });
         application.awaitExit();

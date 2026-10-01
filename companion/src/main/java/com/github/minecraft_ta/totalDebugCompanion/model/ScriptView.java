@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.UUID;
 import java.util.stream.StreamSupport;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 
 public class ScriptView implements IEditorPanel {
@@ -48,17 +49,26 @@ public class ScriptView implements IEditorPanel {
 
     protected ScriptPanel scriptPanel;
 
-    public ScriptView(EditorContext context, Path path) {
-        this.context = context;
+    /** What opening a script reads: where it lies and what it holds. */
+    public record Read(Path path, ScriptFiles.Snapshot snapshot) {
+    }
+
+    /** Reads the script at {@code path} to open it, on file work, through the project's script files. */
+    public static Read read(EditorContext context, Path path) throws IOException {
         if (context.project() == null) throw new IllegalStateException("Open a project before opening scripts");
-        try {
-            this.path = context.project().scriptFiles().resolve(path);
-            this.compilationName = getScriptName();
-            if (!JavaSnippetSource.isValidClassName(compilationName)) throw new IOException("Invalid script name: " + compilationName);
-            var loaded = context.project().scriptFiles().read(this.path);
-            this.text = loaded.text();
-            this.savedSnapshot = loaded;
-        } catch (IOException failure) { throw new IllegalStateException(failure.getMessage(), failure); }
+        Path resolved = context.project().scriptFiles().resolve(path);
+        String name = scriptName(resolved);
+        if (!JavaSnippetSource.isValidClassName(name)) throw new IOException("Invalid script name: " + name);
+        return new Read(resolved, context.project().scriptFiles().read(resolved));
+    }
+
+    /** A tab showing what {@link #read} read; it reads nothing itself. */
+    public ScriptView(EditorContext context, Read read) {
+        this.context = context;
+        this.path = read.path();
+        this.compilationName = scriptName(read.path());
+        this.text = read.snapshot().text();
+        this.savedSnapshot = read.snapshot();
     }
 
     @Override
@@ -74,8 +84,9 @@ public class ScriptView implements IEditorPanel {
         return path;
     }
 
-    public void navigateToOffset(int offset) {
-        ((ScriptPanel) getComponent()).navigateToOffset(offset);
+    /** Places the caret at {@code offset} in the text on screen, if {@code stillWanted} still holds then. */
+    public CompletableFuture<Void> navigateToOffset(int offset, BooleanSupplier stillWanted) {
+        return ((ScriptPanel) getComponent()).navigateToOffset(offset, stillWanted);
     }
 
     @Override
@@ -84,7 +95,11 @@ public class ScriptView implements IEditorPanel {
     }
 
     public String getScriptName() {
-        String fileName = this.path.getFileName().toString();
+        return scriptName(this.path);
+    }
+
+    private static String scriptName(Path path) {
+        String fileName = path.getFileName().toString();
         return fileName.substring(0, fileName.length() - FILE_EXTENSION.length());
     }
 

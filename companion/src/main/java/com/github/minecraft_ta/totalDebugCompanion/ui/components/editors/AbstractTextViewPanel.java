@@ -26,6 +26,9 @@ import java.awt.event.HierarchyEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /** Shared RSyntaxTextArea chrome without Java parsing or navigation behavior. */
@@ -184,8 +187,26 @@ public abstract class AbstractTextViewPanel extends JPanel {
     protected void applyAdditionalSyntaxColors(SyntaxScheme scheme, EditorPalette palette) {
     }
 
-    public void navigateToOffset(int offset) {
-        SwingUtilities.invokeLater(() -> UIUtils.positionViewportOnRange(this.editorScrollPane, offset, offset));
+    /**
+     * Moves the caret to {@code offset} and scrolls to it in the next Swing step, once the text is laid out, if
+     * {@code stillWanted} still holds then, as a navigation that no newer one replaced. The future completes once the caret
+     * is placed, or as cancelled where it was no longer wanted.
+     */
+    public CompletableFuture<Void> navigateToOffset(int offset, BooleanSupplier stillWanted) {
+        CompletableFuture<Void> placed = new CompletableFuture<>();
+        SwingUtilities.invokeLater(() -> {
+            if (!stillWanted.getAsBoolean()) {
+                placed.completeExceptionally(new CancellationException("Navigation changed"));
+                return;
+            }
+            try {
+                UIUtils.positionViewportOnRange(this.editorScrollPane, offset, offset);
+                placed.complete(null);
+            } catch (RuntimeException failure) {
+                placed.completeExceptionally(failure);
+            }
+        });
+        return placed;
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSettings;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
@@ -17,10 +18,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 
 /**
- * A mod's configuration file in its own tab, edited as text with the same checks as its Configuration tab. The file
- * is read again whenever the tab is shown, unless its text has unsaved changes.
+ * A mod's configuration file in its own tab, edited as text with the same checks as its Configuration tab. It opens
+ * with the text {@link #read} read; the file is read again whenever the tab is shown, and the text shown changes only
+ * where it has no unsaved changes and the file holds other text.
  */
 public final class ConfigFilePanel extends JPanel {
     private final Path file;
@@ -29,7 +33,7 @@ public final class ConfigFilePanel extends JPanel {
     private final PageLoader<String> loader;
 
     /** {@code owner} is the mod configuration {@code file} holds, such as a world's copy of a server configuration. */
-    public ConfigFilePanel(Path file, ConfigSources.Owner owner, ConfigSettings configSettings) {
+    public ConfigFilePanel(Path file, ConfigSources.Owner owner, ConfigSettings configSettings, String text) {
         super(new BorderLayout());
         this.file = Objects.requireNonNull(file, "file");
         ConfigWriter writer = new ConfigWriter(configSettings, this::setStatus, this::load);
@@ -48,6 +52,8 @@ public final class ConfigFilePanel extends JPanel {
         bar.add(actions, BorderLayout.EAST);
         add(bar, BorderLayout.NORTH);
         add(this.editor.component(), BorderLayout.CENTER);
+        // The first read, when the tab is first shown, finds this text, which leaves the text and its caret alone.
+        this.editor.load(text);
         this.loader = new PageLoader<>(() -> this::readFile, this.editor::load,
                 failure -> setStatus("Could not read " + this.file.getFileName() + ": " + failure.getMessage())).page(this).readsWhenShown(this);
     }
@@ -62,11 +68,16 @@ public final class ConfigFilePanel extends JPanel {
     }
 
     private String readFile() throws IOException {
-        long size = Files.size(this.file);
+        return read(this.file);
+    }
+
+    /** Reads a configuration file to open it or show it again, on file work. */
+    public static String read(Path file) throws IOException {
+        long size = Files.size(file);
         if (size > ConfigValues.MAX_FILE_BYTES) {
-            throw new IOException(this.file.getFileName() + " has " + size + " bytes; the limit is " + ConfigValues.MAX_FILE_BYTES);
+            throw new IOException(file.getFileName() + " has " + size + " bytes; the limit is " + ConfigValues.MAX_FILE_BYTES);
         }
-        return Files.readString(this.file, StandardCharsets.UTF_8);
+        return Files.readString(file, StandardCharsets.UTF_8);
     }
 
     private void setStatus(String status) {
@@ -78,8 +89,21 @@ public final class ConfigFilePanel extends JPanel {
         return this.editor.confirmLeave();
     }
 
-    /** Moves the caret to an offset of the text. */
-    public void navigateToOffset(int offset) {
-        this.editor.component().navigateToOffset(offset);
+    /** Moves the caret to an offset of the text shown, if {@code stillWanted} still holds then. */
+    public CompletableFuture<Void> navigateToOffset(int offset, BooleanSupplier stillWanted) {
+        return this.editor.component().navigateToOffset(offset, stillWanted);
+    }
+
+    public NavigationViewState captureNavigationViewState() {
+        return this.editor.component().captureNavigationViewState();
+    }
+
+    public void restoreNavigationViewState(NavigationViewState state) {
+        this.editor.component().restoreNavigationViewState(state);
+    }
+
+    /** Stops reading, as when the tab closed. */
+    public void dispose() {
+        this.loader.dispose();
     }
 }

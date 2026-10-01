@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.model.OpenedTabs;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexStatuses;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import java.util.concurrent.CompletableFuture;
@@ -43,8 +44,8 @@ class RuntimeInstallationTest {
             var created = new CompletableFuture<MainWindow>();
             SwingUtilities.invokeAndWait(() -> {
                 MainWindow window = app.createWindow();
-                window.getEditorTabs().openEditorTab(new ResourceView(window.editorContext(),
-                        new ArchiveEntrySource(root.resolve("old.jar"), "old.txt", -1), null));
+                window.getEditorTabs().openEditorTab(OpenedTabs.text(window.editorContext(),
+                        new ArchiveEntrySource(root.resolve("old.jar"), "old.txt", -1), null, "old"));
                 created.complete(window);
             });
             MainWindow window = created.join();
@@ -84,8 +85,8 @@ class RuntimeInstallationTest {
                 SwingUtilities.invokeAndWait(() -> {
                     MainWindow window = app.createWindow();
                     var source = new ArchiveEntrySource(directory.resolve("same.jar"), "same.txt", -1);
-                    var stale = new ResourceView(window.editorContext(), source, null);
-                    var current = new ResourceView(window.editorContext(), source, app.requireProject().runtime());
+                    var stale = OpenedTabs.text(window.editorContext(), source, null, "same");
+                    var current = OpenedTabs.text(window.editorContext(), source, app.requireProject().runtime(), "same");
                     window.getEditorTabs().openEditorTab(stale);
                     window.getEditorTabs().openEditorTab(current);
                     createdWindow.set(window);

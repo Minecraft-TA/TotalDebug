@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.model.OpenedTabs;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
@@ -40,8 +41,8 @@ class ScriptPanelDisposalTest {
             Files.writeString(CompanionProfile.forGame(directory.resolve("game")).dataDirectory().resolve("scripts/Second.tdscript"), "");
             SwingUtilities.invokeAndWait(() -> {
                 MainWindow window = app.createWindow();
-                var first = (ScriptPanel) new ScriptView(window.editorContext(), window.editorContext().project().paths().scripts().resolve("First.tdscript")).getComponent();
-                var second = (ScriptPanel) new ScriptView(window.editorContext(), window.editorContext().project().paths().scripts().resolve("Second.tdscript")).getComponent();
+                var first = (ScriptPanel) OpenedTabs.script(window.editorContext(), window.editorContext().project().paths().scripts().resolve("First.tdscript")).getComponent();
+                var second = (ScriptPanel) OpenedTabs.script(window.editorContext(), window.editorContext().project().paths().scripts().resolve("Second.tdscript")).getComponent();
                 Window firstCompletion = popup(first, "codeCompletionPopup");
                 Window firstSignature = popup(first, "signatureHelpPopup");
                 Window secondCompletion = popup(second, "codeCompletionPopup");
