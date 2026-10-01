@@ -140,7 +140,13 @@ this.loader = new PageLoader<>(this::read, this::show, this::fail)
 - A part of a page that reads on its own, such as the resources of a definition, has its own loader with that part as its page.
 - Work that only redraws from values in memory, such as icons again after new ones came, uses `loader.updates(signal, redraw)`: the same waiting and merging, with no read. A page with nothing to read has a loader that only redraws (`PageLoader.redraws(page)`). What shows outside the page, such as its tab's title, is redrawn from the owners' published values whenever their signal fires, shown or not (`retitles`).
 
-**Navigation never reads files.** It shows a page, and passes a selection to it. A navigation that carries a new request to the game, as inspecting a subject again, asks the owner of that request. `InspectionSession`'s timer, which polls the game for live values, stays until live channels (C2) push them, and is listed in the architecture test.
+**Navigation never reads a page's files.** It shows a page, and passes a selection to it. A navigation that carries a new request to the game, as inspecting a subject again, asks the owner of that request. `InspectionSession`'s timer, which polls the game for live values, stays until live channels (C2) push them, and is listed in the architecture test.
+
+**A document tab opens with what it shows.** A script, a resource, a local source file and a configuration file are documents, not pages that follow state. The navigation that opens one runs its kind's open read on file work (`ScriptView.read`, `ResourceView.read`, `CodeView.read`, `ConfigFileView.read`), checks that it is still current, and then builds the tab complete on the Swing thread, placing its position in the same step. Nothing waits for a document tab to become ready. An open tab is focused without a read, except a read-only text tab, which reads its text again when a navigation places an offset in it, as in a log the game writes on. A caret moved later checks that its navigation is still current in the Swing step that moves it.
+
+- **Editors keep what the user edits.** A script follows nothing; its save refuses a file changed since it was read. A pack editor and a configuration file keep their loaders, which keep unsaved changes; a configuration tab's first read finds the text it opened with and changes nothing.
+- **A read-only tab does not follow its file**: it shows the file as read when it was opened or last navigated to. Mod archives do not change while the game runs, and the logs have their own page, which reads whenever it is shown.
+- **A failed open read** fails the navigation with its reason and opens no tab.
 
 This replaces `ShownUpdates`, the modes `whenShown` and `waitsWhileHidden`, the subscriptions pages hold themselves, the reads in constructors, the `refresh()` calls on navigation and in the `model/*View` classes, and `CompanionUi.catalogChanged` and `changesRecorded`.
 
