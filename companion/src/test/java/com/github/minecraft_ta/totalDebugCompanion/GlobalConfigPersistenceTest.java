@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.JsonStateWriter;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import org.junit.jupiter.api.Test;
@@ -8,7 +9,11 @@ import java.awt.Rectangle;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -78,5 +83,41 @@ class GlobalConfigPersistenceTest {
         assertEquals(GlobalConfig.MAX_FONT_SIZE, config.editorFontSize());
         assertEquals(GlobalConfig.MIN_FONT_SIZE, config.uiFontSize());
         config.saveNow();
+    }
+
+    @Test
+    void aSettingChangesWhileTheSettingsAreBeingSaved() throws Exception {
+        CountDownLatch paused = new CountDownLatch(1);
+        CountDownLatch released = new CountDownLatch(1);
+        GlobalConfig config = new GlobalConfig((file, snapshot) -> {
+            paused.countDown();
+            try {
+                assertTrue(released.await(10, TimeUnit.SECONDS), "the paused save was released");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IOException(exception);
+            }
+            JsonStateWriter.Write.FILE.write(file, snapshot);
+        });
+        config.loadFrom(this.home);
+        config.setThemeId("islands-light");
+        CompletableFuture<Void> saving = CompletableFuture.runAsync(() -> {
+            try {
+                config.saveNow();
+            } catch (IOException exception) {
+                throw new IllegalStateException(exception);
+            }
+        });
+        assertTrue(paused.await(5, TimeUnit.SECONDS), "the save started");
+
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> config.setEditorFontSize(21),
+                "a setting does not wait for the file being written");
+
+        released.countDown();
+        saving.get(5, TimeUnit.SECONDS);
+        config.saveNow();
+        GlobalConfig restored = new GlobalConfig();
+        restored.loadFrom(this.home);
+        assertEquals(21, restored.editorFontSize());
     }
 }
