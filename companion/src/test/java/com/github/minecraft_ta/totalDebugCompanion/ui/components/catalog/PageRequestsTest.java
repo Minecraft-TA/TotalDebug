@@ -107,6 +107,32 @@ class PageRequestsTest {
     }
 
     @Test
+    void aResourceCategoryAskedForAfterAnEmptyListingIsNotAppliedByALaterOne() throws Exception {
+        ResourceBrowser.Prepared textures = prepared(true);
+        String selected = UiTestScope.onEdt(() -> {
+            ResourceBrowser browser = new ResourceBrowser(target -> { }, category -> { });
+            // As a mod page whose mod has no resources: its Resources tab is gone, and a navigation asks anyway.
+            browser.setResources(ResourceBrowser.Prepared.NONE);
+            browser.selectCategory("assets/textures");
+            browser.setResources(textures);
+            return browser.selectedCategory();
+        });
+        assertEquals("", selected);
+    }
+
+    @Test
+    void aResourceCategoryAskedForBeforeTheFirstListingIsSelectedByIt() throws Exception {
+        ResourceBrowser.Prepared textures = prepared(true);
+        String selected = UiTestScope.onEdt(() -> {
+            ResourceBrowser browser = new ResourceBrowser(target -> { }, category -> { });
+            browser.selectCategory("assets/textures");
+            browser.setResources(textures);
+            return browser.selectedCategory();
+        });
+        assertEquals("assets/textures", selected);
+    }
+
+    @Test
     void aResourceCategoryNotListedLeavesAllForTheNextListing() throws Exception {
         ResourceBrowser.Prepared models = prepared(false);
         ResourceBrowser.Prepared textures = prepared(true);
