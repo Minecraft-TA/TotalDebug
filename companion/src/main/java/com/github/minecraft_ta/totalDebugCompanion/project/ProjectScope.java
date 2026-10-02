@@ -194,15 +194,22 @@ public final class ProjectScope implements AutoCloseable {
 
     public void refreshLocalSources() throws IOException {
         localSources = new RuntimeSourceCatalog(LocalModSources.discover(profile.workspaceDirectory()));
-        this.runtimeNotices.execute(this.runtimeChanged::fire);
+        this.runtimeNotices.execute(this::tellRuntime);
     }
 
     /**
      * Fires after the runtime binding or the local sources changed (docs/SYSTEMS.md, section 1): on a strand of its own,
-     * after the change committed, so a follower never runs under the lifecycle lock that made it.
+     * once the lifecycle section that changed them ended, so a follower never runs beside it nor under its lock.
      */
     public Signal runtimeChanged() {
         return this.runtimeChanged;
+    }
+
+    private void tellRuntime() {
+        synchronized (lock) {
+            // Waits for the section that changed the runtime.
+        }
+        this.runtimeChanged.fire();
     }
 
     public CompanionProfile profile() { return profile; }
@@ -239,14 +246,14 @@ public final class ProjectScope implements AutoCloseable {
     public void bindRuntime(RuntimeBinding value) {
         requireActive();
         runtime = value;
-        this.runtimeNotices.execute(this.runtimeChanged::fire);
+        this.runtimeNotices.execute(this::tellRuntime);
     }
     public void closeRuntime() {
         RuntimeBinding previous = runtime;
         runtime = null;
         if (previous == null) return;
         previous.close();
-        this.runtimeNotices.execute(this.runtimeChanged::fire);
+        this.runtimeNotices.execute(this::tellRuntime);
     }
     public void queueNavigation(NavigationTarget target, NavigationService.Activation activation) {
         synchronized (lock) { requireActive(); pending.add(new PendingNavigation(target, activation)); }

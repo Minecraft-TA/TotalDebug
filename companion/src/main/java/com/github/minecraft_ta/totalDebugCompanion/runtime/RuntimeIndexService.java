@@ -117,7 +117,7 @@ public final class RuntimeIndexService implements AutoCloseable {
     private final Consumer<ReadySnapshot> readyHandler;
     private final Function<String, ClassIndex> indexLoader;
     private final Signal statusChanged = new Signal();
-    /** Where {@link #statusChanged} fires: in order, after the status committed, never under the lifecycle lock. */
+    /** Where {@link #statusChanged} fires: in order, after the lifecycle section that changed the status ended. */
     private final Strand notices = Workers.strand();
     private volatile Status status = new Status(Phase.WAITING, "Waiting for runtime inventory", null);
     private String activeInventoryId;
@@ -612,8 +612,19 @@ public final class RuntimeIndexService implements AutoCloseable {
     private void update(Status replacement) {
         synchronized (this.lifecycleLock) {
             this.status = replacement;
-            this.notices.execute(this.statusChanged::fire);
+            this.notices.execute(this::tellStatus);
         }
+    }
+
+    /**
+     * Fires {@link #statusChanged} once the lifecycle section that changed the status has ended: the lock is taken and
+     * released first, so a follower never runs beside the section that scheduled it, nor under its lock.
+     */
+    private void tellStatus() {
+        synchronized (this.lifecycleLock) {
+            // Waits for the section that changed the status.
+        }
+        this.statusChanged.fire();
     }
 
     private void ensureOpen() {
