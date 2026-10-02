@@ -72,7 +72,7 @@ class TextureThumbnailsTest {
 
         String[] selected = new String[1];
         SwingUtilities.invokeAndWait(() -> {
-            ResourceBrowser browser = new ResourceBrowser(target -> { }, category -> { });
+            ResourceBrowser browser = new ResourceBrowser(target -> { });
             browser.setResources(before);
             int row = indexOf(browser, TEXTURE);
             browser.resourceList().setSelectedIndex(row);

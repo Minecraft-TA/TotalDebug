@@ -40,7 +40,6 @@ public final class PackResourcesPanel extends JPanel {
     private final PageLoader<ResourceBrowser.Prepared> loader;
     private final PageLoader<List<ListedPack>> packLoader;
     /** The kind of resource shown, such as {@code assets/textures}; empty for all. */
-    private String category = "";
 
     public PackResourcesPanel(PackCatalogService catalog, ResourceEdits edits, PackSelections selections, Path workspace,
                               Consumer<NavigationTarget> navigator) {
@@ -48,7 +47,7 @@ public final class PackResourcesPanel extends JPanel {
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         this.edits = Objects.requireNonNull(edits, "edits");
         this.workspace = Objects.requireNonNull(workspace, "workspace");
-        this.browser = new ResourceBrowser(navigator, category -> this.category = category);
+        this.browser = new ResourceBrowser(navigator);
         this.packs = new PacksPanel(PacksPanel.Side.RESOURCES, navigator);
         this.packs.setApplier(enabled -> selections.set(ChangeRecord.PackSide.RESOURCES, null, enabled),
                 "Enables the checked resource packs in this order: in the connected game, which reloads its resources, otherwise in options.txt");
@@ -93,7 +92,7 @@ public final class PackResourcesPanel extends JPanel {
     /** The page as it is shown now, for navigation history. */
     public NavigationTarget.PackResources target() {
         return this.tabs.getSelectedComponent() == this.packs ? new NavigationTarget.PackResources(ResourcesTab.PACKS, "")
-                : new NavigationTarget.PackResources(this.category);
+                : new NavigationTarget.PackResources(this.browser.selectedCategory());
     }
 
     /** Joins the packs' resources again. */
@@ -122,13 +121,15 @@ public final class PackResourcesPanel extends JPanel {
     }
 
     public void selectCategory(String key) {
-        this.category = key == null ? "" : key;
         this.browser.selectCategory(key);
     }
 
-    /** The kind of resource shown, such as {@code assets/textures}; empty for all. */
+    /**
+     * The kind of resource shown, such as {@code assets/textures}, or asked for before the first listing; empty for all.
+     * The browser keeps it, so it is what the browser shows.
+     */
     public String category() {
-        return this.category;
+        return this.browser.selectedCategory();
     }
 
     ResourceBrowser browser() {

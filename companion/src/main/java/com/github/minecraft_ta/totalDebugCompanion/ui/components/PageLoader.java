@@ -36,6 +36,32 @@ import java.util.function.Consumer;
  * memory ({@link #updates}) and work the page runs itself ({@link #starts}) wait the same way.</p>
  */
 public final class PageLoader<T> {
+    /**
+     * What a navigation asked the page to select once a read lists it, such as a key binding to show (docs/SYSTEMS.md,
+     * section 3). A new request replaces it. The page applies it when a read lists the value, and drops it when a read
+     * that succeeded does not or when the user chooses for themselves. The loader drops it when its page becomes hidden
+     * after the request: leaving the page ends what it was asked for. Swing thread only.
+     */
+    public static final class Request<V> {
+        private V value;
+
+        private Request() {
+        }
+
+        public void ask(V value) {
+            this.value = Objects.requireNonNull(value, "value");
+        }
+
+        /** The value asked for and neither applied nor dropped yet, or null. */
+        public V pending() {
+            return this.value;
+        }
+
+        public void drop() {
+            this.value = null;
+        }
+    }
+
     /** What to read: prepared on the Swing thread, where the page's state is captured, then run off it. */
     @FunctionalInterface
     public interface Read<T> {
@@ -73,6 +99,8 @@ public final class PageLoader<T> {
     private int reads;
     /** Removes the listeners on the components whose showing this loader watches. */
     private final List<Runnable> unwatch = new ArrayList<>();
+    /** The page's requests, dropped when the page becomes hidden. */
+    private final List<Request<?>> requests = new ArrayList<>();
     /**
      * Whether a read for a component being shown waits for the end of the Swing step. Showing a page shows the part of it
      * chosen in the same step, and both read once.
@@ -103,8 +131,23 @@ public final class PageLoader<T> {
         this.waitsForShow = true;
         this.missed.add(ALWAYS);
         watch(page, false);
+        HierarchyListener hidden = event -> {
+            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !page.isShowing()) {
+                this.requests.forEach(Request::drop);
+            }
+        };
+        page.addHierarchyListener(hidden);
+        this.unwatch.add(() -> page.removeHierarchyListener(hidden));
         if (page.isShowing()) SwingUtilities.invokeLater(this::resume);
         return this;
+    }
+
+    /** A request for the loader's page ({@link #page}), dropped when the page becomes hidden. Swing thread only. */
+    public <V> Request<V> request() {
+        if (this.page == null) throw new IllegalStateException("A request needs the loader's page");
+        Request<V> request = new Request<>();
+        this.requests.add(request);
+        return request;
     }
 
     /** Reads again whenever {@code signal} fires. */

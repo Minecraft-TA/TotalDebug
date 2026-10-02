@@ -31,7 +31,7 @@ class ResourceBrowserTest {
         AtomicInteger rendered = new AtomicInteger();
         ResourceBrowser[] browser = new ResourceBrowser[1];
         SwingUtilities.invokeAndWait(() -> {
-            browser[0] = new ResourceBrowser(target -> { }, category -> { });
+            browser[0] = new ResourceBrowser(target -> { });
             JScrollPane shown = new JScrollPane(browser[0]);
             shown.setSize(800, 600);
             shown.doLayout();

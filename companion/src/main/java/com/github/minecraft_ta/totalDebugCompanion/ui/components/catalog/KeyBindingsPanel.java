@@ -113,7 +113,8 @@ public final class KeyBindingsPanel extends JPanel {
     private String status = "";
     private CatalogIndex index;
     private KeyBindings bindings;
-    private String selectAfterLoad;
+    /** The binding a navigation asked to show once the keys are read. */
+    private final PageLoader.Request<String> requested;
     /** A modifier pressed while capturing, taken as the key itself when it is released alone. */
     private KeyEvent heldModifier;
 
@@ -162,6 +163,7 @@ public final class KeyBindingsPanel extends JPanel {
         this.loader = new PageLoader<>(this::prepareLoad, loaded -> show(loaded.index(), loaded.bindings(), ""),
                 failure -> show(this.catalog.index().orElse(null), null, "Could not read options.txt: " + failure.getMessage()))
                 .page(this).follows(catalog.changed()).follows(control.assignmentsChanged());
+        this.requested = this.loader.request();
         addHierarchyListener(event -> {
             if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !isShowing()) stopCapture();
         });
@@ -249,19 +251,26 @@ public final class KeyBindingsPanel extends JPanel {
                 this.control.assignments(), captured.keyNames()));
     }
 
-    /** Shows the binding named {@code name}, such as {@code key.jump}, once the keys are read. */
+    /**
+     * Shows the binding named {@code name}, such as {@code key.jump}, once the keys are read, while the page stays shown;
+     * an empty name shows none and drops a binding asked for before.
+     */
     public void select(String name) {
-        this.selectAfterLoad = name;
+        if (name.isEmpty()) {
+            this.requested.drop();
+            return;
+        }
+        this.requested.ask(name);
         selectPending();
     }
 
     private void selectPending() {
-        if (this.selectAfterLoad == null || this.bindings == null) return;
-        String name = this.selectAfterLoad;
+        String name = this.requested.pending();
+        if (name == null || this.bindings == null) return;
         for (int row = 0; row < this.model.shown.size(); row++) {
             KeyBindings.Binding binding = this.model.shown.get(row).binding();
             if (binding != null && binding.spec().name().equals(name)) {
-                this.selectAfterLoad = null;
+                this.requested.drop();
                 this.table.setRowSelectionInterval(row, row);
                 this.table.scrollRectToVisible(this.table.getCellRect(row, 0, true));
                 return;
@@ -275,7 +284,7 @@ public final class KeyBindingsPanel extends JPanel {
             applyFilter();
             selectPending();
         } else {
-            this.selectAfterLoad = null;
+            this.requested.drop();
         }
     }
 
@@ -302,7 +311,7 @@ public final class KeyBindingsPanel extends JPanel {
             applyFilter();
         };
         // Read again, as after a key rebound in the game, the table stays as it was, unless a binding is to be shown.
-        if (this.selectAfterLoad == null) Tables.keepingSelection(this.table, row -> identity(this.model.shown.get(row)), update);
+        if (this.requested.pending() == null) Tables.keepingSelection(this.table, row -> identity(this.model.shown.get(row)), update);
         else update.run();
         selectPending();
     }

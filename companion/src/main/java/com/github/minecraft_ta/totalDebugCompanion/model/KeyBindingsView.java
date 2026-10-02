@@ -17,9 +17,9 @@ public final class KeyBindingsView implements IEditorPanel {
                 context.navigation()::navigate);
     }
 
-    /** Shows a binding, such as {@code key.jump}; an empty name shows none. */
+    /** Shows a binding, such as {@code key.jump}; an empty name shows none, and drops one asked for before. */
     public void show(String binding) {
-        if (!binding.isEmpty()) this.panel.select(binding);
+        this.panel.select(binding);
     }
 
     @Override

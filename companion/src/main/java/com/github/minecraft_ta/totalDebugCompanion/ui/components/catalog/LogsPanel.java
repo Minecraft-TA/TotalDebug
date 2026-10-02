@@ -51,6 +51,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
@@ -104,8 +105,8 @@ public final class LogsPanel extends JPanel {
     private List<Row> all = List.of();
     /** What the selected file's rows were read from, to read them again only when the file changed. */
     private GameLogs.LogFile rowsOf;
-    /** A file to select once the files are listed, or null to keep the selection. */
-    private Path wanted;
+    /** A file a navigation asked to select once the files are listed; without one, the selection stays. */
+    private PageLoader.Request<Path> requested;
     private boolean updatingFiles;
     /** Reads the selected file's rows. */
     private final PageLoader<List<Row>> rowLoader;
@@ -129,6 +130,8 @@ public final class LogsPanel extends JPanel {
         this.fileList.setFixedCellWidth(1);
         this.fileList.addListSelectionListener(event -> {
             if (event.getValueIsAdjusting() || this.updatingFiles) return;
+            // The user's choice replaces a file asked for before.
+            this.requested.drop();
             showNotice("");
             showRows();
         });
@@ -168,7 +171,8 @@ public final class LogsPanel extends JPanel {
 
         // The game writes its logs while it runs, so the page reads them again whenever it is shown.
         this.rowLoader = new PageLoader<>(this::prepareRows, this::showRead, failure -> showMessage(
-                (this.rowsOf == null ? "The file" : this.rowsOf.name()) + " could not be read: " + failure.getMessage()));
+                (this.rowsOf == null ? "The file" : this.rowsOf.name()) + " could not be read: " + failure.getMessage()))
+                .page(this);
         this.loader = new PageLoader<List<Listed>>(() -> this::listFiles, this::showFiles,
                 failure -> showMessage("The logs could not be listed: " + failure.getMessage())).page(this).readsWhenShown(this)
                 // Rows name the mods behind frames and failures as the catalog knows them.
@@ -176,6 +180,7 @@ public final class LogsPanel extends JPanel {
                     this.rowsOf = null;
                     showRows();
                 });
+        this.requested = this.loader.request();
     }
 
     private static PrimarySecondaryLabel label(JList<?> list, boolean selected, Icon icon, PrimarySecondaryText text, int indent) {
@@ -194,18 +199,21 @@ public final class LogsPanel extends JPanel {
      * since it was read, is looked for by listing the files again.
      */
     public void select(Path file) {
-        if (file == null) return;
+        if (file == null) {
+            // A file asked for before, still being looked for, is not this navigation's.
+            this.requested.drop();
+            return;
+        }
         Path wanted = file.toAbsolutePath().normalize();
         List<Listed> listed = new ArrayList<>();
         for (int index = 0; index < this.files.size(); index++) listed.add(this.files.get(index));
         int index = index(listed, wanted);
         if (index >= 0) {
-            // A file asked for before, still being looked for, is not this navigation's.
-            this.wanted = null;
+            this.requested.drop();
             this.fileList.setSelectedIndex(index);
             return;
         }
-        this.wanted = wanted;
+        this.requested.ask(wanted);
         this.loader.load();
     }
 
@@ -221,9 +229,9 @@ public final class LogsPanel extends JPanel {
         // A single file needs no list to choose from; its rows say what it holds.
         this.sidebar.setSidebarShown(listed.size() > 1);
         Listed selected = this.fileList.getSelectedValue();
-        Path requested = this.wanted;
+        Path requested = this.requested.pending();
         Path keep = requested != null ? requested : selected == null ? null : selected.file().path();
-        this.wanted = null;
+        this.requested.drop();
         List<Listed> before = new ArrayList<>();
         for (int index = 0; index < this.files.size(); index++) before.add(this.files.get(index));
         this.updatingFiles = true;
@@ -440,6 +448,27 @@ public final class LogsPanel extends JPanel {
     /** How many rows the selected file shows. */
     public int rowCount() {
         return this.shown.size();
+    }
+
+    /** The list of files, for tests. */
+    JList<?> fileList() {
+        return this.fileList;
+    }
+
+    /** The file selected now, or null, for tests. */
+    Path selectedFile() {
+        Listed selected = this.fileList.getSelectedValue();
+        return selected == null ? null : selected.file().path().toAbsolutePath().normalize();
+    }
+
+    /** How many listings started, for tests. */
+    int listings() {
+        return this.loader.reads();
+    }
+
+    /** The listing that runs or ran last, for tests. */
+    CompletableFuture<?> listing() {
+        return this.loader.current();
     }
 
     public void dispose() {

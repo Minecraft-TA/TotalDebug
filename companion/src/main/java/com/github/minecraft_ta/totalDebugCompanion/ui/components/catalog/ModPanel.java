@@ -94,6 +94,8 @@ public final class ModPanel extends JPanel {
     private CatalogIndex index;
     /** Lists the mod's resources for the Resources tab. */
     private final PageLoader<ResourceBrowser.Prepared> resourceLoader;
+    /** Reads the shown mod's logo for the header. */
+    private final PageLoader<Icon> logoLoader;
     private boolean disposed;
 
     /**
@@ -112,7 +114,7 @@ public final class ModPanel extends JPanel {
         this.icons = Objects.requireNonNull(icons, "icons");
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.listIcons = new CatalogIcons(icons, LIST_ICON_SIZE);
-        this.resources = new ResourceBrowser(navigator, category -> { });
+        this.resources = new ResourceBrowser(navigator);
         this.resourceLoader = new PageLoader<>(this::prepareResources, prepared -> {
             this.resources.setResources(prepared);
             this.resources.setMessage("");
@@ -124,6 +126,9 @@ public final class ModPanel extends JPanel {
         }).page(this).follows(resourcesRead)
                 // The catalog is in memory: the page is built again from it, and lists the mod's files again where it has any.
                 .updates(catalog.changed(), this::rebuild);
+        this.logoLoader = new PageLoader<Icon>(this::prepareLogo, logo -> {
+            if (logo != null) this.header.setIcon(logo);
+        }, failure -> { }).page(this);
         this.configs = new ConfigPanel(modId, configSettings, navigator);
         this.keyBindings = new KeyBindingsPanel(catalog, keyControl, modId, navigator);
         this.content = new ContentBrowser(this.listIcons, this::iconOf, navigator, null);
@@ -196,8 +201,9 @@ public final class ModPanel extends JPanel {
         this.summary = ModSummary.resolve(this.modId, this.index, this.sources.get()).orElse(null);
         this.listIcons.clear();
         if (this.summary == null) {
-            // A load started while the mod was installed must not bring its tabs back.
+            // A load started while the mod was installed must not bring its tabs or its logo back.
             this.resourceLoader.cancel();
+            this.logoLoader.cancel();
             this.header.setTitle(this.modId);
             this.header.setIcon(new MonogramIcon(this.modId, SubjectHeader.ICON_SIZE));
             this.header.setSubtitle(List.of(SubjectHeader.text(this.modId)));
@@ -222,9 +228,13 @@ public final class ModPanel extends JPanel {
             url(subtitle, "Issues", mod.urls().get("issues"));
         }
         this.header.setSubtitle(subtitle);
-        List<ModLogoIcons.Source> logo = ModLogoIcons.sources(this.summary);
-        if (!logo.isEmpty()) loadLogo(logo);
-        else if (MINECRAFT.equals(this.summary.id())) showGrassBlock();
+        if (!ModLogoIcons.sources(this.summary).isEmpty()) {
+            this.logoLoader.load();
+        } else {
+            // An older logo read must not replace this mod's monogram.
+            this.logoLoader.cancel();
+            if (MINECRAFT.equals(this.summary.id())) showGrassBlock();
+        }
 
         List<PackCatalog.ConfigFile> configFiles = mod == null ? List.of() : mod.configs();
         this.configs.setFiles(configFiles);
@@ -359,10 +369,11 @@ public final class ModPanel extends JPanel {
         return () -> ResourceBrowser.prepare(ModResources.list(files), Map.of(), Map.of());
     }
 
-    private void loadLogo(List<ModLogoIcons.Source> logo) {
-        CompletableFuture.supplyAsync(() -> readLogo(logo), Workers.files()).thenAccept(image -> SwingUtilities.invokeLater(() -> {
-            if (!this.disposed && this.summary != null && image != null) this.header.setIcon(image);
-        }));
+    /** Reads the logo of the mod shown now, or nothing for a mod without one. */
+    private Callable<Icon> prepareLogo() {
+        List<ModLogoIcons.Source> logo = this.summary == null ? List.of() : ModLogoIcons.sources(this.summary);
+        if (logo.isEmpty()) return null;
+        return () -> readLogo(logo);
     }
 
     /** Minecraft declares no logo; its grass block stands for it, drawn from the resource snapshot. */
@@ -439,6 +450,7 @@ public final class ModPanel extends JPanel {
     public void dispose() {
         this.disposed = true;
         this.resourceLoader.dispose();
+        this.logoLoader.dispose();
         this.listIcons.dispose();
         this.resources.dispose();
         this.keyBindings.dispose();

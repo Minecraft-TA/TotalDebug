@@ -450,6 +450,29 @@ class PageLoaderTest {
     }
 
     @Test
+    void aRequestLastsWhileItsPageStaysShown() throws Exception {
+        ShowablePage page = new ShowablePage();
+        PageLoader<Void> loader = onEdt(() -> PageLoader.withoutRead(page));
+        PageLoader.Request<String> request = onEdt(() -> loader.<String>request());
+        SwingUtilities.invokeAndWait(() -> {
+            page.setShown(true);
+            request.ask("key.jump");
+        });
+        assertEquals("key.jump", onEdt(request::pending));
+        SwingUtilities.invokeAndWait(() -> request.ask("key.sneak"));
+        assertEquals("key.sneak", onEdt(request::pending), "a new request replaces the one before");
+
+        SwingUtilities.invokeAndWait(() -> page.setShown(false));
+        assertEquals(null, onEdt(request::pending), "leaving the page drops it");
+
+        // Asked while hidden, as in a window not shown yet: it lasts until the page is shown and left.
+        SwingUtilities.invokeAndWait(() -> request.ask("key.drop"));
+        SwingUtilities.invokeAndWait(() -> page.setShown(true));
+        assertEquals("key.drop", onEdt(request::pending));
+        onEdt(loader::dispose);
+    }
+
+    @Test
     void aTitleIsRedrawnWhileThePageIsHidden() throws Exception {
         AtomicInteger titles = new AtomicInteger();
         ShowablePage page = new ShowablePage();

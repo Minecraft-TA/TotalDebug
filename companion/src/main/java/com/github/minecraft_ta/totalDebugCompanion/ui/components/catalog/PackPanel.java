@@ -47,7 +47,7 @@ public final class PackPanel extends JPanel {
     public PackPanel(Path file, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.file = Objects.requireNonNull(file, "file");
-        this.browser = new ResourceBrowser(Objects.requireNonNull(navigator, "navigator"), category -> { });
+        this.browser = new ResourceBrowser(Objects.requireNonNull(navigator, "navigator"));
         this.header.setTitle(PackFolders.title(file));
         this.header.setIcon(new PlateIcon(Icons.RESOURCES_ROOT, SubjectHeader.ICON_SIZE));
         JButton show = new JButton("Show in Explorer", Icons.FOLDER);
