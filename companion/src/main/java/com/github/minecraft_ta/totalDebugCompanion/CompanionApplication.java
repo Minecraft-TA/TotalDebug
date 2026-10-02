@@ -88,6 +88,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private volatile ProjectScope current;
     /** The current project as the window follows it; {@link #makeCurrent} is the one place that changes it. */
     private final CurrentProject projectState = new CurrentProject();
+    /** Stops the window following the current project's runtime. */
+    private Runnable stopFollowingRuntime = () -> { };
     /** Removes the current project's routes of the game's messages; under the lifecycle lock. */
     private Runnable currentMessages = () -> { };
     private final InstanceState emptyState = InstanceState.inMemory();
@@ -151,6 +153,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             RuntimeIndexService index = runtimeIndexService;
             index.statusChanged().subscribe(() -> updateRuntimeIndexUi(index.status()));
             updateRuntimeIndexUi(index.status());
+            stopFollowingRuntime = projectState.follows(ProjectScope::runtimeChanged, this::runtimeShown);
             debuggerController = createDebuggerController();
             debuggerController.addListener(new DebuggerSessionController.Listener() {
                 private Throwable lastFailure;
@@ -270,6 +273,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     @Override public void close() {
         if (closed) return;
         closed = true;
+        stopFollowingRuntime.run();
         cancelReconnect("Companion is closing");
         cancelLaunch("Companion is closing");
         notifications.close();
@@ -419,7 +423,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 return true;
             });
             if (rebuild) {
-                onUi(CompanionUi::runtimeChanged);
                 return;
             }
             boolean requestedRuntime = selected.admit(() -> {
@@ -431,7 +434,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             });
             if (requestedRuntime) return;
             try {
-                if (restoreOfflineRuntime(selected)) onUi(CompanionUi::runtimeChanged);
+                restoreOfflineRuntime(selected);
             }
             catch (IOException failure) { throw new CompletionException(failure); }
         }, projectWorker);
@@ -629,7 +632,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (requested.equals(currentProject())) {
             projects.select(requested);
             publishConnectionTarget();
-            if (restoreOfflineRuntime(requireProject())) onUi(CompanionUi::runtimeChanged);
+            restoreOfflineRuntime(requireProject());
             return;
         }
         // Prepare the actual replacement before disturbing the current project.
@@ -858,7 +861,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             } catch (IOException failure) {
                 runtimeIndexService.failedBeforeBuild("Unable to rescan mods: " + failure.getMessage());
             }
-            onUi(CompanionUi::runtimeChanged);
         }); } catch (RejectedExecutionException failure) {
             if (!closed) throw failure;
         }
@@ -889,30 +891,31 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 // client or inventory load has taken ownership in the meantime.
                 runtimeIndexService.restore(selected.profile().dataDirectory(), selected.profile().workspaceDirectory());
             }
-            onUi(CompanionUi::runtimeChanged);
         }); } catch (RejectedExecutionException failure) {
             if (!closed) throw failure;
         }
     }
 
-    private void finishRuntimeInstallation(RuntimeBinding installed, ProjectScope selected) {
-        CompanionUi view;
+    /**
+     * The window shows the current project's runtime as it is now, then opens the navigations that waited for one, in
+     * that order and in one Swing step. Follows {@link ProjectScope#runtimeChanged()}.
+     */
+    private void runtimeShown() {
+        CompanionUi view = ui;
+        ProjectScope selected = current;
+        if (view == null || selected == null) return;
+        view.runtimeChanged();
+        List<PendingNavigation> queued;
         synchronized (lifecycleLock) {
-            if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
-            view = ui;
+            if (!selected.isActive() || selected.runtime() == null || current != selected) return;
+            queued = selected.drainNavigations();
         }
-        if (view != null) SwingUtilities.invokeLater(() -> {
-            if (ui != view || !selected.isActive() || selected.runtime() != installed || current != selected) return;
-            view.runtimeChanged();
-            List<PendingNavigation> queued;
-            synchronized (lifecycleLock) {
-                if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
-                queued = selected.drainNavigations();
-            }
-            for (PendingNavigation pending : queued) {
-                view.navigate(pending.target(), pending.activation());
-            }
-        });
+        for (PendingNavigation pending : queued) {
+            view.navigate(pending.target(), pending.activation());
+        }
+    }
+
+    private void finishRuntimeInstallation(RuntimeBinding installed, ProjectScope selected) {
         try {
             CompletableFuture<?> breakpoints;
             synchronized (lifecycleLock) {
@@ -1096,16 +1099,16 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         }
         lastIndexStatus = status;
         synchronized (lifecycleLock) {
-            var installed = current == null ? null : current.runtime();
-            boolean staleLocalIndex = false;
-            if (status.phase() == RuntimeIndexService.Phase.FAILED && status.sourceKind() == IndexIdentity.Kind.LOCAL
-                    && installed != null && installed.snapshot().localGuard() != null) {
-                try { installed.snapshot().localGuard().checkAll(); }
-                catch (IOException failure) { staleLocalIndex = true; }
-            }
-            if (status.phase() == RuntimeIndexService.Phase.EMPTY || staleLocalIndex) {
-                closeRuntime();
-                onUi(CompanionUi::runtimeChanged);
+            // Only for the status still current: an older one, told late, must not close a runtime installed since.
+            if (status == runtimeIndexService.status()) {
+                var installed = current == null ? null : current.runtime();
+                boolean staleLocalIndex = false;
+                if (status.phase() == RuntimeIndexService.Phase.FAILED && status.sourceKind() == IndexIdentity.Kind.LOCAL
+                        && installed != null && installed.snapshot().localGuard() != null) {
+                    try { installed.snapshot().localGuard().checkAll(); }
+                    catch (IOException failure) { staleLocalIndex = true; }
+                }
+                if (status.phase() == RuntimeIndexService.Phase.EMPTY || staleLocalIndex) closeRuntime();
             }
         }
         onUi(view -> view.setRuntimeIndexStatus(status));

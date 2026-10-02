@@ -41,6 +41,8 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
+import com.github.minecraft_ta.totalDebugCompanion.util.Strand;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import java.io.IOException;
@@ -111,6 +113,9 @@ public final class ProjectScope implements AutoCloseable {
     private volatile Phase phase = Phase.ACTIVE;
     private volatile RuntimeBinding runtime;
     private volatile RuntimeSourceCatalog localSources = RuntimeSourceCatalog.empty();
+    private final Signal runtimeChanged = new Signal();
+    /** Where {@link #runtimeChanged} fires: in order, after the change, never under the lifecycle lock that made it. */
+    private final Strand runtimeNotices = Workers.strand();
     private boolean closed;
 
     public ProjectScope(Object lock, CompanionProfile profile, InstanceState state, ChangeRecord changes) {
@@ -189,6 +194,22 @@ public final class ProjectScope implements AutoCloseable {
 
     public void refreshLocalSources() throws IOException {
         localSources = new RuntimeSourceCatalog(LocalModSources.discover(profile.workspaceDirectory()));
+        this.runtimeNotices.execute(this::tellRuntime);
+    }
+
+    /**
+     * Fires after the runtime binding or the local sources changed (docs/SYSTEMS.md, section 1): on a strand of its own,
+     * once the lifecycle section that changed them ended, so a follower never runs beside it nor under its lock.
+     */
+    public Signal runtimeChanged() {
+        return this.runtimeChanged;
+    }
+
+    private void tellRuntime() {
+        synchronized (lock) {
+            // Waits for the section that changed the runtime.
+        }
+        this.runtimeChanged.fire();
     }
 
     public CompanionProfile profile() { return profile; }
@@ -222,11 +243,17 @@ public final class ProjectScope implements AutoCloseable {
     public String runtimeSignature() { var value = runtime; return value == null ? null : value.snapshot().signature(); }
 
     /** Called by the loader under the shared lifecycle lock, before its ownership handoff. */
-    public void bindRuntime(RuntimeBinding value) { requireActive(); runtime = value; }
+    public void bindRuntime(RuntimeBinding value) {
+        requireActive();
+        runtime = value;
+        this.runtimeNotices.execute(this::tellRuntime);
+    }
     public void closeRuntime() {
         RuntimeBinding previous = runtime;
         runtime = null;
-        if (previous != null) previous.close();
+        if (previous == null) return;
+        previous.close();
+        this.runtimeNotices.execute(this::tellRuntime);
     }
     public void queueNavigation(NavigationTarget target, NavigationService.Activation activation) {
         synchronized (lock) { requireActive(); pending.add(new PendingNavigation(target, activation)); }

@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
 import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
+import com.github.minecraft_ta.totalDebugCompanion.util.Strand;
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
@@ -115,6 +117,8 @@ public final class RuntimeIndexService implements AutoCloseable {
     private final Consumer<ReadySnapshot> readyHandler;
     private final Function<String, ClassIndex> indexLoader;
     private final Signal statusChanged = new Signal();
+    /** Where {@link #statusChanged} fires: in order, after the lifecycle section that changed the status ended. */
+    private final Strand notices = Workers.strand();
     private volatile Status status = new Status(Phase.WAITING, "Waiting for runtime inventory", null);
     private String activeInventoryId;
     private Metrics activeMetrics;
@@ -166,7 +170,10 @@ public final class RuntimeIndexService implements AutoCloseable {
         return this.status;
     }
 
-    /** Fires after {@link #status()} changed, on the thread that changed it, under the lifecycle lock. */
+    /**
+     * Fires after {@link #status()} changed, on a strand of its own, never under the lifecycle lock: a follower that fails
+     * cannot undo a committed status or index (docs/SYSTEMS.md, section 1).
+     */
     public Signal statusChanged() {
         return this.statusChanged;
     }
@@ -603,11 +610,21 @@ public final class RuntimeIndexService implements AutoCloseable {
     }
 
     private void update(Status replacement) {
-        // Under the lock, so what the followers read of the status is this one.
         synchronized (this.lifecycleLock) {
             this.status = replacement;
-            this.statusChanged.fire();
+            this.notices.execute(this::tellStatus);
         }
+    }
+
+    /**
+     * Fires {@link #statusChanged} once the lifecycle section that changed the status has ended: the lock is taken and
+     * released first, so a follower never runs beside the section that scheduled it, nor under its lock.
+     */
+    private void tellStatus() {
+        synchronized (this.lifecycleLock) {
+            // Waits for the section that changed the status.
+        }
+        this.statusChanged.fire();
     }
 
     private void ensureOpen() {
