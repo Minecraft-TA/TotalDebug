@@ -33,7 +33,7 @@ import java.util.function.Consumer;
  * ({@link #hold}), as during a save, signals wait in the same way. The page never reads in its constructor or because a
  * navigation showed it. A page whose files others write and only it reads, such as the logs, reads whenever it is shown
  * and when the user comes back to Companion while it is shown ({@link #readsWhenShown}); work that only redraws from
- * memory waits the same way ({@link #updates}).</p>
+ * memory ({@link #updates}) and work the page runs itself ({@link #starts}) wait the same way.</p>
  */
 public final class PageLoader<T> {
     /** What to read: prepared on the Swing thread, where the page's state is captured, then run off it. */
@@ -79,8 +79,11 @@ public final class PageLoader<T> {
      */
     private boolean showReadQueued;
 
-    /** A loader for {@code page}, which reads nothing and only redraws from memory ({@link #updates}). */
-    public static PageLoader<Void> redraws(JComponent page) {
+    /**
+     * A loader for {@code page} without a read of its own: it redraws from memory ({@link #updates}) and starts the work
+     * the page runs itself ({@link #starts}) while the page is shown.
+     */
+    public static PageLoader<Void> withoutRead(JComponent page) {
         return new PageLoader<Void>(() -> null, nothing -> { }, failure -> { }).page(page);
     }
 
@@ -169,22 +172,47 @@ public final class PageLoader<T> {
 
     /**
      * Runs {@code update}, which only redraws from memory, such as icons again after new ones came, when {@code signal}
-     * fires: at once while the page is shown, otherwise once it is shown again, once however often it fired. Swing thread.
+     * fires: at once while the page is shown, otherwise once it is shown again, once however often it fired. It runs as
+     * the page is shown, before what the same Swing step asks of the page, such as a navigation choosing a tab the update
+     * adds. Swing thread.
      */
     public PageLoader<T> updates(Signal signal, Runnable update) {
-        Objects.requireNonNull(update, "update");
+        return whenShown(signal, Objects.requireNonNull(update, "update"), false);
+    }
+
+    /**
+     * Starts {@code work} that the page runs itself instead of through this loader's read, when {@code signal} fires: at
+     * once while the page is shown, otherwise once however often it fired, at the end of the Swing step that shows the
+     * page again, after what that step asked of the page, such as a navigation reading it anew. Such work has its own
+     * runs and cancellation, as an inspection asking the game again, or the Project tree listing its Scripts folders
+     * again; when it starts, it decides itself whether it is still wanted. Swing thread.
+     */
+    public PageLoader<T> starts(Signal signal, Runnable work) {
+        return whenShown(signal, Objects.requireNonNull(work, "work"), true);
+    }
+
+    /**
+     * Runs {@code run} when {@code signal} fires: at once while the page is shown, otherwise when it is shown again, as
+     * it is shown or, {@code afterStep}, at the end of the Swing step that shows it.
+     */
+    private PageLoader<T> whenShown(Signal signal, Runnable run, boolean afterStep) {
         boolean[] missed = {false};
         this.unsubscribe.add(signal.subscribe(() -> SwingUtilities.invokeLater(() -> {
             if (this.disposed) return;
             if (this.page != null && !this.page.isShowing()) missed[0] = true;
-            else update.run();
+            else run.run();
         })));
         if (this.page != null) {
             JComponent shown = this.page;
             HierarchyListener listener = event -> {
                 if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !shown.isShowing() || !missed[0]) return;
-                missed[0] = false;
-                if (!this.disposed) update.run();
+                Runnable runMissed = () -> {
+                    if (this.disposed || !missed[0] || !shown.isShowing()) return;
+                    missed[0] = false;
+                    run.run();
+                };
+                if (afterStep) SwingUtilities.invokeLater(runMissed);
+                else runMissed.run();
             };
             shown.addHierarchyListener(listener);
             this.unwatch.add(() -> shown.removeHierarchyListener(listener));

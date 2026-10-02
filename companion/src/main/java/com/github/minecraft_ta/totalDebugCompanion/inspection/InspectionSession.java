@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Signal;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
@@ -30,7 +31,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -40,8 +40,8 @@ import java.util.function.UnaryOperator;
  * on the chosen side through the ordinary snippet path, so it sees exactly what a script bound to the same subject
  * sees, together with every project tool whose {@code // inspect:} patterns match what occupies the subject; each
  * tool is its own run, so a failing tool leaves the others alone. The session follows what occupies the subject: a
- * read reporting another registry id marks the subject replaced and selects the tools again. While live, a read
- * starts again once the previous one, tools included, has finished and the page is visible. A read that fails keeps
+ * read reporting another registry id marks the subject replaced and selects the tools again. While live, the session
+ * asks for a read again once the previous one, tools included, has finished; its page reads while it is shown. A read that fails keeps
  * the facts it did report, and a failed read keeps the previous one, marked outdated.
  * <p>
  * The session publishes its {@link State} after every change. It is used on the event dispatch thread.
@@ -112,7 +112,8 @@ public final class InspectionSession {
     private final Supplier<SnippetExecutionService> snippets;
     private final Supplier<ScriptFiles> scripts;
     private final Consumer<State> listener;
-    private final BooleanSupplier visible;
+    /** Fires when the session wants to read again on its own; the page reads then, once it is shown. */
+    private final Signal readWanted = new Signal();
     private final Timer liveTimer = new Timer(1_000, event -> liveTick());
     private final Set<Path> chosen = new LinkedHashSet<>();
     private final List<SnippetExecutionService.Execution> activeTools = new ArrayList<>();
@@ -130,18 +131,49 @@ public final class InspectionSession {
     private long toolRevision;
     private CompletableFuture<Void> toolRun = CompletableFuture.completedFuture(null);
     private boolean disposed;
+    /**
+     * Whether the session asked for a read through {@link #readWanted} that no read has answered since, as the compiler
+     * became ready or a tool was created.
+     */
+    private boolean wanted;
+    /** Whether the live interval passed since the last read, which asks for a read only while live reading is on. */
+    private boolean liveDue;
 
-    /** {@code visible} tells whether the page shows, so live reads pause while it is hidden. */
+    /** Reads only when asked; what it wants to read on its own, it asks for through {@link #readWanted()}. */
     public InspectionSession(InspectSubjectPayload subject, Supplier<SnippetExecutionService> snippets,
-                             Supplier<ScriptFiles> scripts, Consumer<State> listener, BooleanSupplier visible) {
+                             Supplier<ScriptFiles> scripts, Consumer<State> listener) {
         this.subject = Objects.requireNonNull(subject, "subject");
         this.snippets = Objects.requireNonNull(snippets, "snippets");
         this.scripts = Objects.requireNonNull(scripts, "scripts");
         this.listener = Objects.requireNonNull(listener, "listener");
-        this.visible = Objects.requireNonNull(visible, "visible");
         this.identity = subject.identity();
         this.side = snapshot() ? Side.CLIENT : Side.SERVER;
         this.liveTimer.setRepeats(false);
+    }
+
+    /**
+     * Fires, on the Swing thread, when the session wants to read again without being asked: the compiler became ready
+     * for a read that waited, the live interval after a read passed, or a tool was created. Its page then calls
+     * {@link #readIfWanted} through its loader, at once when shown and once it is shown again when hidden
+     * (docs/SYSTEMS.md, section 3).
+     */
+    public Signal readWanted() {
+        return this.readWanted;
+    }
+
+    /**
+     * Reads, where the session still wants the read it asked for: a read started since or the disposal answered it, and
+     * one the live interval asked for lapses when live reading was switched off.
+     */
+    public void readIfWanted() {
+        requireEdt();
+        if (!this.disposed && (this.wanted || this.liveDue && this.live)) refresh();
+    }
+
+    /** Asks the page for a read, which it starts once it is shown. */
+    private void want() {
+        this.wanted = true;
+        this.readWanted.fire();
     }
 
     public State state() {
@@ -185,7 +217,7 @@ public final class InspectionSession {
         refresh();
     }
 
-    /** Reads again automatically, {@code intervalMs} after each read finishes, while the page is visible. */
+    /** Asks for a read again {@code intervalMs} after each read finishes; the page reads while it is shown. */
     public void setLive(boolean live, int intervalMs) {
         this.liveInterval = intervalMs;
         if (this.live == live) return;
@@ -202,6 +234,8 @@ public final class InspectionSession {
     public void refresh() {
         requireEdt();
         if (this.disposed) return;
+        this.wanted = false;
+        this.liveDue = false;
         this.liveTimer.stop();
         cancelActive();
         Side selected = this.side;
@@ -282,7 +316,7 @@ public final class InspectionSession {
                 throw new IllegalStateException(exception.getMessage(), exception);
             }
         }, Workers.files()).whenComplete((path, failure) -> SwingUtilities.invokeLater(() -> {
-            if (failure == null) refresh();
+            if (failure == null && !this.disposed) want();
         }));
     }
 
@@ -325,7 +359,7 @@ public final class InspectionSession {
             publish();
         }
         readiness.changed().thenRunAsync(() -> {
-            if (!this.disposed && current == this.revision) refresh();
+            if (!this.disposed && current == this.revision) want();
         }, SwingUtilities::invokeLater);
         return false;
     }
@@ -449,12 +483,9 @@ public final class InspectionSession {
 
     private void liveTick() {
         if (this.disposed || !this.live) return;
-        if (!this.visible.getAsBoolean()) {
-            // A hidden page keeps its last read; check again later instead of loading the game.
-            this.liveTimer.restart();
-            return;
-        }
-        refresh();
+        // A hidden page keeps its last read, and reads once it is shown again.
+        this.liveDue = true;
+        this.readWanted.fire();
     }
 
     private void cancelActive() {

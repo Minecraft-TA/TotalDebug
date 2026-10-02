@@ -35,7 +35,7 @@ public final class ContentPanel extends JPanel {
         this.browser = new ContentBrowser(this.icons, this::iconOf, Objects.requireNonNull(navigator, "navigator"),
                 entry -> this.index == null ? entry.namespace() : this.index.ownerName(entry.namespace()));
         this.message.setVerticalAlignment(JLabel.TOP);
-        this.redraws = PageLoader.redraws(this).updates(catalog.changed(), this::load);
+        this.redraws = PageLoader.withoutRead(this).updates(catalog.changed(), this::load);
         load();
     }
 
