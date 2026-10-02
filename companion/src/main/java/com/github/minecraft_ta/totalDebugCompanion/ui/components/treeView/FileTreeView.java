@@ -3,7 +3,9 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CurrentWorld;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReading;
+import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
@@ -41,6 +43,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -165,12 +168,14 @@ public class FileTreeView extends JScrollPane {
             this.shownProject = null;
             return;
         }
-        Map<String, Object> sources = sources(scope);
+        // Every root is built from what this one computation read; nothing below reads an owner again.
+        PackCatalogService.State catalog = scope.catalog().state();
+        Map<String, Object> sources = sources(scope, catalog);
         if (scope != this.shownProject) {
             this.shown.clear();
             List<DirectoryTreeItem> items = new ArrayList<>();
             sources.forEach((name, source) -> {
-                DirectoryTreeItem item = build(scope, name, source);
+                DirectoryTreeItem item = build(scope, name, source, catalog);
                 this.shown.put(name, new Shown(source, item));
                 items.add(item);
             });
@@ -183,11 +188,11 @@ public class FileTreeView extends JScrollPane {
         sources.forEach((name, source) -> {
             Shown before = this.shown.get(name);
             if (before != null && before.source().equals(source)) {
-                if (before.item() instanceof ModTreeItems.Root modpack) modpack.showState(scope.catalog().state());
+                if (before.item() instanceof ModTreeItems.Root modpack) modpack.showState(catalog);
                 next.put(name, before);
                 return;
             }
-            next.put(name, new Shown(source, build(scope, name, source)));
+            next.put(name, new Shown(source, build(scope, name, source, catalog)));
             if (before != null) reloads.put(name, reload(name, before.source(), source));
         });
         this.shown.clear();
@@ -195,15 +200,19 @@ public class FileTreeView extends JScrollPane {
         this.tree.updateRoots(next.values().stream().map(Shown::item).toList(), reloads);
     }
 
-    /** Each root that exists, in its place, with what it is built from. Only published values; no file is read. */
-    private static Map<String, Object> sources(ProjectScope scope) {
+    /**
+     * Each root that exists, in its place, with what it is built from, given the catalog's {@code state}. Only published
+     * values; no file is read.
+     */
+    private static Map<String, Object> sources(ProjectScope scope, PackCatalogService.State state) {
         Map<String, Object> sources = new LinkedHashMap<>();
         InstanceFolders.Folders folders = scope.folders().published();
         RuntimeBinding binding = scope.runtime();
-        RuntimeSourceCatalog catalog = scope.sources();
+        // The binding's own sources, so that the decompiler and the Runtime rows come from one binding.
+        RuntimeSourceCatalog catalog = binding == null ? scope.sources() : binding.sources();
         int changes = scope.changes().count();
         if (folders.scripts()) sources.put(SCRIPTS, Boolean.TRUE);
-        var index = scope.catalog().index();
+        var index = Optional.ofNullable(PackCatalogService.shown(state));
         if (!catalog.modules().isEmpty() || index.isPresent() || changes > 0 || folders.logs()) {
             sources.put(ModTreeItems.ROOT, new ModpackSource(new ModTreeItems.Same(index.orElse(null)),
                     new ModTreeItems.Same(catalog), changes, folders.logs()));
@@ -212,7 +221,7 @@ public class FileTreeView extends JScrollPane {
         // A server's world is on the server, so an instance without worlds of its own has one while it plays there.
         if (playing instanceof PlayingPayload.Multiplayer server) {
             PackStackPayload datapacks = scope.packs().datapacks();
-            int named = datapacks == null || !server.totalDebug() ? 0 : PackResources.serverDatapacks(datapacks).size();
+            int named = datapacks == null || !server.totalDebug() ? 0 : PackResources.serverDatapackCount(datapacks);
             sources.put(WorldTreeItems.ROOT, new WorldTreeItems.Rows(0, named));
         } else if (folders.saves()) {
             CurrentWorld.Saved saved = scope.world().published().map(WorldReading.World::saved).orElse(null);
@@ -236,8 +245,8 @@ public class FileTreeView extends JScrollPane {
         return WorldTreeItems.ROOT.equals(name) ? LazyFileJTree.Reload.ROWS : LazyFileJTree.Reload.BELOW;
     }
 
-    /** The root {@code name} built from {@code source}. */
-    private DirectoryTreeItem build(ProjectScope scope, String name, Object source) {
+    /** The root {@code name} built from {@code source}, with the catalog's {@code state} its source was computed from. */
+    private DirectoryTreeItem build(ProjectScope scope, String name, Object source, PackCatalogService.State state) {
         return switch (name) {
             case SCRIPTS -> {
                 var scripts = this.tree.getItemFactory().createRootDirectoryItem(scope.paths().scripts());
@@ -246,11 +255,12 @@ public class FileTreeView extends JScrollPane {
             }
             case ModTreeItems.ROOT -> {
                 ModpackSource modpack = (ModpackSource) source;
-                yield new ModTreeItems.Root(new ModTreeItems.Snapshot(scope.catalog().state(),
+                yield new ModTreeItems.Root(new ModTreeItems.Snapshot(state,
                         (RuntimeSourceCatalog) modpack.sources().value(), modpack.changes(), modpack.logs()));
             }
             case WorldTreeItems.ROOT -> new WorldTreeItems.Root((WorldTreeItems.Rows) source);
-            case DECOMPILED -> new DecompiledSourcesTreeItem(this.tree, scope.runtime().decompiler());
+            // The decompiler the roots were computed with: the binding may have been replaced since.
+            case DECOMPILED -> new DecompiledSourcesTreeItem(this.tree, (CompanionDecompilationService) ((ModTreeItems.Same) source).value());
             case RUNTIME -> runtime((RuntimeSource) source);
             default -> throw new IllegalArgumentException("No root " + name);
         };

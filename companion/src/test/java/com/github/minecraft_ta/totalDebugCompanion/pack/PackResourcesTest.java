@@ -127,6 +127,8 @@ class PackResourcesTest {
                 running.stream().map(ListedPack::title).toList(), "the running game's titles are kept");
         assertTrue(running.get(1).is(ListedPack.Rule.REQUIRED));
         assertTrue(running.get(3).is(ListedPack.Rule.INCOMPATIBLE));
+        assertEquals(PackResources.serverDatapacks(stack).size(), PackResources.serverDatapackCount(stack),
+                "a server's datapacks are counted as they are listed, without the hidden ones");
     }
 
     @Test

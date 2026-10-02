@@ -215,6 +215,15 @@ public final class PackResources {
         return packs;
     }
 
+    /** How many datapacks {@link #serverDatapacks} lists, without listing them, for a count drawn on the Swing thread. */
+    public static int serverDatapackCount(PackStackPayload datapacks) {
+        int count = datapacks.others().size();
+        for (PackStackPayload.Pack pack : datapacks.enabled()) {
+            if (!pack.is(PackStackPayload.HIDDEN)) count++;
+        }
+        return count;
+    }
+
     private static PackStackPayload.Pack required(String id) {
         return new PackStackPayload.Pack(id, "", "", PackStackPayload.REQUIRED);
     }
