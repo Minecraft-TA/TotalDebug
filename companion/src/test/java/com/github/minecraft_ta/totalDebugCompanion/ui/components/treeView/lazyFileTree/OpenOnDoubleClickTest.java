@@ -47,7 +47,7 @@ class OpenOnDoubleClickTest {
         });
         LazyFileJTree tree = created.get();
         try {
-            assertTrue(tree.revealItemPath("Page", List.of()).get(5, TimeUnit.SECONDS));
+            assertTrue(tree.revealItemPath("Page", List.of(), () -> true).get(5, TimeUnit.SECONDS));
             SwingUtilities.invokeAndWait(() -> {
                 TreePath row = tree.getSelectionPath();
                 tree.collapsePath(row);

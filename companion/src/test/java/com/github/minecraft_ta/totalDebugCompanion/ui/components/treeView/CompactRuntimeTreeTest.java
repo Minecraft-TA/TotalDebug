@@ -44,18 +44,18 @@ class CompactRuntimeTreeTest {
         var tree = new LazyFileJTree();
         edt(() -> { tree.setRootNodes(new ZipFileRootItem(jar)); return null; });
         try {
-            assertTrue(tree.revealItemPath("example.jar", List.of("com", "example", "mod", "A.class")).get(5, TimeUnit.SECONDS));
+            assertTrue(tree.revealItemPath("example.jar", List.of("com", "example", "mod", "A.class"), () -> true).get(5, TimeUnit.SECONDS));
             edt(() -> {
                 var file = (LazyTreeNode) tree.getSelectionPath().getLastPathComponent();
                 assertEquals("com.example.mod", file.getParent().getUserObject().getPresentation().primary());
                 assertEquals("com/example/mod/A.class", ((ZipFileRootItem.Entry) file.selectedItem()).getEntryPath());
                 return null;
             });
-            assertTrue(tree.revealItemPath("example.jar", List.of("com", "example")).get(5, TimeUnit.SECONDS));
+            assertTrue(tree.revealItemPath("example.jar", List.of("com", "example"), () -> true).get(5, TimeUnit.SECONDS));
             assertEquals(jar + "!/com/example/mod/", edt(() -> selected(tree).location()));
-            assertTrue(tree.revealItemPath("example.jar", List.of("assets", "example", "lang", "en_us.json")).get(5, TimeUnit.SECONDS));
+            assertTrue(tree.revealItemPath("example.jar", List.of("assets", "example", "lang", "en_us.json"), () -> true).get(5, TimeUnit.SECONDS));
             assertEquals("assets/example/lang", edt(() -> ((LazyTreeNode) tree.getSelectionPath().getParentPath().getLastPathComponent()).getUserObject().getPresentation().primary()));
-            assertTrue(tree.revealItemPath("example.jar", List.of("empty")).get(5, TimeUnit.SECONDS));
+            assertTrue(tree.revealItemPath("example.jar", List.of("empty"), () -> true).get(5, TimeUnit.SECONDS));
             assertTrue(edt(() -> ((LazyTreeNode) tree.getSelectionPath().getLastPathComponent()).isLeaf()));
             assertTrue(edt(() -> selected(tree).isDirectory()));
             var jarNode = edt(() -> (LazyTreeNode) ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0));
@@ -79,8 +79,8 @@ class CompactRuntimeTreeTest {
                 return result;
             });
             try {
-                assertTrue(tree.revealItemPath("packages.jar", List.of("com", "example", "mod", "A.class")).get(5, TimeUnit.SECONDS));
-                assertTrue(tree.revealItemPath("packages.jar", List.of("com")).get(5, TimeUnit.SECONDS));
+                assertTrue(tree.revealItemPath("packages.jar", List.of("com", "example", "mod", "A.class"), () -> true).get(5, TimeUnit.SECONDS));
+                assertTrue(tree.revealItemPath("packages.jar", List.of("com"), () -> true).get(5, TimeUnit.SECONDS));
                 edt(() -> {
                     var row = tree.getSelectionPath();
                     var node = (LazyTreeNode) row.getLastPathComponent();
@@ -125,7 +125,7 @@ class CompactRuntimeTreeTest {
             return null;
         });
         try {
-            assertTrue(tree.revealItemPath("Runtime", List.of("java.base", "java", "lang", "Object.class")).get(5, TimeUnit.SECONDS));
+            assertTrue(tree.revealItemPath("Runtime", List.of("java.base", "java", "lang", "Object.class"), () -> true).get(5, TimeUnit.SECONDS));
             edt(() -> {
                 LazyTreeNode packages = ((LazyTreeNode) tree.getSelectionPath().getLastPathComponent()).getParent();
                 assertEquals("java.lang", packages.getUserObject().getPresentation().primary());

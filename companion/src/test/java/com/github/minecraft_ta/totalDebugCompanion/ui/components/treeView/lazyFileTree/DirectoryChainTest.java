@@ -275,7 +275,7 @@ class DirectoryChainTest {
     @Test void revealThroughANamedContainerConsumesItsCompactedSegments() throws Exception {
         Path file = file();
         var tree = tree();
-        assertTrue(tree.revealItemPath("scripts", "modules", List.of("client", "items", "Test.tdscript")).get(5, TimeUnit.SECONDS));
+        assertTrue(tree.revealItemPath("scripts", "modules", List.of("client", "items", "Test.tdscript"), () -> true).get(5, TimeUnit.SECONDS));
         assertEquals(file, edt(() -> selected(tree)));
     }
 
@@ -374,7 +374,7 @@ class DirectoryChainTest {
     }
 
     private static void reveal(LazyFileJTree tree, String... path) throws Exception {
-        assertTrue(tree.revealItemPath("scripts", List.of(path)).get(5, TimeUnit.SECONDS));
+        assertTrue(tree.revealItemPath("scripts", List.of(path), () -> true).get(5, TimeUnit.SECONDS));
     }
 
     private static <T> T edt(Callable<T> work) throws Exception {

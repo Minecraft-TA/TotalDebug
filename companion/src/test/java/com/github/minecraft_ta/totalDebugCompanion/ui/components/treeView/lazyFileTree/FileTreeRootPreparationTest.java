@@ -1,109 +1,107 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProject;
+import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProjects;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
-import org.junit.jupiter.api.io.TempDir;
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.SwingUtilities;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * A Scripts folder made by Companion: the instance's folders are read again on their strand, the Scripts root appears,
+ * and no other root is listed again (docs/PROJECT_TREE.md).
+ */
 class FileTreeRootPreparationTest {
     @TempDir Path directory;
 
-    @Test void firstScriptsRootIsPreparedOffEdtWithoutRefreshingOtherRoots() throws Exception {
+    @Test
+    void aScriptsFolderMadeByCompanionShowsItsRootAndRescansNoOtherRoot() throws Exception {
         var scope = scope("game");
-        var selected = new AtomicReference<>(scope);
-        var view = edt(() -> new FileTreeView(selected::get, ignored -> { }));
-        var tree = (LazyFileJTree) view.getViewport().getView();
-        var factory = new HeldFactory();
-        var existingLoads = new AtomicInteger();
-        var existing = new DirectoryTreeItem("runtime") {
-            @Override public List<TreeItem> loadChildren() {
-                existingLoads.incrementAndGet();
-                return List.of(new TreeItem("Existing"));
-            }
-        };
+        Files.writeString(Files.createDirectories(scope.profile().workspaceDirectory().resolve("logs")).resolve("latest.log"), "");
+        scope.folders().refresh().get(5, TimeUnit.SECONDS);
+        var view = edt(() -> new FileTreeView(CurrentProjects.of(scope), ignored -> { }));
+        var tree = edt(() -> (LazyFileJTree) view.getViewport().getView());
         try {
-            edt(() -> { tree.setRootNodes(existing); tree.setItemFactory(factory); return null; });
-            assertTrue(tree.revealItemPath("runtime", List.of("Existing")).get(5, TimeUnit.SECONDS));
-            var selectedPath = edt(tree::getSelectionPath);
-            var existingNode = edt(() -> ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0));
+            assertTrue(tree.revealItemPath("modpack", List.of("logs"), () -> true).get(5, TimeUnit.SECONDS));
+            int modpackLoads = edt(() -> tree.loads("modpack"));
+            assertFalse(edt(() -> tree.hasRootNode("scripts")), "no Scripts folder, no root");
+
             Path scripts = Files.createDirectories(scope.paths().scripts());
             Files.writeString(scripts.resolve("First.tdscript"), "return 1;");
-            var first = edt(() -> view.refreshDirectory(scripts));
-            factory.prepared.get(5, TimeUnit.SECONDS);
-            assertEquals(42, edt(() -> 42), "The EDT must remain responsive while directory registration is held");
-            var second = edt(() -> view.refreshDirectory(scripts));
-            edt(() -> null);
-            assertEquals(1, factory.calls.get(), "Concurrent refreshes share root preparation");
-            assertFalse(first.isDone());
-            factory.release.complete(null);
-            CompletableFuture.allOf(first, second).get(5, TimeUnit.SECONDS);
-            edt(() -> {
-                var root = (LazyTreeNode) tree.getModel().getRoot();
-                assertEquals(2, root.getChildCount());
-                assertSame(existingNode, root.getChildAt(1));
-                assertEquals(selectedPath, tree.getSelectionPath());
-                assertEquals(1, existingLoads.get(), "Installing Scripts must not rescan an unrelated loaded root");
-                return null;
-            });
-            assertTrue(tree.revealItemPath("scripts", List.of("First.tdscript")).get(5, TimeUnit.SECONDS));
+            view.refreshDirectory(scripts).get(5, TimeUnit.SECONDS);
+            assertTrue(edt(() -> tree.hasRootNode("scripts")), "the root appears once the folders were read");
+            assertTrue(tree.revealItemPath("scripts", List.of("First.tdscript"), () -> true).get(5, TimeUnit.SECONDS));
+            assertEquals(modpackLoads, (int) edt(() -> tree.loads("modpack")), "showing Scripts lists no other root again");
         } finally {
-            factory.release.complete(null);
             edt(() -> { view.dispose(); return null; });
             scope.retire();
             scope.close();
         }
     }
 
-    @ParameterizedTest @ValueSource(strings = {"switch", "retire", "dispose"})
-    void staleRootPreparationDisposesItsWatcherInsteadOfInstalling(String change) throws Exception {
+    @Test
+    void aSwitchWhileTheFoldersAreReadShowsOnlyTheNewProjectsRoots() throws Exception {
         var original = scope("original");
         var replacement = scope("replacement");
-        var selected = new AtomicReference<>(original);
-        var view = edt(() -> new FileTreeView(selected::get, ignored -> { }));
-        var tree = (LazyFileJTree) view.getViewport().getView();
-        var factory = new HeldFactory();
+        original.folders().refresh().get(5, TimeUnit.SECONDS);
+        replacement.folders().refresh().get(5, TimeUnit.SECONDS);
+        CurrentProject current = CurrentProjects.of(original);
+        var view = edt(() -> new FileTreeView(current, ignored -> { }));
+        var tree = edt(() -> (LazyFileJTree) view.getViewport().getView());
+        Path scripts = Files.createDirectories(original.paths().scripts());
         try {
-            edt(() -> { tree.setItemFactory(factory); return null; });
-            Path scripts = Files.createDirectories(original.paths().scripts());
-            var pending = edt(() -> view.refreshDirectory(scripts));
-            factory.prepared.get(5, TimeUnit.SECONDS);
-            edt(() -> {
-                switch (change) {
-                    case "switch" -> { selected.set(replacement); view.reloadProfile(); }
-                    case "retire" -> original.retire();
-                    case "dispose" -> view.dispose();
-                    default -> throw new AssertionError(change);
-                }
-                return null;
+            var refreshed = holdingOwners(() -> {
+                var refresh = view.refreshDirectory(scripts);
+                // The user switches to another project while the original's folders are read.
+                current.set(replacement);
+                return refresh;
             });
-            factory.release.complete(null);
-            assertThrows(ExecutionException.class, () -> pending.get(5, TimeUnit.SECONDS));
-            factory.disposed.get(5, TimeUnit.SECONDS);
-            assertEquals(0, edt(() -> ((LazyTreeNode) tree.getModel().getRoot()).getChildCount()));
+            refreshed.handle((ignored, failure) -> null).get(5, TimeUnit.SECONDS);
+            settle();
+            assertFalse(edt(() -> tree.hasRootNode("scripts")), "the original's Scripts folder is not shown for the replacement");
         } finally {
-            factory.release.complete(null);
             edt(() -> { view.dispose(); return null; });
             original.retire(); original.close();
             replacement.retire(); replacement.close();
+        }
+    }
+
+    /** Runs {@code action} while every owner's thread is held, so the readings it asks for wait, then lets them go. */
+    private static <T> T holdingOwners(Callable<T> action) throws Exception {
+        CountDownLatch started = new CountDownLatch(4);
+        CountDownLatch release = new CountDownLatch(1);
+        for (int owner = 0; owner < 4; owner++) {
+            Workers.strand().execute(() -> {
+                started.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+        assertTrue(started.await(5, TimeUnit.SECONDS), "every owner's thread is held");
+        try {
+            T result = action.call();
+            settle();
+            return result;
+        } finally {
+            release.countDown();
         }
     }
 
@@ -111,23 +109,10 @@ class FileTreeRootPreparationTest {
         return new ProjectScope(new Object(), CompanionProfile.forGame(Files.createDirectory(directory.resolve(name))), InstanceState.inMemory(), ChangeRecord.inMemory());
     }
 
-    private static final class HeldFactory extends FileTreeItemFactory {
-        final CompletableFuture<Void> prepared = new CompletableFuture<>();
-        final CompletableFuture<Void> release = new CompletableFuture<>();
-        final CompletableFuture<Void> disposed = new CompletableFuture<>();
-        final AtomicInteger calls = new AtomicInteger();
-
-        @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path) {
-            assertFalse(SwingUtilities.isEventDispatchThread(), "Filesystem validation must run off the EDT");
-            calls.incrementAndGet();
-            var item = new FileSystemDirectoryItem(tree, path) {
-                @Override public void dispose() { super.dispose(); disposed.complete(null); }
-            };
-            prepared.complete(null);
-            try { release.get(5, TimeUnit.SECONDS); }
-            catch (Exception failure) { item.dispose(); throw new AssertionError(failure); }
-            return item;
-        }
+    private static void settle() throws Exception {
+        for (int step = 0; step < 3; step++) SwingUtilities.invokeAndWait(() -> { });
+        Thread.sleep(200);
+        SwingUtilities.invokeAndWait(() -> { });
     }
 
     private static <T> T edt(Callable<T> call) throws Exception {

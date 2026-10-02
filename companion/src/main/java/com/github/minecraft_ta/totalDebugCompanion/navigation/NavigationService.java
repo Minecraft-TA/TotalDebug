@@ -154,18 +154,19 @@ public final class NavigationService {
             @Override
             public void actionPerformed(ActionEvent event) {
                 if (!isCurrent(context)) return;
+                BooleanSupplier wanted = () -> isCurrent(context);
                 CompletableFuture<Void> result = switch (target) {
-                    case NavigationTarget.LocalFile file -> requireRevealed(fileTree.revealLocalPath(file.path()));
-                    case NavigationTarget.ArchiveEntry entry -> requireRevealed(fileTree.revealArchivePath(entry.archive(), entry.entryName()));
+                    case NavigationTarget.LocalFile file -> requireRevealed(fileTree.revealLocalPath(file.path(), wanted));
+                    case NavigationTarget.ArchiveEntry entry -> requireRevealed(fileTree.revealArchivePath(entry.archive(), entry.entryName(), wanted));
                     case NavigationTarget.RuntimeClass type -> revealRuntimePath(type.binaryName(), type.binaryName().replace('.', '/') + ".class");
-                    case NavigationTarget.ModPage page -> requireRevealed(fileTree.revealModPage(page));
-                    case NavigationTarget.PackConfiguration ignored -> requireRevealed(fileTree.revealPackConfiguration());
-                    case NavigationTarget.PackResources ignored -> requireRevealed(fileTree.revealPackResources());
-                    case NavigationTarget.Logs ignored -> requireRevealed(fileTree.revealLogs());
-                    case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges());
-                    case NavigationTarget.KeyBindings ignored -> requireRevealed(fileTree.revealKeyBindings());
-                    case NavigationTarget.World world -> requireRevealed(fileTree.revealWorld(world.tab()));
-                    case NavigationTarget.Content content -> requireRevealed(fileTree.revealContent(content.registry()));
+                    case NavigationTarget.ModPage page -> requireRevealed(fileTree.revealModPage(page, wanted));
+                    case NavigationTarget.PackConfiguration ignored -> requireRevealed(fileTree.revealPackConfiguration(wanted));
+                    case NavigationTarget.PackResources ignored -> requireRevealed(fileTree.revealPackResources(wanted));
+                    case NavigationTarget.Logs ignored -> requireRevealed(fileTree.revealLogs(wanted));
+                    case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges(wanted));
+                    case NavigationTarget.KeyBindings ignored -> requireRevealed(fileTree.revealKeyBindings(wanted));
+                    case NavigationTarget.World world -> requireRevealed(fileTree.revealWorld(world.tab(), wanted));
+                    case NavigationTarget.Content content -> requireRevealed(fileTree.revealContent(content.registry(), wanted));
                     default -> throw new IllegalArgumentException("Editor has no tree location");
                 };
                 reportFailure(result, target);
@@ -807,7 +808,8 @@ public final class NavigationService {
                 NavigationService.this.fileTree.revealRuntimePath(
                                 ownerClassName,
                                 entryPath,
-                                source
+                                source,
+                                () -> isCurrentNavigation(context)
                         )
                         .whenComplete((revealed, failure) -> {
                     if (failure != null) {
@@ -831,13 +833,15 @@ public final class NavigationService {
     }
 
     private CompletableFuture<Void> revealRuntimeModule(NavigationTarget.RuntimeModuleNode target) {
-        requireNavigationAdmission(captureContext());
-        return requireRevealed(this.fileTree.revealRuntimeModule(target.moduleId()));
+        Context context = captureContext();
+        requireNavigationAdmission(context);
+        return requireRevealed(this.fileTree.revealRuntimeModule(target.moduleId(), () -> isCurrentNavigation(context)));
     }
 
     private CompletableFuture<Void> revealLocalPath(NavigationTarget.LocalDirectory target) {
-        requireNavigationAdmission(captureContext());
-        return this.fileTree.revealLocalPath(target.path()).thenCompose(revealed -> revealed
+        Context context = captureContext();
+        requireNavigationAdmission(context);
+        return this.fileTree.revealLocalPath(target.path(), () -> isCurrentNavigation(context)).thenCompose(revealed -> revealed
                 ? CompletableFuture.completedFuture(null)
                 : CompletableFuture.failedFuture(new IllegalStateException(
                 "Directory is not present in the file tree: " + target.path()
@@ -845,8 +849,9 @@ public final class NavigationService {
     }
 
     private CompletableFuture<Void> revealArchivePath(NavigationTarget.ArchiveDirectory target) {
-        requireNavigationAdmission(captureContext());
-        return this.fileTree.revealArchivePath(target.archive(), target.entryName()).thenCompose(revealed ->
+        Context context = captureContext();
+        requireNavigationAdmission(context);
+        return this.fileTree.revealArchivePath(target.archive(), target.entryName(), () -> isCurrentNavigation(context)).thenCompose(revealed ->
                 revealed
                         ? CompletableFuture.completedFuture(null)
                         : CompletableFuture.failedFuture(new IllegalStateException(

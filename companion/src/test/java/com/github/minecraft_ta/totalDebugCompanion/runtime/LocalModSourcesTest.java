@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
+import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProjects;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
@@ -32,9 +33,9 @@ class LocalModSourcesTest {
             assertEquals(1, scope.sources().modules().size());
             assertEquals("sample.jar", scope.sources().modules().getFirst().displayName());
             assertEquals("pack.mcmeta", new ZipFileRootItem(archive).loadChildren().getFirst().getName());
+            scope.folders().refresh().get(5, java.util.concurrent.TimeUnit.SECONDS);
             SwingUtilities.invokeAndWait(() -> {
-                var view = new FileTreeView(() -> scope, ignored -> { });
-                view.reloadProfile();
+                var view = new FileTreeView(CurrentProjects.of(scope), ignored -> { });
                 var tree = (LazyFileJTree) view.getViewport().getView();
                 var root = tree.getModel().getRoot();
                 assertEquals(2, tree.getModel().getChildCount(root));

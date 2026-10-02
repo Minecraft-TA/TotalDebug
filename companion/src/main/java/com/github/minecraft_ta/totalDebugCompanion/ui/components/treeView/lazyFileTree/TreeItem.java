@@ -25,6 +25,14 @@ public class TreeItem {
 
     }
 
+    /**
+     * What the row's content is built from, compared with {@code equals}, or null. A reload that finds a row whose source
+     * equals the one shown keeps the row's item, so a load under way below it goes on; null replaces it every time.
+     */
+    public Object source() {
+        return null;
+    }
+
     public boolean isHiddenRoot() {
         return isHiddenRoot;
     }

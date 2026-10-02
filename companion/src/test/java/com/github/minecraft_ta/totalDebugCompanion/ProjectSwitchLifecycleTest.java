@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProjects;
+import java.util.function.BooleanSupplier;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode;
@@ -253,8 +255,8 @@ class ProjectSwitchLifecycleTest {
         var lookupCount = new AtomicInteger();
         var created = new CompletableFuture<NavigationService>();
         SwingUtilities.invokeAndWait(() -> {
-            var tree = new FileTreeView(app::currentScope, ignored -> { }) {
-                @Override public CompletableFuture<Boolean> revealLocalPath(Path path) {
+            var tree = new FileTreeView(CurrentProjects.of(app.currentScope()), ignored -> { }) {
+                @Override public CompletableFuture<Boolean> revealLocalPath(Path path, BooleanSupplier stillWanted) {
                     lookupCount.incrementAndGet();
                     var delayed = pending.getAndSet(null);
                     if (delayed != null) lookupStarted.get().complete(null);

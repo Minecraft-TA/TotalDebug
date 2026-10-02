@@ -21,10 +21,15 @@ import java.awt.event.KeyEvent;
 import java.awt.event.ActionEvent;
 import java.util.List;
 import java.util.*;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 
 public class LazyFileJTree extends JTree {
+
+    /** How far a root's reload reaches: its own rows, or also every row loaded below them. */
+    public enum Reload { ROWS, BELOW }
 
     private long interactionRevision;
     private TreePath gesturePath;
@@ -47,6 +52,8 @@ public class LazyFileJTree extends JTree {
     private final Map<LazyTreeNode, CompletableFuture<Void>> activeLoads = new IdentityHashMap<>();
     /** Nodes whose next load updates only their own rows, keeping the rows loaded below them. */
     private final Set<LazyTreeNode> rowsOnly = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** How many loads started per row, by the names on its path, which tests count. Swing thread only. */
+    private final Map<List<String>, Integer> loads = new HashMap<>();
 
     public LazyFileJTree() {
         setShowsRootHandles(true);
@@ -305,13 +312,24 @@ public class LazyFileJTree extends JTree {
         return (DefaultTreeModel) super.getModel();
     }
 
+    /** Loads the rows of the root showing {@code item} again, where they were loaded or are loading. */
     public void loadItemsForTopLevelItem(TreeItem item) {
         UIUtils.onEdt(() -> {
             var node = findTopLevelNodeForItem(item);
-            if (node == null) return;
+            if (node == null || !node.areChildrenLoaded() && !this.activeLoads.containsKey(node)) return;
             node.markChildrenStale();
             loadItemsForNode(node);
         });
+    }
+
+    /** How many loads of the rows below the row on {@code path}, its names from the root down, started. Swing thread only. */
+    public int loads(String... path) {
+        return this.loads.getOrDefault(List.of(path), 0);
+    }
+
+    /** How many loads started per row, by the names on its path from the root down. Swing thread only. */
+    public Map<List<String>, Integer> loads() {
+        return Map.copyOf(this.loads);
     }
 
     private CompletableFuture<Void> loadItemsForNode(LazyTreeNode node) {
@@ -328,6 +346,8 @@ public class LazyFileJTree extends JTree {
 
         int revision = node.revision();
         DirectoryTreeItem source = (DirectoryTreeItem) node.getUserObject();
+        List<String> address = address(new TreePath(node.getPath()), false);
+        if (address != null) this.loads.merge(address, 1, Integer::sum);
         CompletableFuture<Void> load = CompletableFuture.supplyAsync(() ->
                 DirectoryChain.compactChildren(source.loadChildren()).stream()
                 .sorted(LazyFileJTree::compareTreeItems)
@@ -373,11 +393,15 @@ public class LazyFileJTree extends JTree {
         return load;
     }
 
-    /** Reveals an item below one named container beneath a top-level root. */
+    /**
+     * Reveals an item below one named container beneath a top-level root, if {@code stillWanted} still holds in the Swing
+     * step that selects it; otherwise the future completes as cancelled and nothing on screen changes.
+     */
     public CompletableFuture<Boolean> revealItemPath(
             String topLevelRoot,
             String containerName,
-            List<String> directorySegments
+            List<String> directorySegments,
+            BooleanSupplier stillWanted
     ) {
         Objects.requireNonNull(topLevelRoot, "topLevelRoot");
         String container = Objects.requireNonNull(containerName, "containerName");
@@ -392,7 +416,7 @@ public class LazyFileJTree extends JTree {
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         SwingUtilities.invokeLater(() -> {
             interactionRevision++;
-            revealItemPathOnEventThread(topLevelRoot, container, segments).whenComplete((revealed, failure) -> {
+            revealItemPathOnEventThread(topLevelRoot, container, segments, stillWanted).whenComplete((revealed, failure) -> {
                     if (failure != null) {
                         result.completeExceptionally(failure);
                     } else {
@@ -403,8 +427,11 @@ public class LazyFileJTree extends JTree {
         return result;
     }
 
-    /** Reveals an item relative to a top-level directory root. */
-    public CompletableFuture<Boolean> revealItemPath(String topLevelRoot, List<String> directorySegments) {
+    /**
+     * Reveals an item relative to a top-level directory root, if {@code stillWanted} still holds in the Swing step that
+     * selects it; otherwise the future completes as cancelled and nothing on screen changes.
+     */
+    public CompletableFuture<Boolean> revealItemPath(String topLevelRoot, List<String> directorySegments, BooleanSupplier stillWanted) {
         Objects.requireNonNull(topLevelRoot, "topLevelRoot");
         List<String> segments = List.copyOf(Objects.requireNonNull(directorySegments, "directorySegments"));
         if (segments.stream().anyMatch(String::isBlank)) {
@@ -418,7 +445,7 @@ public class LazyFileJTree extends JTree {
             CompletableFuture<Located> path = root == null
                     ? CompletableFuture.completedFuture(null)
                     : findItemPath(root, segments, 0);
-            path.whenComplete((revealedPath, failure) -> completeReveal(result, revealedPath, failure));
+            path.whenComplete((revealedPath, failure) -> completeReveal(result, revealedPath, failure, stillWanted));
         });
         return result;
     }
@@ -426,7 +453,8 @@ public class LazyFileJTree extends JTree {
     private CompletableFuture<Boolean> revealItemPathOnEventThread(
             String topLevelRoot,
             String containerName,
-            List<String> segments
+            List<String> segments,
+            BooleanSupplier stillWanted
     ) {
         LazyTreeNode root = findTopLevelNode(topLevelRoot);
         if (root == null) {
@@ -442,27 +470,36 @@ public class LazyFileJTree extends JTree {
             var path = new ArrayList<>(segments);
             path.add(0, containerName);
             return findItemPath(root, path, 0);
-        }).thenApply(this::revealPath);
+        }).thenApply(location -> revealPath(location, stillWanted));
     }
 
     private void completeReveal(
             CompletableFuture<Boolean> result,
             Located path,
-            Throwable failure
+            Throwable failure,
+            BooleanSupplier stillWanted
     ) {
         if (failure != null) {
             result.completeExceptionally(failure);
-        } else {
-            result.complete(revealPath(path));
+            return;
+        }
+        try {
+            result.complete(revealPath(path, stillWanted));
+        } catch (CancellationException overtaken) {
+            result.completeExceptionally(overtaken);
         }
     }
 
     private record Located(TreePath path, int segment) { }
 
-    private boolean revealPath(Located location) {
+    /** Selects the row found, if {@code stillWanted} still holds; a reveal no longer wanted throws, changing nothing. */
+    private boolean revealPath(Located location, BooleanSupplier stillWanted) {
+        if (!stillWanted.getAsBoolean()) throw new CancellationException("The reveal is no longer wanted");
         if (location == null || !isAttached((LazyTreeNode) location.path().getLastPathComponent())) {
             return false;
         }
+        // The row the user is taken to wins over a restoration of rows a reload under way would put back.
+        this.restoration = null;
         TreePath path = location.path();
         setSelectionPath(path);
         ((LazyTreeNode) path.getLastPathComponent()).selectSegment(location.segment());
@@ -544,15 +581,68 @@ public class LazyFileJTree extends JTree {
         getModel().nodeStructureChanged(hiddenRoot);
     }
 
-    /** Refresh the current project's roots without replacing surviving tree paths. */
-    public void refreshRootNodes(DirectoryTreeItem... roots) {
-        updateChildren((LazyTreeNode) getModel().getRoot(), List.of(roots), true);
+    /**
+     * Shows {@code roots}, in their order, keeping the node of a root shown under the same name: a root whose item is the
+     * one shown stays as it is, another item takes its place, a root not shown before is added, and a root missing from
+     * {@code roots} is removed. Only the roots {@code reloads} names load their rows again, and only where those were
+     * loaded or are loading: a root whose rows were never loaded stays unloaded. A root added or removed above the
+     * visible rows leaves the top visible row where it was. Swing thread only.
+     */
+    public void updateRoots(List<? extends DirectoryTreeItem> roots, Map<String, Reload> reloads) {
+        if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Tree roots must be updated on the Swing event thread");
+        Rectangle visible = getVisibleRect();
+        TreePath top = getClosestPathForLocation(visible.x, visible.y);
+        Rectangle topBounds = top == null ? null : getPathBounds(top);
+        int topOffset = topBounds == null ? 0 : topBounds.y - visible.y;
+        LazyTreeNode hidden = (LazyTreeNode) getModel().getRoot();
+        Set<String> names = new HashSet<>();
+        roots.forEach(root -> names.add(root.getName()));
+        for (LazyTreeNode child : children(hidden)) {
+            if (names.contains(child.getUserObject().getName())) continue;
+            disposeNode(child);
+            this.rowsOnly.remove(child);
+            getModel().removeNodeFromParent(child);
+        }
+        for (int index = 0; index < roots.size(); index++) {
+            DirectoryTreeItem item = roots.get(index);
+            LazyTreeNode node = findTopLevelNode(item.getName());
+            if (node == null) {
+                getModel().insertNodeInto(new LazyTreeNode(item), hidden, Math.min(index, hidden.getChildCount()));
+                continue;
+            }
+            if (node.getUserObject() != item) {
+                node.getUserObject().dispose();
+                node.setUserObject(item);
+            }
+            getModel().nodeChanged(node);
+            Reload reload = reloads.get(item.getName());
+            if (reload != null) reload(node, reload);
+        }
+        if (top != null && isAttached((TreeNode) top.getLastPathComponent())) {
+            Rectangle moved = getPathBounds(top);
+            if (moved != null) scrollRectToVisible(new Rectangle(visible.x, moved.y - topOffset, visible.width, visible.height));
+        }
     }
 
-    /** Installs one prepared root without refreshing the other roots or their loaded children. */
-    public void insertRootNode(DirectoryTreeItem item, int index) {
-        if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Tree roots must be installed on the Swing event thread");
-        getModel().insertNodeInto(new LazyTreeNode(item), (LazyTreeNode) getModel().getRoot(), index);
+    /**
+     * Loads the rows of the root named {@code name} again, where they were loaded or are loading, as after the user came
+     * back to Companion. Swing thread only. Completes once they are loaded again.
+     */
+    public CompletableFuture<Void> reloadRoot(String name, Reload reload) {
+        if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Tree roots must be reloaded on the Swing event thread");
+        LazyTreeNode root = findTopLevelNode(name);
+        return root == null ? CompletableFuture.completedFuture(null) : reload(root, reload);
+    }
+
+    /** Loads the rows of {@code root} again, where they were loaded or are loading; {@code reload} says how far. */
+    private CompletableFuture<Void> reload(LazyTreeNode root, Reload reload) {
+        boolean loading = this.activeLoads.containsKey(root);
+        if (!root.areChildrenLoaded() && !loading) return CompletableFuture.completedFuture(null);
+        // A load already running may be one that reloads what is below, which a reload of the rows must not narrow.
+        if (reload == Reload.BELOW) this.rowsOnly.remove(root);
+        else if (!loading) this.rowsOnly.add(root);
+        root.markChildrenStale(reload == Reload.BELOW);
+        return loadItemsForNode(root);
     }
 
     private record ItemKey(Class<?> type, String name) {
@@ -580,12 +670,18 @@ public class LazyFileJTree extends JTree {
         List<LazyTreeNode> updated = new ArrayList<>();
         List<LazyTreeNode> refresh = new ArrayList<>();
         Set<LazyTreeNode> changed = new HashSet<>();
-        for (TreeItem item : items) {
+        for (TreeItem loaded : items) {
+            TreeItem item = loaded;
             LazyTreeNode child = existing.remove(new ItemKey(item));
             if (child == null) {
                 child = new LazyTreeNode(item);
             } else {
                 TreeItem previous = child.getUserObject();
+                if (item.source() != null && item.source().equals(previous.source())) {
+                    // The row shows what it showed: it keeps its item, so a load under way below it goes on.
+                    item.dispose();
+                    item = previous;
+                }
                 if (!previous.getPresentation().equals(item.getPresentation())
                         || previous.getIcon() != item.getIcon()
                         || !Objects.equals(previous.getTooltip(), item.getTooltip())) changed.add(child);
@@ -751,61 +847,27 @@ public class LazyFileJTree extends JTree {
         return result;
     }
 
-    /** Loads the rows under a top-level root again, when they were loaded; the other roots keep theirs. */
-    public CompletableFuture<Void> refreshRoot(String name) {
-        var result = new CompletableFuture<Void>();
-        UIUtils.onEdt(() -> {
-            LazyTreeNode root = findTopLevelNode(name);
-            if (root == null || !(root.areChildrenLoaded() || this.activeLoads.containsKey(root))) {
-                result.complete(null);
-                return;
-            }
-            this.rowsOnly.remove(root);
-            root.markChildrenStale();
-            loadItemsForNode(root).whenComplete((ignored, failure) -> {
-                if (failure == null) result.complete(null); else result.completeExceptionally(failure);
-            });
-        });
-        return result;
-    }
-
     /** Whether a top-level root named {@code name} is shown. Swing thread only. */
     public boolean hasRootNode(String name) {
         return findTopLevelNode(name) != null;
     }
 
     /**
-     * Puts {@code item} in place of the top-level root of its name, and loads the rows under it again when they were
-     * loaded: with {@code below}, also every row loaded below them; otherwise only the rows directly under it, for a root
-     * whose rows count what a source holds, such as the changes in effect. The other roots are left alone. Swing thread
-     * only. Completes once the rows under it are loaded again.
+     * Puts back the row on {@code segments} below the root named {@code rootName}, selected or expanded, as a script action
+     * does after it moved files, if {@code stillWanted} still holds in the step that changes the tree; otherwise the future
+     * completes as cancelled and nothing changes.
      */
-    public CompletableFuture<Void> refreshRoot(DirectoryTreeItem item, boolean below) {
-        if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Tree roots must be refreshed on the Swing event thread");
-        LazyTreeNode root = findTopLevelNode(item.getName());
-        if (root == null) return CompletableFuture.completedFuture(null);
-        TreeItem previous = root.getUserObject();
-        if (previous != item) {
-            previous.dispose();
-            root.setUserObject(item);
-            getModel().nodeChanged(root);
-        }
-        boolean loading = this.activeLoads.containsKey(root);
-        if (!root.areChildrenLoaded() && !loading) return CompletableFuture.completedFuture(null);
-        // A load already running may be one that refreshes what is below, which this must not narrow.
-        if (below) this.rowsOnly.remove(root);
-        else if (!loading) this.rowsOnly.add(root);
-        root.markChildrenStale(below);
-        return loadItemsForNode(root);
-    }
-
-    public CompletableFuture<Void> restoreItemPath(String rootName, List<String> segments, boolean select) {
+    public CompletableFuture<Void> restoreItemPath(String rootName, List<String> segments, boolean select, BooleanSupplier stillWanted) {
         var result = new CompletableFuture<Void>();
         UIUtils.onEdt(() -> {
             var root = findTopLevelNode(rootName);
             if (root == null) { result.complete(null); return; }
             findItemPath(root, segments, 0).whenComplete((path, failure) -> {
-                if (path != null) {
+                if (!stillWanted.getAsBoolean()) {
+                    result.completeExceptionally(new CancellationException("The restoration is no longer wanted"));
+                    return;
+                }
+                if (path != null && attached(path)) {
                     if (select) {
                         addSelectionPath(path.path());
                         ((LazyTreeNode) path.path().getLastPathComponent()).selectSegment(path.segment());
