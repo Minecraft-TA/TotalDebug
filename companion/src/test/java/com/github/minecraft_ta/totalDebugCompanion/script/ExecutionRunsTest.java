@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
@@ -13,6 +14,7 @@ import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.tth05.scnet.message.IMessageBus;
 import org.junit.jupiter.api.Test;
@@ -77,7 +79,10 @@ class ExecutionRunsTest {
             var recorder = new Recorder();
             int id = fixture.runs.open(recorder);
 
-            fixture.runs.relayFailed(id, "The server does not have TotalDebug");
+            // As the game sends it; a refusal of another kind of message with the same correlation is not this run's.
+            fixture.sessionBus.post(new RelayFailedMessage(id, CompanionProtocol.CHANGE, "Not this run"));
+            assertTrue(recorder.events.isEmpty());
+            fixture.sessionBus.post(new RelayFailedMessage(id, CompanionProtocol.RUN_SCRIPT, "The server does not have TotalDebug"));
             fixture.deliver(id, ExecutionStatus.RUN_COMPLETED);
 
             assertEquals(1, recorder.events.size());

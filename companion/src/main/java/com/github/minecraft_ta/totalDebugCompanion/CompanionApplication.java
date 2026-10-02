@@ -10,11 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
-import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
-import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsRequestMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
@@ -35,6 +31,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ServerScriptAccess;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
@@ -42,8 +39,6 @@ import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -68,7 +63,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -103,11 +97,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::sendRun);
     private final ItemIconService itemIcons = new ItemIconService();
     private volatile CompanionMcpServer mcpServer;
-    /** The world whose server was last asked about scripts on this connection, as {@code PLAYING} names it, or null. */
-    private volatile String serverScriptsTarget;
-    /** Correlates the questions whether the server runs scripts; they count down from -1, script runs up from 1. */
-    private final AtomicInteger serverScriptsRequests = new AtomicInteger();
-    private volatile int serverScriptsRequest;
+    /** Whether the server the game plays runs this player's scripts. */
+    private final ServerScriptAccess serverScripts;
     // Job tracking must survive HTTP shutdown so project retirement can still cancel submitted code.
     private volatile CodeModeJobService mcpJobs;
     private final DebuggerSessionController debuggerController;
@@ -207,7 +198,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                         if (executionRuns != null) executionRuns.disconnected(connection,
                                 closed || reconnect != null || current == null || current.phase() == ProjectScope.Phase.RETIRED);
                         scriptCompiler.runtimeDisconnected();
-                        serverScriptsTarget = null;
+                        if (serverScripts != null) serverScripts.disconnected();
                         if (current != null) current.location().disconnected();
                         if (reconnect != null)
                             updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
@@ -222,12 +213,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     if (pendingLaunch != null) queueLaunch(pendingLaunch);
                 }
 
-                @Override
-                public void playing(PlayingMessage message) {
-                    // The current project's game location takes it too, through its own route.
-                    requestServerScripts(message.payload());
-                }
-
                 @Override public void failed(String detail, ClientHelloMessage hello) {
                     synchronized (lifecycleLock) {
                         if (closed || switching) return;
@@ -235,30 +220,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                         if (reconnect != null) failReconnect(reconnect, detail);
                         else if (launch != null) failLaunch(launch, detail);
                         else updateGameStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Connection failed", detail));
-                    }
-                }
-
-                @Override
-                public void relayFailed(RelayFailedMessage message) {
-                    // The refused message and its correlation name the request together.
-                    switch (message.messageId()) {
-                        case CompanionProtocol.SERVER_SCRIPTS_REQUEST -> {
-                            if (message.correlation() == serverScriptsRequest) scriptCompiler.serverAccess("", message.reason());
-                        }
-                        case CompanionProtocol.RUN_SCRIPT, CompanionProtocol.STOP_SCRIPT -> {
-                            if (executionRuns != null) executionRuns.relayFailed(message.correlation(), message.reason());
-                        }
-                        // A change's or reload's reaches the current project's pipeline through its own route.
-                        default -> { }
-                    }
-                }
-
-                @Override
-                public void serverScripts(ServerScriptsMessage message) {
-                    // An answer to an earlier question may still arrive after the game moved on.
-                    String target = serverScriptsTarget;
-                    if (target != null && message.request() == serverScriptsRequest) {
-                        scriptCompiler.serverAccess(target, message.refusal());
                     }
                 }
 
@@ -271,6 +232,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             synchronized (lifecycleLock) { makeCurrent(current); }
             scriptExecutions = new ScriptExecutionService(session, scriptCompiler, this::isConnected);
             executionRuns = new ExecutionRuns(session, scriptExecutions);
+            serverScripts = new ServerScriptAccess(session, session::sendToServer, () -> !switching, scriptCompiler::serverAccess,
+                    executionRuns::serverSessionEnded);
             editorRuns = new EditorScriptRunService(executionRuns, notifications);
             session.setProjectSelectionHandler(hello -> {
                 try { openProject(CompanionProfile.fromHello(hello)).join(); }
@@ -310,6 +273,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         cancelLaunch("Companion is closing");
         notifications.close();
         itemIcons.close();
+        if (serverScripts != null) serverScripts.close();
         if (executionRuns != null) executionRuns.close();
         if (editorRuns != null) editorRuns.close();
         try (var shutdown = RuntimePhase.start("companion.shutdown")) {
@@ -611,11 +575,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 long established = connected.connection();
                 // Sends only on this connection, never to a game that connected after it.
                 current.location().connected(message -> connected.send(established, message));
-                // What the game told before the connection was taken as established names the server to ask.
-                this.serverScriptsTarget = null;
-                scriptCompiler.serverAccess("", ScriptCompilationService.NO_SERVER);
-                PlayingPayload playing = current.location().playing();
-                if (playing != null) requestServerScripts(playing);
+                serverScripts.connected(current.location().playing());
             }
             if (reconnect != null && reconnect.project == current) {
                 var completed = reconnect;
@@ -1199,33 +1159,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (switching) return false;
         CompanionSession current = session;
         return current != null && current.sendToServer(message, message.scriptId(), message.world());
-    }
-
-    /**
-     * Asks the server whether it runs this player's scripts once the game plays a world or a server with TotalDebug, and
-     * again only when it plays another. The runs on the server before end then, since they can no longer report back.
-     */
-    private void requestServerScripts(PlayingPayload playing) {
-        String target = switch (playing) {
-            case PlayingPayload.Singleplayer singleplayer -> singleplayer.identity();
-            case PlayingPayload.Multiplayer multiplayer when multiplayer.totalDebug() -> multiplayer.identity();
-            default -> null;
-        };
-        if (Objects.equals(target, this.serverScriptsTarget)) return;
-        if (this.serverScriptsTarget != null && executionRuns != null) executionRuns.serverSessionEnded();
-        this.serverScriptsTarget = target;
-        if (target == null) {
-            scriptCompiler.serverAccess("", ScriptCompilationService.NO_SERVER);
-            return;
-        }
-        scriptCompiler.serverAccess("", "Waiting for the server");
-        int request = this.serverScriptsRequests.decrementAndGet();
-        this.serverScriptsRequest = request;
-        CompanionSession current = session;
-        if (switching || current == null || !current.sendToServer(new ServerScriptsRequestMessage(request), request, target)) {
-            this.serverScriptsTarget = null;
-            scriptCompiler.serverAccess("", "Minecraft disconnected");
-        }
     }
 
     CompanionSession session() { return session; }

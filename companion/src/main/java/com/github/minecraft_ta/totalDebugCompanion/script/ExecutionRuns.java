@@ -3,10 +3,12 @@ package com.github.minecraft_ta.totalDebugCompanion.script;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope.InactiveProjectException;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
+import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
 
 import java.util.List;
 import java.util.Map;
@@ -39,6 +41,7 @@ public final class ExecutionRuns implements AutoCloseable {
     private final ScriptExecutionService scripts;
     private final Map<Integer, Run> runs = new ConcurrentHashMap<>();
     private final BiConsumer<Side, ExecutionResultMessage> listener = (from, message) -> result(from, message.scriptId(), message.result());
+    private final Runnable stopTakingRefusals;
     private int lastId;
     private boolean closed;
 
@@ -46,6 +49,12 @@ public final class ExecutionRuns implements AutoCloseable {
         this.session = Objects.requireNonNull(session, "session");
         this.scripts = Objects.requireNonNull(scripts, "scripts");
         session.addExecutionResultListener(this.listener);
+        // The refused message and its correlation name the run together.
+        this.stopTakingRefusals = session.on(RelayFailedMessage.class, message -> {
+            if (message.messageId() == CompanionProtocol.RUN_SCRIPT || message.messageId() == CompanionProtocol.STOP_SCRIPT) {
+                relayFailed(message.correlation(), message.reason());
+            }
+        });
     }
 
     /** Registers an observer before its source is built. Ids are unique for this Companion process. */
@@ -113,7 +122,7 @@ public final class ExecutionRuns implements AutoCloseable {
     }
 
     /** The game client could not carry run {@code id} to the server. */
-    public void relayFailed(int id, String reason) {
+    private void relayFailed(int id, String reason) {
         Run run = this.runs.remove(id);
         if (run != null) run.observer().result(id, ExecutionResult.failed("", null, reason));
     }
@@ -168,6 +177,7 @@ public final class ExecutionRuns implements AutoCloseable {
             this.closed = true;
         }
         this.session.removeExecutionResultListener(this.listener);
+        this.stopTakingRefusals.run();
         disconnectAll(true);
     }
 }
