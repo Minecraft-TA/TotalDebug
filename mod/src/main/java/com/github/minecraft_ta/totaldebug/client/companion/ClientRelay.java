@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totaldebug.network.ToServerPayload;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -83,8 +84,8 @@ public final class ClientRelay {
             this.fromServer.clear();
             this.assembling = chunk.companion();
         }
-        this.fromServer.accept(chunk).ifPresent(message -> this.companionApp.sendFromServer(chunk.companion(),
-                new RelayedMessage(0, "", message.messageId(), message.body())));
+        this.fromServer.accept(chunk).ifPresent(message -> this.companionApp.send(chunk.companion(), new FromServerMessage(
+                new RelayedMessage(0, "", message.messageId(), message.body()))));
     }
 
     /** The player left the server: what it was sending is dropped. */

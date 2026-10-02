@@ -27,6 +27,7 @@ import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyAssignmentsMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
@@ -96,7 +97,7 @@ public final class TotalDebugClient {
                 },
                 companionApp::sendPreparedFile
         );
-        this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.sendPackStack(new PackStackMessage(stack)));
+        this.packStacks = new PackStackPublisher(gameDirectory, stack -> companionApp.send(new PackStackMessage(stack)));
         companionApp.setSessionOpenedHandler(() -> Minecraft.getInstance().execute(this::tellSession));
         companionApp.setPackCatalogHandler((inventoryId, modules) -> {
             // Icons are drawn from the resource snapshot, which must follow the current packs even when the
@@ -107,7 +108,7 @@ public final class TotalDebugClient {
         ChangeTable changes = new ChangeTable(Map.of(KeyBindingEdits.CATEGORY, new KeyBindingEdits(),
                 ResourcePackEdits.CATEGORY, new ResourcePackEdits()), Minecraft.getInstance());
         companionApp.on(ChangeMessage.class, (message, companion) -> Minecraft.getInstance().execute(() -> changes.apply(message.payload())
-                .thenAccept(result -> companionApp.sendChangeResult(companion, new ChangeResultMessage(result)))));
+                .thenAccept(result -> companionApp.send(companion, new ChangeResultMessage(result)))));
         companionApp.on(ReloadMessage.class, (message, companion) -> Minecraft.getInstance().execute(() ->
                 ResourceReloads.reload(message.payload(), result -> answerReload(companion, result))));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
@@ -209,7 +210,7 @@ public final class TotalDebugClient {
         if (assigned.equals(this.keys)) return;
         this.keys = assigned;
         // Queued rather than run now, as Minecraft.execute would on this thread.
-        Minecraft.getInstance().tell(this.companionApp::sendKeyAssignments);
+        Minecraft.getInstance().tell(() -> this.companionApp.send(new KeyAssignmentsMessage()));
     }
 
     /** The player joined a singleplayer world or a server. Client thread only. */
@@ -231,12 +232,12 @@ public final class TotalDebugClient {
         if (playing.equals(this.playing)) return;
         this.playing = playing;
         // The resource packs are the game client's, whatever it plays.
-        this.companionApp.sendPlaying(new PlayingMessage(this.playing));
+        this.companionApp.send(new PlayingMessage(this.playing));
     }
 
     /** Tells a newly connected Companion what the game plays and its packs. Client thread only. */
     private void tellSession() {
-        this.companionApp.sendPlaying(new PlayingMessage(this.playing));
+        this.companionApp.send(new PlayingMessage(this.playing));
         this.packStacks.republish();
     }
 
@@ -247,7 +248,7 @@ public final class TotalDebugClient {
     private void answerReload(int companion, ReloadResultPayload result) {
         Minecraft.getInstance().execute(() -> {
             this.packStacks.publish();
-            this.companionApp.sendReloadResult(companion, new ReloadResultMessage(result));
+            this.companionApp.send(companion, new ReloadResultMessage(result));
         });
     }
 

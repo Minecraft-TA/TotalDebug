@@ -18,9 +18,6 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyAssignmentsMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
@@ -28,7 +25,6 @@ import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
@@ -131,9 +127,9 @@ public final class CompanionAppClient implements AutoCloseable {
                 "Ignoring companion script request {} because no handler is installed", message.scriptId()));
         on(StopScriptMessage.class, (message, companion) -> TotalDebug.LOGGER.warn(
                 "Ignoring companion stop-script request {} because no handler is installed", message.scriptId()));
-        on(ChangeMessage.class, (message, companion) -> sendChangeResult(companion, new ChangeResultMessage(
+        on(ChangeMessage.class, (message, companion) -> send(companion, new ChangeResultMessage(
                 ChangeResultPayload.refused(message.payload().requestId(), "The game is not ready to change anything yet"))));
-        on(ReloadMessage.class, (message, companion) -> sendReloadResult(companion, new ReloadResultMessage(
+        on(ReloadMessage.class, (message, companion) -> send(companion, new ReloadResultMessage(
                 new ReloadResultPayload(message.payload().requestId(), 0, List.of(), "The game is not ready to reload resources yet"))));
         on(ToServerMessage.class, (message, companion) -> sendRelayFailed(companion, message.payload(),
                 "The game's relay to the server is not ready"));
@@ -255,8 +251,8 @@ public final class CompanionAppClient implements AutoCloseable {
 
     /**
      * Handles Companion's requests of {@code type}, with the number of the connection that sent them, on the connection
-     * thread, replacing what handled them before. A request that comes before its connection's handshake completed fails
-     * that session instead, whatever its type (docs/SYSTEMS.md, section 6).
+     * thread, replacing what handled them before, also on a connection already open. A request that comes before its
+     * connection's handshake completed fails that session instead, whatever its type (docs/SYSTEMS.md, section 6).
      */
     public <M extends AbstractMessage> void on(Class<M> type, ObjIntConsumer<M> handler) {
         this.requests.put(Objects.requireNonNull(type, "type"), Objects.requireNonNull(handler, "handler"));
@@ -289,36 +285,8 @@ public final class CompanionAppClient implements AutoCloseable {
         }
     }
 
-    /** Answers a change of Companion connection {@code companion}, and no connection opened since. */
-    public void sendChangeResult(int companion, ChangeResultMessage message) {
-        send(companion, message);
-    }
-
-    /** Answers a reload of Companion connection {@code companion}, and no connection opened since. */
-    public void sendReloadResult(int companion, ReloadResultMessage message) {
-        send(companion, message);
-    }
-
-    public void sendPackStack(PackStackMessage message) {
-        send(message);
-    }
-
-    public void sendPlaying(PlayingMessage message) {
-        send(message);
-    }
-
-    /** Tells Companion that the game saved changed key bindings in {@code options.txt}. */
-    public void sendKeyAssignments() {
-        send(new KeyAssignmentsMessage());
-    }
-
     public void setProgressListener(Consumer<CompanionStartupProgress> listener) {
         this.progressListener = Objects.requireNonNull(listener, "listener");
-    }
-
-    /** Hands Companion connection {@code companion} a message the server sent it, unread. */
-    public void sendFromServer(int companion, RelayedMessage message) {
-        send(companion, new FromServerMessage(message));
     }
 
     /** Tells Companion connection {@code companion} a message it sent for the server could not be carried, and why. */
@@ -333,14 +301,6 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     public void sendExecutionResult(int scriptId, ExecutionResult result) {
-        if (!isAuthenticated()) {
-            TotalDebug.LOGGER.debug(
-                    "Discarding execution result {} for script {} because the session is not authenticated",
-                    result.status(),
-                    scriptId
-            );
-            return;
-        }
         send(new ExecutionResultMessage(scriptId, result));
     }
 
@@ -385,7 +345,12 @@ public final class CompanionAppClient implements AutoCloseable {
                 return;
             }
             if (message instanceof RunScriptMessage run && !compiledForThisInventory(run)) return;
-            ((ObjIntConsumer<M>) this.requests.get(type)).accept(message, attempt.number);
+            ObjIntConsumer<M> handler = (ObjIntConsumer<M>) this.requests.get(type);
+            if (handler == null) {
+                TotalDebug.LOGGER.warn("Ignoring Companion's {} because nothing in the game handles it", type.getSimpleName());
+                return;
+            }
+            handler.accept(message, attempt.number);
         });
     }
 
@@ -416,7 +381,10 @@ public final class CompanionAppClient implements AutoCloseable {
             }
             attempt.ready.complete(null);
         });
-        for (Class<? extends AbstractMessage> type : this.requests.keySet()) listenAuthenticated(attempt, type);
+        // Every request the protocol lets Companion send the game, so a handler installed later is found when it comes.
+        for (Class<? extends AbstractMessage> type : ProtocolBindings.toGame()) {
+            if (type != ReadyMessage.class && type != ServerHelloMessage.class) listenAuthenticated(attempt, type);
+        }
         transport.addConnectionListener(new IConnectionListener() {
             @Override public void onConnected() {
                 if (closing || connection != attempt) { transport.close(); return; }
@@ -461,7 +429,8 @@ public final class CompanionAppClient implements AutoCloseable {
         return current != null && current.authenticated() && !current.finished.get();
     }
 
-    private void send(AbstractMessage message) {
+    /** Sends {@code message} to the authenticated Companion connection, if there is one. */
+    public void send(AbstractMessage message) {
         var current = connection;
         if (current == null) return;
         send(current, message);
@@ -471,7 +440,7 @@ public final class CompanionAppClient implements AutoCloseable {
      * Sends {@code message} only to Companion connection {@code companion}: a restarted Companion counts its request ids
      * from the beginning again, so an answer meant for an earlier connection must not reach it.
      */
-    private void send(int companion, AbstractMessage message) {
+    public void send(int companion, AbstractMessage message) {
         var current = connection;
         if (current == null || current.number != companion) return;
         send(current, message);

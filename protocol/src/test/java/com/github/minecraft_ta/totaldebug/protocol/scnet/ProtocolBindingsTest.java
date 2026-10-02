@@ -10,11 +10,15 @@ import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import com.github.tth05.scnet.message.IMessageProcessor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -25,6 +29,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Timeout(10)
 class ProtocolBindingsTest {
+    @Test
+    void everyMessageIsDeclaredOnceWithItsIdAndAWayToTravel() throws Exception {
+        Set<Short> ids = new HashSet<>();
+        Set<Class<?>> types = new HashSet<>();
+        for (ProtocolBindings.Binding binding : ProtocolBindings.ALL) {
+            assertTrue(ids.add(binding.id()), "id " + binding.id() + " is declared twice");
+            assertTrue(types.add(binding.type()), binding.type().getSimpleName() + " is declared twice");
+            assertEquals(binding.type(), binding.create().get().getClass(), "each binding makes its own message");
+            assertTrue(binding.direct() != ProtocolBindings.Direct.NONE || binding.relay() != ProtocolBindings.Relay.NONE,
+                    binding.type().getSimpleName() + " travels nowhere");
+        }
+        Set<Short> constants = new HashSet<>();
+        for (Field field : CompanionProtocol.class.getFields()) {
+            if (field.getType() == short.class && Modifier.isStatic(field.getModifiers())) constants.add(field.getShort(null));
+        }
+        assertEquals(constants, ids, "every id of CompanionProtocol is bound, and only those");
+    }
+
     @Test
     void aMessageForTheServerTravelsFromCompanionToTheModInItsEnvelope() throws Exception {
         try (Server server = endpoint(ProtocolBindings::registerCompanion); Client client = new Client()) {
