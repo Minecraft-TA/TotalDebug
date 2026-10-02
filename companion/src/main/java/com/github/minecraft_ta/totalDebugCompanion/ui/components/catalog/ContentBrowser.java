@@ -98,7 +98,10 @@ public final class ContentBrowser extends JPanel {
         select(this.pendingKind);
     }
 
-    /** Selects the kind of {@code registry}, such as {@code minecraft:fluid}, or All for an empty or unlisted one. */
+    /**
+     * Selects the kind of {@code registry}, such as {@code minecraft:fluid}, or All for an empty or unlisted one. With
+     * content listed the request is settled at once, so All chosen again is the user's; with none it waits for content.
+     */
     public void select(String registry) {
         this.pendingKind = registry == null ? ALL : registry;
         int position = 0;
@@ -111,6 +114,7 @@ public final class ContentBrowser extends JPanel {
         } finally {
             this.updating = false;
         }
+        if (!this.content.isEmpty()) this.pendingKind = selectedKind();
         showSelected();
     }
 

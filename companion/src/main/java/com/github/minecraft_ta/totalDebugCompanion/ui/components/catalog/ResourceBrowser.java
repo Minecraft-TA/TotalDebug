@@ -237,7 +237,10 @@ public final class ResourceBrowser extends JPanel {
         } finally {
             this.updating = false;
         }
+        String requested = this.pendingCategory;
         applyFilter();
+        // Nothing listed has no category to choose from: one asked for waits for a listing with something.
+        if (prepared.resources().isEmpty()) this.pendingCategory = requested;
     }
 
     /** Shows a message in place of the resources, for example why they could not be read; empty shows the resources. */
@@ -246,9 +249,14 @@ public final class ResourceBrowser extends JPanel {
         else this.body.showMessage(message);
     }
 
+    /**
+     * Selects the category {@code key}, or All when it is not listed. With resources listed the request is settled at
+     * once, so All chosen again is the user's; with none listed it waits for a listing with something.
+     */
     public void selectCategory(String key) {
         this.pendingCategory = key == null ? ALL : key;
         selectKey(this.pendingCategory);
+        if (!this.resources.isEmpty()) this.pendingCategory = selectedCategory();
     }
 
     private void selectKey(String key) {
