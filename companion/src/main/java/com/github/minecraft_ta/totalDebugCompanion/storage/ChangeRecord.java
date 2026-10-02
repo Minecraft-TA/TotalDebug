@@ -118,7 +118,7 @@ public final class ChangeRecord implements AutoCloseable {
     private volatile int count;
     private final Signal changed = new Signal();
 
-    private ChangeRecord(JsonStateWriter writer, Clock clock, Path gameDirectory) {
+    ChangeRecord(JsonStateWriter writer, Clock clock, Path gameDirectory) {
         this.writer = writer;
         this.clock = clock;
         this.gameDirectory = gameDirectory;

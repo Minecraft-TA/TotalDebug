@@ -53,8 +53,15 @@ public final class GlobalConfig {
     /** The width each kind of sidebar was last dragged to, by kind, such as {@code resource-categories}. */
     private final Map<String, Integer> sidebarWidths = new ConcurrentHashMap<>();
     private JsonStateWriter writer;
+    /** How the settings' writer writes its file; a test pauses it. */
+    private final JsonStateWriter.Write write;
 
     GlobalConfig() {
+        this(JsonStateWriter.Write.FILE);
+    }
+
+    GlobalConfig(JsonStateWriter.Write write) {
+        this.write = write;
     }
 
     public String themeId() {
@@ -260,7 +267,7 @@ public final class GlobalConfig {
         if (this.writer != null) {
             this.writer.close();
         }
-        this.writer = new JsonStateWriter(target);
+        this.writer = new JsonStateWriter(target, this.write);
         if (persisted == null) {
             return;
         }
@@ -309,10 +316,14 @@ public final class GlobalConfig {
         this.writer.schedule(GSON.toJsonTree(snapshot));
     }
 
-    /** Flushes any pending change synchronously. Called during shutdown. */
-    public synchronized void saveNow() throws IOException {
-        if (this.writer != null) {
-            this.writer.flush();
+    /** Flushes any pending change synchronously, without holding the settings' lock. Called during shutdown. */
+    public void saveNow() throws IOException {
+        JsonStateWriter writer;
+        synchronized (this) {
+            writer = this.writer;
+        }
+        if (writer != null) {
+            writer.flush();
         }
     }
 
