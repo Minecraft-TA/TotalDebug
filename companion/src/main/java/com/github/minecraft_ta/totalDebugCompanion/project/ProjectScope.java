@@ -5,6 +5,9 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.WorldReading;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyAssignmentsMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PreparedFileMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
@@ -38,6 +41,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import java.io.IOException;
 import java.net.URI;
@@ -140,6 +144,16 @@ public final class ProjectScope implements AutoCloseable {
                 routes.on(PackStackMessage.class, message -> this.packs.named(message.payload())),
                 routes.on(DatapacksMessage.class, message -> this.packs.datapacks(message.world(), message.payload(), message.refusal())),
                 routes.on(PlayingMessage.class, message -> this.location.playing(message.payload())),
+                routes.on(DebugTargetMessage.class, message -> this.location.process(message.processId())),
+                routes.on(PreparedFileMessage.class, message -> {
+                    PreparedFilePayload file = message.payload();
+                    if (file.kind() != PreparedFilePayload.Kind.PACK_CATALOG) return;
+                    switch (file.state()) {
+                        case PREPARING -> this.catalog.capturing();
+                        case READY -> this.catalog.accept(file.inventoryId(), Path.of(file.file()), Workers.files());
+                        case FAILED -> this.catalog.failed(file.detail());
+                    }
+                }),
                 routes.on(KeyAssignmentsMessage.class, message -> this.keyBindings.saved()),
                 // The refused message and its correlation name the request together.
                 routes.on(RelayFailedMessage.class, message -> {

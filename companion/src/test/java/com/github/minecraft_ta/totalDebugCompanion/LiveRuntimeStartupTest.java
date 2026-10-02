@@ -15,6 +15,13 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PreparedFileMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsRequestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
+import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
@@ -57,6 +64,43 @@ class LiveRuntimeStartupTest {
     @TempDir Path root;
 
     @UiTest
+    @Test void theConnectedGameIsAskedWhetherItsWorldsServerRunsScriptsAndItsAnswerReachesTheCompiler() throws Exception {
+        var profile = CompanionProfile.forGame(Files.createDirectories(root.resolve("game")));
+        var config = new CompanionLaunchConfiguration(root.resolve("app"));
+        GlobalConfig.getInstance().loadFrom(config.appHome());
+        try (var app = new CompanionApplication(config, TOKEN)) {
+            app.session().bindAndPublish(config);
+            app.openProject(profile).get(10, TimeUnit.SECONDS);
+            var compiler = field(app, "scriptCompiler", ScriptCompilationService.class);
+            try (var game = new Game(app, profile, config)) {
+                var asked = new CompletableFuture<ServerScriptsRequestMessage>();
+                game.client.getMessageBus().listenAlways(ToServerMessage.class, message -> {
+                    if (RelayedMessages.decodeToServer(message.payload()) instanceof ServerScriptsRequestMessage request) asked.complete(request);
+                });
+                var world = new PlayingPayload.Singleplayer(profile.workspaceDirectory().resolve("saves/World").toString());
+                game.client.getMessageProcessor().enqueueMessage(new PlayingMessage(world));
+                var request = asked.get(5, TimeUnit.SECONDS);
+                await(() -> serverAccess(compiler).contains("Waiting for the server"));
+
+                // The server answers through the game client.
+                game.client.getMessageProcessor().enqueueMessage(new FromServerMessage(RelayedMessages.fromServer(
+                        new ServerScriptsMessage(request.request(), "Not an operator"))));
+                await(() -> serverAccess(compiler).contains(world.identity()) && serverAccess(compiler).contains("Not an operator"),
+                        () -> serverAccess(compiler));
+            }
+            await(() -> serverAccess(compiler).contains("Minecraft disconnected"), () -> serverAccess(compiler));
+        }
+    }
+
+    /** What the compiler was told about the server's scripts last. */
+    private static String serverAccess(ScriptCompilationService compiler) {
+        try {
+            return String.valueOf(field(compiler, "serverAccess", Object.class));
+        } catch (ReflectiveOperationException failure) {
+            throw new AssertionError(failure);
+        }
+    }
+
     @Test void restoredInventoryCannotCompileDuringLiveStartupAndTheNewInventoryBecomesUsable() throws Exception {
         var cachedA = cache("A", "oldOnly");
         var cachedB = cache("B", "newOnly");

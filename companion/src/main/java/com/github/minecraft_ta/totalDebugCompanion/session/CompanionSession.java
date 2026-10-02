@@ -8,7 +8,6 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FromServerMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RelayFailedMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ToServerMessage;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
@@ -20,8 +19,6 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PreparedFileMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PreparedFilePayload;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.PlayingMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.Server;
 import com.github.tth05.scnet.message.AbstractMessage;
@@ -78,12 +75,6 @@ public final class CompanionSession implements AutoCloseable, MessageRoutes {
         /** The state of a file the game prepares for Companion: its runtime inventory, pack catalog or item icons. */
         default void preparedFile(PreparedFilePayload file) {
         }
-
-        /** The game's server answered whether it runs this player's scripts. */
-        default void serverScripts(ServerScriptsMessage message) {}
-        /** The game client could not carry a message to the server; {@code correlation} is the message's. */
-        default void relayFailed(RelayFailedMessage message) {}
-        default void playing(PlayingMessage message) {}
 
         default void debugTarget(DebugTargetMessage message) {
         }
@@ -260,8 +251,6 @@ public final class CompanionSession implements AutoCloseable, MessageRoutes {
     private void registerHandlers() {
         this.server.getMessageBus().listenAlways(ClientHelloMessage.class, this::handleHello);
         this.server.getMessageBus().listenAlways(PreparedFileMessage.class, message -> this.listener.preparedFile(message.payload()));
-        this.server.getMessageBus().listenAlways(ServerScriptsMessage.class, this.listener::serverScripts);
-        this.server.getMessageBus().listenAlways(RelayFailedMessage.class, this.listener::relayFailed);
         // The server's messages arrive through the game client and reach the same listeners as the game's own.
         this.server.getMessageBus().listenAlways(FromServerMessage.class, message -> {
             AbstractMessage unwrapped;
@@ -278,7 +267,6 @@ public final class CompanionSession implements AutoCloseable, MessageRoutes {
                 this.server.getMessageBus().post(unwrapped);
             }
         });
-        this.server.getMessageBus().listenAlways(PlayingMessage.class, this.listener::playing);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
         this.server.getMessageBus().listenAlways(InspectSubjectMessage.class, this.listener::inspectSubject);
         this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->

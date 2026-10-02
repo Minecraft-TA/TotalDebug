@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.ProjectSelectionRequest;
 import com.github.minecraft_ta.totaldebug.protocol.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
@@ -108,6 +109,29 @@ class CompanionReconnectTest {
                 assertThrows(ExecutionException.class, () -> app.reconnectGame(oldScope).get(5, TimeUnit.SECONDS));
                 assertTrue(app.isConnected());
                 assertEquals(second, app.currentProject());
+            }
+        }
+    }
+
+    @Test void aReloadTheOldProjectWaitsForFailsWhenAnotherProjectBecomesCurrent() throws Exception {
+        var ui = new TestUi();
+        var config = new CompanionLaunchConfiguration(root.resolve("app"));
+        try (var app = new CompanionApplication(config, TOKEN, ui)) {
+            app.session().bindAndPublish(config);
+            var first = profile("first");
+            app.openProject(first).get(5, TimeUnit.SECONDS);
+            var oldScope = app.requireProject();
+            try (var game = socket(config)) {
+                assertTrue(handshake(game, first, TOKEN));
+                await(() -> oldScope.location().connection() != null);
+                // The game never answers this reload.
+                var waiting = oldScope.pipeline().reloads().resources(oldScope.location().connection(), ReloadPayload.Kind.LANGUAGE, "", "");
+
+                app.openProject(profile("second")).get(5, TimeUnit.SECONDS);
+                var failure = assertThrows(ExecutionException.class, () -> waiting.get(5, TimeUnit.SECONDS),
+                        "the old project's game is gone, so it stops waiting at the switch, not at a timeout");
+                assertInstanceOf(IOException.class, failure.getCause());
+                assertNull(oldScope.location().connection(), "the old project no longer has the game");
             }
         }
     }
