@@ -95,9 +95,11 @@ class ModResourcesTest {
     @Test
     void resourcesKnowTheirPathInsideTheirCategory() {
         ModResources.Resource texture = new ModResources.Resource(this.directory, false,
-                "assets/framedblocks/textures/block/framed_slab.png", new ModResources.Category("assets", "textures"));
+                "assets/framedblocks/textures/block/framed_slab.png", new ModResources.Category("assets", "textures"),
+                new ModResources.Version(0, 0));
         ModResources.Resource sounds = new ModResources.Resource(this.directory, false,
-                "assets/framedblocks/sounds.json", new ModResources.Category("assets", "sounds"));
+                "assets/framedblocks/sounds.json", new ModResources.Category("assets", "sounds"),
+                new ModResources.Version(0, 0));
 
         assertEquals("framedblocks", texture.namespace());
         assertEquals("block/framed_slab.png", texture.relativePath());

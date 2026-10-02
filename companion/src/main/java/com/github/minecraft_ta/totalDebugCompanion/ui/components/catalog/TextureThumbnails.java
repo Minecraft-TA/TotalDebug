@@ -35,8 +35,9 @@ final class TextureThumbnails {
     private final int size;
     /** Where the previews are read, one at a time, as the archives are open there. */
     private final Strand loader = Workers.fileStrand();
-    /** On the loader only. */
-    private final Map<Path, ZipFile> archives = new HashMap<>();
+    /** On the loader only; by archive and version, so a replaced archive is opened anew. */
+    private final Map<Archive, ZipFile> archives = new HashMap<>();
+    /** By resource, whose version tells a texture replaced at the same path apart. */
     private final IconLoader<ModResources.Resource> icons;
     /** Previews requested and not yet finished; the archives close when none remain. */
     private final AtomicInteger pending = new AtomicInteger();
@@ -76,10 +77,11 @@ final class TextureThumbnails {
             if (Files.size(file) > MAX_TEXTURE_BYTES) throw new IOException("Texture too large");
             return Files.readAllBytes(file);
         }
-        ZipFile archive = this.archives.get(texture.file());
+        Archive key = new Archive(texture.file(), texture.version());
+        ZipFile archive = this.archives.get(key);
         if (archive == null) {
             archive = new ZipFile(texture.file().toFile());
-            this.archives.put(texture.file(), archive);
+            this.archives.put(key, archive);
         }
         var entry = archive.getEntry(texture.path());
         if (entry == null || entry.getSize() > MAX_TEXTURE_BYTES) throw new IOException("Texture unavailable");
@@ -98,6 +100,9 @@ final class TextureThumbnails {
             }
         }
         this.archives.clear();
+    }
+
+    private record Archive(Path file, ModResources.Version version) {
     }
 
     void dispose() {

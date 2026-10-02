@@ -481,7 +481,7 @@ final class PacksPanel extends JPanel {
         if (row.pack().file() != null) {
             menu.add(ContextMenus.action("Open", null, "ENTER", () -> open(row)));
             menu.add(ContextMenus.action("Show in Explorer", null, null,
-                    () -> this.body.showNotice(Explorer.show(row.pack().file()).orElse(""))));
+                    () -> Explorer.show(row.pack().file(), this.body::showNotice)));
         } else if (!row.modId().isEmpty()) {
             menu.add(ContextMenus.action("Open " + row.from(), null, "ENTER", () -> open(row)));
         }

@@ -46,8 +46,18 @@ public final class ModResources {
         }
     }
 
-    /** One resource inside a mod file; {@code path} is relative to the file's root. */
-    public record Resource(Path file, boolean archive, String path, Category category) {
+    /**
+     * Which version of a file was listed: a loose file's size and modified time, or for an archive's entry the archive's,
+     * in milliseconds. A file replaced by one of the same size and time counts as the same.
+     */
+    public record Version(long size, long modified) {
+    }
+
+    /**
+     * One resource inside a mod file; {@code path} is relative to the file's root. Its {@code version} tells a file
+     * replaced at the same path apart, as for its thumbnail.
+     */
+    public record Resource(Path file, boolean archive, String path, Category category, Version version) {
         public String fileName() {
             return this.path.substring(this.path.lastIndexOf('/') + 1);
         }
@@ -137,7 +147,7 @@ public final class ModResources {
                 return cached.resources();
             }
         }
-        List<Resource> resources = listArchive(normalized);
+        List<Resource> resources = listArchive(normalized, new Version(attributes.size(), modified));
         synchronized (CACHE) {
             CACHE.put(normalized, new Listing(attributes.size(), modified, resources));
         }
@@ -153,7 +163,7 @@ public final class ModResources {
                 .toList();
     }
 
-    private static List<Resource> listArchive(Path archive) throws IOException {
+    private static List<Resource> listArchive(Path archive, Version version) throws IOException {
         List<Resource> resources = new ArrayList<>();
         try (ZipFile zip = new ZipFile(archive.toFile())) {
             var entries = zip.entries();
@@ -162,7 +172,7 @@ public final class ModResources {
                 if (entry.isDirectory()) continue;
                 Category category = category(entry.getName());
                 if (category != null) {
-                    resources.add(new Resource(archive, true, entry.getName(), category));
+                    resources.add(new Resource(archive, true, entry.getName(), category, version));
                 }
             }
         }
@@ -176,17 +186,30 @@ public final class ModResources {
             Path rootDirectory = directory.resolve(root);
             if (!Files.isDirectory(rootDirectory)) continue;
             try (Stream<Path> files = Files.walk(rootDirectory)) {
-                files.filter(Files::isRegularFile).forEach(path -> {
+                files.forEach(path -> {
                     String relative = directory.relativize(path).toString().replace('\\', '/');
                     Category category = category(relative);
-                    if (category != null) {
-                        resources.add(new Resource(directory, false, relative, category));
+                    if (category == null) return;
+                    BasicFileAttributes file = attributes(path);
+                    // A file reached through a link counts, as the walk follows no folder link.
+                    if (file != null && file.isRegularFile()) {
+                        resources.add(new Resource(directory, false, relative, category,
+                                new Version(file.size(), file.lastModifiedTime().toMillis())));
                     }
                 });
             }
         }
         resources.sort(Comparator.comparing(Resource::path));
         return List.copyOf(resources);
+    }
+
+    /** The file's attributes, following a link, or null when it is gone or unreadable. */
+    private static BasicFileAttributes attributes(Path path) {
+        try {
+            return Files.readAttributes(path, BasicFileAttributes.class);
+        } catch (IOException gone) {
+            return null;
+        }
     }
 
     /** {@code assets/<ns>/<folder>/...} and {@code data/<ns>/<folder>/...}; a file directly in the namespace is its own category. */

@@ -267,7 +267,7 @@ public final class WorldPanel extends JPanel {
         content.add(facts);
         LinkLabel folder = new LinkLabel(saved.directory().getFileName().toString(), Icons.FOLDER,
                 Tooltip.of("Show in Explorer").detail(Tooltip.shortPath(saved.directory())).html(),
-                () -> this.notice.show(Explorer.show(saved.directory()).orElse("")));
+                () -> Explorer.show(saved.directory(), this.notice::show));
         content.add(new PageSection("Files", PageSection.linkRows(List.of(new PageSection.LinkRow("Folder", List.of(folder))))));
         this.overview.removeAll();
         this.overview.add(content, BorderLayout.NORTH);

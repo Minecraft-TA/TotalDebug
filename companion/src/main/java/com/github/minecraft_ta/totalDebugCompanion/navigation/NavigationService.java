@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.PackResourcesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LogsView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PackView;
 import com.github.minecraft_ta.totalDebugCompanion.model.WorldView;
+import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
@@ -569,8 +570,10 @@ public final class NavigationService {
         RuntimeBinding installed = context.runtime();
         if (installed == null) throw new IllegalStateException("Decompilation is unavailable");
         var service = installed.decompiler();
-        return service.load(binaryName).thenCompose(source -> {
+        // On file work, also when the source was decompiled already: finding the location checks the source's folder.
+        return service.load(binaryName).thenComposeAsync(source -> {
             int offset = offsetResolver.applyAsInt(source);
+            EditorLocation location = source.location();
             return dispatchNavigation(() -> {
                 if (!isCurrentNavigation(context) || service != requireProject().requireRuntime().decompiler()) {
                     return CompletableFuture.failedFuture(new CancellationException("Runtime changed during source navigation"));
@@ -578,14 +581,14 @@ public final class NavigationService {
                 return openRuntimeEditor(installed,
                         CodeView.class,
                         view -> view.getPath().equals(source.path()),
-                        () -> new CodeView(editors.get(), source, source.location(), installed)
+                        () -> new CodeView(editors.get(), source, location, installed)
                 ).thenCompose(view -> view.navigateToOffset(offset, () -> isCurrentNavigation(context)).thenRun(() -> {
                     if (executionLine > 0) {
                         view.showExecutionLine(executionLine);
                     }
                 }));
             }, activation);
-        });
+        }, Workers.files());
     }
 
     /**

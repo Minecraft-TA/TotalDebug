@@ -31,6 +31,7 @@ import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import java.awt.BorderLayout;
 import java.awt.Component;
@@ -180,11 +181,17 @@ public final class ResourceBrowser extends JPanel {
      */
     public record Prepared(List<ModResources.Resource> resources, List<String> lowercasePaths, Map<String, Integer> counts,
                            Set<String> animated, Map<String, String> from, Map<String, List<String>> hidden) {
+        /** No resources, as for a page that could not read them. */
+        public static final Prepared NONE = new Prepared(List.of(), List.of(), Map.of(), Set.of(), Map.of(), Map.of());
     }
 
-    /** Prepares {@code resources} to show. It takes a while for a whole pack, so it runs off the Swing thread there. */
+    /**
+     * Prepares {@code resources} to show, in the page's read: sorting them takes a while for a whole pack or a large mod,
+     * so it never runs on the Swing thread.
+     */
     public static Prepared prepare(List<ModResources.Resource> resources, Map<String, String> from,
                                    Map<String, List<String>> hidden) {
+        if (SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Resources are prepared off the Swing thread");
         // Sorted once here, by keys made once, instead of on every keystroke.
         List<String> keys = new ArrayList<>(resources.size());
         for (ModResources.Resource resource : resources) keys.add(resource.relativePath() + '\u0000' + resource.path());
@@ -209,10 +216,6 @@ public final class ResourceBrowser extends JPanel {
         }
         return new Prepared(List.copyOf(sorted), List.copyOf(lowercase), counts, Set.copyOf(animated), Map.copyOf(from),
                 Map.copyOf(hidden));
-    }
-
-    public void setResources(List<ModResources.Resource> resources) {
-        setResources(prepare(resources, Map.of(), Map.of()));
     }
 
     public void setResources(Prepared prepared) {
