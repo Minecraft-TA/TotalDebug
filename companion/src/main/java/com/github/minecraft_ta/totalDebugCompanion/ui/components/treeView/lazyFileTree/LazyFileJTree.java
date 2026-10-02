@@ -52,8 +52,6 @@ public class LazyFileJTree extends JTree {
     private final Map<LazyTreeNode, CompletableFuture<Void>> activeLoads = new IdentityHashMap<>();
     /** Nodes whose next load updates only their own rows, keeping the rows loaded below them. */
     private final Set<LazyTreeNode> rowsOnly = Collections.newSetFromMap(new IdentityHashMap<>());
-    /** How many loads started per row, by the names on its path, which tests count. Swing thread only. */
-    private final Map<List<String>, Integer> loads = new HashMap<>();
 
     public LazyFileJTree() {
         setShowsRootHandles(true);
@@ -324,12 +322,22 @@ public class LazyFileJTree extends JTree {
 
     /** How many loads of the rows below the row on {@code path}, its names from the root down, started. Swing thread only. */
     public int loads(String... path) {
-        return this.loads.getOrDefault(List.of(path), 0);
+        return loads().getOrDefault(List.of(path), 0);
     }
 
-    /** How many loads started per row, by the names on its path from the root down. Swing thread only. */
+    /**
+     * How many loads started per row shown, by the names on its path from the root down; a row removed takes its count
+     * with it. Swing thread only.
+     */
     public Map<List<String>, Integer> loads() {
-        return Map.copyOf(this.loads);
+        Map<List<String>, Integer> loads = new HashMap<>();
+        var rows = Collections.list(((LazyTreeNode) getModel().getRoot()).depthFirstEnumeration());
+        for (var row : rows) {
+            if (!(row instanceof LazyTreeNode node) || node.loads() == 0) continue;
+            List<String> address = address(new TreePath(node.getPath()), false);
+            if (address != null) loads.put(address, node.loads());
+        }
+        return loads;
     }
 
     private CompletableFuture<Void> loadItemsForNode(LazyTreeNode node) {
@@ -346,8 +354,7 @@ public class LazyFileJTree extends JTree {
 
         int revision = node.revision();
         DirectoryTreeItem source = (DirectoryTreeItem) node.getUserObject();
-        List<String> address = address(new TreePath(node.getPath()), false);
-        if (address != null) this.loads.merge(address, 1, Integer::sum);
+        node.loadStarted();
         CompletableFuture<Void> load = CompletableFuture.supplyAsync(() ->
                 DirectoryChain.compactChildren(source.loadChildren()).stream()
                 .sorted(LazyFileJTree::compareTreeItems)
@@ -415,7 +422,6 @@ public class LazyFileJTree extends JTree {
 
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         SwingUtilities.invokeLater(() -> {
-            interactionRevision++;
             revealItemPathOnEventThread(topLevelRoot, container, segments, stillWanted).whenComplete((revealed, failure) -> {
                     if (failure != null) {
                         result.completeExceptionally(failure);
@@ -440,7 +446,6 @@ public class LazyFileJTree extends JTree {
 
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         SwingUtilities.invokeLater(() -> {
-            interactionRevision++;
             LazyTreeNode root = findTopLevelNode(topLevelRoot);
             CompletableFuture<Located> path = root == null
                     ? CompletableFuture.completedFuture(null)

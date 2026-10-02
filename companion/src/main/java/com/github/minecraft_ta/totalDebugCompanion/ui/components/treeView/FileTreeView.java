@@ -9,7 +9,6 @@ import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilat
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
-import com.github.minecraft_ta.totalDebugCompanion.pack.PackResources;
 import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProject;
 import com.github.minecraft_ta.totalDebugCompanion.project.InstanceFolders;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
@@ -22,7 +21,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFi
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.util.WindowFocus;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
-import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 
@@ -220,8 +218,7 @@ public class FileTreeView extends JScrollPane {
         PlayingPayload playing = scope.location().playing();
         // A server's world is on the server, so an instance without worlds of its own has one while it plays there.
         if (playing instanceof PlayingPayload.Multiplayer server) {
-            PackStackPayload datapacks = scope.packs().datapacks();
-            int named = datapacks == null || !server.totalDebug() ? 0 : PackResources.serverDatapackCount(datapacks);
+            int named = server.totalDebug() ? scope.packs().serverDatapackCount() : 0;
             sources.put(WorldTreeItems.ROOT, new WorldTreeItems.Rows(0, named));
         } else if (folders.saves()) {
             CurrentWorld.Saved saved = scope.world().published().map(WorldReading.World::saved).orElse(null);

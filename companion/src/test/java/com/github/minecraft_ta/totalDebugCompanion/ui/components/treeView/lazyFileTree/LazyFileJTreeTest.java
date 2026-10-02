@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyF
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -528,9 +529,15 @@ class LazyFileJTreeTest {
         };
     }
 
+    /**
+     * When a reveal starts against a reload whose rows regroup: before it, while it loads, or while its restoration waits,
+     * overtaken before it would select.
+     */
+    enum Reveal { BEFORE_THE_RELOAD, DURING_THE_RELOAD, OVERTAKEN_WHILE_RESTORING }
+
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void aRevealKeepsItsSelectionOverARestorationFinishingLater(boolean revealFirst, @TempDir Path directory) throws Exception {
+    @EnumSource(Reveal.class)
+    void aRevealAndARestorationFinishingLaterEachKeepTheirSelection(Reveal reveal, @TempDir Path directory) throws Exception {
         LazyFileJTree tree = new LazyFileJTree();
         Files.createDirectories(directory.resolve("a/b"));
         Files.writeString(directory.resolve("a/b/x.tdscript"), "");
@@ -558,27 +565,40 @@ class LazyFileJTreeTest {
         // The single-folder chain a/b shows as one row; the script in it is selected.
         assertTrue(tree.revealItemPath("scripts", List.of("a", "b", "x.tdscript"), () -> true).get(3, TimeUnit.SECONDS));
 
-        // Another folder beside b ends the chain. Just before or while Scripts loads again, the user is taken to a row
-        // that loads itself; it is selected after the rows regrouped and before their restoration, which waits for a.
+        // Another folder beside b ends the chain, and the rows' restoration waits for a to load again. The user is taken
+        // to a row that loads itself, which would be selected after the rows regrouped and before their restoration.
         Files.createDirectories(directory.resolve("a/c"));
         var rootHeld = new CountDownLatch(1);
         var folderHeld = new CountDownLatch(1);
         rootGate.set(rootHeld);
         folderGate.set(folderHeld);
-        CompletableFuture<Boolean> revealed;
+        var wanted = new AtomicBoolean(true);
+        CompletableFuture<Boolean> revealed = null;
         try {
-            if (!revealFirst) tree.loadItemsForTopLevelItem(scripts);
+            if (reveal == Reveal.BEFORE_THE_RELOAD) revealed = tree.revealItemPath("other", List.of("slow", "row"), wanted::get);
             SwingUtilities.invokeAndWait(() -> { });
-            revealed = tree.revealItemPath("other", List.of("slow", "row"), () -> true);
+            tree.loadItemsForTopLevelItem(scripts);
             SwingUtilities.invokeAndWait(() -> { });
-            if (revealFirst) tree.loadItemsForTopLevelItem(scripts);
+            if (reveal == Reveal.DURING_THE_RELOAD) revealed = tree.revealItemPath("other", List.of("slow", "row"), wanted::get);
             SwingUtilities.invokeAndWait(() -> { });
             rootHeld.countDown();
             var root = (LazyTreeNode) tree.getModel().getRoot();
             awaitOnEdt(() -> ((LazyTreeNode) root.getChildAt(0)).getChildAt(0) instanceof LazyTreeNode a
                     && DirectoryChain.segments(a.getUserObject()).size() == 1);
+            if (reveal == Reveal.OVERTAKEN_WHILE_RESTORING) {
+                revealed = tree.revealItemPath("other", List.of("slow", "row"), wanted::get);
+                SwingUtilities.invokeAndWait(() -> { });
+                SwingUtilities.invokeAndWait(() -> wanted.set(false));
+            }
             revealGate.countDown();
-            assertTrue(revealed.get(3, TimeUnit.SECONDS));
+            CompletableFuture<Boolean> started = revealed;
+            if (reveal == Reveal.OVERTAKEN_WHILE_RESTORING) {
+                assertThrows(CancellationException.class, () -> {
+                    try { started.get(3, TimeUnit.SECONDS); } catch (ExecutionException failure) { throw failure.getCause(); }
+                });
+            } else {
+                assertTrue(started.get(3, TimeUnit.SECONDS));
+            }
         } finally {
             rootHeld.countDown();
             revealGate.countDown();
@@ -588,8 +608,9 @@ class LazyFileJTreeTest {
         Thread.sleep(200);
         SwingUtilities.invokeAndWait(() -> {
             assertEquals(1, tree.getSelectionCount());
-            assertEquals("row", ((LazyTreeNode) tree.getSelectionPath().getLastPathComponent()).getUserObject().getName(),
-                    "the restoration finishing later leaves the reveal's selection");
+            assertEquals(reveal == Reveal.OVERTAKEN_WHILE_RESTORING ? "x.tdscript" : "row",
+                    ((LazyTreeNode) tree.getSelectionPath().getLastPathComponent()).getUserObject().getName(),
+                    "a reveal that selects wins over the restoration; one overtaken leaves it to put the script back");
         });
     }
 
