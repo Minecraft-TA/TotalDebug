@@ -497,7 +497,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Starting", "Waiting for Minecraft to connect from Prism."));
         }
         queueLaunch(request);
-        CompletableFuture.delayedExecutor(10, TimeUnit.MINUTES).execute(() ->
+        Workers.later(TimeUnit.MINUTES.toMillis(10), projectWorker, () ->
                 failLaunch(request, "Minecraft has not connected after 10 minutes. Check Prism for launch or sign-in errors."));
         return request.result;
     }
@@ -593,7 +593,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     }
                 } catch (IOException | RuntimeException failure) { failReconnect(request, failure.getMessage()); }
             });
-            CompletableFuture.delayedExecutor(30, TimeUnit.SECONDS).execute(() ->
+            Workers.later(TimeUnit.SECONDS.toMillis(30), projectWorker, () ->
                     failReconnect(request, "No matching Minecraft connected within 30 seconds."));
         } catch (RejectedExecutionException failure) { failReconnect(request, "Companion is closing"); }
         return request.result;
