@@ -139,6 +139,8 @@ public final class SubjectPanel extends JPanel {
         showSections();
         // The page draws its items once it is shown; the editor tabs draw the tab's (refreshTabIcon).
         this.redraws = PageLoader.redraws(this).updates(services.icons().changed(), this::reloadPageIcons);
+        // A read the session wants on its own, as a live read or once the compiler is ready, waits while hidden.
+        if (this.live != null) this.redraws.updates(this.live.session.readWanted(), this.live.session::readIfWanted);
         reloadIcons();
     }
 
@@ -380,7 +382,7 @@ public final class SubjectPanel extends JPanel {
         private Live(InspectSubjectPayload subject, Supplier<SnippetExecutionService> snippets, Supplier<ScriptFiles> scripts) {
             this.subject = subject;
             this.identity = subject.identity();
-            this.session = new InspectionSession(subject, snippets, scripts, this::show, SubjectPanel.this::isShowing);
+            this.session = new InspectionSession(subject, snippets, scripts, this::show);
             this.state = this.session.state();
         }
 
