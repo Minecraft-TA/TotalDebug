@@ -4,7 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.DefinitionDetails;
+import com.github.minecraft_ta.totalDebugCompanion.ui.categories.content.DefinitionDetails;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.SubjectPanel;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 

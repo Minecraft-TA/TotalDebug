@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.tth05.jindex.ClassIndex;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.IType;

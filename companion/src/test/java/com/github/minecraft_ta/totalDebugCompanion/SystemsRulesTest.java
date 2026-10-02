@@ -115,7 +115,7 @@ class SystemsRulesTest {
     // CurrentProject.follows (section 3); a subscription of its own in ui/ is one of these.
     private static final Map<String, Allowed> UI_SUBSCRIPTIONS = Map.ofEntries(
             Map.entry("ui/components/PageLoader.java", new Allowed(4, "the page loader itself")),
-            Map.entry("ui/components/catalog/CatalogIcons.java", new Allowed(1, "a cache of the catalog's icons, emptied when it changes")),
+            Map.entry("ui/categories/CatalogIcons.java", new Allowed(1, "a cache of the catalog's icons, emptied when it changes")),
             Map.entry("ui/components/treeView/DecompiledSourcesTreeItem.java",
                     new Allowed(1, "the decompiler of the runtime binding the row is built for, which no signal announces yet")),
             Map.entry("ui/components/treeView/FileTreeView.java", new Allowed(1, "the current project itself, whose roots replace every root")),
