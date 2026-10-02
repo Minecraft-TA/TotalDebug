@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProject;
+import com.github.minecraft_ta.totalDebugCompanion.util.Strand;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
@@ -135,6 +136,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private final PrismGameLauncher gameLauncher;
     private final ExecutorService projectWorker = Executors.newSingleThreadExecutor(
             runnable -> Thread.ofPlatform().daemon().name("companion-projects").unstarted(runnable));
+    /** Where a launch or reconnect that waited too long fails, at its deadline, not behind the project worker's queue. */
+    private final Strand connectionTimeouts = Workers.strand();
     // HTTP shutdown may await handlers using projectWorker; it cannot run on that worker.
     private final ExecutorService mcpWorker = Executors.newSingleThreadExecutor(
             runnable -> Thread.ofPlatform().daemon().name("companion-mcp-lifecycle").unstarted(runnable));
@@ -497,7 +500,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Starting", "Waiting for Minecraft to connect from Prism."));
         }
         queueLaunch(request);
-        Workers.later(TimeUnit.MINUTES.toMillis(10), projectWorker, () ->
+        Workers.later(TimeUnit.MINUTES.toMillis(10), connectionTimeouts, () ->
                 failLaunch(request, "Minecraft has not connected after 10 minutes. Check Prism for launch or sign-in errors."));
         return request.result;
     }
@@ -593,7 +596,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     }
                 } catch (IOException | RuntimeException failure) { failReconnect(request, failure.getMessage()); }
             });
-            Workers.later(TimeUnit.SECONDS.toMillis(30), projectWorker, () ->
+            Workers.later(TimeUnit.SECONDS.toMillis(30), connectionTimeouts, () ->
                     failReconnect(request, "No matching Minecraft connected within 30 seconds."));
         } catch (RejectedExecutionException failure) { failReconnect(request, "Companion is closing"); }
         return request.result;
