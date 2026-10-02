@@ -167,7 +167,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 @Override public void preparedFile(PreparedFilePayload file) {
                     switch (file.kind()) {
                         case RUNTIME_INVENTORY -> handleRuntimeInventory(file);
-                        case PACK_CATALOG -> handlePackCatalog(file);
+                        // The current project's catalog takes its own, through the project's routes.
+                        case PACK_CATALOG -> { }
                         // Icons keep the last archive until a newer one is ready.
                         case ITEM_ICONS -> {
                             if (file.state() == PreparedFilePayload.State.READY) itemIcons.accept(Path.of(file.file()));
@@ -342,8 +343,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 message.displayName(),
                 message.processId()
         ));
-        ProjectScope scope = currentScope();
-        if (scope != null) scope.location().process(message.processId());
     }
 
     private void restoreProfile() throws IOException {
@@ -763,20 +762,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         // Independent tasks: unreadable icon archives must not keep the catalog from loading.
         itemIcons.restore(scope.paths().previews());
         CompletableFuture.runAsync(scope.catalog()::restore, Workers.files());
-    }
-
-    private void handlePackCatalog(PreparedFilePayload message) {
-        ProjectScope scope;
-        synchronized (lifecycleLock) {
-            if (switching) return;
-            scope = current;
-        }
-        if (scope == null || !scope.isActive()) return;
-        switch (message.state()) {
-            case PREPARING -> scope.catalog().capturing();
-            case READY -> scope.catalog().accept(message.inventoryId(), Path.of(message.file()), Workers.files());
-            case FAILED -> scope.catalog().failed(message.detail());
-        }
     }
 
     private void restoreProjectState(ProjectScope scope) {
