@@ -128,7 +128,7 @@ final class UiScenarioDriver {
             var files = window.editorContext().project().scriptFiles();
             var path = files.root().resolve(name + ".tdscript");
             if (!Files.exists(path)) files.create(files.root(), name, false, "");
-            return new ScriptView(window.editorContext(), path);
+            return new ScriptView(window.editorContext(), ScriptView.read(window.editorContext(), path));
         } catch (IOException failure) { throw new UncheckedIOException(failure); }
     }
 

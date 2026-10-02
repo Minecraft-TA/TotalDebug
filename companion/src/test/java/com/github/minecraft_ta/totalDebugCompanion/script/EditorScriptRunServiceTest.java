@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
+import com.github.minecraft_ta.totalDebugCompanion.model.OpenedTabs;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
@@ -76,7 +77,7 @@ class EditorScriptRunServiceTest {
             treeField.setAccessible(true);
             var actions = edt(() -> new ScriptFileActions(window, window.getEditorTabs(),
                     (FileTreeView) treeField.get(window), () -> runContext));
-            var view = edt(() -> new ScriptView(runContext, script));
+            var view = edt(() -> OpenedTabs.script(runContext, script));
             edt(() -> window.getEditorTabs().openEditorTab(view)).get(10, TimeUnit.SECONDS);
             var run = fixture.runs.start(project, Source.capture(project, "Test.tdscript", new NavigationTarget.LocalFile(script)),
                     CODE, Side.CLIENT, ScriptExecutionEnvironment.THREAD);

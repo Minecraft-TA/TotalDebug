@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.model.OpenedTabs;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
@@ -98,8 +99,8 @@ class ApplicationNavigationTest {
                     if (scripts.getItem(i) != null && "View Breakpoints".equals(scripts.getItem(i).getText())) breakpoints = scripts.getItem(i).isEnabled();
                 assertTrue(breakpoints);
                 window.getEditorTabs().openEditorTab(resource
-                        ? new ResourceView(window.editorContext(), new LocalFileSource(textFile), null)
-                        : new ScriptView(window.editorContext(), script));
+                        ? OpenedTabs.resource(window.editorContext(), new LocalFileSource(textFile), null)
+                        : OpenedTabs.script(window.editorContext(), script));
                 windowRef.set(window);
             });
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);

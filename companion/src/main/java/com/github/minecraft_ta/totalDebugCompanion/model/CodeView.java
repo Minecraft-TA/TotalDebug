@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
-import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.formdev.flatlaf.util.StringUtils;
@@ -17,6 +16,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import java.util.Optional;
 
 public class CodeView implements IEditorPanel {
@@ -29,69 +29,38 @@ public class CodeView implements IEditorPanel {
     private final DebugEngine.Source debugSource;
     private final NavigationTarget navigationTarget;
     private final CodeViewPanel codeViewPanel;
-    private volatile CompletableFuture<Void> ready = CompletableFuture.completedFuture(null);
 
-    public CodeView(EditorContext context, Path path, int offset) {
-        this(context, path, offset, EditorLocation.forFile(path, context.project().profile().workspaceDirectory()));
-    }
-
-    public CodeView(EditorContext context, Path path, int offset, EditorLocation location) {
+    /** A local source file, showing {@code code} as {@link #read} read it; it reads nothing itself. */
+    public CodeView(EditorContext context, Path path, String code) {
         this.runtimeBinding = null;
         this.path = path;
-        this.location = location;
+        this.location = EditorLocation.forFile(path, context.project().profile().workspaceDirectory());
         this.debugSource = null;
         this.navigationTarget = new NavigationTarget.LocalFile(path);
         this.codeViewPanel = new CodeViewPanel(context, this);
-        reload(offset);
+        this.codeViewPanel.setCode(code);
     }
 
-    public CodeView(EditorContext context, DecompiledSource source, int offset, EditorLocation location, RuntimeBinding runtimeBinding) {
+    /** A decompiled class of {@code runtimeBinding}, whose source the decompiler already holds. */
+    public CodeView(EditorContext context, DecompiledSource source, EditorLocation location, RuntimeBinding runtimeBinding) {
         this.runtimeBinding = runtimeBinding;
         this.path = source.path();
         this.location = location;
         this.debugSource = source.debugSource();
         this.navigationTarget = new NavigationTarget.RuntimeClass(source.binaryName());
         this.codeViewPanel = new CodeViewPanel(context, this);
-        setCode(source.contents(), offset);
+        this.codeViewPanel.setCode(source.contents());
     }
 
-    public void reload(int offset) {
-        CompletableFuture<Void> task = CompletableFuture
-                .supplyAsync(() -> readCode(this.path), Workers.files())
-                .thenAcceptAsync(code -> {
-                    this.codeViewPanel.setCode(code);
-                    this.codeViewPanel.navigateToOffset(offset);
-                }, SwingUtilities::invokeLater);
-        this.ready = task;
-        task.exceptionally(failure -> {
-            failure.printStackTrace();
-            return null;
-        });
+    /** Shows {@code code} read again from the local file, as before a navigation places an offset in it. */
+    public void replaceCode(String code) {
+        this.codeViewPanel.setCode(code);
     }
 
-    private void setCode(String code, int offset) {
-        this.ready = CompletableFuture.runAsync(
-                () -> {
-                    this.codeViewPanel.setCode(code);
-                    this.codeViewPanel.navigateToOffset(offset);
-                },
-                SwingUtilities::invokeLater
-        );
-    }
-
-    @Override
-    public CompletableFuture<Void> ready() {
-        return this.ready;
-    }
-
-    /**
-     * @param offset the offset to scroll to
-     */
-    public void navigateToOffset(int offset) {
-        if (offset < 0)
-            throw new IllegalArgumentException();
-
-        this.codeViewPanel.navigateToOffset(offset);
+    /** Places the caret at {@code offset}, if {@code stillWanted} still holds then. */
+    public CompletableFuture<Void> navigateToOffset(int offset, BooleanSupplier stillWanted) {
+        if (offset < 0) throw new IllegalArgumentException("The offset must not be negative");
+        return this.codeViewPanel.navigateToOffset(offset, stillWanted);
     }
 
     public void showExecutionLine(int displayedLine) {
@@ -160,14 +129,10 @@ public class CodeView implements IEditorPanel {
         return Optional.ofNullable(this.debugSource);
     }
 
-    public static String readCode(Path path) {
-        try {
-            String code = Files.readString(path);
-            code = code.replace("\r\n", "\n");
-            code = StringUtils.removeTrailing(code, "\n");
-            return code;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    /** Reads a local source file to open it, on file work. */
+    public static String read(Path path) throws IOException {
+        String code = Files.readString(path);
+        code = code.replace("\r\n", "\n");
+        return StringUtils.removeTrailing(code, "\n");
     }
 }

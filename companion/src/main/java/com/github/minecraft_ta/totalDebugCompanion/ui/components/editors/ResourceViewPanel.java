@@ -1,159 +1,133 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
-import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourcePaths;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
-import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
-import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
+import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
-import java.util.concurrent.ExecutionException;
-import java.util.function.Consumer;
-import java.beans.PropertyChangeListener;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.FocusEvent;
+import java.beans.PropertyChangeListener;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
+/**
+ * A resource file as its tab shows it: read-only text or an image, or the pack's editor for a resource of a pack. It is
+ * built with what {@link #read} read before the tab existed (docs/EDITOR_LOADING.md) and reads nothing itself; a pack
+ * editor follows the pack's copies through its own loader.
+ */
 public final class ResourceViewPanel extends JPanel {
+
+    /**
+     * What opening a resource reads: its content, the folder pack a local file lies in, which its editor saves into, or
+     * null, and its path inside a pack, which decides whether an editor edits it, or null.
+     */
+    public record Opened(LoadedResource content, Path pack, String resourcePath) {
+    }
 
     private final NavigationService navigation;
     private final ContentSource source;
     private final ResourceFileType fileType;
     private final ResourceEdits edits;
+    private final Opened opened;
     private String metadata = "";
-
-    /** What a load read: the content, and the folder pack a local file lies in, or null. */
-    private record Opened(LoadedResource content, Path pack) {
-    }
-
-    private CompletableFuture<Opened> loadTask;
-    /** The folder pack the loaded file lies in, which its editor saves into, or null for a file of a mod or archive. */
-    private Path openedPack;
     private Component activeView;
 
     /** The editor the panel shows, or null while it shows the resource read-only, for tests. */
     PackResourceEditor<?> editor() {
         return this.activeView instanceof PackResourceEditor<?> editor ? editor : null;
     }
-    /** Where to show the text once it has loaded, or -1. */
-    private int pendingOffset = -1;
-    /** When a local file was last read, so an offset into a file written since reads it again first; null otherwise. */
-    private FileTime loadedModified;
-    private boolean disposed;
 
-    /** {@code edits} writes text resources of the pack into the managed pack, or is null where they stay read-only. */
+    /**
+     * Reads {@code source} to open it, on file work. {@code edits} writes text resources of the pack into the managed
+     * pack, or is null where they stay read-only.
+     */
+    public static Opened read(ContentSource source, ResourceFileType fileType, ResourceEdits edits) throws IOException {
+        LoadedResource content = ResourceLoader.load(source, fileType);
+        try {
+            Path pack = edits != null && source instanceof LocalFileSource file ? edits.packOf(file.path()).orElse(null) : null;
+            String resourcePath = edits == null ? null : ResourcePaths.of(source).orElse(null);
+            return new Opened(content, pack, resourcePath);
+        } catch (RuntimeException failure) {
+            if (content instanceof LoadedResource.Image image) image.value().flush();
+            throw failure;
+        }
+    }
+
+    /** Shows what {@link #read} read; {@code edits} as there. */
     public ResourceViewPanel(ContentSource source, ResourceFileType fileType, NavigationService navigation,
-                             ResourceEdits edits) {
+                             ResourceEdits edits, Opened opened) {
         super(new BorderLayout());
         this.edits = edits;
         this.navigation = navigation;
         this.source = source;
         this.fileType = fileType;
-        reload();
-    }
-
-    public void reload() {
-        if (this.disposed) {
-            return;
-        }
-        if (this.loadTask != null) {
-            this.loadTask.cancel(true);
-        }
-        showCenteredMessage("Loading " + this.source.displayName() + "...", null);
-        setMetadata("");
-        this.loadedModified = modified();
-        CompletableFuture<Opened> task = CompletableFuture.supplyAsync(() -> {
-            try {
-                LoadedResource content = ResourceLoader.load(this.source, this.fileType);
-                // Reading the pack's metadata to tell whether the file lies in a pack happens here, off the Swing thread.
-                Path pack = this.edits != null && this.source instanceof LocalFileSource file
-                        ? this.edits.packOf(file.path()).orElse(null) : null;
-                return new Opened(content, pack);
-            } catch (Exception exception) {
-                throw new CompletionException(exception);
-            }
-        }, Workers.files());
-        this.loadTask = task;
-        task.whenComplete((opened, failure) -> SwingUtilities.invokeLater(() -> {
-            if (this.disposed || this.loadTask != task) {
-                if (opened != null && opened.content() instanceof LoadedResource.Image image) {
-                    image.value().flush();
-                }
-                return;
-            }
-            if (failure != null) {
-                Throwable cause = unwrap(failure);
-                showCenteredMessage(messageFor(cause), this::reload);
-                return;
-            }
-            this.openedPack = opened.pack();
-            showContent(opened.content());
-        }));
-    }
-
-    private void showContent(LoadedResource content) {
-        Component view = switch (content) {
+        this.opened = opened;
+        Component view = switch (opened.content()) {
             case LoadedResource.Text text -> textView(text);
             case LoadedResource.Image image -> imageView(image);
         };
         if (view instanceof AbstractTextViewPanel text) text.installNavigationHistoryMenu(navigation);
         if (view instanceof ResourceTextEditor editor) editor.textPanel().installNavigationHistoryMenu(navigation);
         replaceActiveView(view);
-        if (this.pendingOffset >= 0) {
-            int offset = this.pendingOffset;
-            this.pendingOffset = -1;
-            // The text was just read; a log the game wrote to meanwhile still shows at the offset instead of reading again.
-            showOffset(offset);
-        }
+    }
+
+    /** Whether the panel shows text read-only, which a navigation to an offset reads again first. */
+    public boolean showsReadOnlyText() {
+        return this.activeView instanceof TextFileViewPanel;
+    }
+
+    /** Shows {@code text}, the file read again, in place of the read-only text shown, as before an offset is placed. */
+    public void replaceText(LoadedResource.Text text) {
+        if (!showsReadOnlyText()) throw new IllegalStateException("Only read-only text is read again");
+        TextFileViewPanel view = new TextFileViewPanel(text, this.fileType, this::setMetadata);
+        view.installNavigationHistoryMenu(this.navigation);
+        replaceActiveView(view);
     }
 
     /**
-     * Shows the text at {@code offset}, once it has loaded. A local file written since it was read, such as a log the
-     * game keeps writing, is read again first, so the offset points into what the file holds now.
+     * Places the caret at {@code offset} in the text shown, if {@code stillWanted} still holds then; an image has no
+     * offset, and completes at once.
      */
-    public void navigateToOffset(int offset) {
-        if (this.disposed) return;
-        if (this.loadedModified != null && !this.loadedModified.equals(modified())) {
-            this.pendingOffset = offset;
-            reload();
-            return;
-        }
-        showOffset(offset);
+    public CompletableFuture<Void> navigateToOffset(int offset, BooleanSupplier stillWanted) {
+        AbstractTextViewPanel text = textPanel();
+        return text == null ? CompletableFuture.completedFuture(null) : text.navigateToOffset(offset, stillWanted);
     }
 
-    private void showOffset(int offset) {
-        if (this.activeView instanceof AbstractTextViewPanel text) text.navigateToOffset(offset);
-        else if (this.activeView instanceof ResourceTextEditor editor) editor.textPanel().navigateToOffset(offset);
-        else this.pendingOffset = offset;
+    /** The caret and scroll of the text shown; an image keeps none. */
+    public NavigationViewState captureNavigationViewState() {
+        AbstractTextViewPanel text = textPanel();
+        return text == null ? NavigationViewState.EMPTY : text.captureNavigationViewState();
     }
 
-    /** When a local file was last written, or null for another source or a file that cannot be read. */
-    private FileTime modified() {
-        if (!(this.source instanceof LocalFileSource file)) return null;
-        try {
-            return Files.getLastModifiedTime(file.path());
-        } catch (IOException unreadable) {
-            return null;
-        }
+    public void restoreNavigationViewState(NavigationViewState state) {
+        AbstractTextViewPanel text = textPanel();
+        if (text != null) text.restoreNavigationViewState(state);
+    }
+
+    /** The text the panel shows, read-only or in its editor, or null for an image. */
+    private AbstractTextViewPanel textPanel() {
+        if (this.activeView instanceof AbstractTextViewPanel text) return text;
+        if (this.activeView instanceof ResourceTextEditor editor) return editor.textPanel();
+        return null;
     }
 
     /** An editor for a text resource of the pack, otherwise the read-only text. */
     private Component textView(LoadedResource.Text text) {
-        String path = this.edits == null ? null : ResourcePaths.of(this.source).orElse(null);
+        String path = this.opened.resourcePath();
         if (path == null) return new TextFileViewPanel(text, this.fileType, this::setMetadata);
         setMetadata(this.fileType.description());
-        return new ResourceTextEditor(path, origin(), openedPack(), text, this.edits);
+        return new ResourceTextEditor(path, origin(), this.opened.pack(), text, this.edits);
     }
 
     /** The file an editor names as where the resource comes from, such as a mod's JAR. */
@@ -162,42 +136,18 @@ public final class ResourceViewPanel extends JPanel {
                 ? entry.archivePath().getFileName().toString() : this.source.displayName();
     }
 
-    /** The folder pack the opened file lies in, which an editor saves into, or null for a file of a mod or archive. */
-    private Path openedPack() {
-        return this.openedPack;
-    }
-
     /** An editor for a texture of the pack, otherwise the image. */
     private Component imageView(LoadedResource.Image image) {
-        String path = this.edits == null ? null : ResourcePaths.of(this.source).orElse(null);
+        String path = this.opened.resourcePath();
         if (path == null || !ResourcePaths.editableImage(path) || !TextureEditor.editable(image.value())) {
             return new ImageViewPanel(image, this::setMetadata);
         }
-        return new TextureEditor(path, origin(), openedPack(), image, this.edits, this::setMetadata);
+        return new TextureEditor(path, origin(), this.opened.pack(), image, this.edits, this::setMetadata);
     }
 
     /** Whether the tab can close: an edited resource has no unsaved changes, or they were discarded after asking. */
     public boolean canClose() {
         return !(this.activeView instanceof PackResourceEditor<?> editor) || editor.confirmLeave();
-    }
-
-    private void showCenteredMessage(String message, Runnable retry) {
-        JPanel panel = new JPanel(new GridBagLayout());
-        JPanel content = new JPanel();
-        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-        JLabel label = new JLabel(message);
-        label.putClientProperty("html.disable", Boolean.TRUE);
-        label.setAlignmentX(Component.CENTER_ALIGNMENT);
-        content.add(label);
-        if (retry != null) {
-            content.add(Box.createVerticalStrut(10));
-            JButton button = new JButton("Retry");
-            button.setAlignmentX(Component.CENTER_ALIGNMENT);
-            button.addActionListener(event -> retry.run());
-            content.add(button);
-        }
-        panel.add(content);
-        replaceActiveView(panel);
     }
 
     private void replaceActiveView(Component replacement) {
@@ -246,28 +196,7 @@ public final class ResourceViewPanel extends JPanel {
         this.activeView = null;
     }
 
-    private static String messageFor(Throwable failure) {
-        String message = failure.getMessage();
-        return message == null || message.isBlank() ? "Unable to open this file" : message;
-    }
-
-    private static Throwable unwrap(Throwable failure) {
-        Throwable current = failure;
-        while ((current instanceof CompletionException || current instanceof ExecutionException)
-                && current.getCause() != null) {
-            current = current.getCause();
-        }
-        return current;
-    }
-
     public void dispose() {
-        if (this.disposed) {
-            return;
-        }
-        this.disposed = true;
-        if (this.loadTask != null) {
-            this.loadTask.cancel(true);
-        }
         disposeActiveView();
     }
 

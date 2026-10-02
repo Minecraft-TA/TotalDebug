@@ -189,15 +189,12 @@ public class EditorTabs extends JTabbedPane {
             if (clazz.isAssignableFrom(editor.getClass()) && filter.test((T) editor)) {
                 setSelectedIndex(this.editors.indexOf(editor));
                 focusEditor(editor.getComponent());
-                T matchingEditor = (T) editor;
-                return matchingEditor.ready().thenApply(ignored -> matchingEditor);
+                return CompletableFuture.completedFuture((T) editor);
             }
         }
 
         var tab = supplier.get();
-        return openEditorTab(tab)
-                .thenCompose(ignored -> tab.ready())
-                .thenApply(ignored -> tab);
+        return openEditorTab(tab).thenApply(ignored -> tab);
     }
 
     public CompletableFuture<Void> replacePreview(IEditorPanel previous, IEditorPanel replacement) {
@@ -209,7 +206,11 @@ public class EditorTabs extends JTabbedPane {
         setTabComponentAt(index, new EditorTabHeader(this, replacement.getIcon()));
         previous.dispose();
         refreshEditorTitles();
-        return replacement.ready().thenRunAsync(() -> replacement.restoreNavigationViewState(state), SwingUtilities::invokeLater);
+        // The replacement was built with what it shows; its position is put back once it is laid out.
+        SwingUtilities.invokeLater(() -> {
+            if (editors.contains(replacement)) replacement.restoreNavigationViewState(state);
+        });
+        return CompletableFuture.completedFuture(null);
     }
 
     public List<IEditorPanel> editors() { return List.copyOf(editors); }

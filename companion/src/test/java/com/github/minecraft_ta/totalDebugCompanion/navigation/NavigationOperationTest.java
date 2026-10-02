@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
+import java.util.function.BooleanSupplier;
+import java.io.IOException;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
@@ -266,21 +268,25 @@ class NavigationOperationTest {
         final List<Integer> offsets = new ArrayList<>();
         final List<NavigationViewState> restored = new ArrayList<>();
 
-        HeldScriptView(EditorContext context, Path path) { super(context, path); }
+        HeldScriptView(EditorContext context, Path path) throws IOException { super(context, ScriptView.read(context, path)); }
+        /** Holds the next placement: the tab is focused, and its offset waits until released. */
         Ready holdNextReady() { var gate = new Ready(); pending.add(gate); gates.add(gate); return gate; }
         void releaseAll() { gates.forEach(gate -> gate.release.complete(null)); }
-        @Override public CompletableFuture<Void> ready() {
+        /** Places an offset, as its queued caret move does: only where the navigation still wants it then. */
+        @Override public CompletableFuture<Void> navigateToOffset(int offset, BooleanSupplier stillWanted) {
             var gate = pending.poll();
-            if (gate == null) return CompletableFuture.completedFuture(null);
-            gate.entered.complete(null);
-            return gate.release;
+            CompletableFuture<Void> placing = gate == null ? CompletableFuture.completedFuture(null) : gate.release;
+            if (gate != null) gate.entered.complete(null);
+            return placing.thenRunAsync(() -> {
+                if (!stillWanted.getAsBoolean()) throw new CancellationException("Navigation changed");
+                offsets.add(offset);
+            }, SwingUtilities::invokeLater);
         }
         @Override public Component getComponent() {
             if (panel == null) panel = new JPanel();
             return panel;
         }
         @Override public JavaEditorContext getJavaEditorContext() { return null; }
-        @Override public void navigateToOffset(int offset) { offsets.add(offset); }
         @Override public NavigationViewState captureNavigationViewState() { return NavigationViewState.EMPTY; }
         @Override public void restoreNavigationViewState(NavigationViewState state) { restored.add(state); }
     }

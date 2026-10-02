@@ -33,6 +33,7 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ResourceViewPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
@@ -46,9 +47,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CancellationException;
+import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
@@ -571,33 +577,42 @@ public final class NavigationService {
                 return openRuntimeEditor(installed,
                         CodeView.class,
                         view -> view.getPath().equals(source.path()),
-                        () -> new CodeView(editors.get(), source, offset, source.location(), installed)
-                ).thenAcceptAsync(view -> {
-                    if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
-                    view.navigateToOffset(offset);
+                        () -> new CodeView(editors.get(), source, source.location(), installed)
+                ).thenCompose(view -> view.navigateToOffset(offset, () -> isCurrentNavigation(context)).thenRun(() -> {
                     if (executionLine > 0) {
                         view.showExecutionLine(executionLine);
                     }
-                }, SwingUtilities::invokeLater);
+                }));
             }, activation);
         });
     }
 
+    /**
+     * Puts a tab of {@code path} in place of {@code previous}, a tab of a file a file operation moved there. The file is
+     * read on file work before its new tab is built, as every document tab is opened (docs/EDITOR_LOADING.md).
+     */
     public CompletableFuture<Void> relocatePreview(IEditorPanel previous, Path path) {
-        if (path.getFileName().toString().endsWith(ScriptView.FILE_EXTENSION)) {
-            EditorContext context = editors.get();
-            return CompletableFuture.supplyAsync(() -> new ScriptView(context, path), Workers.files()).thenComposeAsync(replacement -> {
-                // A pending switch may still be vetoed by this active file operation.
-                if (project != context.project() || context.project().phase() == ProjectScope.Phase.RETIRED) {
-                    replacement.dispose();
-                    return CompletableFuture.failedFuture(new CancellationException("Project changed while loading the moved script"));
-                }
-                return tabs.replacePreview(previous, replacement);
-            }, SwingUtilities::invokeLater);
-        }
-        IEditorPanel replacement = path.getFileName().toString().endsWith(".java") ? new CodeView(editors.get(), path, 0)
-                : new ResourceView(editors.get(), new LocalFileSource(path), null);
-        return tabs.replacePreview(previous, replacement);
+        EditorContext context = editors.get();
+        String fileName = path.getFileName().toString();
+        return CompletableFuture.supplyAsync(() -> call(() -> {
+            if (fileName.endsWith(ScriptView.FILE_EXTENSION)) {
+                ScriptView.Read read = ScriptView.read(context, path);
+                return (Supplier<IEditorPanel>) () -> new ScriptView(context, read);
+            }
+            if (fileName.endsWith(".java")) {
+                String code = CodeView.read(path);
+                return (Supplier<IEditorPanel>) () -> new CodeView(context, path, code);
+            }
+            LocalFileSource source = new LocalFileSource(path);
+            ResourceViewPanel.Opened opened = ResourceView.read(context, source);
+            return (Supplier<IEditorPanel>) () -> new ResourceView(context, source, null, opened);
+        }), Workers.files()).thenComposeAsync(replacement -> {
+            // A pending switch may still be vetoed by this active file operation.
+            if (project != context.project() || context.project().phase() == ProjectScope.Phase.RETIRED) {
+                return CompletableFuture.failedFuture(new CancellationException("Project changed while reading the moved file"));
+            }
+            return tabs.replacePreview(previous, replacement.get());
+        }, SwingUtilities::invokeLater);
     }
 
     /** Finishes the owning file operation while its busy guard still excludes other navigation. */
@@ -605,15 +620,12 @@ public final class NavigationService {
         EditorContext context = editors.get();
         if (context.project() != expected || project != expected || expected.phase() == ProjectScope.Phase.RETIRED)
             return CompletableFuture.failedFuture(new CancellationException("Project changed while creating the script"));
-        return captureCurrentEntry().thenCompose(origin -> CompletableFuture.supplyAsync(() -> new ScriptView(context, path), Workers.files())
-                .thenComposeAsync(script -> {
+        return captureCurrentEntry().thenCompose(origin -> CompletableFuture.supplyAsync(() -> call(() -> ScriptView.read(context, path)), Workers.files())
+                .thenComposeAsync(read -> {
                     if (project != expected || expected.phase() == ProjectScope.Phase.RETIRED) {
-                        script.dispose();
                         return CompletableFuture.failedFuture(new CancellationException("Project changed while opening the created script"));
                     }
-                    if (tabs.editors().stream().anyMatch(view -> view instanceof ScriptView existing && existing.getPath().equals(path)))
-                        script.dispose();
-                    return tabs.focusOrCreateIfAbsent(ScriptView.class, view -> view.getPath().equals(path), () -> script)
+                    return tabs.focusOrCreateIfAbsent(ScriptView.class, view -> view.getPath().equals(path), () -> new ScriptView(context, read))
                             .thenAcceptAsync(view -> {
                                 if (project != expected || expected.phase() == ProjectScope.Phase.RETIRED)
                                     throw new CancellationException("Project changed while opening the created script");
@@ -627,48 +639,37 @@ public final class NavigationService {
     private CompletableFuture<Void> openLocalFile(NavigationTarget.LocalFile target, Activation activation) {
         Context context = captureContext();
         Path path = target.path();
-        if (!Files.isRegularFile(path)) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("File does not exist: " + path));
-        }
+        int offset = target.offset();
+        BooleanSupplier wanted = () -> isCurrentNavigation(context);
+        EditorContext editorContext = editors.get();
+        ProjectScope project = requireProject();
         String fileName = path.getFileName().toString();
-        Path scripts = requireProject().paths().scripts().toAbsolutePath().normalize();
-        if (path.startsWith(scripts) && !path.equals(scripts)
-                && fileName.endsWith(ScriptView.FILE_EXTENSION)) {
-            String scriptName = fileName.substring(0, fileName.length() - ScriptView.FILE_EXTENSION.length());
-            return dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                    ScriptView.class,
-                    view -> view.getPath().equals(path),
-                    () -> new ScriptView(editors.get(), path)
-            ).thenAcceptAsync(view -> {
-                if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
-                view.navigateToOffset(target.offset());
-            }, SwingUtilities::invokeLater), activation);
+        Path scripts = project.paths().scripts().toAbsolutePath().normalize();
+        if (path.startsWith(scripts) && !path.equals(scripts) && fileName.endsWith(ScriptView.FILE_EXTENSION)) {
+            // The text in an open script tab is the user's draft: the tab is focused, and nothing is read again.
+            return openDocument(context, activation, ScriptView.class, view -> view.getPath().equals(path),
+                    () -> ScriptView.read(editorContext, existing(path)),
+                    read -> new ScriptView(editorContext, read),
+                    (view, opened) -> view.navigateToOffset(offset, wanted));
         }
         if (fileName.endsWith(".java")) {
-            return dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                    CodeView.class,
-                    view -> view.getPath().equals(path),
-                    () -> new CodeView(editors.get(), path, target.offset())
-            ).thenAcceptAsync(view -> {
-                if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
-                view.navigateToOffset(target.offset());
-            }, SwingUtilities::invokeLater), activation);
+            return openDocument(context, activation, CodeView.class, view -> view.getPath().equals(path),
+                    () -> CodeView.read(existing(path)),
+                    code -> new CodeView(editorContext, path, code),
+                    (view, opened) -> opened || offset <= 0 ? view.navigateToOffset(offset, wanted)
+                            : readAgain(context, view, () -> CodeView.read(existing(path)), view::replaceCode)
+                                    .thenCompose(ignored -> view.navigateToOffset(offset, wanted)));
         }
         // A mod's configuration file is edited, with the checks its Configuration tab applies.
-        ProjectScope project = requireProject();
         var owner = project.catalog().index().flatMap(index ->
                 ConfigSources.owner(index, project.profile().workspaceDirectory(), path));
         if (owner.isPresent()) {
-            return dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                    ConfigFileView.class,
-                    view -> view.getPath().equals(path),
-                    () -> new ConfigFileView(editors.get(), path, owner.get())
-            ).thenAcceptAsync(view -> {
-                if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
-                if (target.offset() > 0) view.navigateToOffset(target.offset());
-            }, SwingUtilities::invokeLater), activation);
+            return openDocument(context, activation, ConfigFileView.class, view -> view.getPath().equals(path),
+                    () -> ConfigFileView.read(existing(path)),
+                    text -> new ConfigFileView(editorContext, path, owner.get(), text),
+                    (view, opened) -> offset > 0 ? view.navigateToOffset(offset, wanted) : CompletableFuture.completedFuture(null));
         }
-        return openResource(new LocalFileSource(path), activation, target.offset());
+        return openResource(new LocalFileSource(path), activation, offset);
     }
 
     private CompletableFuture<Void> openResource(ContentSource source, Activation activation) {
@@ -677,15 +678,102 @@ public final class NavigationService {
 
     /** Opens a resource tab, showing its text at {@code offset} when it is above zero. */
     private CompletableFuture<Void> openResource(ContentSource source, Activation activation, int offset) {
+        Context context = captureContext();
         RuntimeBinding installed = source instanceof ArchiveEntrySource entry && !isLocalModArchive(entry.archivePath())
-                ? captureContext().runtime() : null;
-        return dispatchNavigation(() -> openRuntimeEditor(installed,
-                ResourceView.class,
-                view -> view.source().identity().equals(source.identity()),
-                () -> new ResourceView(editors.get(), source, installed)
-        ).thenAccept(view -> {
-            if (offset > 0) view.navigateToOffset(offset);
-        }), activation);
+                ? context.runtime() : null;
+        BooleanSupplier wanted = () -> isCurrentNavigation(context);
+        EditorContext editorContext = editors.get();
+        Predicate<ResourceView> sameSource = view -> view.source().identity().equals(source.identity());
+        return openDocument(context, activation, ResourceView.class,
+                view -> view.runtimeBinding() == installed && sameSource.test(view),
+                () -> {
+                    if (source instanceof LocalFileSource file) existing(file.path());
+                    return ResourceView.read(editorContext, source);
+                },
+                opened -> {
+                    if (installed != null && installed != captureContext().runtime()) throw new CancellationException("Runtime changed");
+                    // A tab of the same file from another runtime shows what that runtime held.
+                    tabs.closeMatching(editor -> editor instanceof ResourceView view && sameSource.test(view)
+                            && view.runtimeBinding() != installed);
+                    return new ResourceView(editorContext, source, installed, opened);
+                },
+                (view, opened) -> {
+                    if (offset <= 0) return CompletableFuture.completedFuture(null);
+                    if (opened || !view.showsReadOnlyText()) return view.navigateToOffset(offset, wanted);
+                    // A log the game writes on is read again, so the offset points into what it holds now.
+                    return readAgain(context, view, () -> ResourceView.readText(source), view::replaceText)
+                            .thenCompose(ignored -> view.navigateToOffset(offset, wanted));
+                });
+    }
+
+    /**
+     * Opens a document tab with what it shows (docs/EDITOR_LOADING.md). An open tab that {@code matches} is focused,
+     * with no file access. Otherwise {@code read} runs on file work before the tab exists, the navigation is checked
+     * again, and the tab {@code create} builds from what was read is added. {@code place} then places the position; it
+     * is told whether the tab was just opened.
+     */
+    private <T extends IEditorPanel, R> CompletableFuture<Void> openDocument(Context context, Activation activation,
+            Class<T> type, Predicate<T> matches, Callable<R> read, Function<R, T> create,
+            BiFunction<T, Boolean, CompletableFuture<Void>> place) {
+        return dispatchNavigation(() -> {
+            T open = focusOpen(type, matches);
+            if (open != null) return place.apply(open, false);
+            return CompletableFuture.supplyAsync(() -> readWhileCurrent(context, read), Workers.files()).thenComposeAsync(content -> {
+                if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+                requireNavigationAdmission(context);
+                T opened = focusOpen(type, matches);
+                if (opened != null) return place.apply(opened, false);
+                T view = create.apply(content);
+                this.tabs.openEditorTab(view);
+                return place.apply(view, true);
+            }, SwingUtilities::invokeLater);
+        }, activation);
+    }
+
+    /** Selects the open tab of {@code type} that {@code matches} and returns it, or null without one. Swing thread. */
+    private <T extends IEditorPanel> T focusOpen(Class<T> type, Predicate<T> matches) {
+        for (IEditorPanel editor : this.tabs.editors()) {
+            if (type.isInstance(editor) && matches.test(type.cast(editor))) {
+                T open = type.cast(editor);
+                return this.tabs.focusOrCreateIfAbsent(type, candidate -> candidate == open, () -> open).join();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Reads the text of {@code tab}, an open read-only tab, again on file work and shows it, as before an offset is placed
+     * in it; a tab closed meanwhile shows nothing, and the navigation ends as cancelled.
+     */
+    private <R> CompletableFuture<Void> readAgain(Context context, IEditorPanel tab, Callable<R> read, Consumer<R> show) {
+        return CompletableFuture.supplyAsync(() -> readWhileCurrent(context, read), Workers.files()).thenAcceptAsync(content -> {
+            if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+            if (!this.tabs.editors().contains(tab)) throw new CancellationException("The tab closed");
+            show.accept(content);
+        }, SwingUtilities::invokeLater);
+    }
+
+    /** {@code path}, checked on file work to be a file. */
+    private static Path existing(Path path) {
+        if (!Files.isRegularFile(path)) throw new IllegalArgumentException("File does not exist: " + path);
+        return path;
+    }
+
+    /**
+     * Runs {@code read} for a navigation, unless a newer navigation replaced it while the read waited for a file worker:
+     * clicking a large file several times reads it once for the last click, and keeps the workers for other reads.
+     */
+    private <T> T readWhileCurrent(Context context, Callable<T> read) {
+        if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+        return call(read);
+    }
+
+    private static <T> T call(Callable<T> read) {
+        try {
+            return read.call();
+        } catch (Exception failure) {
+            throw new CompletionException(failure);
+        }
     }
 
     private boolean isLocalModArchive(Path archive) {

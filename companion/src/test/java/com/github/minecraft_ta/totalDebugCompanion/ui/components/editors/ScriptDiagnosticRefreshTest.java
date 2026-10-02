@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.model.OpenedTabs;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
@@ -39,7 +40,7 @@ class ScriptDiagnosticRefreshTest {
             SwingUtilities.invokeAndWait(() -> {
                 var window = app.createWindow();
                 CompanionClassIndex.set(index);
-                var panel = (ScriptPanel) new ScriptView(window.editorContext(), window.editorContext().project().paths().scripts().resolve("DiagnosticProof.tdscript")).getComponent();
+                var panel = (ScriptPanel) OpenedTabs.script(window.editorContext(), window.editorContext().project().paths().scripts().resolve("DiagnosticProof.tdscript")).getComponent();
                 panel.editorPane.setParserDelay(Integer.MAX_VALUE);
                 panel.astCache().addChangeListener(panel.astKey(), snapshot -> {
                     if (snapshot == null) return;

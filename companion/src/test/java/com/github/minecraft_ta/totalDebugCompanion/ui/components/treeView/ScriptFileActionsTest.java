@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.model.OpenedTabs;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import javax.swing.JMenuItem;
@@ -67,7 +68,7 @@ class ScriptFileActionsTest {
                     window.editorContext().project().scriptFiles().root(), "Pending", false, "return 1;");
             CompletableFuture<Void> pending = new CompletableFuture<>();
             CountDownLatch observed = new CountDownLatch(1);
-            ScriptView view = new ScriptView(window.editorContext(), script) {
+            ScriptView view = new ScriptView(window.editorContext(), OpenedTabs.scriptRead(window.editorContext(), script)) {
                 @Override public CompletableFuture<Void> pendingSave() {
                     observed.countDown();
                     return pending;
@@ -395,7 +396,7 @@ class ScriptFileActionsTest {
             Path items = Files.createDirectories(root.resolve("modules/client/items"));
             Path script = Files.writeString(items.resolve("Test.tdscript"), "return 1;");
             FileTreeView files = find(window, FileTreeView.class);
-            edt(() -> { files.reloadProfile(); window.getEditorTabs().openEditorTab(new ScriptView(window.editorContext(), script)); return null; });
+            edt(() -> { files.reloadProfile(); window.getEditorTabs().openEditorTab(OpenedTabs.script(window.editorContext(), script)); return null; });
             ScriptView editor = edt(() -> (ScriptView) window.getEditorTabs().getSelectedEditor());
             assertTrue(files.revealLocalPath(root.resolve("modules/client")).get(5, TimeUnit.SECONDS));
             Path target = edt(() -> ScriptFileActions.path(files.tree().getSelectionPath()));

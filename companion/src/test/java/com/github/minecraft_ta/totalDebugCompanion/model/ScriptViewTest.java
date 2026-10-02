@@ -25,7 +25,7 @@ class ScriptViewTest {
             Path root = Files.createDirectories(project.scriptFiles().root());
             Path original = Files.writeString(root.resolve("Original.tdscript"), "return 42;");
             var context = new EditorContext(null, null, null, project, null, null, null, null, null, null, null, null, null);
-            var view = new ScriptView(context, original);
+            var view = new ScriptView(context, ScriptView.read(context, original));
             String editorKey = view.editorKey();
             String generated = JavaSnippetSource.body(view.compilationName(), view.getSourceText()).source();
             Path moved = Files.move(original, Files.createDirectory(root.resolve("nested")).resolve("Renamed.tdscript"));
