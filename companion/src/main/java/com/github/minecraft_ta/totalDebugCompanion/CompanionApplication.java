@@ -149,7 +149,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         this.ui = ui;
         try {
             JDTHacks.init(configuration.paths().jdtCache());
-            runtimeIndexService = new RuntimeIndexService(lifecycleLock, this::installRuntimeSnapshot);
+            runtimeIndexService = new RuntimeIndexService(lifecycleLock, this::indexFailed, this::installRuntimeSnapshot);
             RuntimeIndexService index = runtimeIndexService;
             index.statusChanged().subscribe(() -> updateRuntimeIndexUi(index.status()));
             updateRuntimeIndexUi(index.status());
@@ -856,10 +856,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 if (closed || current != scope || !scope.isActive() || scope.runtime() == null || scope.runtime().snapshot() != snapshot) return;
                 closeRuntime();
             }
+            long admitted = runtimeIndexService.admissions();
             try {
                 restoreOfflineRuntime(scope);
             } catch (IOException failure) {
-                runtimeIndexService.failedBeforeBuild("Unable to rescan mods: " + failure.getMessage());
+                runtimeIndexService.failedBeforeBuild("Unable to rescan mods: " + failure.getMessage(), admitted);
             }
         }); } catch (RejectedExecutionException failure) {
             if (!closed) throw failure;
@@ -1091,13 +1092,14 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             onUi(view -> view.setMcpStatus(status));
         }
     }
-    private RuntimeIndexService.Status lastIndexStatus;
+    /** Tells a failure the index accepted; a switch under way drops it, as the failure is the old project's. Under the lock. */
+    private void indexFailed(RuntimeIndexService.Status status) {
+        if (closed || switching) return;
+        notifications.publish(Severity.ERROR, "Class indexing failed", status.detail() + (status.failure() == null ? "" : "\n" + status.failure()),
+                Source.capture(current, "Index", null));
+    }
+
     private void updateRuntimeIndexUi(RuntimeIndexService.Status status) {
-        if (!closed && !switching && status.phase() == RuntimeIndexService.Phase.FAILED && !status.equals(lastIndexStatus)) {
-            notifications.publish(Severity.ERROR, "Class indexing failed", status.detail() + (status.failure() == null ? "" : "\n" + status.failure()),
-                    Source.capture(current, "Index", null));
-        }
-        lastIndexStatus = status;
         synchronized (lifecycleLock) {
             // Only for the status still current: an older one, told late, must not close a runtime installed since.
             if (status == runtimeIndexService.status()) {

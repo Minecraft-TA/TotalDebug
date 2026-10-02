@@ -117,6 +117,9 @@ public final class RuntimeIndexService implements AutoCloseable {
     private final Consumer<ReadySnapshot> readyHandler;
     private final Function<String, ClassIndex> indexLoader;
     private final Signal statusChanged = new Signal();
+    private final Consumer<Status> failed;
+    /** How often the pending work was replaced, so a failure found before a job can tell whether it was superseded. */
+    private long admissions;
     /** Where {@link #statusChanged} fires: in order, after the lifecycle section that changed the status ended. */
     private final Strand notices = Workers.strand();
     private volatile Status status = new Status(Phase.WAITING, "Waiting for runtime inventory", null);
@@ -155,13 +158,19 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    public RuntimeIndexService(Object lifecycleLock, Consumer<ReadySnapshot> readyHandler) {
-        this(lifecycleLock, readyHandler, ClassIndex::fromFile);
+    /**
+     * {@code failed} is told each failure the service accepts for the job it admitted last, once per change of status, on
+     * the thread that accepted it, under the lifecycle lock: a failure that must not be missed is told by its owner
+     * (docs/SYSTEMS.md, section 1).
+     */
+    public RuntimeIndexService(Object lifecycleLock, Consumer<Status> failed, Consumer<ReadySnapshot> readyHandler) {
+        this(lifecycleLock, failed, readyHandler, ClassIndex::fromFile);
     }
 
-    RuntimeIndexService(Object lifecycleLock, Consumer<ReadySnapshot> readyHandler,
+    RuntimeIndexService(Object lifecycleLock, Consumer<Status> failed, Consumer<ReadySnapshot> readyHandler,
                         Function<String, ClassIndex> indexLoader) {
         this.lifecycleLock = Objects.requireNonNull(lifecycleLock, "lifecycleLock");
+        this.failed = Objects.requireNonNull(failed, "failed");
         this.readyHandler = Objects.requireNonNull(readyHandler, "readyHandler");
         this.indexLoader = Objects.requireNonNull(indexLoader, "indexLoader");
     }
@@ -183,6 +192,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             ensureOpen();
             // A saved inventory does not establish the identity of a newly connected runtime.
             // Retire in-flight restores too, so they cannot publish READY after this transition.
+            this.admissions++;
             this.pending = null;
             this.activeInventoryId = null;
             this.activeDataDirectory = null;
@@ -228,6 +238,7 @@ public final class RuntimeIndexService implements AutoCloseable {
 
     public void clear() {
         synchronized (this.lifecycleLock) {
+            this.admissions++;
             this.pending = null;
             this.activeInventoryId = null;
             this.activeMetrics = null;
@@ -257,6 +268,24 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
+    /** How often the pending work was replaced so far: a job admitted, waiting or cleared; for {@link #failedBeforeBuild(String, long)}. */
+    public long admissions() {
+        synchronized (this.lifecycleLock) {
+            return this.admissions;
+        }
+    }
+
+    /**
+     * A failure found before a job, such as discovering local mods, that counts only where the pending work was not
+     * replaced since {@code admitted}, as {@link #admissions()} told it then: a newer job, or the wait for a game that
+     * connected, is not replaced by an older failure.
+     */
+    public void failedBeforeBuild(String detail, long admitted) {
+        synchronized (this.lifecycleLock) {
+            if (this.admissions == admitted) failedBeforeBuild(detail);
+        }
+    }
+
     public void failedBeforeBuild(String detail) {
         synchronized (this.lifecycleLock) {
             String message = Objects.requireNonNullElse(detail, "Runtime inventory failed");
@@ -273,6 +302,7 @@ public final class RuntimeIndexService implements AutoCloseable {
     }
 
     private void submit(Work work) {
+        this.admissions++;
         this.pending = work;
         this.worker.execute(() -> buildOrLoad(work));
     }
@@ -611,7 +641,9 @@ public final class RuntimeIndexService implements AutoCloseable {
 
     private void update(Status replacement) {
         synchronized (this.lifecycleLock) {
+            Status previous = this.status;
             this.status = replacement;
+            if (replacement.phase() == Phase.FAILED && !replacement.equals(previous)) this.failed.accept(replacement);
             this.notices.execute(this::tellStatus);
         }
     }

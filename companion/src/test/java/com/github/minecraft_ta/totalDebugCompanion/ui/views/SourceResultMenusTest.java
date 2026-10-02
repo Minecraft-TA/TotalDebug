@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class SourceResultMenusTest {
     @Test
     void searchMenuCopiesQualifiedReferencesAndOpensItsCapturedResult() throws Exception {
-        try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
+        try (var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> snapshot.close())) {
             SwingUtilities.invokeAndWait(() -> {
                 List<NavigationTarget> opened = new ArrayList<>();
                 var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, () -> null, new ItemIconService(), opened::add);

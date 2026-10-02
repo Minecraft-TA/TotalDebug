@@ -129,7 +129,8 @@ public class SearchEverywherePopup extends JFrame {
         SwingUtilities.invokeLater(() -> {
             if (!isDisplayable()) return;
             RuntimeBinding installed = runtime.get();
-            if (installed != null) { syncRuntimeModules(installed); refreshResults(); }
+            // Hidden, it does not search: open() searches when it is shown again.
+            if (installed != null) { syncRuntimeModules(installed); if (isVisible()) refreshResults(); }
             else showIndexStatus(status);
         });
     }
