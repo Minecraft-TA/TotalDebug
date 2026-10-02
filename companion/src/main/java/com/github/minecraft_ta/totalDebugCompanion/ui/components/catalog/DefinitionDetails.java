@@ -87,6 +87,8 @@ public final class DefinitionDetails {
     private final PageLoader<List<ModResources.Resource>> resourceLoader;
     private ModelAppearance appearance;
     private List<Icon> appearancePreviews = List.of();
+    /** The appearance's resource roots that are folders, as its read found them; the others are archives. */
+    private Set<Path> appearanceFolders = Set.of();
     private List<ModResources.Resource> matched = List.of();
     private List<ModResources.Resource> owned = List.of();
     private int labelWidth;
@@ -105,6 +107,7 @@ public final class DefinitionDetails {
         this.appearanceLoader = new PageLoader<>(this::prepareAppearance, found -> {
             this.appearance = found.appearance();
             this.appearancePreviews = found.previews();
+            this.appearanceFolders = found.folders();
             showExtras();
         }, failure -> { }).page(page).follows(services.icons().changed())
                 // The catalog is in memory: the definition is looked up again, then its appearance read.
@@ -218,8 +221,11 @@ public final class DefinitionDetails {
         this.appearanceLoader.load();
     }
 
-    /** A model appearance with a thumbnail of each of its textures; neither when there is no model. */
-    private record Appearance(ModelAppearance appearance, List<Icon> previews) {
+    /**
+     * A model appearance with a thumbnail of each of its textures, and which of its resource roots are folders; none
+     * when there is no model.
+     */
+    private record Appearance(ModelAppearance appearance, List<Icon> previews, Set<Path> folders) {
     }
 
     private Callable<Appearance> prepareAppearance() {
@@ -240,6 +246,7 @@ public final class DefinitionDetails {
         if (blockId.isEmpty() && itemModel.isEmpty()) {
             this.appearanceLoader.cancel();
             this.appearance = null;
+            this.appearanceFolders = Set.of();
             showExtras();
             return null;
         }
@@ -248,7 +255,8 @@ public final class DefinitionDetails {
         // Textures are scaled to thumbnails off the Swing thread; a texture can be large.
         return () -> {
             Optional<ModelAppearance> found = this.services.icons().appearance(block, item).join();
-            return new Appearance(found.orElse(null), found.map(DefinitionDetails::previews).orElse(List.of()));
+            return new Appearance(found.orElse(null), found.map(DefinitionDetails::previews).orElse(List.of()),
+                    found.map(DefinitionDetails::folders).orElse(Set.of()));
         };
     }
 
@@ -285,6 +293,16 @@ public final class DefinitionDetails {
                     : new ImageIcon(PixelImages.fit(texture.image(), size)));
         }
         return previews;
+    }
+
+    /** The resource roots of the appearance's files and textures that are folders. Not on the Swing thread. */
+    private static Set<Path> folders(ModelAppearance appearance) {
+        Set<Path> roots = new HashSet<>();
+        for (ModelAppearance.File file : appearance.files()) roots.add(file.root().path());
+        for (ModelAppearance.Texture texture : appearance.textures()) roots.add(texture.root().path());
+        Set<Path> folders = new HashSet<>();
+        for (Path root : roots) if (Files.isDirectory(root)) folders.add(root);
+        return Set.copyOf(folders);
     }
 
     /** Shows the Appearance and Files sections from what has loaded so far. */
@@ -375,12 +393,15 @@ public final class DefinitionDetails {
         return parts.length == 3 ? parts[2] : resourcePath;
     }
 
-    /** Opens a resource from the owning mod's file when it ships one, otherwise from the resource snapshot. */
+    /**
+     * Opens a resource from the owning mod's file when it ships one, otherwise from the resource snapshot, as a folder's
+     * file or an archive's entry as the appearance's read found its root.
+     */
     private NavigationTarget target(String resourcePath, ItemRenderResourceRoot root) {
         for (ModResources.Resource resource : this.owned) {
             if (resource.path().equals(resourcePath)) return resource.target();
         }
-        return Files.isDirectory(root.path())
+        return this.appearanceFolders.contains(root.path())
                 ? new NavigationTarget.LocalFile(root.path().resolve(root.entryPath(resourcePath)))
                 : new NavigationTarget.ArchiveEntry(root.path(), root.entryPath(resourcePath));
     }

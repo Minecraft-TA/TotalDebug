@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -33,7 +34,7 @@ import java.util.function.Consumer;
  */
 public final class PackPanel extends JPanel {
     /** What was read of the pack: its {@code pack.mcmeta}, or null without one, its icon or null, and its files. */
-    private record Loaded(PackFolders.Meta meta, BufferedImage icon, List<ModResources.Resource> resources) {
+    private record Loaded(PackFolders.Meta meta, BufferedImage icon, ResourceBrowser.Prepared resources) {
     }
 
     private final Path file;
@@ -50,7 +51,7 @@ public final class PackPanel extends JPanel {
         this.header.setTitle(PackFolders.title(file));
         this.header.setIcon(new PlateIcon(Icons.RESOURCES_ROOT, SubjectHeader.ICON_SIZE));
         JButton show = new JButton("Show in Explorer", Icons.FOLDER);
-        show.addActionListener(event -> this.notice.show(Explorer.show(file).orElse("")));
+        show.addActionListener(event -> Explorer.show(file, this.notice::show));
         this.header.addControl(show);
         JPanel top = new JPanel(new BorderLayout());
         top.add(this.header, BorderLayout.NORTH);
@@ -61,13 +62,14 @@ public final class PackPanel extends JPanel {
             // What was read before is not the pack any more.
             this.header.setIcon(new PlateIcon(Icons.RESOURCES_ROOT, SubjectHeader.ICON_SIZE));
             this.header.setSubtitle(List.of());
-            this.browser.setResources(List.of());
+            this.browser.setResources(ResourceBrowser.Prepared.NONE);
             this.browser.setMessage(PackFolders.title(file) + " could not be read: " + failure.getMessage());
         }).page(this).readsWhenShown(this);
     }
 
     private static Loaded read(Path file) throws IOException {
-        return new Loaded(PackFolders.meta(file).orElse(null), icon(file), side(file, ModResources.list(file)));
+        return new Loaded(PackFolders.meta(file).orElse(null), icon(file),
+                ResourceBrowser.prepare(side(file, ModResources.list(file)), Map.of(), Map.of()));
     }
 
     /**
@@ -103,7 +105,7 @@ public final class PackPanel extends JPanel {
         }
         this.header.setSubtitle(subtitle);
         this.browser.setResources(loaded.resources());
-        this.browser.setMessage(loaded.resources().isEmpty() ? "The pack holds no resources." : "");
+        this.browser.setMessage(loaded.resources().resources().isEmpty() ? "The pack holds no resources." : "");
     }
 
     public Path file() {

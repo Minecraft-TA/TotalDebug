@@ -65,7 +65,7 @@ public final class PackResourcesPanel extends JPanel {
             TabTitles.setCounted(this.tabs, 0, ResourcesTab.FILES.title(), prepared.resources().size());
         }, failure -> {
             TabTitles.setUncounted(this.tabs, 0, ResourcesTab.FILES.title());
-            this.browser.setResources(List.of());
+            this.browser.setResources(ResourceBrowser.Prepared.NONE);
             this.browser.setMessage("Resources could not be read: " + failure.getMessage());
         }).page(this).follows(catalog.changed()).follows(edits.packs().changed(ChangeRecord.PackSide.RESOURCES))
                 .follows(edits.packs().changed(ChangeRecord.PackSide.DATA)).follows(edits.edited());
@@ -105,7 +105,7 @@ public final class PackResourcesPanel extends JPanel {
     private Callable<ResourceBrowser.Prepared> prepareJoin() {
         CatalogIndex index = this.catalog.index().orElse(null);
         if (index == null) {
-            this.browser.setResources(List.of());
+            this.browser.setResources(ResourceBrowser.Prepared.NONE);
             this.browser.setMessage("The pack catalog is not captured yet.");
             return null;
         }

@@ -93,7 +93,7 @@ public final class ModPanel extends JPanel {
     private ModSummary summary;
     private CatalogIndex index;
     /** Lists the mod's resources for the Resources tab. */
-    private final PageLoader<List<ModResources.Resource>> resourceLoader;
+    private final PageLoader<ResourceBrowser.Prepared> resourceLoader;
     private boolean disposed;
 
     /**
@@ -113,12 +113,12 @@ public final class ModPanel extends JPanel {
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.listIcons = new CatalogIcons(icons, LIST_ICON_SIZE);
         this.resources = new ResourceBrowser(navigator, category -> { });
-        this.resourceLoader = new PageLoader<>(this::prepareResources, list -> {
-            this.resources.setResources(list);
+        this.resourceLoader = new PageLoader<>(this::prepareResources, prepared -> {
+            this.resources.setResources(prepared);
             this.resources.setMessage("");
-            setTab(ModTab.RESOURCES, list.size());
+            setTab(ModTab.RESOURCES, prepared.resources().size());
         }, failure -> {
-            this.resources.setResources(List.of());
+            this.resources.setResources(ResourceBrowser.Prepared.NONE);
             this.resources.setMessage("Resources could not be read: " + failure.getMessage());
             setTab(ModTab.RESOURCES, 1);
         }).page(this).follows(resourcesRead)
@@ -348,15 +348,15 @@ public final class ModPanel extends JPanel {
     }
 
     /** Lists the files of the mod shown now; a mod of code alone has no Resources tab. */
-    private Callable<List<ModResources.Resource>> prepareResources() {
+    private Callable<ResourceBrowser.Prepared> prepareResources() {
         List<Path> files = this.summary == null ? List.of() : this.summary.files();
         if (files.isEmpty()) {
             this.resourceLoader.cancel();
-            this.resources.setResources(List.of());
+            this.resources.setResources(ResourceBrowser.Prepared.NONE);
             setTab(ModTab.RESOURCES, 0);
             return null;
         }
-        return () -> ModResources.list(files);
+        return () -> ResourceBrowser.prepare(ModResources.list(files), Map.of(), Map.of());
     }
 
     private void loadLogo(List<ModLogoIcons.Source> logo) {
