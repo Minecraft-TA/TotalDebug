@@ -395,14 +395,17 @@ class PageLoaderTest {
         changed();
         changed();
         assertEquals(0, updates.get(), "a hidden page does not update");
-        SwingUtilities.invokeAndWait(() -> page.setShown(true));
-        SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(1, updates.get(), "shown, it updates once for the changes it missed");
+        int[] inShowingStep = {-1};
+        SwingUtilities.invokeAndWait(() -> {
+            page.setShown(true);
+            inShowingStep[0] = updates.get();
+        });
+        assertEquals(1, inShowingStep[0], "shown, it updates once for the changes it missed, before the step goes on, "
+                + "as to a navigation choosing what the update adds");
         SwingUtilities.invokeAndWait(() -> {
             page.setShown(false);
             page.setShown(true);
         });
-        SwingUtilities.invokeAndWait(() -> { });
         assertEquals(1, updates.get(), "shown again without a change, it does not update");
         changed();
         assertEquals(2, updates.get(), "a shown page updates at once");

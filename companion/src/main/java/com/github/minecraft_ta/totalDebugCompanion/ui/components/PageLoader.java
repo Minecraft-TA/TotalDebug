@@ -172,11 +172,12 @@ public final class PageLoader<T> {
 
     /**
      * Runs {@code update}, which only redraws from memory, such as icons again after new ones came, when {@code signal}
-     * fires: at once while the page is shown, otherwise once however often it fired, at the end of the Swing step that
-     * shows the page again. Swing thread.
+     * fires: at once while the page is shown, otherwise once it is shown again, once however often it fired. It runs as
+     * the page is shown, before what the same Swing step asks of the page, such as a navigation choosing a tab the update
+     * adds. Swing thread.
      */
     public PageLoader<T> updates(Signal signal, Runnable update) {
-        return whenShown(signal, Objects.requireNonNull(update, "update"));
+        return whenShown(signal, Objects.requireNonNull(update, "update"), false);
     }
 
     /**
@@ -187,14 +188,14 @@ public final class PageLoader<T> {
      * again; when it starts, it decides itself whether it is still wanted. Swing thread.
      */
     public PageLoader<T> starts(Signal signal, Runnable work) {
-        return whenShown(signal, Objects.requireNonNull(work, "work"));
+        return whenShown(signal, Objects.requireNonNull(work, "work"), true);
     }
 
     /**
-     * Runs {@code run} when {@code signal} fires: at once while the page is shown, otherwise at the end of the Swing step
-     * that shows it again.
+     * Runs {@code run} when {@code signal} fires: at once while the page is shown, otherwise when it is shown again, as
+     * it is shown or, {@code afterStep}, at the end of the Swing step that shows it.
      */
-    private PageLoader<T> whenShown(Signal signal, Runnable run) {
+    private PageLoader<T> whenShown(Signal signal, Runnable run, boolean afterStep) {
         boolean[] missed = {false};
         this.unsubscribe.add(signal.subscribe(() -> SwingUtilities.invokeLater(() -> {
             if (this.disposed) return;
@@ -205,11 +206,13 @@ public final class PageLoader<T> {
             JComponent shown = this.page;
             HierarchyListener listener = event -> {
                 if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !shown.isShowing() || !missed[0]) return;
-                SwingUtilities.invokeLater(() -> {
+                Runnable runMissed = () -> {
                     if (this.disposed || !missed[0] || !shown.isShowing()) return;
                     missed[0] = false;
                     run.run();
-                });
+                };
+                if (afterStep) SwingUtilities.invokeLater(runMissed);
+                else runMissed.run();
             };
             shown.addHierarchyListener(listener);
             this.unwatch.add(() -> shown.removeHierarchyListener(listener));
