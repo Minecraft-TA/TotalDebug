@@ -67,7 +67,12 @@ class RuntimeIndexServiceTest {
             service.failedBeforeBuild("Unable to rescan mods: gone", admitted);
             assertFalse(told.contains("Unable to rescan mods: gone"), "the older discovery's failure is not told");
             assertFalse(service.status().detail().contains("Unable to rescan mods"), "nor does it replace the job's status");
-            // Without a job since, it counts.
+            // A game connecting meanwhile replaces it too.
+            long beforeTheGame = service.admissions();
+            service.waiting("Waiting for Minecraft");
+            service.failedBeforeBuild("Unable to rescan mods: gone", beforeTheGame);
+            assertEquals("Waiting for Minecraft", service.status().detail());
+            // Without either since, it counts.
             service.failedBeforeBuild("Unable to rescan mods: gone", service.admissions());
             assertTrue(told.contains("Unable to rescan mods: gone"));
         }

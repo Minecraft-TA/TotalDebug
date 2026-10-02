@@ -118,7 +118,7 @@ public final class RuntimeIndexService implements AutoCloseable {
     private final Function<String, ClassIndex> indexLoader;
     private final Signal statusChanged = new Signal();
     private final Consumer<Status> failed;
-    /** How many jobs were admitted, so a failure found before a job can tell whether a newer one came meanwhile. */
+    /** How often the pending work was replaced, so a failure found before a job can tell whether it was superseded. */
     private long admissions;
     /** Where {@link #statusChanged} fires: in order, after the lifecycle section that changed the status ended. */
     private final Strand notices = Workers.strand();
@@ -192,6 +192,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             ensureOpen();
             // A saved inventory does not establish the identity of a newly connected runtime.
             // Retire in-flight restores too, so they cannot publish READY after this transition.
+            this.admissions++;
             this.pending = null;
             this.activeInventoryId = null;
             this.activeDataDirectory = null;
@@ -237,6 +238,7 @@ public final class RuntimeIndexService implements AutoCloseable {
 
     public void clear() {
         synchronized (this.lifecycleLock) {
+            this.admissions++;
             this.pending = null;
             this.activeInventoryId = null;
             this.activeMetrics = null;
@@ -266,7 +268,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    /** How many jobs were admitted so far, for {@link #failedBeforeBuild(String, long)}. */
+    /** How often the pending work was replaced so far: a job admitted, waiting or cleared; for {@link #failedBeforeBuild(String, long)}. */
     public long admissions() {
         synchronized (this.lifecycleLock) {
             return this.admissions;
@@ -274,8 +276,9 @@ public final class RuntimeIndexService implements AutoCloseable {
     }
 
     /**
-     * A failure found before a job, such as discovering local mods, that counts only where no job was admitted since
-     * {@code admitted}, as {@link #admissions()} told it then: a newer job is not cleared by an older failure.
+     * A failure found before a job, such as discovering local mods, that counts only where the pending work was not
+     * replaced since {@code admitted}, as {@link #admissions()} told it then: a newer job, or the wait for a game that
+     * connected, is not replaced by an older failure.
      */
     public void failedBeforeBuild(String detail, long admitted) {
         synchronized (this.lifecycleLock) {
