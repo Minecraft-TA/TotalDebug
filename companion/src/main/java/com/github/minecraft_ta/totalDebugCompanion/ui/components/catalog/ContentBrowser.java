@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Sidebar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
@@ -48,10 +47,7 @@ public final class ContentBrowser extends JPanel {
     private final CatalogEntryTable table;
     private final boolean namesMods;
     private Map<String, List<CatalogIndex.Entry>> content = Map.of();
-    /** The kind the user chose, kept across listings while it is listed again. */
     private String pendingKind = ALL;
-    /** A kind a navigation asked for before content was listed; dropped when the browser is hidden. */
-    private final PageLoader.Request<String> requested = PageLoader.withoutRead(this).request();
     private boolean updating;
 
     /** {@code modName} names the mod of each entry in its own column, or is null where every entry is one mod's. */
@@ -99,35 +95,19 @@ public final class ContentBrowser extends JPanel {
             this.updating = false;
         }
         this.sidebar.setSidebarShown(content.size() > 1);
-        String asked = this.requested.pending();
-        show(asked != null ? asked : this.pendingKind);
-        if (!content.isEmpty() && asked != null) {
-            this.pendingKind = selectedKind();
-            this.requested.drop();
-        }
+        select(this.pendingKind);
     }
 
     /**
      * Selects the kind of {@code registry}, such as {@code minecraft:fluid}, or All for an empty or unlisted one. With
-     * content listed the request is settled at once, so All chosen again is the user's; with none it waits for content
-     * while the browser is shown.
+     * content listed the request is settled at once, so All chosen again is the user's; with none, as before the catalog
+     * is captured, the first content settles it.
      */
     public void select(String registry) {
-        String kind = registry == null ? ALL : registry;
-        if (this.content.isEmpty()) {
-            this.requested.ask(kind);
-            return;
-        }
-        this.requested.drop();
-        show(kind);
-        this.pendingKind = selectedKind();
-    }
-
-    /** Selects the kind of {@code registry}, or All when it is not listed. */
-    private void show(String registry) {
+        this.pendingKind = registry == null ? ALL : registry;
         int position = 0;
         for (int index = 0; index < this.kinds.size(); index++) {
-            if (this.kinds.get(index).registry().equals(registry)) position = index;
+            if (this.kinds.get(index).registry().equals(this.pendingKind)) position = index;
         }
         this.updating = true;
         try {
@@ -135,6 +115,7 @@ public final class ContentBrowser extends JPanel {
         } finally {
             this.updating = false;
         }
+        if (!this.content.isEmpty()) this.pendingKind = selectedKind();
         showSelected();
     }
 

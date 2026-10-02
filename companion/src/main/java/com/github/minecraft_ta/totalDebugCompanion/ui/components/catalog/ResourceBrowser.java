@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.PageLoader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.Sidebar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.BrowserBody;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
@@ -97,10 +96,7 @@ public final class ResourceBrowser extends JPanel {
     private Map<String, String> from = Map.of();
     private Map<String, List<String>> hidden = Map.of();
     private Set<String> animated = Set.of();
-    /** The category the user chose, kept across listings. */
     private String pendingCategory = ALL;
-    /** A category a navigation asked for before anything was listed; dropped when the browser is hidden. */
-    private final PageLoader.Request<String> requested = PageLoader.withoutRead(this).request();
     private boolean updating;
 
     public ResourceBrowser(Consumer<NavigationTarget> navigator, Consumer<String> categoryChanged) {
@@ -237,16 +233,11 @@ public final class ResourceBrowser extends JPanel {
             this.categories = categories;
             this.categoryList.setModel(categories);
             this.sidebar.setSidebarShown(prepared.counts().size() > 1);
-            String asked = this.requested.pending();
-            selectKey(asked != null ? asked : this.pendingCategory);
+            selectKey(this.pendingCategory);
         } finally {
             this.updating = false;
         }
-        String chosen = this.pendingCategory;
         applyFilter();
-        // Nothing listed has no category to choose from: the user's and a requested one wait for a listing with something.
-        if (prepared.resources().isEmpty()) this.pendingCategory = chosen;
-        else this.requested.drop();
     }
 
     /** Shows a message in place of the resources, for example why they could not be read; empty shows the resources. */
@@ -257,18 +248,12 @@ public final class ResourceBrowser extends JPanel {
 
     /**
      * Selects the category {@code key}, or All when it is not listed. With resources listed the request is settled at
-     * once, so All chosen again is the user's; with none listed it waits for a listing with something while the browser
-     * is shown.
+     * once, so All chosen again is the user's; asked before the first listing, that listing settles it.
      */
     public void selectCategory(String key) {
-        String category = key == null ? ALL : key;
-        if (this.resources.isEmpty()) {
-            this.requested.ask(category);
-            return;
-        }
-        this.requested.drop();
-        selectKey(category);
-        this.pendingCategory = selectedCategory();
+        this.pendingCategory = key == null ? ALL : key;
+        selectKey(this.pendingCategory);
+        if (!this.resources.isEmpty()) this.pendingCategory = selectedCategory();
     }
 
     private void selectKey(String key) {
