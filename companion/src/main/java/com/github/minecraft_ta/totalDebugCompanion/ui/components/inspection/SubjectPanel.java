@@ -73,7 +73,7 @@ public final class SubjectPanel extends JPanel {
     private final ItemTabIcon tabIcon;
     private final JPanel sections = new JPanel();
     private final Set<String> collapsed = new HashSet<>();
-    private final PageLoader<Void> redraws;
+    private final PageLoader<Void> whenShown;
     private final Live live;
     private final FactsPanel.Actions actions = new FactsPanel.Actions() {
         @Override
@@ -138,9 +138,9 @@ public final class SubjectPanel extends JPanel {
         showHeader();
         showSections();
         // The page draws its items once it is shown; the editor tabs draw the tab's (refreshTabIcon).
-        this.redraws = PageLoader.redraws(this).updates(services.icons().changed(), this::reloadPageIcons);
+        this.whenShown = PageLoader.withoutRead(this).updates(services.icons().changed(), this::reloadPageIcons);
         // A read the session wants on its own, as a live read or once the compiler is ready, waits while hidden.
-        if (this.live != null) this.redraws.updates(this.live.session.readWanted(), this.live.session::readIfWanted);
+        if (this.live != null) this.whenShown.starts(this.live.session.readWanted(), this.live.session::readIfWanted);
         reloadIcons();
     }
 
@@ -326,7 +326,7 @@ public final class SubjectPanel extends JPanel {
         this.disposed = true;
         if (this.live != null) this.live.dispose();
         this.details.dispose();
-        this.redraws.dispose();
+        this.whenShown.dispose();
     }
 
     private static JScrollPane scroll(JComponent content) {

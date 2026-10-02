@@ -390,7 +390,7 @@ class PageLoaderTest {
     void anUpdateFromMemoryWaitsWhileThePageIsHiddenAndRunsOnceWhenShown() throws Exception {
         AtomicInteger updates = new AtomicInteger();
         ShowablePage page = new ShowablePage();
-        PageLoader<Void> redraws = onEdt(() -> PageLoader.redraws(page).updates(this.source, updates::incrementAndGet));
+        PageLoader<Void> redraws = onEdt(() -> PageLoader.withoutRead(page).updates(this.source, updates::incrementAndGet));
 
         changed();
         changed();
@@ -416,10 +416,32 @@ class PageLoaderTest {
     }
 
     @Test
+    void workThePageRunsItselfWaitsWhileThePageIsHiddenAndStartsOnceWhenShown() throws Exception {
+        AtomicInteger started = new AtomicInteger();
+        ShowablePage page = new ShowablePage();
+        PageLoader<Void> loader = onEdt(() -> PageLoader.withoutRead(page).starts(this.source, started::incrementAndGet));
+
+        changed();
+        changed();
+        assertEquals(0, started.get(), "a hidden page starts nothing");
+        SwingUtilities.invokeAndWait(() -> page.setShown(true));
+        assertEquals(1, started.get(), "shown, it starts once for the requests it missed");
+        changed();
+        assertEquals(2, started.get(), "a shown page starts at once");
+        assertEquals(0, onEdt(loader::reads), "the work does not run as the loader's read");
+
+        SwingUtilities.invokeAndWait(() -> page.setShown(false));
+        changed();
+        onEdt(loader::dispose);
+        SwingUtilities.invokeAndWait(() -> page.setShown(true));
+        assertEquals(2, started.get(), "a closed page starts nothing it missed");
+    }
+
+    @Test
     void aTitleIsRedrawnWhileThePageIsHidden() throws Exception {
         AtomicInteger titles = new AtomicInteger();
         ShowablePage page = new ShowablePage();
-        PageLoader<Void> redraws = onEdt(() -> PageLoader.redraws(page).retitles(this.source, titles::incrementAndGet));
+        PageLoader<Void> redraws = onEdt(() -> PageLoader.withoutRead(page).retitles(this.source, titles::incrementAndGet));
         changed();
         assertEquals(1, titles.get(), "the tab shows its title though the page is hidden");
         onEdt(() -> {

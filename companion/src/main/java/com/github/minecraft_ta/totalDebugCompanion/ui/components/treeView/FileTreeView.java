@@ -138,7 +138,7 @@ public class FileTreeView extends JScrollPane {
                 currentProject.follows(scope -> scope.packs().changed(ChangeRecord.PackSide.DATA), this::syncRoots),
                 currentProject.follows(scope -> scope.folders().changed(), this::syncRoots));
         // Another program may have changed the loaded Scripts folders while the user was away.
-        this.returns = PageLoader.redraws(this).updates(WindowFocus.returned(), this::refreshScripts);
+        this.returns = PageLoader.withoutRead(this).starts(WindowFocus.returned(), this::refreshScripts);
         syncRoots();
     }
 
