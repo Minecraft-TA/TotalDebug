@@ -73,20 +73,22 @@ public final class JsonStateWriter implements AutoCloseable {
 
     /**
      * Writes the pending snapshot and refuses later ones. A failed close leaves the writer open with its snapshot pending,
-     * so it can be closed again.
+     * so it can be closed again. Closes run one at a time, so a failed one cannot open a writer another closed since.
      */
     @Override
     public void close() throws IOException {
-        synchronized (this) {
-            this.closed = true;
-        }
-        try {
-            drain();
-        } catch (IOException | RuntimeException failure) {
+        synchronized (this.writing) {
             synchronized (this) {
-                this.closed = false;
+                this.closed = true;
             }
-            throw failure;
+            try {
+                drain();
+            } catch (IOException | RuntimeException failure) {
+                synchronized (this) {
+                    this.closed = false;
+                }
+                throw failure;
+            }
         }
     }
 

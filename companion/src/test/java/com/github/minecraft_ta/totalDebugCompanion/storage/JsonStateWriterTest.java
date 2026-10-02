@@ -132,6 +132,25 @@ class JsonStateWriterTest {
     }
 
     @Test
+    void aCloseThatFailsBesideOneThatSucceedsLeavesTheWriterClosed() throws Exception {
+        PausedWrite write = new PausedWrite();
+        write.failFirst.set(true);
+        JsonStateWriter writer = new JsonStateWriter(file(), write);
+        writer.schedule(value("A"));
+        CompletableFuture<Void> failing = closing(writer);
+        write.awaitPaused();
+        CompletableFuture<Void> second = closing(writer);
+        // The second close is waiting for the first's write.
+        Thread.sleep(200);
+
+        write.release();
+        assertThrows(Exception.class, () -> failing.get(5, TimeUnit.SECONDS));
+        second.get(5, TimeUnit.SECONDS);
+        assertEquals("A", read());
+        assertThrows(IllegalStateException.class, () -> writer.schedule(value("B")), "a close succeeded, so the writer stays closed");
+    }
+
+    @Test
     void aFailedCloseLeavesTheWriterOpenToBeClosedAgain() throws Exception {
         PausedWrite write = new PausedWrite();
         write.failFirst.set(true);
@@ -158,6 +177,16 @@ class JsonStateWriterTest {
         JsonObject json = new JsonObject();
         json.addProperty("value", value);
         return json;
+    }
+
+    private static CompletableFuture<Void> closing(JsonStateWriter writer) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                writer.close();
+            } catch (IOException exception) {
+                throw new IllegalStateException(exception);
+            }
+        });
     }
 
     private static CompletableFuture<Void> flushing(JsonStateWriter writer) {
