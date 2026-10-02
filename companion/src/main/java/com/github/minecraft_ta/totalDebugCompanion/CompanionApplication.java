@@ -776,6 +776,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private void makeCurrent(ProjectScope scope) {
         this.currentMessages.run();
         this.currentMessages = () -> { };
+        // A project that stops being current loses the game: its owners stop waiting for answers, as at a disconnect.
+        if (current != null && current != scope) current.location().disconnected();
         current = scope;
         if (scope != null && session != null) this.currentMessages = scope.listen(session);
         this.projectState.set(scope);
