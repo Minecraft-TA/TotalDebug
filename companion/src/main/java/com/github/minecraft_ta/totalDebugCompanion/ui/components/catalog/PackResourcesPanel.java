@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ResourcesTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.pack.GamePacks;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackResources;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
@@ -108,8 +109,10 @@ public final class PackResourcesPanel extends JPanel {
             this.browser.setMessage("The pack catalog is not captured yet.");
             return null;
         }
-        PackStackPayload resourcePacks = this.edits.packs().resourcePacks();
-        PackStackPayload datapacks = this.edits.packs().datapacks();
+        // Both sides as named at one moment.
+        GamePacks.Named named = this.edits.packs().named();
+        PackStackPayload resourcePacks = named.resourcePacks();
+        PackStackPayload datapacks = named.datapacks();
         if (this.browser.rowCount() == 0) this.browser.setMessage("Reading the resources of every pack");
         return () -> {
             PackResources.Joined joined = PackResources.join(PackResources.assets(resourcePacks, index, this.workspace),

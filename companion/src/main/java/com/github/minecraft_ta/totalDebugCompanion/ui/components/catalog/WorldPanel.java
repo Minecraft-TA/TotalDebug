@@ -24,6 +24,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLab
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.PlateIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
+import com.github.minecraft_ta.totalDebugCompanion.pack.GamePacks;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackResources;
 import com.github.minecraft_ta.totalDebugCompanion.pack.PackSelections;
 import com.github.minecraft_ta.totalDebugCompanion.pack.ResourceEdits;
@@ -149,9 +150,9 @@ public final class WorldPanel extends JPanel {
         // The world's owner reads it when the game plays another and when the user comes back to Companion; the
         // datapacks the connected game names come with its packs.
         this.loader = new PageLoader<>(() -> {
-            PackStackPayload stack = edits.packs().datapacks();
-            String refusal = edits.packs().worldRefusal();
-            return () -> read(edits.location().read(), this.world, stack, refusal);
+            // The datapacks and the refusal the server named together.
+            GamePacks.Named named = edits.packs().named();
+            return () -> read(edits.location().read(), this.world, named.datapacks(), named.worldRefusal());
         }, this::show, failure -> show(Loaded.problem("The world could not be read: " + failure.getMessage())))
                 .page(this).follows(world.changed()).follows(edits.packs().changed(ChangeRecord.PackSide.DATA))
                 // Only the names of the mods behind datapacks come from the catalog.
