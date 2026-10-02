@@ -88,7 +88,6 @@ public final class ResourceBrowser extends JPanel {
     private final ShownModel shown = new ShownModel();
     private final JList<ModResources.Resource> list = new JList<>(this.shown);
     private final TextureThumbnails thumbnails = new TextureThumbnails(UiMetrics.previewPixels(UiMetrics.THUMBNAIL_SIZE));
-    private final Consumer<String> categoryChanged;
     /** The resources in the order they are shown, and what the filter matches in each, in lowercase. */
     private List<ModResources.Resource> resources = List.of();
     private List<String> lowercasePaths = List.of();
@@ -101,10 +100,9 @@ public final class ResourceBrowser extends JPanel {
     private boolean listed;
     private boolean updating;
 
-    public ResourceBrowser(Consumer<NavigationTarget> navigator, Consumer<String> categoryChanged) {
+    public ResourceBrowser(Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         Objects.requireNonNull(navigator, "navigator");
-        this.categoryChanged = Objects.requireNonNull(categoryChanged, "categoryChanged");
         this.categoryList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.categoryList.setCellRenderer((list, category, index, selected, focused) -> {
             PrimarySecondaryLabel label = new PrimarySecondaryLabel();
@@ -120,7 +118,6 @@ public final class ResourceBrowser extends JPanel {
         this.categoryList.addListSelectionListener(event -> {
             if (event.getValueIsAdjusting() || this.updating) return;
             applyFilter();
-            this.categoryChanged.accept(selectedCategory());
         });
         this.categoryScroll.setBorder(BorderFactory.createEmptyBorder());
 

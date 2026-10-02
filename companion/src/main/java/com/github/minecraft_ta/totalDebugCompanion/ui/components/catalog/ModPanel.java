@@ -114,7 +114,7 @@ public final class ModPanel extends JPanel {
         this.icons = Objects.requireNonNull(icons, "icons");
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.listIcons = new CatalogIcons(icons, LIST_ICON_SIZE);
-        this.resources = new ResourceBrowser(navigator, category -> { });
+        this.resources = new ResourceBrowser(navigator);
         this.resourceLoader = new PageLoader<>(this::prepareResources, prepared -> {
             this.resources.setResources(prepared);
             this.resources.setMessage("");
