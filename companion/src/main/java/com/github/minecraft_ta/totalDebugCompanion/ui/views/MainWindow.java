@@ -117,7 +117,8 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.project = currentProject::scope;
         // The current project's catalog and change record, whichever project that is.
         this.stopFollowingProject = List.of(currentProject.follows(scope -> scope.catalog().changed(), this::catalogChanged),
-                currentProject.follows(scope -> scope.changes().changed(), this::changesRecorded));
+                // Tabs draw items; a new icon snapshot draws them again, shown or not.
+                itemIcons.changed().subscribe(() -> SwingUtilities.invokeLater(this.editorTabs::refreshTabIdentities)));
         this.debugger = debugger;
         this.insights = insights;
         this.scripts = scripts;
@@ -126,9 +127,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.frameNavigation = frameNavigation;
         setAutoRequestFocus(false);
 
-        // Tabs draw items; a new icon snapshot draws them again, shown or not.
-        itemIcons.changed().subscribe(this.editorTabs::refreshTabIdentities);
-        this.fileTreeView = new FileTreeView(project, target -> navigation().navigate(target));
+        this.fileTreeView = new FileTreeView(currentProject, target -> navigation().navigate(target));
         this.navigationService = new NavigationService(this, this.editorTabs, this.fileTreeView, project.get(), this::editorContext);
         this.scriptFileActions = new ScriptFileActions(this, editorTabs, fileTreeView, this::editorContext);
         this.fileTreeView.setFileActions(scriptFileActions);
@@ -277,13 +276,8 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         refreshActions();
         this.projectSelector.refresh();
     }
-    private void changesRecorded() {
-        // Only the Changes row counts the changes in effect.
-        this.fileTreeView.refreshModpack(false);
-    }
-
+    /** The Project tree follows the catalog itself; tabs and search name what it holds. */
     private void catalogChanged() {
-        this.fileTreeView.refreshModpack(true);
         this.editorTabs.refreshTabIdentities();
         if (this.searchEverywherePopup != null) this.searchEverywherePopup.catalogChanged();
     }
@@ -553,7 +547,6 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.projectSelector.refresh();
         setDebuggerState(debugger.status());
         this.navigationService.projectChanged(project.get());
-        this.fileTreeView.reloadProfile();
         refreshLaunchAvailability();
         refreshActions();
     }
@@ -605,8 +598,9 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.snippetExecutions = null;
     }
 
+    /** The runtime binding has no signal yet (docs/SYSTEMS.md, step 6): the Project tree computes its roots again. */
     public void refreshRuntimeSources() {
-        UIUtils.onEdt(this.fileTreeView::reloadProfile);
+        UIUtils.onEdt(this.fileTreeView::syncRoots);
     }
 
     private void refreshActions() {

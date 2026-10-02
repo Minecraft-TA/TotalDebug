@@ -235,7 +235,7 @@ public final class ScriptFileActions {
         return tree.refreshDirectory(path.getParent())
                 .thenComposeAsync(ignored -> {
                     requireOwner(ctx);
-                    return tree.revealLocalPath(path);
+                    return tree.revealLocalPath(path, () -> owns(ctx));
                 }, SwingUtilities::invokeLater)
                 .thenComposeAsync(found -> {
                     requireOwner(ctx);
@@ -245,8 +245,12 @@ public final class ScriptFileActions {
                 }, SwingUtilities::invokeLater);
     }
     private void requireOwner(EditorContext ctx) {
-        if (context.get().project() != ctx.project() || ctx.project().phase() == ProjectScope.Phase.RETIRED)
-            throw new CancellationException("Project changed during file operation");
+        if (!owns(ctx)) throw new CancellationException("Project changed during file operation");
+    }
+
+    /** Whether the file operation's project is still the one shown, and not retired. */
+    private boolean owns(EditorContext ctx) {
+        return context.get().project() == ctx.project() && ctx.project().phase() != ProjectScope.Phase.RETIRED;
     }
     private void rename(FileSelection selected) {
         Path from = selected.path;
@@ -418,7 +422,7 @@ public final class ScriptFileActions {
             tabs.refreshEditorTitles();
             roots.forEach(path -> refreshes.add(tree.refreshDirectory(path.getParent())));
             CompletableFuture.allOf(refreshes.toArray(CompletableFuture[]::new)).handle((value, refreshFailure) -> refreshFailure)
-                    .thenCompose(refreshFailure -> restoreTree(ctx.project().scriptFiles().root(), expandedPaths, selectionPaths, changes)
+                    .thenCompose(refreshFailure -> restoreTree(ctx, ctx.project().scriptFiles().root(), expandedPaths, selectionPaths, changes)
                             .handle((value, restoreFailure) -> refreshFailure != null ? refreshFailure : restoreFailure))
                     .thenComposeAsync(refreshFailure -> {
                         if (failure != null) return CompletableFuture.failedFuture(failure);
@@ -439,7 +443,8 @@ public final class ScriptFileActions {
         return result;
     }
 
-    private CompletableFuture<Void> restoreTree(Path root, List<Path> expanded, List<Path> selected, List<Change> changes) {
+    /** Puts back the rows the user had open and selected, where they moved to, while the operation's project stays. */
+    private CompletableFuture<Void> restoreTree(EditorContext ctx, Path root, List<Path> expanded, List<Path> selected, List<Change> changes) {
         CompletableFuture<Void> restored = CompletableFuture.completedFuture(null);
         for (boolean select : List.of(false, true)) {
             for (Path old : select ? selected : expanded) {
@@ -450,7 +455,7 @@ public final class ScriptFileActions {
                 if (moved == null) continue;
                 List<String> segments = new ArrayList<>();
                 root.relativize(moved).forEach(segment -> segments.add(segment.toString()));
-                restored = restored.thenCompose(ignored -> tree.tree().restoreItemPath(root.getFileName().toString(), segments, select));
+                restored = restored.thenCompose(ignored -> tree.tree().restoreItemPath(root.getFileName().toString(), segments, select, () -> owns(ctx)));
             }
         }
         return restored;

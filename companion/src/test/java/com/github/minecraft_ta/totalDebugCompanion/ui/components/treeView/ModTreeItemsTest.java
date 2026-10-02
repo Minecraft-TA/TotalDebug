@@ -90,7 +90,7 @@ class ModTreeItemsTest {
         List<TreeItem> groups = ((DirectoryTreeItem) mods.getFirst()).loadChildren();
         assertEquals(List.of("resources"), groups.stream().map(TreeItem::getName).toList());
         assertInstanceOf(NavigableTreeItem.class, groups.getFirst());
-        ModTreeItems.Root root = new ModTreeItems.Root(() -> snapshot);
+        ModTreeItems.Root root = new ModTreeItems.Root(snapshot);
         assertEquals("not captured", root.getPresentation().secondary());
         assertEquals(List.of(ModTreeItems.MODS), root.loadChildren().stream().map(TreeItem::getName).toList(),
                 "Configuration waits for the catalog that describes the settings");

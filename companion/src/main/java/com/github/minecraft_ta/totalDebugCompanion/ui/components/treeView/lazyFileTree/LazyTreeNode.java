@@ -7,6 +7,8 @@ public class LazyTreeNode extends DefaultMutableTreeNode {
 
     private boolean childrenLoaded;
     private int revision;
+    /** How many loads of its rows started, which tests count. */
+    private int loads;
     private boolean refreshDescendants;
     private int selectedSegment = -1;
 
@@ -54,6 +56,8 @@ public class LazyTreeNode extends DefaultMutableTreeNode {
     }
 
     int revision() { return this.revision; }
+    int loads() { return this.loads; }
+    void loadStarted() { this.loads++; }
 
     boolean refreshDescendants() { return this.refreshDescendants; }
 

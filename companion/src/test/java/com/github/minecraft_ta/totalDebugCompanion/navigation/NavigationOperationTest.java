@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
+import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProjects;
 import java.util.function.BooleanSupplier;
 import java.io.IOException;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
@@ -228,7 +229,7 @@ class NavigationOperationTest {
             app.openProject(CompanionProfile.forGame(Files.createDirectory(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
             window = edt(app::createWindow);
             tabs = activation == null ? window.getEditorTabs() : edt(EditorTabs::new);
-            isolatedTree = activation == null ? null : edt(() -> new FileTreeView(app::currentScope, ignored -> { }));
+            isolatedTree = activation == null ? null : edt(() -> new FileTreeView(CurrentProjects.of(app.currentScope()), ignored -> { }));
             navigation = activation == null ? window.navigation() : edt(() -> new NavigationService(window, tabs, isolatedTree,
                     app.currentScope(), window::editorContext, activation));
             state = app.currentScope().navigation();

@@ -307,7 +307,7 @@ class OfflineProjectIntegrationTest {
     private static void expandMods(MainWindow view) throws Exception {
         var tree = new AtomicReference<LazyFileJTree>();
         SwingUtilities.invokeAndWait(() -> tree.set(find(view, LazyFileJTree.class)));
-        assertTrue(tree.get().revealItemPath("runtime", "demo.jar [demo.jar]", List.of("demo")).get(5, TimeUnit.SECONDS));
+        assertTrue(tree.get().revealItemPath("runtime", "demo.jar [demo.jar]", List.of("demo"), () -> true).get(5, TimeUnit.SECONDS));
     }
 
     private static String onEdtText(Container container) {

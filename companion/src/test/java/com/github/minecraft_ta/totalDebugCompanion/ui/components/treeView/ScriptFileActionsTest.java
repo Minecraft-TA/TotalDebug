@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProjects;
+import java.util.function.BooleanSupplier;
 import com.github.minecraft_ta.totalDebugCompanion.model.OpenedTabs;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
@@ -221,12 +223,12 @@ class ScriptFileActionsTest {
         final CompletableFuture<Path> arrived = new CompletableFuture<>();
         final CompletableFuture<Void> release = new CompletableFuture<>();
         HeldRevealTree(MainWindow window, FileTreeView delegate) {
-            super(() -> window.editorContext().project(), ignored -> { });
+            super(CurrentProjects.of(window.editorContext().project()), ignored -> { });
             this.delegate = delegate;
         }
         @Override public CompletableFuture<Void> refreshDirectory(Path parent) { return delegate.refreshDirectory(parent); }
-        @Override public CompletableFuture<Boolean> revealLocalPath(Path path) {
-            return delegate.revealLocalPath(path).thenCompose(found -> {
+        @Override public CompletableFuture<Boolean> revealLocalPath(Path path, BooleanSupplier stillWanted) {
+            return delegate.revealLocalPath(path, stillWanted).thenCompose(found -> {
                 arrived.complete(path);
                 return release.thenApply(ignored -> found);
             });
@@ -396,9 +398,9 @@ class ScriptFileActionsTest {
             Path items = Files.createDirectories(root.resolve("modules/client/items"));
             Path script = Files.writeString(items.resolve("Test.tdscript"), "return 1;");
             FileTreeView files = find(window, FileTreeView.class);
-            edt(() -> { files.reloadProfile(); window.getEditorTabs().openEditorTab(OpenedTabs.script(window.editorContext(), script)); return null; });
+            edt(() -> { files.syncRoots(); window.getEditorTabs().openEditorTab(OpenedTabs.script(window.editorContext(), script)); return null; });
             ScriptView editor = edt(() -> (ScriptView) window.getEditorTabs().getSelectedEditor());
-            assertTrue(files.revealLocalPath(root.resolve("modules/client")).get(5, TimeUnit.SECONDS));
+            assertTrue(files.revealLocalPath(root.resolve("modules/client"), () -> true).get(5, TimeUnit.SECONDS));
             Path target = edt(() -> ScriptFileActions.path(files.tree().getSelectionPath()));
             assertEquals(root.resolve("modules/client"), target);
             edt(() -> {
@@ -414,7 +416,7 @@ class ScriptFileActionsTest {
             assertTrue(Files.isRegularFile(editor.getPath()));
             assertFalse(Files.exists(target));
             Path destination = Files.createDirectories(root.resolve("Destination"));
-            assertTrue(files.revealLocalPath(root.resolve("modules/server")).get(5, TimeUnit.SECONDS));
+            assertTrue(files.revealLocalPath(root.resolve("modules/server"), () -> true).get(5, TimeUnit.SECONDS));
             Path moved = edt(() -> ScriptFileActions.path(files.tree().getSelectionPath()));
             edt(() -> window.scriptFileActions().move(List.of(moved), destination)).get(10, TimeUnit.SECONDS);
             assertEquals(destination.resolve("server/items/Test.tdscript"), editor.getPath());
@@ -536,7 +538,7 @@ class ScriptFileActionsTest {
                 assertTrue(treeView.tree().isVisible(selected));
                 return null;
             });
-            treeView.revealLocalPath(root.resolve("One/Test.tdscript")).get(10, TimeUnit.SECONDS);
+            treeView.revealLocalPath(root.resolve("One/Test.tdscript"), () -> true).get(10, TimeUnit.SECONDS);
             edt(() -> {
                 var tree = treeView.tree();
                 assertTrue(tree.getDragEnabled()); assertEquals(DropMode.ON, tree.getDropMode());
@@ -555,7 +557,7 @@ class ScriptFileActionsTest {
                 return null;
             });
             var firstSelection = edt(() -> treeView.tree().getSelectionPath());
-            treeView.revealLocalPath(root.resolve("Two/Test.tdscript")).get(10, TimeUnit.SECONDS);
+            treeView.revealLocalPath(root.resolve("Two/Test.tdscript"), () -> true).get(10, TimeUnit.SECONDS);
             edt(() -> {
                 treeView.tree().addSelectionPath(firstSelection);
                 var menu = treeView.createContextMenu(treeView.tree().getItemFactory().createFileSystemFileItem(root.resolve("One/Test.tdscript")));

@@ -18,9 +18,14 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
     public Path getPath() { return path; }
 
     FileSystemDirectoryItem(LazyFileJTree lazyFileJTree, Path path) {
+        this(lazyFileJTree, path, true);
+    }
+
+    /** A folder; {@code check} whether it is one, where no reading found that already, as for a root. */
+    FileSystemDirectoryItem(LazyFileJTree lazyFileJTree, Path path, boolean check) {
         super(path.getFileName().toString());
         this.tree = lazyFileJTree;
-        if (!Files.isDirectory(path))
+        if (check && !Files.isDirectory(path))
             throw new IllegalArgumentException("Not a directory");
 
         this.path = path;

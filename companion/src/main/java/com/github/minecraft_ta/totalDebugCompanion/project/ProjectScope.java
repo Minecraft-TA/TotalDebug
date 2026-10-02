@@ -93,6 +93,9 @@ public final class ProjectScope implements AutoCloseable {
     public GamePacks packs() { return packs; }
     private final ResourceEdits resources;
     private final WorldReading world;
+    private final InstanceFolders folders;
+    /** Whether the scripts folder and saves exist and the game wrote logs, which the Project tree's roots need. */
+    public InstanceFolders folders() { return folders; }
     /** The current world, which the World page and the Project tree show. */
     public WorldReading world() { return world; }
     /** Writes edited resources into the packs Companion manages and reloads them in the running game. */
@@ -120,6 +123,7 @@ public final class ProjectScope implements AutoCloseable {
         this.keyBindings = new KeyBindingControl(this.pipeline);
         this.packs = new GamePacks(this.location);
         this.world = new WorldReading(this.location, this.packs);
+        this.folders = new InstanceFolders(paths().scripts(), profile.workspaceDirectory(), this.location);
         this.resources = new ResourceEdits(this.pipeline, this.packs, new ResourceOriginals(paths().originals()),
                 this.pipeline.writes(), state);
         this.packSelections = new PackSelections(this.resources);
@@ -229,7 +233,7 @@ public final class ProjectScope implements AutoCloseable {
             pending.clear();
         }
         // Writes still queued finish first, so each is recorded before the change record closes.
-        try { keyBindings.close(); world.close(); resources.close(); writes.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
+        try { keyBindings.close(); world.close(); folders.close(); resources.close(); writes.close(); closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
     }
 
     public String loadBreakpointScript(String name) {

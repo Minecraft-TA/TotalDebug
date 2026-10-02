@@ -49,6 +49,11 @@ public final class WorldReading implements AutoCloseable {
         return this.reading.changed();
     }
 
+    /** The current world as read last, without reading; empty where none was read yet. */
+    public Optional<World> published() {
+        return this.reading.published();
+    }
+
     /** The name of the current world as read last, without reading; empty where none was read yet. */
     public Optional<String> publishedName() {
         return this.reading.published().map(World::saved).map(CurrentWorld.Saved::name);

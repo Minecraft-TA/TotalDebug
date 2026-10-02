@@ -46,6 +46,8 @@ public final class GamePacks {
     private volatile String worldRefusal = "";
     /** What the game played when its server named {@link #datapacks}, whose datapacks they are. */
     private volatile PlayingPayload datapacksFor;
+    /** How many of {@link #datapacks} the World page lists for a server, counted when they were named. */
+    private volatile int serverDatapackCount;
     private final Map<ChangeRecord.PackSide, Signal> changed = new EnumMap<>(Map.of(
             ChangeRecord.PackSide.RESOURCES, new Signal(),
             ChangeRecord.PackSide.DATA, new Signal()));
@@ -62,6 +64,7 @@ public final class GamePacks {
             synchronized (this) {
                 if (!Objects.equals(this.datapacksFor, location.playing())) {
                     this.datapacks = null;
+                    this.serverDatapackCount = 0;
                     this.worldRefusal = "";
                 }
             }
@@ -81,6 +84,7 @@ public final class GamePacks {
         this.resourcePacks = null;
         this.dataFormat = 0;
         this.datapacks = null;
+        this.serverDatapackCount = 0;
         this.worldRefusal = "";
         tell(ChangeRecord.PackSide.RESOURCES);
         tell(ChangeRecord.PackSide.DATA);
@@ -132,6 +136,7 @@ public final class GamePacks {
             if (!current) return;
             this.datapacksFor = playing;
             this.datapacks = refusal.isEmpty() ? packs : null;
+            this.serverDatapackCount = this.datapacks == null ? 0 : PackResources.serverDatapackCount(this.datapacks);
             this.worldRefusal = refusal;
         }
         tell(ChangeRecord.PackSide.DATA);
@@ -151,6 +156,14 @@ public final class GamePacks {
      */
     public String worldRefusal() {
         return this.worldRefusal;
+    }
+
+    /**
+     * How many datapacks the World page lists for the server the game plays on, as it named them last; 0 until then.
+     * Counted when they were named, so that a count drawn on the Swing thread costs nothing.
+     */
+    public int serverDatapackCount() {
+        return this.serverDatapackCount;
     }
 
     /** The datapacks the server of the world the game plays named last, or null until it named them. */

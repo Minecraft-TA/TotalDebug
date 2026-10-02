@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totalDebugCompanion.game.Access;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocation;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totalDebugCompanion.util.Strand;
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangePayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ChangeResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.relay.RelayedMessages;
@@ -26,7 +28,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -65,6 +66,8 @@ public final class ChangePipeline {
     private final GameLocation location;
     private final ChangeRecord record;
     private final Executor writes;
+    /** Where a change waited for too long is told so. */
+    private final Strand answers = Workers.strand();
     private final AtomicInteger requests = new AtomicInteger();
     private final Map<Integer, CompletableFuture<ChangeResultPayload>> waiting = new ConcurrentHashMap<>();
     private final Reloads reloads;
@@ -249,7 +252,7 @@ public final class ChangePipeline {
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));
         }
         CompletableFuture<Outcome<T>> waited = made.copy();
-        CompletableFuture.delayedExecutor(category.answerWait().toMillis(), TimeUnit.MILLISECONDS).execute(() -> waited.completeExceptionally(
+        Workers.later(category.answerWait().toMillis(), this.answers, () -> waited.completeExceptionally(
                 new IOException("The game has not answered yet; the change is recorded if the game makes it")));
         return waited;
     }

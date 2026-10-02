@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.project.CurrentProject;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
 import org.junit.jupiter.api.Test;
@@ -27,7 +28,7 @@ class FileTreeViewMenuTest {
         }
         SwingUtilities.invokeAndWait(() -> {
             List<NavigationTarget> opened = new ArrayList<>();
-            var view = new FileTreeView(() -> null, opened::add);
+            var view = new FileTreeView(new CurrentProject(), opened::add);
             var tree = (LazyFileJTree) view.getViewport().getView();
             var sourceMenu = view.createContextMenu(new DecompiledSourcesTreeItem.SourceItem("example.Test"));
             assertEquals("example.Test", item(sourceMenu, "Copy Reference").getActionCommand());

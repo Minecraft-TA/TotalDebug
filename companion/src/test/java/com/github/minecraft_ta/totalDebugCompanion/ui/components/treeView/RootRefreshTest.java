@@ -7,6 +7,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFi
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -19,6 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RootRefreshTest {
     private final AtomicInteger rootLoads = new AtomicInteger();
     private final AtomicInteger folderLoads = new AtomicInteger();
+    /** What the root's rows wait for while they load. */
+    private volatile CountDownLatch gate = new CountDownLatch(0);
 
     @Test
     void refreshingARootsRowsKeepsWhatIsLoadedBelowThem() throws Exception {
@@ -28,12 +32,12 @@ class RootRefreshTest {
             return null;
         });
         try {
-            assertTrue(tree.revealItemPath("pack", List.of("mods", "leaf")).get(5, TimeUnit.SECONDS));
+            assertTrue(tree.revealItemPath("pack", List.of("mods", "leaf"), () -> true).get(5, TimeUnit.SECONDS));
             assertEquals(1, this.folderLoads.get());
 
             // As when the changes in effect changed: only the root's own rows, such as Changes, are read again.
             onEdt(() -> {
-                tree.refreshRoot(root(), false);
+                tree.updateRoots(List.of(root()), Map.of("pack", LazyFileJTree.Reload.ROWS));
                 return null;
             });
             await(() -> this.rootLoads.get() == 2);
@@ -43,10 +47,61 @@ class RootRefreshTest {
 
             // As when the catalog changed: every loaded row below is read again too.
             onEdt(() -> {
-                tree.refreshRoot(root(), true);
+                tree.updateRoots(List.of(root()), Map.of("pack", LazyFileJTree.Reload.BELOW));
                 return null;
             });
             await(() -> this.rootLoads.get() == 3 && this.folderLoads.get() == 2);
+        } finally {
+            onEdt(() -> {
+                tree.setRootNodes();
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void aReloadOfTheRowsDoesNotNarrowAReloadOfEverythingBelowUnderWay() throws Exception {
+        LazyFileJTree tree = new LazyFileJTree();
+        onEdt(() -> {
+            tree.setRootNodes(root());
+            return null;
+        });
+        CountDownLatch held = new CountDownLatch(1);
+        try {
+            assertTrue(tree.revealItemPath("pack", List.of("mods", "leaf"), () -> true).get(5, TimeUnit.SECONDS));
+            this.gate = held;
+            onEdt(() -> {
+                tree.updateRoots(List.of(root()), Map.of("pack", LazyFileJTree.Reload.BELOW));
+                return null;
+            });
+            await(() -> this.rootLoads.get() == 2);
+            // A count of changes comes while the catalog's reload still reads the root's rows.
+            onEdt(() -> {
+                tree.updateRoots(List.of(root()), Map.of("pack", LazyFileJTree.Reload.ROWS));
+                return null;
+            });
+            held.countDown();
+            await(() -> this.folderLoads.get() == 2);
+        } finally {
+            held.countDown();
+            onEdt(() -> {
+                tree.setRootNodes();
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void aRootWhoseRowsWereNeverLoadedStaysUnloaded() throws Exception {
+        LazyFileJTree tree = new LazyFileJTree();
+        onEdt(() -> {
+            tree.setRootNodes(root());
+            tree.updateRoots(List.of(root()), Map.of("pack", LazyFileJTree.Reload.BELOW));
+            return null;
+        });
+        try {
+            Thread.sleep(200);
+            assertEquals(0, this.rootLoads.get(), "a root never expanded loads nothing");
         } finally {
             onEdt(() -> {
                 tree.setRootNodes();
@@ -60,6 +115,8 @@ class RootRefreshTest {
             @Override
             public List<TreeItem> loadChildren() {
                 RootRefreshTest.this.rootLoads.incrementAndGet();
+                try { RootRefreshTest.this.gate.await(5, TimeUnit.SECONDS); }
+                catch (InterruptedException interrupted) { throw new IllegalStateException(interrupted); }
                 return List.of(folder());
             }
         };

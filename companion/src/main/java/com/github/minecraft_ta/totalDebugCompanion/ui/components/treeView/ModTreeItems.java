@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Supplier;
 
 /**
  * The Modpack tree (see docs/MODPACK.md): the pack's mods and its configuration. Mods has one node per installed mod
@@ -64,27 +63,49 @@ final class ModTreeItems {
         }
     }
 
-    /** The Modpack root; its status tells whether the pack's catalog is captured. */
-    static final class Root extends DirectoryTreeItem {
-        private final Supplier<Snapshot> snapshot;
+    /** A value compared by identity, for sources an owner replaces only when they change, as the catalog's index. */
+    record Same(Object value) {
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Same same && same.value == this.value;
+        }
 
-        Root(Supplier<Snapshot> snapshot) {
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(this.value);
+        }
+    }
+
+    /**
+     * The Modpack root, built from {@code snapshot}, from which its rows are built too, also those the user expands
+     * later; its status tells whether the pack's catalog is captured.
+     */
+    static final class Root extends DirectoryTreeItem {
+        private final Snapshot snapshot;
+        private volatile PackCatalogService.State state;
+
+        Root(Snapshot snapshot) {
             super(ROOT);
             this.snapshot = snapshot;
-            String status = CatalogMessages.status(snapshot.get().state());
-            setPresentation(new PrimarySecondaryText("Modpack", status));
             setIcon(Icons.MODPACK);
+            showState(snapshot.state());
+        }
+
+        /** Draws the catalog's status as {@code state} tells it, on a root whose rows stay as they are. */
+        void showState(PackCatalogService.State state) {
+            this.state = state;
+            setPresentation(new PrimarySecondaryText("Modpack", CatalogMessages.status(state)));
         }
 
         @Override
         public String getTooltip() {
-            String unavailable = CatalogMessages.unavailable(this.snapshot.get().state());
+            String unavailable = CatalogMessages.unavailable(this.state);
             return unavailable.isEmpty() ? "The pack's mods and configuration" : unavailable;
         }
 
         @Override
         public List<TreeItem> loadChildren() {
-            return packChildren(this.snapshot.get());
+            return packChildren(this.snapshot);
         }
     }
 
@@ -98,7 +119,9 @@ final class ModTreeItems {
         boolean mods = snapshot.index() != null || snapshot.sources().modules().stream().anyMatch(module ->
                 module.kind() == RuntimeInventory.ModuleKind.MOD || module.kind() == RuntimeInventory.ModuleKind.PLATFORM);
         if (mods) children.add(new Mods(snapshot));
-        if (snapshot.index() != null && !snapshot.index().entries().isEmpty()) children.add(new Content(null, snapshot.index().content()));
+        if (snapshot.index() != null && !snapshot.index().entries().isEmpty()) {
+            children.add(new Content(null, snapshot.index().content(), new Same(snapshot.index())));
+        }
         if (snapshot.index() != null) children.add(new Configuration());
         if (snapshot.index() != null) children.add(new PackResources());
         if (snapshot.index() != null && !snapshot.index().catalog().keyBindings().isEmpty()) {
@@ -126,6 +149,12 @@ final class ModTreeItems {
         @Override
         public String getTooltip() {
             return "Installed mods";
+        }
+
+        /** The catalog's index and the runtime's sources it lists, which a count of changes leaves as they are. */
+        @Override
+        public Object source() {
+            return List.of(new Same(this.snapshot.index()), new Same(this.snapshot.sources()));
         }
 
         @Override
@@ -330,11 +359,18 @@ final class ModTreeItems {
     static final class Content extends DirectoryTreeItem {
         private final String modId;
         private final Map<String, List<CatalogIndex.Entry>> content;
+        private final Object source;
 
         Content(String modId, Map<String, List<CatalogIndex.Entry>> content) {
+            this(modId, content, null);
+        }
+
+        /** {@code source} is what {@code content} comes from, as the catalog's index, or null. */
+        Content(String modId, Map<String, List<CatalogIndex.Entry>> content, Object source) {
             super(CONTENT);
             this.modId = modId;
             this.content = content;
+            this.source = source;
             setPresentation(PrimarySecondaryText.primary("Content"));
             setIcon(SubjectIcons.tab(ModTab.CONTENT));
             setSortPriority(modId == null ? 1 : ModTab.CONTENT.ordinal());
@@ -343,6 +379,11 @@ final class ModTreeItems {
         @Override
         public String getTooltip() {
             return this.modId == null ? "Registered content of every mod" : "Registered content";
+        }
+
+        @Override
+        public Object source() {
+            return this.source;
         }
 
         @Override

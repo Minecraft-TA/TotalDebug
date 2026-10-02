@@ -114,6 +114,8 @@ public final class ChangeRecord implements AutoCloseable {
     /** The game directory the record's files are stored relative to, or null for a record that is not saved. */
     private final Path gameDirectory;
     private final Map<Target, Change> changes = new LinkedHashMap<>();
+    /** How many changes are in effect, published on every change of {@link #changes} for readers that take no lock. */
+    private volatile int count;
     private final Signal changed = new Signal();
 
     private ChangeRecord(JsonStateWriter writer, Clock clock, Path gameDirectory) {
@@ -184,6 +186,7 @@ public final class ChangeRecord implements AutoCloseable {
                         value(entry, "current"), Instant.parse(JsonFiles.string(entry, "firstChanged")),
                         Instant.parse(JsonFiles.string(entry, "lastChanged"))));
             }
+            record.count = record.changes.size();
             return record;
         } catch (IOException | RuntimeException exception) {
             record.writer.close();
@@ -231,6 +234,7 @@ public final class ChangeRecord implements AutoCloseable {
                 this.changes.put(target, new Change(target, original, written,
                         earlier == null ? now : earlier.firstChanged(), now));
             }
+            this.count = this.changes.size();
             scheduleSave();
         }
         this.changed.fire();
@@ -248,6 +252,7 @@ public final class ChangeRecord implements AutoCloseable {
             dropped = change != null && sameValue.test(change.original(), literal);
             if (dropped) {
                 this.changes.remove(target);
+                this.count = this.changes.size();
                 scheduleSave();
             }
         }
@@ -285,6 +290,14 @@ public final class ChangeRecord implements AutoCloseable {
 
     public synchronized int size() {
         return this.changes.size();
+    }
+
+    /**
+     * How many changes are in effect, as published last, without the record's lock: a change holds that lock while it
+     * schedules its save, whose writer can wait for a flush, so a reader on the Swing thread uses this.
+     */
+    public int count() {
+        return this.count;
     }
 
     /** Fires after every change of the record, on the thread that changed it, but not after a write that leaves it as it was. */

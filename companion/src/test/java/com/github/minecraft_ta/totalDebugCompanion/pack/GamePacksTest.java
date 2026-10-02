@@ -46,6 +46,26 @@ class GamePacksTest {
     }
 
     @Test
+    void aServersDatapacksAreCountedWhenNamedAndForgottenWithItsWorld() {
+        GameLocation location = new GameLocation(this.directory);
+        GamePacks packs = new GamePacks(location);
+        location.connected(message -> true);
+        location.playing(new PlayingPayload.Multiplayer("play.example.invalid", false, true));
+        assertEquals(0, packs.serverDatapackCount(), "nothing named yet");
+
+        packs.datapacks("", new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "", "", 0),
+                new PackStackPayload.Pack("mod/testmod", "", "", PackStackPayload.HIDDEN)),
+                List.of(new PackStackPayload.Pack("bundle", "", "", 0))), "");
+        assertEquals(2, packs.serverDatapackCount(), "the ones the World page lists, without the hidden one");
+
+        location.playing(new PlayingPayload.Multiplayer("other.example.invalid", false, true));
+        assertEquals(0, packs.serverDatapackCount(), "another server's world has its own");
+        packs.datapacks("", stack("vanilla"), "");
+        location.disconnected();
+        assertEquals(0, packs.serverDatapackCount(), "without the game, none");
+    }
+
+    @Test
     void aSelectionWrittenToItsFileTellsItsSide() {
         GamePacks packs = follow(new GamePacks(new GameLocation(this.directory)));
         packs.written(ChangeRecord.PackSide.DATA);

@@ -14,6 +14,14 @@ public class FileTreeItemFactory {
         return new FileSystemDirectoryItem(tree, path);
     }
 
+    /**
+     * The root of a folder a reading found, as the Scripts folder, built without checking the folder again, so on the
+     * Swing thread; a folder removed meanwhile shows the failure of its first load.
+     */
+    public FileSystemDirectoryItem createRootDirectoryItem(Path path) {
+        return new FileSystemDirectoryItem(tree, path, false);
+    }
+
     public FileSystemFileItem createFileSystemFileItem(Path path) {
         return new FileSystemFileItem(path);
     }

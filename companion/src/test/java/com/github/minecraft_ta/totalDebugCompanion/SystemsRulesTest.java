@@ -53,11 +53,12 @@ class SystemsRulesTest {
             Map.entry("thenRunAsync", 1), Map.entry("thenComposeAsync", 1), Map.entry("whenCompleteAsync", 1),
             Map.entry("handleAsync", 1), Map.entry("exceptionallyAsync", 1), Map.entry("exceptionallyComposeAsync", 1),
             Map.entry("thenCombineAsync", 2), Map.entry("thenAcceptBothAsync", 2), Map.entry("runAfterBothAsync", 2),
-            Map.entry("applyToEitherAsync", 2), Map.entry("acceptEitherAsync", 2), Map.entry("runAfterEitherAsync", 2));
+            Map.entry("applyToEitherAsync", 2), Map.entry("acceptEitherAsync", 2), Map.entry("runAfterEitherAsync", 2),
+            Map.entry("delayedExecutor", 2));
 
     /** What a file does against a rule, and how often. */
     private record Found(Map<String, Integer> threads, Map<String, Integer> sharedPool, Map<String, Integer> listenerLists,
-                         Map<String, Integer> watchers) {
+                         Map<String, Integer> watchers, Map<String, Integer> subscriptions) {
     }
 
     private static Found found;
@@ -110,12 +111,27 @@ class SystemsRulesTest {
     private static final Map<String, Allowed> WATCHERS = Map.ofEntries(
             Map.entry("util/FileWatch.java", new Allowed(1, "the watch of files handed to another program")));
 
+    // A page follows what it shows through its loader, and a part of the window the current project's owners through
+    // CurrentProject.follows (section 3); a subscription of its own in ui/ is one of these.
+    private static final Map<String, Allowed> UI_SUBSCRIPTIONS = Map.ofEntries(
+            Map.entry("ui/components/PageLoader.java", new Allowed(4, "the page loader itself")),
+            Map.entry("ui/components/catalog/CatalogIcons.java", new Allowed(1, "a cache of the catalog's icons, emptied when it changes")),
+            Map.entry("ui/components/treeView/DecompiledSourcesTreeItem.java",
+                    new Allowed(1, "the decompiler of the runtime binding the row is built for, which no signal announces yet")),
+            Map.entry("ui/components/treeView/FileTreeView.java", new Allowed(1, "the current project itself, whose roots replace every root")),
+            Map.entry("ui/views/MainWindow.java", new Allowed(1, "item icons, which open tabs draw whether shown or not")),
+            Map.entry("ui/views/SearchEverywherePopup.java", new Allowed(1, "the index's status while the popup is open")),
+            Map.entry("ui/components/editors/ScriptPanel.java", new Allowed(1, "a script run, an event")),
+            Map.entry("ui/components/global/ScriptActivityWidget.java", new Allowed(1, "script runs, an event")),
+            Map.entry("ui/components/global/NotificationWidget.java", new Allowed(1, "notifications, an event")));
+
     @BeforeAll
     static void scan() throws IOException {
         Map<String, Integer> threads = new TreeMap<>();
         Map<String, Integer> sharedPool = new TreeMap<>();
         Map<String, Integer> listenerLists = new TreeMap<>();
         Map<String, Integer> watchers = new TreeMap<>();
+        Map<String, Integer> subscriptions = new TreeMap<>();
         List<Path> files;
         try (Stream<Path> walk = Files.walk(SOURCES)) {
             files = walk.filter(path -> path.toString().endsWith(".java")).sorted().toList();
@@ -139,6 +155,7 @@ class SystemsRulesTest {
                         sharedPool.merge(name, 1, Integer::sum);
                     }
                     if (method.equals("newWatchService")) watchers.merge(name, 1, Integer::sum);
+                    if (method.equals("subscribe") && name.startsWith("ui/")) subscriptions.merge(name, 1, Integer::sum);
                     return true;
                 }
 
@@ -168,7 +185,7 @@ class SystemsRulesTest {
                 }
             });
         }
-        found = new Found(threads, sharedPool, listenerLists, watchers);
+        found = new Found(threads, sharedPool, listenerLists, watchers, subscriptions);
     }
 
     private static CompilationUnit parse(Path file) throws IOException {
@@ -199,6 +216,11 @@ class SystemsRulesTest {
     @Test
     void filesAreWatchedInOnePlace() {
         check("watches files", found.watchers(), WATCHERS);
+    }
+
+    @Test
+    void theWindowFollowsThroughTheLoaderAndTheCurrentProject() {
+        check("subscribes to a signal", found.subscriptions(), UI_SUBSCRIPTIONS);
     }
 
     private static void check(String breaks, Map<String, Integer> actual, Map<String, Allowed> allowed) {

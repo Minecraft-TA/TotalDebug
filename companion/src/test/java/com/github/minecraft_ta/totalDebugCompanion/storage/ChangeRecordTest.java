@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -69,6 +70,31 @@ class ChangeRecordTest {
         assertEquals(1, record.size());
         record.observed(speed, "9", String::equals);
         assertEquals(0, record.size());
+    }
+
+    @Test
+    void theCountFollowsTheChangesAndAnswersWhileTheRecordIsLocked() throws Exception {
+        InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
+        try (ChangeRecord record = ChangeRecord.open(paths, this.directory)) {
+            ChangeRecord.Setting speed = setting("speed");
+            record.changed(speed, "9", "12");
+            record.changed(setting("mode"), "\"SLOW\"", "\"FAST\"");
+            assertEquals(2, record.count());
+            record.observed(speed, "9", String::equals);
+            assertEquals(1, record.count(), "a change put back outside Companion is counted no more");
+
+            // A change holds the record's lock while it schedules its save; the count answers meanwhile.
+            CompletableFuture<Integer> counted = new CompletableFuture<>();
+            synchronized (record) {
+                Thread reader = Thread.ofPlatform().start(() -> counted.complete(record.count()));
+                reader.join(5_000);
+                assertTrue(counted.isDone(), "the count takes no lock");
+            }
+            assertEquals(1, counted.get());
+        }
+        try (ChangeRecord reopened = ChangeRecord.open(paths, this.directory)) {
+            assertEquals(1, reopened.count(), "a record opened from its file counts what it holds");
+        }
     }
 
     @Test
