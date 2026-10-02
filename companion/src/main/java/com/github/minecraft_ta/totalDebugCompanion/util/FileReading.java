@@ -104,12 +104,14 @@ public final class FileReading<T> implements AutoCloseable {
      */
     public CompletableFuture<T> refresh() {
         CompletableFuture<T> answered = new CompletableFuture<>();
+        boolean closed;
         synchronized (this) {
-            if (this.closed) {
-                answered.cancel(false);
-                return answered;
-            }
-            this.waiting.add(answered);
+            closed = this.closed;
+            if (!closed) this.waiting.add(answered);
+        }
+        if (closed) {
+            answered.cancel(false);
+            return answered;
         }
         request(true);
         return answered;
@@ -161,20 +163,27 @@ public final class FileReading<T> implements AutoCloseable {
             throw unreadable;
         }
         boolean tell;
+        boolean closed;
         synchronized (this) {
-            if (this.closed) {
-                answers.forEach(answer -> answer.cancel(false));
-                return now;
-            }
-            if (this.queued) {
+            closed = this.closed;
+            if (!closed && this.queued) {
                 // A request made while this read ran reads again and publishes: the newest wins, as in the page loader.
                 this.waiting.addAll(answers);
                 return now;
             }
-            Read<T> before = this.last;
-            tell = this.failed || (before == null ? tellFirst : !Objects.equals(before.value(), now));
-            this.last = new Read<>(now);
-            this.failed = false;
+            if (!closed) {
+                Read<T> before = this.last;
+                tell = this.failed || (before == null ? tellFirst : !Objects.equals(before.value(), now));
+                this.last = new Read<>(now);
+                this.failed = false;
+            } else {
+                tell = false;
+            }
+        }
+        // The futures complete, and the signal fires, after the lock is released.
+        if (closed) {
+            answers.forEach(answer -> answer.cancel(false));
+            return now;
         }
         if (tell) this.changed.fire();
         answers.forEach(answer -> answer.complete(now));

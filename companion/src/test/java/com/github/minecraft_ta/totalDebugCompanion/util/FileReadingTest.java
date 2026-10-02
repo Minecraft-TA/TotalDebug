@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -356,10 +357,13 @@ class FileReadingTest {
         reading.value();
         Files.writeString(file, "Second");
         CompletableFuture<String> waiting = reading.refresh();
+        // What follows the refresh runs where it completes, which must not be under the reading's lock.
+        CompletableFuture<Boolean> underLock = waiting.handle((value, failure) -> Thread.holdsLock(reading));
         assertTrue(paused.await(5, TimeUnit.SECONDS));
         reading.close();
         release.countDown();
         assertThrows(CancellationException.class, () -> waiting.get(5, TimeUnit.SECONDS));
+        assertFalse(underLock.get(5, TimeUnit.SECONDS), "the refresh is cancelled after the lock is released");
         assertEquals(Optional.of("First"), reading.published(), "a read the closing overtook publishes nothing");
         assertTrue(reading.refresh().isCancelled(), "a closed reading answers no refresh");
     }
