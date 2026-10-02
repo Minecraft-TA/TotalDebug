@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.storage;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -51,6 +52,26 @@ class JsonStateWriterTest {
         saving.get(5, TimeUnit.SECONDS);
         record.saveNow();
         assertEquals(2, JsonFiles.read(file()).getAsJsonArray("changes").size());
+    }
+
+    @Test
+    void savesComingDueDuringASlowWriteHoldNoFileWorkers() throws Exception {
+        PausedWrite write = new PausedWrite();
+        JsonStateWriter writer = new JsonStateWriter(file(), write);
+        writer.schedule(value("A"));
+        write.awaitPaused();
+        // Each comes due while the first write is paused.
+        for (String value : List.of("B", "C", "D", "E")) {
+            writer.schedule(value(value));
+            Thread.sleep(700);
+        }
+
+        CompletableFuture<Void> other = CompletableFuture.runAsync(() -> { }, Workers.files());
+        assertTimeoutPreemptively(PROMPTLY, () -> other.get(), "other file work still runs");
+
+        write.release();
+        writer.close();
+        assertEquals("E", read());
     }
 
     @Test

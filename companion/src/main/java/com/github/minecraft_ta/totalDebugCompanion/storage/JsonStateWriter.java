@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.storage;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.Strand;
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import com.google.gson.JsonElement;
@@ -27,6 +28,11 @@ public final class JsonStateWriter implements AutoCloseable {
     private final Write write;
     /** Held through a write, so writes run one at a time, each taking the newest snapshot when it starts. */
     private final Object writing = new Object();
+    /**
+     * Where the scheduled saves run, one at a time: saves that come due while a slow write runs wait here, not on the
+     * shared file workers, which they would otherwise each hold waiting for {@link #writing}.
+     */
+    private final Strand saves = Workers.fileStrand();
     private ScheduledFuture<?> scheduled;
     private JsonElement pending;
     private boolean closed;
@@ -50,7 +56,7 @@ public final class JsonStateWriter implements AutoCloseable {
             if (this.scheduled != null) {
                 this.scheduled.cancel(false);
             }
-            this.scheduled = Workers.later(500, Workers.files(), () -> {
+            this.scheduled = Workers.later(500, this.saves, () -> {
                 try {
                     drain();
                 } catch (IOException exception) {
