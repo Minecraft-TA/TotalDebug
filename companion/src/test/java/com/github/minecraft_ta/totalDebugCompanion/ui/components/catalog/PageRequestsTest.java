@@ -120,6 +120,26 @@ class PageRequestsTest {
     }
 
     @Test
+    void aResourceCategoryAskedForBeforeAnythingIsListedIsDroppedWhenTheBrowserIsLeft() throws Exception {
+        ResourceBrowser.Prepared textures = prepared(true);
+        String selected = UiTestScope.onEdt(() -> {
+            ResourceBrowser browser = new ResourceBrowser(target -> { }, category -> { });
+            JTabbedPane tabs = new JTabbedPane();
+            tabs.addTab("Resources", browser);
+            tabs.addTab("Other", new JPanel());
+            UiTestScope.showPages(tabs);
+            browser.selectCategory("assets/textures");
+            browser.setResources(ResourceBrowser.Prepared.NONE);
+            // The user leaves by a click on another tab, and comes back the same way after the resources were read.
+            tabs.setSelectedIndex(1);
+            browser.setResources(textures);
+            tabs.setSelectedIndex(0);
+            return browser.selectedCategory();
+        });
+        assertEquals("", selected, "the category asked for before the browser was left is not selected");
+    }
+
+    @Test
     void aResourceCategoryNotListedLeavesAllForTheNextListing() throws Exception {
         ResourceBrowser.Prepared models = prepared(false);
         ResourceBrowser.Prepared textures = prepared(true);
