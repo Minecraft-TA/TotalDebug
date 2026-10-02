@@ -172,7 +172,8 @@ public final class PageLoader<T> {
 
     /**
      * Runs {@code update}, which only redraws from memory, such as icons again after new ones came, when {@code signal}
-     * fires: at once while the page is shown, otherwise once it is shown again, once however often it fired. Swing thread.
+     * fires: at once while the page is shown, otherwise once however often it fired, at the end of the Swing step that
+     * shows the page again. Swing thread.
      */
     public PageLoader<T> updates(Signal signal, Runnable update) {
         return whenShown(signal, Objects.requireNonNull(update, "update"));
@@ -180,7 +181,8 @@ public final class PageLoader<T> {
 
     /**
      * Starts {@code work} that the page runs itself instead of through this loader's read, when {@code signal} fires: at
-     * once while the page is shown, otherwise once it is shown again, once however often it fired. Such work has its own
+     * once while the page is shown, otherwise once however often it fired, at the end of the Swing step that shows the
+     * page again, after what that step asked of the page, such as a navigation reading it anew. Such work has its own
      * runs and cancellation, as an inspection asking the game again, or the Project tree listing its Scripts folders
      * again; when it starts, it decides itself whether it is still wanted. Swing thread.
      */
@@ -188,7 +190,10 @@ public final class PageLoader<T> {
         return whenShown(signal, Objects.requireNonNull(work, "work"));
     }
 
-    /** Runs {@code run} when {@code signal} fires, at once while the page is shown, otherwise once it is shown again. */
+    /**
+     * Runs {@code run} when {@code signal} fires: at once while the page is shown, otherwise at the end of the Swing step
+     * that shows it again.
+     */
     private PageLoader<T> whenShown(Signal signal, Runnable run) {
         boolean[] missed = {false};
         this.unsubscribe.add(signal.subscribe(() -> SwingUtilities.invokeLater(() -> {
@@ -200,8 +205,11 @@ public final class PageLoader<T> {
             JComponent shown = this.page;
             HierarchyListener listener = event -> {
                 if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !shown.isShowing() || !missed[0]) return;
-                missed[0] = false;
-                if (!this.disposed) run.run();
+                SwingUtilities.invokeLater(() -> {
+                    if (this.disposed || !missed[0] || !shown.isShowing()) return;
+                    missed[0] = false;
+                    run.run();
+                });
             };
             shown.addHierarchyListener(listener);
             this.unwatch.add(() -> shown.removeHierarchyListener(listener));

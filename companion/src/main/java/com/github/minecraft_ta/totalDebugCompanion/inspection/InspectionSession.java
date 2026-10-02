@@ -131,8 +131,13 @@ public final class InspectionSession {
     private long toolRevision;
     private CompletableFuture<Void> toolRun = CompletableFuture.completedFuture(null);
     private boolean disposed;
-    /** Whether the session asked for a read through {@link #readWanted} that no read has answered since. */
+    /**
+     * Whether the session asked for a read through {@link #readWanted} that no read has answered since, as the compiler
+     * became ready or a tool was created.
+     */
     private boolean wanted;
+    /** Whether the live interval passed since the last read, which asks for a read only while live reading is on. */
+    private boolean liveDue;
 
     /** Reads only when asked; what it wants to read on its own, it asks for through {@link #readWanted()}. */
     public InspectionSession(InspectSubjectPayload subject, Supplier<SnippetExecutionService> snippets,
@@ -157,12 +162,12 @@ public final class InspectionSession {
     }
 
     /**
-     * Reads, where the session still wants the read it asked for: a read started since, live reading switched off, or
-     * the disposal answered it.
+     * Reads, where the session still wants the read it asked for: a read started since or the disposal answered it, and
+     * one the live interval asked for lapses when live reading was switched off.
      */
     public void readIfWanted() {
         requireEdt();
-        if (this.wanted && !this.disposed) refresh();
+        if (!this.disposed && (this.wanted || this.liveDue && this.live)) refresh();
     }
 
     /** Asks the page for a read, which it starts once it is shown. */
@@ -221,7 +226,6 @@ public final class InspectionSession {
             refresh();
         } else {
             this.liveTimer.stop();
-            this.wanted = false;
             publish();
         }
     }
@@ -231,6 +235,7 @@ public final class InspectionSession {
         requireEdt();
         if (this.disposed) return;
         this.wanted = false;
+        this.liveDue = false;
         this.liveTimer.stop();
         cancelActive();
         Side selected = this.side;
@@ -479,7 +484,8 @@ public final class InspectionSession {
     private void liveTick() {
         if (this.disposed || !this.live) return;
         // A hidden page keeps its last read, and reads once it is shown again.
-        want();
+        this.liveDue = true;
+        this.readWanted.fire();
     }
 
     private void cancelActive() {

@@ -39,7 +39,7 @@ class InspectionReadsTest {
     @TempDir Path directory;
 
     @Test
-    void theCompilerBecomingReadyAsksForAReadInsteadOfReading() throws Exception {
+    void theCompilerBecomingReadyAsksForAReadThatSwitchingLiveReadingOffKeeps() throws Exception {
         ScriptCompilationService compiler = new ScriptCompilationService(message -> false);
         CompanionSession connection = new CompanionSession("inspection-reads-test-token");
         ExecutionRuns runs = new ExecutionRuns(connection, new ScriptExecutionService(connection, compiler, () -> true));
@@ -56,8 +56,8 @@ class InspectionReadsTest {
                     return snippets;
                 }, () -> { throw new IllegalStateException("No project tools"); }, state -> { });
                 session[0].readWanted().subscribe(wanted::incrementAndGet);
-                // The runtime index is not loaded: the read waits for the compiler.
-                session[0].refresh();
+                // The runtime index is not loaded: the first live read waits for the compiler.
+                session[0].setLive(true, 60_000);
             });
             assertEquals(1, asked.get(), "the read asked whether it can run");
 
@@ -65,6 +65,13 @@ class InspectionReadsTest {
             UiTestScope.await(() -> wanted.get() == 1);
             Thread.sleep(200);
             assertEquals(1, asked.get(), "the session does not read itself; its page reads once it is shown");
+
+            // Live reading switched off before the page read: the read the compiler asked for is still wanted.
+            UiTestScope.onEdt(() -> {
+                session[0].setLive(false, 60_000);
+                session[0].readIfWanted();
+            });
+            assertEquals(2, asked.get(), "the read that waited for the compiler runs");
         } finally {
             UiTestScope.onEdt(() -> { if (session[0] != null) session[0].dispose(); });
             runs.close();
@@ -89,6 +96,32 @@ class InspectionReadsTest {
 
                 UiTestScope.onEdt(() -> UiTestScope.showPages(panel));
                 UiTestScope.await(() -> reads.get() > asked);
+            } finally {
+                UiTestScope.onEdt(panel::dispose);
+            }
+        }
+    }
+
+    @Test
+    void aNavigationShowingAHiddenLivePageReadsItOnce() throws Exception {
+        AtomicInteger reads = new AtomicInteger();
+        try (ItemIconService icons = new ItemIconService()) {
+            SubjectPanel panel = panel(icons, reads);
+            try {
+                UiTestScope.onEdt(() -> panel.session().setLive(true, 300));
+                Thread.sleep(700);
+                // The live interval passed while hidden; the next one is far off.
+                UiTestScope.onEdt(() -> panel.session().setLive(true, 60_000));
+                int asked = reads.get();
+
+                // As NavigationService does when the game inspects the subject again: show the page, then read it anew.
+                UiTestScope.onEdt(() -> {
+                    UiTestScope.showPages(panel);
+                    panel.session().refresh();
+                });
+                Thread.sleep(500);
+                // A read asks for the snippets twice: whether the side can run, then to run.
+                assertEquals(asked + 2, reads.get(), "the navigation's read answers the read the live interval asked for");
             } finally {
                 UiTestScope.onEdt(panel::dispose);
             }

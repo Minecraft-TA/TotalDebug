@@ -396,11 +396,13 @@ class PageLoaderTest {
         changed();
         assertEquals(0, updates.get(), "a hidden page does not update");
         SwingUtilities.invokeAndWait(() -> page.setShown(true));
+        SwingUtilities.invokeAndWait(() -> { });
         assertEquals(1, updates.get(), "shown, it updates once for the changes it missed");
         SwingUtilities.invokeAndWait(() -> {
             page.setShown(false);
             page.setShown(true);
         });
+        SwingUtilities.invokeAndWait(() -> { });
         assertEquals(1, updates.get(), "shown again without a change, it does not update");
         changed();
         assertEquals(2, updates.get(), "a shown page updates at once");
@@ -424,7 +426,13 @@ class PageLoaderTest {
         changed();
         changed();
         assertEquals(0, started.get(), "a hidden page starts nothing");
-        SwingUtilities.invokeAndWait(() -> page.setShown(true));
+        int[] inShowingStep = {-1};
+        SwingUtilities.invokeAndWait(() -> {
+            page.setShown(true);
+            inShowingStep[0] = started.get();
+        });
+        assertEquals(0, inShowingStep[0], "the step that shows the page, as a navigation reading it anew, finishes first");
+        SwingUtilities.invokeAndWait(() -> { });
         assertEquals(1, started.get(), "shown, it starts once for the requests it missed");
         changed();
         assertEquals(2, started.get(), "a shown page starts at once");
@@ -434,6 +442,7 @@ class PageLoaderTest {
         changed();
         onEdt(loader::dispose);
         SwingUtilities.invokeAndWait(() -> page.setShown(true));
+        SwingUtilities.invokeAndWait(() -> { });
         assertEquals(2, started.get(), "a closed page starts nothing it missed");
     }
 
