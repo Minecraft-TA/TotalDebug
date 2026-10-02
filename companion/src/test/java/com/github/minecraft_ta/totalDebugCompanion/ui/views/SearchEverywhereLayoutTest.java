@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @UiTest
 class SearchEverywhereLayoutTest {
     @Test void longResultsStayWithinTheViewportWhenNavigatingAndResizing() throws Exception {
-        try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
+        try (var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> snapshot.close())) {
         SwingUtilities.invokeAndWait(() -> {
             var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, () -> null, new ItemIconService(), ignored -> {});
             try {

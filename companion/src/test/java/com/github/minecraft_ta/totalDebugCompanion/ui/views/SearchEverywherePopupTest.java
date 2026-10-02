@@ -62,7 +62,7 @@ class SearchEverywherePopupTest {
         try (var index = ClassIndex.fromSources(inputs);
              var compiler = new ScriptCompilationService(ignored -> false);
              var insights = new CodeInsightService(() -> null, RuntimeSourceCatalog.empty());
-             var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close());
+             var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> snapshot.close());
              var binding = new RuntimeBinding(new RuntimeIndexService.ReadySnapshot("fixture", "fixture",
                      directory.resolve("index.jindex"), sources, index), directory,
                      RuntimeSnapshotBytecodeSource.fromIndexedSources(sources, index), compiler, insights)) {
@@ -97,7 +97,7 @@ class SearchEverywherePopupTest {
 
     @Test
     void tabCyclesSearchCategoriesInBothDirections() throws Exception {
-        try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
+        try (var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> snapshot.close())) {
             onEdt(() -> {
                 var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, () -> null, new ItemIconService(), ignored -> {});
                 try { verifyCategoryCycling(popup); }
@@ -112,7 +112,7 @@ class SearchEverywherePopupTest {
         listenersField.setAccessible(true);
         var messageField = SearchEverywherePopup.class.getDeclaredField("messageLabel");
         messageField.setAccessible(true);
-        try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
+        try (var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> snapshot.close())) {
             for (int cycle = 0; cycle < 3; cycle++) {
                 var label = new AtomicReference<JLabel>();
                 SwingUtilities.invokeAndWait(() -> {

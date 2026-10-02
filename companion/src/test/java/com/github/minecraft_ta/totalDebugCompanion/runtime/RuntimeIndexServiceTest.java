@@ -34,7 +34,7 @@ class RuntimeIndexServiceTest {
 
     @Test void theStatusIsToldAfterItsChangeWithoutTheLifecycleLock() throws Exception {
         Object lifecycleLock = new Object();
-        try (var service = new RuntimeIndexService(lifecycleLock, ignored -> { })) {
+        try (var service = new RuntimeIndexService(lifecycleLock, told -> { }, ignored -> { })) {
             CompletableFuture<Boolean> heldWhenTold = new CompletableFuture<>();
             service.statusChanged().subscribe(() -> heldWhenTold.complete(Thread.holdsLock(lifecycleLock)));
             synchronized (lifecycleLock) {
@@ -47,9 +47,35 @@ class RuntimeIndexServiceTest {
         }
     }
 
+    @Test void aFailureIsToldOnceWhereTheStatusChanged() throws Exception {
+        List<RuntimeIndexService.Status> told = new CopyOnWriteArrayList<>();
+        try (var service = new RuntimeIndexService(new Object(), told::add, ignored -> { })) {
+            service.failedBeforeBuild("Runtime capture failed");
+            service.failedBeforeBuild("Runtime capture failed");
+            assertEquals(1, told.size(), "the same failure again is not told again");
+            service.failedBeforeBuild("Runtime capture failed again");
+            assertEquals(2, told.size());
+        }
+    }
+
+    @Test void aFailureFoundBeforeAJobDoesNotClearAJobAdmittedSince(@TempDir Path data) throws Exception {
+        List<String> told = new CopyOnWriteArrayList<>();
+        try (var service = new RuntimeIndexService(new Object(), status -> told.add(status.detail()), ignored -> { })) {
+            // Discovering local mods starts, then the game announces an inventory, which admits a job.
+            long admitted = service.admissions();
+            service.accept(data, "inventory", new InstancePaths(data).inventory());
+            service.failedBeforeBuild("Unable to rescan mods: gone", admitted);
+            assertFalse(told.contains("Unable to rescan mods: gone"), "the older discovery's failure is not told");
+            assertFalse(service.status().detail().contains("Unable to rescan mods"), "nor does it replace the job's status");
+            // Without a job since, it counts.
+            service.failedBeforeBuild("Unable to rescan mods: gone", service.admissions());
+            assertTrue(told.contains("Unable to rescan mods: gone"));
+        }
+    }
+
     @Test void forcedRebuildReportsMissingInventoryInsteadOfWaitingForIt() throws Exception {
         var failed = new CountDownLatch(1);
-        try (var service = new RuntimeIndexService(new Object(), ignored -> { throw new AssertionError("No inventory"); })) {
+        try (var service = new RuntimeIndexService(new Object(), told -> { }, ignored -> { throw new AssertionError("No inventory"); })) {
             IndexStatuses.follow(service, status -> { if (status.phase() == RuntimeIndexService.Phase.FAILED) failed.countDown(); });
             service.rebuild(temporaryDirectory, null);
             assertTrue(failed.await(5, TimeUnit.SECONDS));
@@ -73,7 +99,7 @@ class RuntimeIndexServiceTest {
         var rebuilt = new CountDownLatch(1);
         var loaded = new CountDownLatch(1);
         var installations = new AtomicInteger();
-        try (var service = new RuntimeIndexService(new Object(), snapshot -> {
+        try (var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> {
             try (snapshot) {
                 if (installations.incrementAndGet() == 1) assertNotNull(snapshot.index().findClass(RuntimeIndexServiceTest.class.getName()));
                 else assertNotNull(snapshot.index().findClass(RuntimeInventoryTest.class.getName()));
@@ -161,7 +187,7 @@ class RuntimeIndexServiceTest {
         AtomicInteger installations = new AtomicInteger();
         List<RuntimeIndexService.ReadySnapshot> snapshots = new ArrayList<>();
         CountDownLatch restored = new CountDownLatch(1);
-        try (RuntimeIndexService service = new RuntimeIndexService(new Object(), snapshot -> {
+        try (RuntimeIndexService service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> {
             snapshots.add(snapshot);
             installations.incrementAndGet();
             restored.countDown();
@@ -219,7 +245,7 @@ class RuntimeIndexServiceTest {
                 new RuntimeInventory("runtime-" + version, "21", System.getProperty("java.home"), true,
                         List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, jar, jar.toUri().toString(), module)))
                         .write(paths.inventory());
-                try (RuntimeIndexService service = new RuntimeIndexService(new Object(), snapshots::add)) {
+                try (RuntimeIndexService service = new RuntimeIndexService(new Object(), told -> { }, snapshots::add)) {
                     CountDownLatch settled = new CountDownLatch(1);
                     IndexStatuses.follow(service, status -> {
                         if (status.phase() == RuntimeIndexService.Phase.READY || status.phase() == RuntimeIndexService.Phase.FAILED) {
@@ -242,7 +268,7 @@ class RuntimeIndexServiceTest {
                         files.map(path -> path.getFileName().toString()).sorted().toList());
             }
             Files.delete(paths.inventory());
-            try (RuntimeIndexService service = new RuntimeIndexService(new Object(),
+            try (RuntimeIndexService service = new RuntimeIndexService(new Object(), told -> { },
                     ignored -> { throw new AssertionError("An index without its current inventory must not be restored"); })) {
                 service.restore(root);
                 assertEquals(RuntimeIndexService.Phase.WAITING, service.status().phase());
@@ -277,7 +303,7 @@ class RuntimeIndexServiceTest {
         CountDownLatch installed = new CountDownLatch(1);
         AtomicInteger loads = new AtomicInteger();
         var snapshots = new CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
-        try (RuntimeIndexService service = new RuntimeIndexService(new Object(), snapshot -> {
+        try (RuntimeIndexService service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> {
             snapshots.add(snapshot);
             installed.countDown();
         }, file -> {
@@ -314,7 +340,7 @@ class RuntimeIndexServiceTest {
         var loaded = new AtomicReference<ClassIndex>();
         var workerThread = new AtomicReference<Thread>();
         var installations = new AtomicInteger();
-        try (var service = new RuntimeIndexService(new Object(), snapshot -> installations.incrementAndGet(), file -> {
+        try (var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> installations.incrementAndGet(), file -> {
             workerThread.set(Thread.currentThread());
             ClassIndex index = ClassIndex.fromFile(file);
             loaded.set(index);
@@ -345,7 +371,7 @@ class RuntimeIndexServiceTest {
         var installed = new CountDownLatch(1);
         var discarded = new AtomicReference<ClassIndex>();
         var snapshots = new CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
-        try (var service = new RuntimeIndexService(new Object(), snapshot -> {
+        try (var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> {
             snapshots.add(snapshot);
             installed.countDown();
         }, file -> {
@@ -375,7 +401,7 @@ class RuntimeIndexServiceTest {
         var paths = cachedFixture("rejected-handler");
         var candidate = new AtomicReference<RuntimeIndexService.ReadySnapshot>();
         var failed = new CountDownLatch(1);
-        try (var service = new RuntimeIndexService(new Object(), snapshot -> {
+        try (var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> {
             candidate.set(snapshot);
             throw new IllegalStateException("Rejected installation");
         })) {
@@ -392,7 +418,7 @@ class RuntimeIndexServiceTest {
         var candidate = new AtomicReference<RuntimeIndexService.ReadySnapshot>();
         var ready = new CountDownLatch(1);
         try {
-            try (var service = new RuntimeIndexService(new Object(), candidate::set)) {
+            try (var service = new RuntimeIndexService(new Object(), told -> { }, candidate::set)) {
                 IndexStatuses.follow(service, status -> { if (status.phase() == RuntimeIndexService.Phase.READY) ready.countDown(); });
                 service.restore(paths.home());
                 assertTrue(ready.await(5, TimeUnit.SECONDS));
