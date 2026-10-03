@@ -2,28 +2,19 @@ package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
 import com.github.minecraft_ta.totalDebugCompanion.util.Workers;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
-import com.github.minecraft_ta.totalDebugCompanion.ui.categories.changes.ChangesView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.categories.configuration.ConfigFileView;
-import com.github.minecraft_ta.totalDebugCompanion.ui.categories.content.ContentView;
-import com.github.minecraft_ta.totalDebugCompanion.ui.categories.keybindings.KeyBindingsView;
-import com.github.minecraft_ta.totalDebugCompanion.ui.categories.resources.PackResourcesView;
-import com.github.minecraft_ta.totalDebugCompanion.ui.categories.logs.LogsView;
-import com.github.minecraft_ta.totalDebugCompanion.ui.categories.resources.PackView;
-import com.github.minecraft_ta.totalDebugCompanion.ui.categories.world.WorldView;
 import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import java.util.function.Predicate;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
+import com.github.minecraft_ta.totalDebugCompanion.ui.categories.Pages;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
-import com.github.minecraft_ta.totalDebugCompanion.ui.categories.mods.ModView;
-import com.github.minecraft_ta.totalDebugCompanion.ui.categories.configuration.PackConfigurationView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LiteralUsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
@@ -46,7 +37,6 @@ import javax.swing.SwingUtilities;
 import java.awt.event.ActionEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -70,6 +60,8 @@ public final class NavigationService {
     private final EditorTabs tabs;
     private final FileTreeView fileTree;
     private final Supplier<EditorContext> editors;
+    /** How each category opens its pages. */
+    private static final Pages PAGES = new Pages();
     private final Runnable activateWindow;
     private volatile ProjectScope project;
     private final NavigationState emptyNavigation = new NavigationState();
@@ -139,14 +131,7 @@ public final class NavigationService {
             case NavigationTarget.ArchiveEntry entry -> project.sources().modules().stream()
                     .flatMap(module -> project.sources().sourcesForModule(module.id()).stream())
                     .anyMatch(source -> source.path().equals(entry.archive().toAbsolutePath().normalize()));
-            case NavigationTarget.ModPage ignored -> true;
-            case NavigationTarget.PackConfiguration ignored -> true;
-            case NavigationTarget.PackResources ignored -> true;
-            case NavigationTarget.Logs ignored -> true;
-            case NavigationTarget.Changes ignored -> true;
-            case NavigationTarget.KeyBindings ignored -> true;
-            case NavigationTarget.World ignored -> true;
-            case NavigationTarget.Content ignored -> true;
+            case NavigationTarget.CategoryTarget page -> PAGES.of(page).reveal(page) != null;
             case null, default -> false;
         };
         if (!available) return null;
@@ -160,14 +145,7 @@ public final class NavigationService {
                     case NavigationTarget.LocalFile file -> requireRevealed(fileTree.revealLocalPath(file.path(), wanted));
                     case NavigationTarget.ArchiveEntry entry -> requireRevealed(fileTree.revealArchivePath(entry.archive(), entry.entryName(), wanted));
                     case NavigationTarget.RuntimeClass type -> revealRuntimePath(type.binaryName(), type.binaryName().replace('.', '/') + ".class");
-                    case NavigationTarget.ModPage page -> requireRevealed(fileTree.revealModPage(page, wanted));
-                    case NavigationTarget.PackConfiguration ignored -> requireRevealed(fileTree.revealPackConfiguration(wanted));
-                    case NavigationTarget.PackResources ignored -> requireRevealed(fileTree.revealPackResources(wanted));
-                    case NavigationTarget.Logs ignored -> requireRevealed(fileTree.revealLogs(wanted));
-                    case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges(wanted));
-                    case NavigationTarget.KeyBindings ignored -> requireRevealed(fileTree.revealKeyBindings(wanted));
-                    case NavigationTarget.World world -> requireRevealed(fileTree.revealWorld(world.tab(), wanted));
-                    case NavigationTarget.Content content -> requireRevealed(fileTree.revealContent(content.registry(), wanted));
+                    case NavigationTarget.CategoryTarget page -> requireRevealed(PAGES.of(page).reveal(page).in(fileTree, wanted));
                     default -> throw new IllegalArgumentException("Editor has no tree location");
                 };
                 reportFailure(result, target);
@@ -317,51 +295,7 @@ public final class NavigationService {
                     this.window.openSearchEverywhere(search);
                     return CompletableFuture.completedFuture(null);
                 }, Activation.KEEP_CURRENT_WINDOW);
-                case NavigationTarget.ModPage page -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                        ModView.class,
-                        view -> view.modId().equals(page.modId()),
-                        () -> new ModView(editors.get(), page)
-                ).thenAccept(view -> view.show(page)), activation);
-                case NavigationTarget.PackConfiguration ignored -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                        PackConfigurationView.class,
-                        view -> true,
-                        () -> new PackConfigurationView(editors.get())
-                ).thenAccept(view -> { }), activation);
-                case NavigationTarget.PackResources resources -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                        PackResourcesView.class,
-                        view -> true,
-                        () -> new PackResourcesView(editors.get())
-                ).thenAccept(view -> view.show(resources)), activation);
-                case NavigationTarget.Logs logs -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                        LogsView.class,
-                        view -> true,
-                        () -> new LogsView(editors.get())
-                ).thenAccept(view -> view.show(logs.file())), activation);
-                case NavigationTarget.Changes ignored -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                        ChangesView.class,
-                        view -> true,
-                        () -> new ChangesView(editors.get())
-                ).thenAccept(view -> { }), activation);
-                case NavigationTarget.Content content -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                        ContentView.class,
-                        view -> true,
-                        () -> new ContentView(editors.get())
-                ).thenAccept(view -> view.show(content.registry())), activation);
-                case NavigationTarget.KeyBindings keys -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                        KeyBindingsView.class,
-                        view -> true,
-                        () -> new KeyBindingsView(editors.get())
-                ).thenAccept(view -> view.show(keys.binding())), activation);
-                case NavigationTarget.Pack pack -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                        PackView.class,
-                        view -> view.file().equals(pack.file()),
-                        () -> new PackView(editors.get(), pack.file())
-                ).thenApply(ignored -> null), activation);
-                case NavigationTarget.World world -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
-                        WorldView.class,
-                        view -> true,
-                        () -> new WorldView(editors.get())
-                ).thenAccept(view -> view.show(world.tab())), activation);
+                case NavigationTarget.CategoryTarget page -> dispatchNavigation(() -> PAGES.of(page).open(page, this.tabs, editors), activation);
                 case NavigationTarget.Definition definition -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         DefinitionView.class,
                         view -> view.subject().equals(definition.subject()),
@@ -919,16 +853,7 @@ public final class NavigationService {
             case NavigationTarget.RuntimePackage runtimePackage -> runtimePackage.packageName();
             case NavigationTarget.ModuleSearch ignored -> "Search Everywhere";
             case NavigationTarget.Inspection inspection -> inspection.subject().subject();
-            case NavigationTarget.ModPage page -> "mod " + page.modId();
-            case NavigationTarget.PackConfiguration ignored -> "modpack configuration";
-            case NavigationTarget.PackResources ignored -> "modpack resources";
-            case NavigationTarget.Logs ignored -> "logs";
-            case NavigationTarget.Changes ignored -> "changes";
-            case NavigationTarget.KeyBindings ignored -> "key bindings";
-            case NavigationTarget.World ignored -> "world";
-            case NavigationTarget.Pack pack -> "pack " + pack.file().getFileName();
-            case NavigationTarget.Content content -> "modpack " + (content.registry().isEmpty() ? "content"
-                    : ContentKinds.of(content.registry()).plural().toLowerCase(Locale.ROOT));
+            case NavigationTarget.CategoryTarget page -> PAGES.of(page).label(page);
             case NavigationTarget.Definition definition -> definition.subject().format();
             case NavigationTarget.RuntimeModuleNode node -> "module " + node.moduleId();
         };

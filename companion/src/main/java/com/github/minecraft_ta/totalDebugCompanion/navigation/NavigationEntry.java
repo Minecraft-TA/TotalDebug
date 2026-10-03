@@ -28,15 +28,7 @@ record NavigationEntry(
             case NavigationTarget.LocalDirectory ignored -> false;
             case NavigationTarget.ArchiveEntry ignored -> false;
             case NavigationTarget.ArchiveDirectory ignored -> false;
-            case NavigationTarget.ModPage ignored -> false;
-            case NavigationTarget.PackConfiguration ignored -> false;
-            case NavigationTarget.PackResources ignored -> false;
-            case NavigationTarget.Logs ignored -> false;
-            case NavigationTarget.Changes ignored -> false;
-            case NavigationTarget.KeyBindings ignored -> false;
-            case NavigationTarget.World ignored -> false;
-            case NavigationTarget.Pack ignored -> false;
-            case NavigationTarget.Content ignored -> false;
+            case NavigationTarget.CategoryTarget ignored -> false;
             case NavigationTarget.Definition ignored -> false;
             case NavigationTarget.RuntimeModuleNode ignored -> false;
             default -> true;
