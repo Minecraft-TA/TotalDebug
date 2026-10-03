@@ -96,7 +96,7 @@ The Project tree on the left, editor tabs in the middle, the status bar at the b
   - **Table or list** below the bar.
   - **Empty or failed state:** replaces the table in the same place.
 - **Two-pane browser:**
-  - Categories with muted counts in a sidebar on the left, 190 px wide by default, All first, then the entries of the selected category ([`ContentBrowser`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/components/catalog/ContentBrowser.java), `ResourceBrowser`).
+  - Categories with muted counts in a sidebar on the left, 190 px wide by default, All first, then the entries of the selected category ([`ContentBrowser`](../companion/src/main/java/com/github/minecraft_ta/totalDebugCompanion/ui/categories/content/ContentBrowser.java), `ResourceBrowser`).
   - The category list is left out when there is only one category.
   - All shows a column naming each entry's category.
 - **Pack-wide and per-mod views are one component:** the pack-wide one adds a Mod column. A new pack-wide view reuses the per-mod component, or the other way round.
