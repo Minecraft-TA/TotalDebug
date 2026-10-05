@@ -43,7 +43,7 @@ class LocalIndexTest {
         Path blocker = Files.writeString(paths.runtime(), "blocks cache-directory creation");
         var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
         var retry = new AtomicBoolean(true);
-        try (var service = new RuntimeIndexService(new Object(), told -> { }, ready::complete)) {
+        try (var service = RuntimeTestSources.service(new Object(), told -> { }, ready::complete)) {
             IndexStatuses.follow(service, status -> {
                 if (status.phase() != RuntimeIndexService.Phase.FAILED) return;
                 if (!retry.getAndSet(false)) { ready.completeExceptionally(status.failure()); return; }
@@ -135,7 +135,7 @@ class LocalIndexTest {
         var failure = new CompletableFuture<RuntimeIndexService.Status>();
         var discarded = new AtomicReference<ClassIndex>();
         var published = new AtomicBoolean();
-        try (var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> {
+        try (var service = RuntimeTestSources.service(new Object(), told -> { }, snapshot -> {
             published.set(true);
             snapshot.close();
         }, file -> {
@@ -229,7 +229,7 @@ class LocalIndexTest {
         var first = new AtomicBoolean(true);
         var discarded = new AtomicReference<ClassIndex>();
         var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
-        try (var service = new RuntimeIndexService(new Object(), told -> { }, ready::complete, file -> {
+        try (var service = RuntimeTestSources.service(new Object(), told -> { }, ready::complete, file -> {
             var index = ClassIndex.fromFile(file);
             if (first.getAndSet(false)) {
                 discarded.set(index);
@@ -269,7 +269,7 @@ class LocalIndexTest {
         var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
         var readyStatus = new CompletableFuture<RuntimeIndexService.Status>();
         Object lifecycle = new Object();
-        try (var service = new RuntimeIndexService(lifecycle, told -> { }, ready::complete, file -> {
+        try (var service = RuntimeTestSources.service(lifecycle, told -> { }, ready::complete, file -> {
             loading.countDown();
             try { assertTrue(release.await(10, TimeUnit.SECONDS)); }
             catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
@@ -294,9 +294,26 @@ class LocalIndexTest {
         } finally { release.countDown(); }
     }
 
-    private RuntimeIndexService.ReadySnapshot open() throws Exception {
+    /** The other tests index only {@code java.lang}; Companion's own service indexes every module of the JDK. */
+    @Test void companionsIndexHoldsTheWholeJdk() throws Exception {
+        writeJar(Files.createDirectories(game.resolve("mods")).resolve("sample.jar"), "sample/Example", 1, false);
         var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
         try (var service = new RuntimeIndexService(new Object(), told -> { }, ready::complete)) {
+            IndexStatuses.follow(service, status -> {
+                if (status.phase() == RuntimeIndexService.Phase.FAILED) ready.completeExceptionally(status.failure());
+            });
+            var paths = InstancePaths.forGame(game);
+            service.restore(paths.home(), game);
+            try (var snapshot = ready.get(60, TimeUnit.SECONDS)) {
+                assertNotNull(snapshot.index().findClass("java.util", "ArrayList"));
+                assertNotNull(snapshot.index().findClass("javax.swing", "JComponent"));
+            }
+        }
+    }
+
+    private RuntimeIndexService.ReadySnapshot open() throws Exception {
+        var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
+        try (var service = RuntimeTestSources.service(new Object(), told -> { }, ready::complete)) {
             IndexStatuses.follow(service, status -> {
                 if (status.phase() == RuntimeIndexService.Phase.FAILED) ready.completeExceptionally(status.failure());
             });
