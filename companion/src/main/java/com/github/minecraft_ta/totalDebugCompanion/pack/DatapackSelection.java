@@ -108,11 +108,15 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
     }
 
     /**
-     * Enables {@code id} at the top of {@code world}'s datapacks where its {@code level.dat} disables it, and tells whether
-     * it did; a pack named in neither list the game enables itself when it loads the world. Blocking.
+     * Enables {@code id} at the top of {@code world}'s datapacks where its {@code level.dat} disables it or enables it
+     * lower, as the data reload of a live save does, and tells whether it changed them; a pack named in neither list the
+     * game enables itself on top when it loads the world. Blocking.
      */
-    static boolean enableDisabled(Path world, String id) throws IOException {
-        if (!disables(world, id)) return false;
+    static boolean enableOnTop(Path world, String id) throws IOException {
+        NbtData.CompoundTag named = dataPacks(LevelDat.read(LevelDat.file(world)).tag());
+        List<String> enabledNow = strings(named, "Enabled");
+        boolean disabledNow = strings(named, "Disabled").contains(id);
+        if (!disabledNow && (!enabledNow.contains(id) || enabledNow.getLast().equals(id))) return false;
         LevelDat.update(world, root -> {
             if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
                 throw new IOException("The level.dat of " + world.getFileName() + " holds no world data");

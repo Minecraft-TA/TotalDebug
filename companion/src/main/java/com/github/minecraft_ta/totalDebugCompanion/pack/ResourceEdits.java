@@ -602,10 +602,11 @@ public final class ResourceEdits {
                 }
             }
             if (!assets && managed(pack) && !game.isOpen(world)) {
-                // A world enables a datapack it has not seen when it loads, but not one its level.dat disables, which the
-                // player did; a save into the managed pack enables it, as the reload of a live save does.
+                // A world enables a datapack it has not seen on top when it loads, but not one its level.dat disables or
+                // keeps lower, as the player chose; a save into the managed pack enables it on top, as a live save's
+                // reload does.
                 try {
-                    if (DatapackSelection.enableDisabled(world, PACK_ID)) {
+                    if (DatapackSelection.enableOnTop(world, PACK_ID)) {
                         this.landed.incrementAndGet();
                         this.packs.written(ChangeRecord.PackSide.DATA);
                     }

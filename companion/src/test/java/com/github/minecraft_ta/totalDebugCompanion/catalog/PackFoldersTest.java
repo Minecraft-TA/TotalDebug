@@ -46,12 +46,14 @@ class PackFoldersTest {
                 // What the game's codec refuses for its content's value, run against it.
                 {"NumberText", "{\"text\":1}"}, {"ObjectTranslation", "{\"type\":\"translatable\",\"translate\":{}}"},
                 {"NegativeIndex", "{\"index\":-1}"}, {"HalfScore", "{\"score\":{\"name\":\"a\"}}"},
-                {"NumberType", "{\"type\":1,\"text\":\"x\"}"}, {"Score", "{\"score\":{\"name\":\"a\",\"objective\":\"b\"}}"}}) {
+                {"NumberType", "{\"type\":1,\"text\":\"x\"}"}, {"Score", "{\"score\":{\"name\":\"a\",\"objective\":\"b\"}}"},
+                {"SourcelessNbt", "{\"nbt\":\"a\"}"}, {"StoredNbt", "{\"nbt\":\"a\",\"storage\":\"minecraft:x\"}"}}) {
             Files.createDirectories(folder.resolve(pack[0]));
             Files.writeString(folder.resolve(pack[0] + "/pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":" + pack[1] + "}}");
         }
 
-        assertEquals(List.of("file/Faithful", "file/Inserting", "file/InsertingUntyped", "file/Old.zip", "file/Score", "file/Translated", "file/Typed"), List.copyOf(PackFolders.list(folder).keySet()),
+        assertEquals(List.of("file/Faithful", "file/Inserting", "file/InsertingUntyped", "file/Old.zip", "file/Score",
+                        "file/StoredNbt", "file/Translated", "file/Typed"), List.copyOf(PackFolders.list(folder).keySet()),
                 "a folder or zip without readable pack metadata at its root and other files are no packs, as for the game");
         assertEquals("Old.zip", PackFolders.title(folder.resolve("Old.zip")), "the game titles a zip pack with its file name");
         assertTrue(PackFolders.list(this.directory.resolve("missing")).isEmpty());

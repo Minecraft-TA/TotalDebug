@@ -32,27 +32,23 @@ public final class PackFolders {
     public record Meta(String description, int format) {
     }
 
-    /** A kind of a component's content: the key holding it, and whether the game reads the value there. */
-    private record Content(String key, Predicate<JsonElement> valid) {
-        boolean heldBy(JsonObject component) {
-            return this.valid.test(component.get(this.key));
-        }
-    }
-
     /**
-     * The kinds of a component's content by the name its {@code type} gives: text, translation, key binding, score,
-     * selector, NBT, and NeoForge's insertion of a translation's argument. Selectors and NBT paths are not parsed.
+     * The kinds of a component's content by the name its {@code type} gives, each with whether a component holds the
+     * fields the game's codec requires of it: text, translation, key binding, score, selector, NBT with its source, and
+     * NeoForge's insertion of a translation's argument. What the game parses further, selectors, NBT paths, block
+     * positions and resource ids, is taken as written.
      */
-    private static final Map<String, Content> COMPONENT_CONTENTS = Map.of(
-            "text", new Content("text", PackFolders::isString),
-            "translatable", new Content("translate", PackFolders::isString),
-            "keybind", new Content("keybind", PackFolders::isString),
-            "score", new Content("score", value -> value instanceof JsonObject score
-                    && isString(score.get("name")) && isString(score.get("objective"))),
-            "selector", new Content("selector", PackFolders::isString),
-            "nbt", new Content("nbt", PackFolders::isString),
-            "neoforge:inserting", new Content("index", value -> value instanceof JsonPrimitive index && index.isNumber()
-                    && index.getAsNumber().intValue() >= 0));
+    private static final Map<String, Predicate<JsonObject>> COMPONENT_CONTENTS = Map.of(
+            "text", component -> isString(component.get("text")),
+            "translatable", component -> isString(component.get("translate")),
+            "keybind", component -> isString(component.get("keybind")),
+            "score", component -> component.get("score") instanceof JsonObject score
+                    && isString(score.get("name")) && isString(score.get("objective")),
+            "selector", component -> isString(component.get("selector")),
+            "nbt", component -> isString(component.get("nbt")) && (isString(component.get("block"))
+                    || isString(component.get("entity")) || isString(component.get("storage"))),
+            "neoforge:inserting", component -> component.get("index") instanceof JsonPrimitive index && index.isNumber()
+                    && index.getAsNumber().intValue() >= 0);
 
     private PackFolders() {
     }
@@ -83,9 +79,9 @@ public final class PackFolders {
             return true;
         }
         if (!(value instanceof JsonObject object)) return false;
-        if (!object.has("type")) return COMPONENT_CONTENTS.values().stream().anyMatch(content -> content.heldBy(object));
-        Content content = isString(object.get("type")) ? COMPONENT_CONTENTS.get(object.get("type").getAsString()) : null;
-        return content != null && content.heldBy(object);
+        if (!object.has("type")) return COMPONENT_CONTENTS.values().stream().anyMatch(content -> content.test(object));
+        Predicate<JsonObject> content = isString(object.get("type")) ? COMPONENT_CONTENTS.get(object.get("type").getAsString()) : null;
+        return content != null && content.test(object);
     }
 
     private static boolean isString(JsonElement value) {

@@ -257,6 +257,24 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aSaveIntoAClosedWorldThatEnablesTheManagedDatapackLowerMovesItOnTop() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        Map<String, Object> data = LevelDatFixture.world("World");
+        data.put("DataPacks", Map.of("Enabled", List.of("vanilla", ResourceEdits.PACK_ID, "file/Other"), "Disabled", List.of()));
+        LevelDatFixture.write(world, data);
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
+
+        edits.save("data/testmod/recipe/gear.json", bytes("{}")).get(5, TimeUnit.SECONDS);
+        assertEquals(List.of("vanilla", "file/Other", ResourceEdits.PACK_ID), DatapackSelection.saved(world),
+                "above a pack that may supply the same file, as a reload places it");
+
+        byte[] onTop = Files.readAllBytes(world.resolve("level.dat"));
+        edits.save("data/testmod/recipe/gear.json", bytes("{\"a\":1}")).get(5, TimeUnit.SECONDS);
+        assertArrayEquals(onTop, Files.readAllBytes(world.resolve("level.dat")), "a pack on top already stays as it is");
+    }
+
+    @Test
     void aSaveIntoAClosedWorldThatDoesNotNameTheManagedDatapackLeavesItsLevelDat() throws Exception {
         Path world = this.directory.resolve("saves/World");
         LevelDatFixture.write(world, LevelDatFixture.world("World"));
