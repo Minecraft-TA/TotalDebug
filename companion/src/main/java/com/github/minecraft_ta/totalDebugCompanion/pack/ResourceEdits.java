@@ -630,7 +630,7 @@ public final class ResourceEdits {
         // The world reads a world-load file when it loads again, from the managed pack only if it is enabled: such a save
         // reloads only to enable it, as the reload after any other save does.
         boolean worldLoad = !assets && apply == ResourcePaths.Apply.WORLD_LOAD;
-        if (worldLoad && (!managed(pack) || serverEnables(PACK_ID))) {
+        if (worldLoad && (!managed(pack) || serverHasOnTop(PACK_ID))) {
             return CompletableFuture.completedFuture(new Saved(Effect.REJOIN, pack, List.of(), ""));
         }
         Effect failed = assets ? Effect.GAME_STARTS : worldLoad ? Effect.REJOIN : Effect.WORLD_OPENS;
@@ -653,10 +653,13 @@ public final class ResourceEdits {
         }
     }
 
-    /** Whether the server of the world the game plays named {@code id} among its enabled datapacks. */
-    private boolean serverEnables(String id) {
+    /**
+     * Whether the server of the world the game plays named {@code id} as its highest enabled datapack, so no other one
+     * can supply a file it holds. A pack fixed above it makes every such save reload, which places it as high as it goes.
+     */
+    private boolean serverHasOnTop(String id) {
         PackStackPayload datapacks = this.packs.datapacks();
-        return datapacks != null && datapacks.enabled().stream().anyMatch(enabled -> enabled.id().equals(id));
+        return datapacks != null && !datapacks.enabled().isEmpty() && datapacks.enabled().getLast().id().equals(id);
     }
 
     /** Asks the game to reload what {@code path} needs: the client's resources, or the data of {@code world}. */

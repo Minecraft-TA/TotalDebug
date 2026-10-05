@@ -307,6 +307,15 @@ class ResourceEditsTest {
         assertEquals(Effect.REJOIN, edits.save(biome, bytes("{}")).get(5, TimeUnit.SECONDS).effect());
         assertTrue(sent.isEmpty(), "the world reads the file when it loads again");
 
+        edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""),
+                new PackStackPayload.Pack("file/Other", "Other", ""))), "");
+        CompletableFuture<ResourceEdits.Saved> below = edits.save(biome, bytes("{\"b\":1}"));
+        awaitSent(sent, 1);
+        assertEquals(ResourceEdits.PACK_ID, sent.getFirst().managedDataPack(), "a pack above it could supply the file; the reload places it on top");
+        edits.pipeline().reloads().answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
+        assertEquals(Effect.REJOIN, below.get(5, TimeUnit.SECONDS).effect());
+        sent.clear();
+
         edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Default", ""))), "");
         CompletableFuture<ResourceEdits.Saved> saved = edits.save(biome, bytes("{\"a\":1}"));
         awaitSent(sent, 1);

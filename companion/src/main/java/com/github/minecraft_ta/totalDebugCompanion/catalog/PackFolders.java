@@ -36,7 +36,7 @@ public final class PackFolders {
      * The kinds of a component's content by the name its {@code type} gives, each with whether a component holds the
      * fields the game's codec requires of it: text, translation, key binding, score, selector, NBT with its source, and
      * NeoForge's insertion of a translation's argument. What the game parses further, selectors, NBT paths, block
-     * positions and resource ids, is taken as written.
+     * positions, resource ids and the style's fields (color, font, events), is taken as written.
      */
     private static final Map<String, Predicate<JsonObject>> COMPONENT_CONTENTS = Map.of(
             "text", component -> isString(component.get("text")),
@@ -79,6 +79,10 @@ public final class PackFolders {
             return true;
         }
         if (!(value instanceof JsonObject object)) return false;
+        // Its siblings are components of their own, at least one.
+        if (object.has("extra") && !(object.get("extra") instanceof JsonArray extra && !extra.isEmpty() && isComponent(extra))) {
+            return false;
+        }
         if (!object.has("type")) return COMPONENT_CONTENTS.values().stream().anyMatch(content -> content.test(object));
         Predicate<JsonObject> content = isString(object.get("type")) ? COMPONENT_CONTENTS.get(object.get("type").getAsString()) : null;
         return content != null && content.test(object);
