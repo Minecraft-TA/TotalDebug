@@ -25,24 +25,24 @@ public sealed interface NavigationTarget permits
         NavigationTarget.RuntimePackage,
         NavigationTarget.ModuleSearch,
         NavigationTarget.Inspection,
-        NavigationTarget.ModPage,
-        NavigationTarget.PackConfiguration,
-        NavigationTarget.PackResources,
-        NavigationTarget.Logs,
-        NavigationTarget.Changes,
-        NavigationTarget.KeyBindings,
-        NavigationTarget.World,
-        NavigationTarget.Pack,
-        NavigationTarget.Content,
         NavigationTarget.Definition,
+        NavigationTarget.CategoryTarget,
         NavigationTarget.RuntimeModuleNode {
+
+    /**
+     * A category's page, which the category's {@link Page} opens, names and shows in the Project tree. The records stay
+     * here as plain data, since the change labels, the subject links and the search make them too.
+     */
+    sealed interface CategoryTarget extends NavigationTarget permits ModPage, PackConfiguration, PackResources, Logs,
+            Changes, KeyBindings, World, Pack, Content {
+    }
 
     /**
      * An installed mod's page, or a namespace's or runtime module's page when no captured mod has that id.
      * {@code section} selects a part of the tab: a registry such as {@code minecraft:fluid} on the Content tab, a
      * resource category on the Resources tab; empty selects none.
      */
-    record ModPage(String modId, ModTab tab, String section) implements NavigationTarget {
+    record ModPage(String modId, ModTab tab, String section) implements CategoryTarget {
         public ModPage {
             modId = requireText(modId, "modId");
             Objects.requireNonNull(tab, "tab");
@@ -55,46 +55,46 @@ public sealed interface NavigationTarget permits
     }
 
     /** The registered content of every mod; {@code registry}, such as {@code minecraft:fluid}, selects a kind, empty all. */
-    record Content(String registry) implements NavigationTarget {
+    record Content(String registry) implements CategoryTarget {
         public Content {
             registry = Objects.requireNonNullElse(registry, "");
         }
     }
 
     /** The key bindings of every mod in the pack; {@code binding}, such as {@code key.jump}, is shown when not empty. */
-    record KeyBindings(String binding) implements NavigationTarget {
+    record KeyBindings(String binding) implements CategoryTarget {
         public KeyBindings {
             binding = Objects.requireNonNullElse(binding, "");
         }
     }
 
     /** A resource pack or datapack of its own folder or zip file. */
-    record Pack(Path file) implements NavigationTarget {
+    record Pack(Path file) implements CategoryTarget {
         public Pack {
             file = Objects.requireNonNull(file, "file").toAbsolutePath().normalize();
         }
     }
 
     /** The current world: the one the game has open, or the one played last. */
-    record World(WorldTab tab) implements NavigationTarget {
+    record World(WorldTab tab) implements CategoryTarget {
         public World {
             Objects.requireNonNull(tab, "tab");
         }
     }
 
     /** What Companion changed in the pack. */
-    record Changes() implements NavigationTarget {
+    record Changes() implements CategoryTarget {
     }
 
     /** The settings of every mod in the pack. */
-    record PackConfiguration() implements NavigationTarget {
+    record PackConfiguration() implements CategoryTarget {
     }
 
     /**
      * Every resource of the pack as the game uses it, or its resource packs. On the Files tab, {@code category}, such as
      * {@code assets/textures}, selects a kind, empty all.
      */
-    record PackResources(ResourcesTab tab, String category) implements NavigationTarget {
+    record PackResources(ResourcesTab tab, String category) implements CategoryTarget {
         public PackResources {
             Objects.requireNonNull(tab, "tab");
             category = Objects.requireNonNullElse(category, "");
@@ -106,7 +106,7 @@ public sealed interface NavigationTarget permits
     }
 
     /** The game's logs and crash reports; {@code file}, a log or crash report, is selected when not null. */
-    record Logs(Path file) implements NavigationTarget {
+    record Logs(Path file) implements CategoryTarget {
         public Logs {
             if (file != null) file = file.toAbsolutePath().normalize();
         }
