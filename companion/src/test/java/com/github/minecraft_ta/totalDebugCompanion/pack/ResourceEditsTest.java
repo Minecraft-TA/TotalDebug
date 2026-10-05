@@ -297,6 +297,13 @@ class ResourceEditsTest {
         edits.pipeline().reloads().relayFailed(sent.getFirst().requestId(), "The server does not have TotalDebug");
         assertEquals(Effect.REJOIN, saved.get(5, TimeUnit.SECONDS).effect());
         assertEquals("The server does not have TotalDebug", saved.get().reloadFailure());
+
+        CompletableFuture<ResourceEdits.Saved> parsed = edits.save(biome, bytes("{\"a\":2}"));
+        awaitSent(sent, 2);
+        edits.pipeline().reloads().answered(new ReloadResultPayload(sent.get(1).requestId(), 10,
+                List.of(new ReloadResultPayload.Problem(biome, "Unknown biome field a")), ""));
+        assertEquals(Effect.REJOIN, parsed.get(5, TimeUnit.SECONDS).effect());
+        assertEquals(List.of("Unknown biome field a"), parsed.get().problems(), "the reload's problems with the file are the save's");
     }
 
     @Test
@@ -364,6 +371,28 @@ class ResourceEditsTest {
             assertEquals("The world World is open in a game that is not connected to Companion; it uses the change when the world is loaded again",
                     saved.reloadFailure());
         }
+    }
+
+    @Test
+    void aDatapackOfAWorldTheUnconnectedGameHasOpenWithTheManagedPackDisabledSaysWhatEnablesIt() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        Map<String, Object> data = LevelDatFixture.world("World");
+        data.put("DataPacks", Map.of("Enabled", List.of("vanilla"), "Disabled", List.of(ResourceEdits.PACK_ID)));
+        LevelDatFixture.write(world, data);
+        byte[] levelDat = Files.readAllBytes(world.resolve("level.dat"));
+        Path pack = Files.createDirectories(world.resolve("datapacks/TotalDebug"));
+        Files.writeString(pack.resolve("pack.mcmeta"), "{\"pack\":{\"pack_format\":48,\"description\":\"\"}}");
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, true), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, InstanceState.inMemory());
+
+        try (FileChannel channel = FileChannel.open(world.resolve("session.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock ignored = channel.lock()) {
+            ResourceEdits.Saved saved = edits.save("data/testmod/recipe/gear.json", bytes("{}")).get(5, TimeUnit.SECONDS);
+
+            assertEquals("The world World is open in a game that is not connected to Companion, and its level.dat disables the "
+                    + "TotalDebug datapack; the next save after the world closes enables it", saved.reloadFailure());
+        }
+        assertArrayEquals(levelDat, Files.readAllBytes(world.resolve("level.dat")), "the open world's level.dat is its own to write");
     }
 
     @Test

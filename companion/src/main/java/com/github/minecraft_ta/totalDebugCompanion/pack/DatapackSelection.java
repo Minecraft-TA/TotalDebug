@@ -112,7 +112,7 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
      * it did; a pack named in neither list the game enables itself when it loads the world. Blocking.
      */
     static boolean enableDisabled(Path world, String id) throws IOException {
-        if (!strings(dataPacks(LevelDat.read(LevelDat.file(world)).tag()), "Disabled").contains(id)) return false;
+        if (!disables(world, id)) return false;
         LevelDat.update(world, root -> {
             if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
                 throw new IOException("The level.dat of " + world.getFileName() + " holds no world data");
@@ -127,6 +127,11 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
             return new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written)));
         });
         return true;
+    }
+
+    /** Whether {@code world}'s {@code level.dat} lists {@code id} as disabled, which the player did. Blocking. */
+    static boolean disables(Path world, String id) throws IOException {
+        return strings(dataPacks(LevelDat.read(LevelDat.file(world)).tag()), "Disabled").contains(id);
     }
 
     /** The datapacks {@code world}'s {@code level.dat} enables, lowest first. Blocking. */
