@@ -62,7 +62,7 @@ class RuntimeIndexRecoveryTest {
         byte[] previousCache = Files.readAllBytes(paths.index());
         Files.delete(paths.home().resolve("current.jar"));
 
-        try (RuntimeIndexService service = new RuntimeIndexService(new Object(),
+        try (RuntimeIndexService service = new RuntimeIndexService(new Object(), told -> { },
                 ignored -> fail("An inventory with a missing current source must not become ready"))) {
             await(service, paths, restore);
             assertEquals(RuntimeIndexService.Phase.FAILED, service.status().phase());
@@ -125,7 +125,7 @@ class RuntimeIndexRecoveryTest {
 
     private static void assertRebuilt(InstancePaths paths, boolean restore) throws Exception {
         var installed = new AtomicReference<RuntimeIndexService.ReadySnapshot>();
-        try (RuntimeIndexService service = new RuntimeIndexService(new Object(), installed::set)) {
+        try (RuntimeIndexService service = new RuntimeIndexService(new Object(), told -> { }, installed::set)) {
             await(service, paths, restore);
             assertEquals(RuntimeIndexService.Phase.READY, service.status().phase(), service.status().detail());
             assertNotNull(installed.get());

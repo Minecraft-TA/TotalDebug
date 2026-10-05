@@ -38,7 +38,7 @@ class SearchEverywherePopupProcessTest {
 
     public static final class Probe {
         public static void main(String[] arguments) throws Exception {
-            try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
+            try (var service = new RuntimeIndexService(new Object(), told -> { }, snapshot -> snapshot.close())) {
                 SwingUtilities.invokeAndWait(() -> new SearchEverywherePopup(null, service, () -> null, () -> null, () -> null, new ItemIconService(), ignored -> {}).dispose());
             }
             System.exit(0);
