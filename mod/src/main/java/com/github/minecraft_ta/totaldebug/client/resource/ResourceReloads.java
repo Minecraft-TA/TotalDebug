@@ -109,8 +109,10 @@ public final class ResourceReloads {
         // As Options.updateResourcePacks saves them, which would also start a reload of its own.
         if (enabled) ResourcePackEdits.save(minecraft);
         if (!kinds.contains(ReloadPayload.Kind.RESOURCES) && !enabled && quickly(managedPack, kinds, watched)) {
-            // A full reload tells the catalog through its reload listener; these quick ones do not.
-            TotalDebugClient.current().ifPresent(TotalDebugClient::resourcesReloaded);
+            // A full reload tells the catalog through its reload listener; these quick ones do not. Textures put in place
+            // change icons; the language alone changes names only.
+            TotalDebugClient.current().ifPresent(kinds.contains(ReloadPayload.Kind.TEXTURES)
+                    ? TotalDebugClient::resourcesReloaded : TotalDebugClient::languageReloaded);
             return CompletableFuture.completedFuture(null);
         }
         return reloadAll(minecraft);

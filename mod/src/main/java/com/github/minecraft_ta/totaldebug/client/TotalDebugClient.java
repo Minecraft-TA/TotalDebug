@@ -187,6 +187,15 @@ public final class TotalDebugClient {
      */
     public void resourcesReloaded() {
         this.resources.resourcesChanged();
+        languageReloaded();
+    }
+
+    /**
+     * The language was reloaded alone, as Companion's quick reload of a language file does. Only translated names
+     * changed, which the catalog and the packs' titles hold; the snapshot's models and textures did not, and capturing
+     * them again would take seconds. Client thread only.
+     */
+    public void languageReloaded() {
         this.catalogs.recapture();
         this.companionApp.announceInventory();
         this.packStacks.republish();
