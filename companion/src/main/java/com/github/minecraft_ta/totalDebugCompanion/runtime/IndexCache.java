@@ -120,6 +120,9 @@ final class IndexCache {
             if (JsonFiles.integer(json, "format") != FORMAT) {
                 throw new IOException("Unsupported runtime index format: " + file);
             }
+            if (!javaVersion().equals(JsonFiles.string(json, "javaVersion"))) {
+                throw new IOException("The index holds the classes of another Java runtime: " + JsonFiles.string(json, "javaVersion"));
+            }
             List<Source> sources = new ArrayList<>();
             var ids = new HashSet<Integer>();
             for (var value : JsonFiles.array(json, "sources")) {
@@ -166,9 +169,15 @@ final class IndexCache {
         return Path.of(System.getProperty("java.home")).toAbsolutePath().normalize();
     }
 
+    /** The version and build of that runtime, which an update in place changes. */
+    static String javaVersion() {
+        return System.getProperty("java.runtime.version");
+    }
+
     private static JsonObject toJson(Manifest manifest) {
         JsonObject json = new JsonObject();
         json.addProperty("format", FORMAT);
+        json.addProperty("javaVersion", javaVersion());
         json.addProperty("sourceKind", manifest.identity().kind().name());
         json.addProperty("sourceIdentity", manifest.identity().value());
         if (!manifest.detail().isBlank()) json.addProperty("detail", manifest.detail());
