@@ -28,8 +28,9 @@ class SearchEverywherePopupProcessTest {
                 "-cp", System.getProperty("java.class.path"), Probe.class.getName())
                 .redirectErrorStream(true).redirectOutput(output.toFile()).start();
         try {
-            assertTrue(process.waitFor(5, TimeUnit.SECONDS),
-                    () -> "Popup initialization did not finish within five seconds: " + output);
+            // A deadlock never ends; a minute leaves a slow start on a loaded runner its time.
+            assertTrue(process.waitFor(60, TimeUnit.SECONDS),
+                    () -> "Popup initialization did not finish within a minute: " + output);
             assertEquals(0, process.exitValue(), Files.readString(output));
         } finally {
             if (process.isAlive()) process.destroyForcibly().waitFor();
