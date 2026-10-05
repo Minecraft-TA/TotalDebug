@@ -108,26 +108,20 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
     }
 
     /**
-     * Enables {@code id} at the top of {@code world}'s datapacks where its {@code level.dat} disables it or enables it
-     * lower, as the data reload of a live save does, and tells whether it changed them; a pack named in neither list the
-     * game enables itself on top when it loads the world. Blocking.
+     * Takes {@code id} off the datapacks {@code world}'s {@code level.dat} disables, and tells whether it was there. The
+     * game then enables it as a pack it has not seen when it loads the world, placing it as it places any new pack; the
+     * enabled packs, the selection Companion records, stay as they are. Blocking.
      */
-    static boolean enableOnTop(Path world, String id) throws IOException {
-        NbtData.CompoundTag named = dataPacks(LevelDat.read(LevelDat.file(world)).tag());
-        List<String> enabledNow = strings(named, "Enabled");
-        boolean disabledNow = strings(named, "Disabled").contains(id);
-        if (!disabledNow && (!enabledNow.contains(id) || enabledNow.getLast().equals(id))) return false;
+    static boolean enableDisabled(Path world, String id) throws IOException {
+        if (!disables(world, id)) return false;
         LevelDat.update(world, root -> {
             if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
                 throw new IOException("The level.dat of " + world.getFileName() + " holds no world data");
             }
             NbtData.CompoundTag packs = dataPacks(root.tag());
-            List<String> enabled = new ArrayList<>(strings(packs, "Enabled"));
             List<String> disabled = new ArrayList<>(strings(packs, "Disabled"));
-            enabled.remove(id);
-            enabled.add(id);
             disabled.remove(id);
-            NbtData.CompoundTag written = LevelDat.with(LevelDat.with(packs, "Enabled", list(enabled)), "Disabled", list(disabled));
+            NbtData.CompoundTag written = LevelDat.with(packs, "Disabled", list(disabled));
             return new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written)));
         });
         return true;

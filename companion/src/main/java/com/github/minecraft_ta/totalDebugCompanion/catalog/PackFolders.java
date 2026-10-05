@@ -17,7 +17,6 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
-import java.util.function.Predicate;
 import java.util.zip.ZipFile;
 
 /**
@@ -32,24 +31,6 @@ public final class PackFolders {
     public record Meta(String description, int format) {
     }
 
-    /**
-     * The kinds of a component's content by the name its {@code type} gives, each with whether a component holds the
-     * fields the game's codec requires of it: text, translation, key binding, score, selector, NBT with its source, and
-     * NeoForge's insertion of a translation's argument. What the game parses further, selectors, NBT paths, block
-     * positions, resource ids and the style's fields (color, font, events), is taken as written.
-     */
-    private static final Map<String, Predicate<JsonObject>> COMPONENT_CONTENTS = Map.of(
-            "text", component -> isString(component.get("text")),
-            "translatable", component -> isString(component.get("translate")),
-            "keybind", component -> isString(component.get("keybind")),
-            "score", component -> component.get("score") instanceof JsonObject score
-                    && isString(score.get("name")) && isString(score.get("objective")),
-            "selector", component -> isString(component.get("selector")),
-            "nbt", component -> isString(component.get("nbt")) && (isString(component.get("block"))
-                    || isString(component.get("entity")) || isString(component.get("storage"))),
-            "neoforge:inserting", component -> component.get("index") instanceof JsonPrimitive index && index.isNumber()
-                    && index.getAsNumber().intValue() >= 0);
-
     private PackFolders() {
     }
 
@@ -62,34 +43,10 @@ public final class PackFolders {
         if (!Files.isDirectory(entry) && !(Files.isRegularFile(entry) && entry.getFileName().toString().endsWith(".zip"))) {
             return false;
         }
+        // The description is a text component: text, a list or an object; null or a number is none.
         return section(entry).filter(section -> section.get("pack_format") instanceof JsonPrimitive format && format.isNumber()
-                && isComponent(section.get("description"))).isPresent();
-    }
-
-    /**
-     * Whether the game reads {@code value} as a text component (its {@code ComponentSerialization}): text, a list of at
-     * least one component, or an object holding the content of the kind its {@code type} names, or without a type, of
-     * any kind. Read against NeoForge 21.1's codec.
-     */
-    private static boolean isComponent(JsonElement value) {
-        if (value instanceof JsonPrimitive) return isString(value);
-        if (value instanceof JsonArray list) {
-            if (list.isEmpty()) return false;
-            for (JsonElement element : list) if (!isComponent(element)) return false;
-            return true;
-        }
-        if (!(value instanceof JsonObject object)) return false;
-        // Its siblings are components of their own, at least one.
-        if (object.has("extra") && !(object.get("extra") instanceof JsonArray extra && !extra.isEmpty() && isComponent(extra))) {
-            return false;
-        }
-        if (!object.has("type")) return COMPONENT_CONTENTS.values().stream().anyMatch(content -> content.test(object));
-        Predicate<JsonObject> content = isString(object.get("type")) ? COMPONENT_CONTENTS.get(object.get("type").getAsString()) : null;
-        return content != null && content.test(object);
-    }
-
-    private static boolean isString(JsonElement value) {
-        return value instanceof JsonPrimitive text && text.isString();
+                && (section.get("description") instanceof JsonPrimitive text && text.isString()
+                || section.get("description") instanceof JsonArray || section.get("description") instanceof JsonObject)).isPresent();
     }
 
     /** The {@code pack} section of a pack's {@code pack.mcmeta}, or empty without one it can read. */

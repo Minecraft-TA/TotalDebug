@@ -249,29 +249,12 @@ class ResourceEditsTest {
 
         assertEquals(Effect.WORLD_OPENS, saved.effect());
         assertEquals("", saved.reloadFailure());
-        assertEquals(List.of("vanilla", ResourceEdits.PACK_ID), DatapackSelection.saved(world), "enabled at the top, as a reload enables it");
+        assertEquals(List.of("vanilla"), DatapackSelection.saved(world),
+                "the game enables it as a pack it has not seen, where it places any new pack; the recorded selection stays");
         NbtData.CompoundTag packs = (NbtData.CompoundTag) ((NbtData.CompoundTag) LevelDat.read(LevelDat.file(world)).tag()
                 .entries().get("Data")).entries().get("DataPacks");
         assertEquals(List.of(new NbtData.StringTag("file/Off")), ((NbtData.ListTag) packs.entries().get("Disabled")).items(),
                 "the player's other choices stay");
-    }
-
-    @Test
-    void aSaveIntoAClosedWorldThatEnablesTheManagedDatapackLowerMovesItOnTop() throws Exception {
-        Path world = this.directory.resolve("saves/World");
-        Map<String, Object> data = LevelDatFixture.world("World");
-        data.put("DataPacks", Map.of("Enabled", List.of("vanilla", ResourceEdits.PACK_ID, "file/Other"), "Disabled", List.of()));
-        LevelDatFixture.write(world, data);
-        ResourceEdits edits = edits(ChangeRecord.inMemory());
-        edits.packs().named(new ClientPacksPayload(STACK, 48));
-
-        edits.save("data/testmod/recipe/gear.json", bytes("{}")).get(5, TimeUnit.SECONDS);
-        assertEquals(List.of("vanilla", "file/Other", ResourceEdits.PACK_ID), DatapackSelection.saved(world),
-                "above a pack that may supply the same file, as a reload places it");
-
-        byte[] onTop = Files.readAllBytes(world.resolve("level.dat"));
-        edits.save("data/testmod/recipe/gear.json", bytes("{\"a\":1}")).get(5, TimeUnit.SECONDS);
-        assertArrayEquals(onTop, Files.readAllBytes(world.resolve("level.dat")), "a pack on top already stays as it is");
     }
 
     @Test
@@ -307,14 +290,6 @@ class ResourceEditsTest {
         assertEquals(Effect.REJOIN, edits.save(biome, bytes("{}")).get(5, TimeUnit.SECONDS).effect());
         assertTrue(sent.isEmpty(), "the world reads the file when it loads again");
 
-        edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""),
-                new PackStackPayload.Pack("file/Other", "Other", ""))), "");
-        CompletableFuture<ResourceEdits.Saved> below = edits.save(biome, bytes("{\"b\":1}"));
-        awaitSent(sent, 1);
-        assertEquals(ResourceEdits.PACK_ID, sent.getFirst().managedDataPack(), "a pack above it could supply the file; the reload places it on top");
-        edits.pipeline().reloads().answered(new ReloadResultPayload(sent.getFirst().requestId(), 10, List.of(), ""));
-        assertEquals(Effect.REJOIN, below.get(5, TimeUnit.SECONDS).effect());
-        sent.clear();
 
         edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Default", ""))), "");
         CompletableFuture<ResourceEdits.Saved> saved = edits.save(biome, bytes("{\"a\":1}"));
