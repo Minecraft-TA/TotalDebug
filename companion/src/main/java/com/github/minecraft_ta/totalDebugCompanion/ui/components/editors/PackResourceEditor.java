@@ -37,6 +37,7 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -487,6 +488,8 @@ abstract class PackResourceEditor<V> extends JPanel {
         Map<String, byte[]> alongside = alongside();
         String expected = this.baseline;
         String[] written = new String[1];
+        // The saved copy as a read of it shows it: the pack saved into can keep an animation of its own for the pixels.
+        AtomicReference<V> savedCopy = new AtomicReference<>(edited);
         // Encoding a large texture takes a while, so it runs with the rest of the save, and so does its hash.
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -502,7 +505,15 @@ abstract class PackResourceEditor<V> extends JPanel {
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
-        }, Workers.files()).thenCompose(bytes -> this.edits.save(this.path, into, bytes, alongside, expected))
+        }, Workers.files()).thenCompose(bytes -> this.edits.save(this.path, into, bytes, alongside, expected)
+                        .thenApplyAsync(saved -> {
+                            try {
+                                savedCopy.set(decode(bytes, saved.pack()));
+                            } catch (IOException | RuntimeException unreadable) {
+                                // The bytes were encoded from what is shown; the copy stays as edited.
+                            }
+                            return saved;
+                        }, Workers.files()))
                 .whenComplete((saved, failure) -> SwingUtilities.invokeLater(() -> {
                     // The reads go on afterwards, whatever happens here, unless another save takes the hold over.
                     boolean savingAgain = false;
@@ -532,10 +543,10 @@ abstract class PackResourceEditor<V> extends JPanel {
                         this.packHash = written[0];
                         boolean keepEdits = !same(shown(), edited);
                         showPack(saved.pack());
-                        this.packContent = edited;
+                        this.packContent = savedCopy.get();
                         this.managed = true;
-                        if (keepEdits) markSaved(edited);
-                        else load(edited);
+                        if (keepEdits) markSaved(this.packContent);
+                        else load(this.packContent);
                         showSaved(saved);
                         changed();
                         // Another tab's save that came while this one ran was not read then.

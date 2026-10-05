@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.pack;
 
 import com.github.minecraft_ta.totalDebugCompanion.change.ChangePipeline;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDat;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.LevelDatFixture;
 import com.github.minecraft_ta.totalDebugCompanion.change.Effect;
 import com.github.minecraft_ta.totalDebugCompanion.game.GameLocations;
@@ -9,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ResourceOriginals;
 import com.github.minecraft_ta.totaldebug.protocol.message.ClientPacksPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.PackStackPayload;
+import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
 import com.github.minecraft_ta.totaldebug.protocol.message.PlayingPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
@@ -38,6 +40,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -231,6 +234,69 @@ class ResourceEditsTest {
         assertEquals(newer.resolve("datapacks/TotalDebug"), saved.pack());
         assertEquals(Effect.WORLD_OPENS, saved.effect());
         assertTrue(Files.readString(saved.pack().resolve("pack.mcmeta")).contains("\"pack_format\":48"));
+    }
+
+    @Test
+    void aSaveIntoAClosedWorldThatDisabledTheManagedDatapackEnablesItThere() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        Map<String, Object> data = LevelDatFixture.world("World");
+        data.put("DataPacks", Map.of("Enabled", List.of("vanilla"), "Disabled", List.of(ResourceEdits.PACK_ID, "file/Off")));
+        LevelDatFixture.write(world, data);
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
+
+        ResourceEdits.Saved saved = edits.save("data/testmod/recipe/gear.json", bytes("{}")).get(5, TimeUnit.SECONDS);
+
+        assertEquals(Effect.WORLD_OPENS, saved.effect());
+        assertEquals("", saved.reloadFailure());
+        assertEquals(List.of("vanilla", ResourceEdits.PACK_ID), DatapackSelection.saved(world), "enabled at the top, as a reload enables it");
+        NbtData.CompoundTag packs = (NbtData.CompoundTag) ((NbtData.CompoundTag) LevelDat.read(LevelDat.file(world)).tag()
+                .entries().get("Data")).entries().get("DataPacks");
+        assertEquals(List.of(new NbtData.StringTag("file/Off")), ((NbtData.ListTag) packs.entries().get("Disabled")).items(),
+                "the player's other choices stay");
+    }
+
+    @Test
+    void aSaveIntoAClosedWorldThatDoesNotNameTheManagedDatapackLeavesItsLevelDat() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        LevelDatFixture.write(world, LevelDatFixture.world("World"));
+        byte[] before = Files.readAllBytes(world.resolve("level.dat"));
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
+
+        edits.save("data/testmod/recipe/gear.json", bytes("{}")).get(5, TimeUnit.SECONDS);
+
+        assertArrayEquals(before, Files.readAllBytes(world.resolve("level.dat")), "the game enables a new pack when it loads the world");
+    }
+
+    @Test
+    void aWorldLoadSaveAsksTheReloadThatEnablesTheManagedDatapackOnlyWhereTheServerDoesNotUseIt() throws Exception {
+        Path world = this.directory.resolve("saves/World");
+        LevelDatFixture.write(world, LevelDatFixture.world("World"));
+        ResourceEdits edits = edits(ChangeRecord.inMemory());
+        List<ReloadPayload> sent = new CopyOnWriteArrayList<>();
+        edits.location().connected(message -> {
+            if (SentMessage.of(message).message() instanceof ReloadMessage reload) sent.add(reload.payload());
+            return true;
+        });
+        PlayingPayload playing = new PlayingPayload.Singleplayer(world.toString());
+        edits.location().playing(playing);
+        edits.packs().named(new ClientPacksPayload(STACK, 48));
+        String biome = "data/testmod/worldgen/biome/glade.json";
+
+        edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Default", ""),
+                new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), "");
+        assertEquals(Effect.REJOIN, edits.save(biome, bytes("{}")).get(5, TimeUnit.SECONDS).effect());
+        assertTrue(sent.isEmpty(), "the world reads the file when it loads again");
+
+        edits.packs().datapacks(playing.identity(), new PackStackPayload(48, List.of(new PackStackPayload.Pack("vanilla", "Default", ""))), "");
+        CompletableFuture<ResourceEdits.Saved> saved = edits.save(biome, bytes("{\"a\":1}"));
+        awaitSent(sent, 1);
+        assertEquals(Set.of(ReloadPayload.Kind.DATA), sent.getFirst().kinds());
+        assertEquals(ResourceEdits.PACK_ID, sent.getFirst().managedDataPack(), "the reload enables the managed datapack");
+        edits.pipeline().reloads().relayFailed(sent.getFirst().requestId(), "The server does not have TotalDebug");
+        assertEquals(Effect.REJOIN, saved.get(5, TimeUnit.SECONDS).effect());
+        assertEquals("The server does not have TotalDebug", saved.get().reloadFailure());
     }
 
     @Test

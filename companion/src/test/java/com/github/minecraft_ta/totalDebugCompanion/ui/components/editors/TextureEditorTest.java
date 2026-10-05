@@ -179,6 +179,36 @@ class TextureEditorTest {
         }
     }
 
+    @Test
+    void aSaveIntoAPackWithItsOwnAnimationPlaysThatAnimation() throws Exception {
+        ResourceEdits edits = ResourceEditsFixture.edits(GameLocations.of(this.directory, false), ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run,
+                InstanceState.inMemory());
+        edits.packs().named(new ClientPacksPayload(new PackStackPayload(34, List.of(new PackStackPayload.Pack(ResourceEdits.PACK_ID, "TotalDebug", ""))), 48));
+        // The pack has the texture's animation but not the texture: the save keeps the pack's animation.
+        Path copy = edits.pack(TEXTURE).resolve(TEXTURE);
+        Files.createDirectories(copy.getParent());
+        Files.writeString(copy.resolveSibling("gear.png.mcmeta"), "{\"animation\":{\"frametime\":2}}");
+
+        TextureEditor[] editor = new TextureEditor[1];
+        SwingUtilities.invokeAndWait(() -> editor[0] = new TextureEditor(TEXTURE, "testmod.jar", null,
+                new LoadedResource.Image(new BufferedImage(4, 8, BufferedImage.TYPE_INT_ARGB), 100), edits, ignored -> { }));
+        SwingUtilities.invokeAndWait(() -> UiTestScope.showPages(editor[0]));
+        try {
+            awaitOnSwing(() -> editor[0].targetBox().getItemCount() > 0);
+            SwingUtilities.invokeAndWait(() -> {
+                selectTool(editor[0], "Pencil");
+                click(editor[0], new Point(1, 2), 0);
+                editor[0].save();
+            });
+            awaitOnSwing(() -> Files.isRegularFile(copy) && !editor[0].modified());
+            SwingUtilities.invokeAndWait(() -> assertEquals(4, editor[0].view().shownRegion().height,
+                    "the saved copy plays the pack's animation, two frames of 4 x 4, as the game does"));
+        } finally {
+            SwingUtilities.invokeAndWait(editor[0]::dispose);
+        }
+    }
+
     /** Clicks the toolbar button with the accessible name {@code name}. */
     private static void selectTool(TextureEditor editor, String name) {
         for (Component component : allComponents(editor.view())) {

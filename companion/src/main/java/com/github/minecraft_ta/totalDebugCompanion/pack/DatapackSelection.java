@@ -107,6 +107,28 @@ final class DatapackSelection implements ChangeCategory<ChangeRecord.PackSelecti
         }
     }
 
+    /**
+     * Enables {@code id} at the top of {@code world}'s datapacks where its {@code level.dat} disables it, and tells whether
+     * it did; a pack named in neither list the game enables itself when it loads the world. Blocking.
+     */
+    static boolean enableDisabled(Path world, String id) throws IOException {
+        if (!strings(dataPacks(LevelDat.read(LevelDat.file(world)).tag()), "Disabled").contains(id)) return false;
+        LevelDat.update(world, root -> {
+            if (!(root.tag().entries().get("Data") instanceof NbtData.CompoundTag data)) {
+                throw new IOException("The level.dat of " + world.getFileName() + " holds no world data");
+            }
+            NbtData.CompoundTag packs = dataPacks(root.tag());
+            List<String> enabled = new ArrayList<>(strings(packs, "Enabled"));
+            List<String> disabled = new ArrayList<>(strings(packs, "Disabled"));
+            enabled.remove(id);
+            enabled.add(id);
+            disabled.remove(id);
+            NbtData.CompoundTag written = LevelDat.with(LevelDat.with(packs, "Enabled", list(enabled)), "Disabled", list(disabled));
+            return new LevelDat.Root(root.name(), LevelDat.with(root.tag(), "Data", LevelDat.with(data, "DataPacks", written)));
+        });
+        return true;
+    }
+
     /** The datapacks {@code world}'s {@code level.dat} enables, lowest first. Blocking. */
     static List<String> saved(Path world) throws IOException {
         return strings(dataPacks(LevelDat.read(LevelDat.file(world)).tag()), "Enabled");

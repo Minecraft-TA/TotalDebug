@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
@@ -31,6 +32,9 @@ public final class PackFolders {
     public record Meta(String description, int format) {
     }
 
+    /** The keys naming a component's content, one per kind: text, translation, score, selector, key binding, NBT. */
+    private static final List<String> COMPONENT_CONTENTS = List.of("text", "translate", "score", "selector", "keybind", "nbt");
+
     private PackFolders() {
     }
 
@@ -43,10 +47,22 @@ public final class PackFolders {
         if (!Files.isDirectory(entry) && !(Files.isRegularFile(entry) && entry.getFileName().toString().endsWith(".zip"))) {
             return false;
         }
-        // The description is a text component: text, a list or an object; null or a number is none.
         return section(entry).filter(section -> section.get("pack_format") instanceof JsonPrimitive format && format.isNumber()
-                && (section.get("description") instanceof JsonPrimitive text && text.isString()
-                || section.get("description") instanceof JsonArray || section.get("description") instanceof JsonObject)).isPresent();
+                && isComponent(section.get("description"))).isPresent();
+    }
+
+    /**
+     * Whether the game reads {@code value} as a text component (its {@code ComponentSerialization}): text, a list of at
+     * least one component, or an object with the content of one of its kinds.
+     */
+    private static boolean isComponent(JsonElement value) {
+        if (value instanceof JsonPrimitive text) return text.isString();
+        if (value instanceof JsonArray list) {
+            if (list.isEmpty()) return false;
+            for (JsonElement element : list) if (!isComponent(element)) return false;
+            return true;
+        }
+        return value instanceof JsonObject object && COMPONENT_CONTENTS.stream().anyMatch(object::has);
     }
 
     /** The {@code pack} section of a pack's {@code pack.mcmeta}, or empty without one it can read. */

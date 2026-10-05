@@ -36,8 +36,14 @@ class PackFoldersTest {
             output.closeEntry();
         }
         Files.writeString(folder.resolve("readme.txt"), "");
+        // The game reads the description as a text component, and refuses a list without one or an object without content.
+        for (String[] pack : new String[][]{{"EmptyList", "[]"}, {"EmptyObject", "{}"}, {"HalfList", "[\"ok\",{}]"},
+                {"Translated", "{\"translate\":\"pack.translated\"}"}}) {
+            Files.createDirectories(folder.resolve(pack[0]));
+            Files.writeString(folder.resolve(pack[0] + "/pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":" + pack[1] + "}}");
+        }
 
-        assertEquals(List.of("file/Faithful", "file/Old.zip"), List.copyOf(PackFolders.list(folder).keySet()),
+        assertEquals(List.of("file/Faithful", "file/Old.zip", "file/Translated"), List.copyOf(PackFolders.list(folder).keySet()),
                 "a folder or zip without readable pack metadata at its root and other files are no packs, as for the game");
         assertEquals("Old.zip", PackFolders.title(folder.resolve("Old.zip")), "the game titles a zip pack with its file name");
         assertTrue(PackFolders.list(this.directory.resolve("missing")).isEmpty());
