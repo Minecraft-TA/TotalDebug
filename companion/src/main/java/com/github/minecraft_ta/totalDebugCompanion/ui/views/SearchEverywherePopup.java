@@ -13,9 +13,9 @@ import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.CatalogSear
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogIcons;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ModLogoIcons;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogMessages;
+import com.github.minecraft_ta.totalDebugCompanion.ui.categories.CatalogIcons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.categories.mods.ModLogoIcons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.categories.CatalogMessages;
 
 import java.util.Locale;
 import java.util.function.Supplier;

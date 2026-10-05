@@ -8,7 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.inspection.InspectionTool;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.DefinitionDetails;
+import com.github.minecraft_ta.totalDebugCompanion.ui.categories.content.DefinitionDetails;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;

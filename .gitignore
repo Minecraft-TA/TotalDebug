@@ -5,6 +5,8 @@ build/
 out/
 .run/
 logs/
+# The logs category's sources are not logs.
+!companion/src/**/logs/
 run/
 run-*/
 .claude/

@@ -13,7 +13,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.SegmentedToggle;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.DefinitionDetails;
+import com.github.minecraft_ta.totalDebugCompanion.ui.categories.content.DefinitionDetails;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
