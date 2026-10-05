@@ -20,24 +20,20 @@ import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
-import java.util.function.ToIntFunction;
 
 /**
  * Built-in reader for what a block or entity holds, through NeoForge's item, fluid and energy capabilities, read
- * without a side. A block that only exposes a handler through its faces is read through the face exposing the most.
- * When a block's faces expose its slots differently, the slots are shown per side as {@link SideReader} groups them.
+ * without a side, with what the sides do after it. When a block's faces expose its contents differently, each group of
+ * faces {@link SideReader} finds is shown with its own contents instead.
  * No chunk is loaded and containers whose loot is not generated yet are not read, because reading their slots would
  * generate it. Each part is read independently, so one failing handler does not hide the others.
  */
 public final class StorageReader {
     public static final int MAX_SLOTS = 96;
     public static final int MAX_TANKS = 32;
-
-    /** A block's handler and the face it was read through, which is null for the handler without a side. */
-    record Found<T>(T handler, Direction face) {
-    }
 
     private StorageReader() {
     }
@@ -62,10 +58,9 @@ public final class StorageReader {
                 facts.section("Items").text("Contents", pending);
                 return;
             }
-            Found<IItemHandler> found = contents(block, Capabilities.ItemHandler.BLOCK, IItemHandler::getSlots);
             List<SideReader.Group<List<SideReader.Slot>>> sides = SideReader.items(block);
             if (sides.size() == 1) {
-                items(block.blockEntity(), () -> through(block, "Items", found, facts), facts);
+                items(block.blockEntity(), () -> handler(block, Capabilities.ItemHandler.BLOCK, null), facts);
                 return;
             }
             // Each group shows its slots, the contents among them, and all groups share the section's facts.
@@ -78,10 +73,22 @@ public final class StorageReader {
                 SideReader.writeItems(group, section, perGroup);
             }
         });
-        facts.guarded("Fluids", () -> fluids(through(block, "Fluids",
-                contents(block, Capabilities.FluidHandler.BLOCK, IFluidHandler::getTanks), facts), facts));
-        facts.guarded("Energy", () -> energy(through(block, "Energy",
-                contents(block, Capabilities.EnergyStorage.BLOCK, IEnergyStorage::getMaxEnergyStored), facts), facts));
+        facts.guarded("Fluids", () -> sided("Fluids", () -> SideReader.fluids(block),
+                () -> fluids(handler(block, Capabilities.FluidHandler.BLOCK, null), facts), facts));
+        facts.guarded("Energy", () -> sided("Energy", () -> SideReader.energy(block),
+                () -> energy(handler(block, Capabilities.EnergyStorage.BLOCK, null), facts), facts));
+    }
+
+    /**
+     * The contents without a side and what the sides do, or where the sides differ, each one's rows with its own amounts,
+     * the block having no contents of its own to show. Sides that cannot be read leave the contents shown.
+     */
+    private static void sided(String section, Supplier<List<SideReader.Group<SideReader.Exposed>>> read, Runnable contents,
+                              ScriptFacts facts) {
+        List<SideReader.Group<SideReader.Exposed>> sides = new ArrayList<>();
+        facts.guarded(section, () -> sides.addAll(read.get()));
+        if (sides.size() <= 1) contents.run();
+        SideReader.write(sides, section, facts);
     }
 
     private static void readEntity(Entity entity, ScriptFacts facts) {
@@ -107,24 +114,6 @@ public final class StorageReader {
         }
     }
 
-    /**
-     * The block's handler without a side, or when it has none, the handler of the face whose {@code size} is largest.
-     * The handler is null when no face exposes one either.
-     */
-    static <T> Found<T> contents(ScriptTarget.PlacedBlock block, BlockCapability<T, Direction> capability,
-                                 ToIntFunction<T> size) {
-        T unsided = handler(block, capability, null);
-        if (unsided != null) return new Found<>(unsided, null);
-        Found<T> best = new Found<>(null, null);
-        for (Direction face : Direction.values()) {
-            T handler = handler(block, capability, face);
-            if (handler != null && (best.handler() == null || size.applyAsInt(handler) > size.applyAsInt(best.handler()))) {
-                best = new Found<>(handler, face);
-            }
-        }
-        return best;
-    }
-
     /** The block's handler through {@code face}; a double chest whose other half is not loaded has no item handler. */
     static <T> T handler(ScriptTarget.PlacedBlock block, BlockCapability<T, Direction> capability, Direction face) {
         if (capability == Capabilities.ItemHandler.BLOCK && otherChestHalfUnloaded(block.level(), block.pos(), block.state())) {
@@ -137,14 +126,6 @@ public final class StorageReader {
     static String unreadableItems(ScriptTarget.PlacedBlock block) {
         String pending = pendingLoot(block.blockEntity());
         return pending != null ? pending : otherChestHalfUnreadable(block.level(), block.pos(), block.state());
-    }
-
-    /** The found handler, noting the face it was read through when it is not the handler without a side. */
-    private static <T> T through(ScriptTarget.PlacedBlock block, String section, Found<T> found, ScriptFacts facts) {
-        if (found.handler() != null && found.face() != null) {
-            facts.section(section).text("Read through", Faces.name(found.face(), Faces.facing(block.state())));
-        }
-        return found.handler();
     }
 
     /**

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,6 +53,29 @@ class SideReaderTest {
                 new SideReader.Group<>("Up", SideReader.NOT_EXPOSED),
                 new SideReader.Group<>("Down, North, South, West, East", "in")
         ), SideReader.group("closed", faces, null, String::equals));
+    }
+
+    @Test
+    void facesOfSeparateStoragesThatDoTheSameStayApartWithTheirAmounts() {
+        SideReader.Exposed input = new SideReader.Exposed(List.of(), "1,000 / 8,000 FE: takes and gives", "Takes and gives");
+        SideReader.Exposed output = new SideReader.Exposed(List.of(), "6,000 / 8,000 FE: takes and gives", "Takes and gives");
+        Map<Direction, SideReader.Exposed> faces = new EnumMap<>(Direction.class);
+        for (Direction face : Direction.values()) faces.put(face, face == Direction.DOWN ? output : input);
+
+        assertEquals(List.of(SideReader.Exposed.NONE, input, output),
+                SideReader.group(SideReader.Exposed.NONE, faces, null, SideReader.Exposed::same).stream()
+                        .map(SideReader.Group::view).toList());
+    }
+
+    @Test
+    void amountsAreGroupedNumbersOfTheirCapacity() {
+        Locale before = Locale.getDefault();
+        Locale.setDefault(Locale.ROOT);
+        try {
+            assertEquals("4,000 / 8,000 mB", SideReader.amounts(4_000, 8_000, "mB"));
+        } finally {
+            Locale.setDefault(before);
+        }
     }
 
     @Test
