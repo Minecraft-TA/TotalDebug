@@ -163,7 +163,7 @@ final class IndexCache {
 
     /** The Java runtime whose classes an index holds: the one Companion runs on. */
     static Path javaHome() {
-        return Path.of(System.getProperty("java.home"));
+        return Path.of(System.getProperty("java.home")).toAbsolutePath().normalize();
     }
 
     private static JsonObject toJson(Manifest manifest) {

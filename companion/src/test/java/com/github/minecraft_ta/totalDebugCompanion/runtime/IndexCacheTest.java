@@ -55,4 +55,17 @@ class IndexCacheTest {
                 List.of(new RuntimeSnapshotBytecodeSource.Source(0, this.home, "jrt:/", java)));
         assertThrows(IOException.class, () -> IndexCache.requireSourcePaths(other));
     }
+
+    @Test
+    void aJavaHomeWrittenWithRedundantPartsIsTheSameRuntime() throws Exception {
+        var java = new RuntimeInventory.RuntimeModule("java-runtime", "Java Runtime", RuntimeInventory.ModuleKind.JAVA_RUNTIME);
+        String property = System.getProperty("java.home");
+        System.setProperty("java.home", Path.of(property, ".").toString());
+        try {
+            IndexCache.requireSourcePaths(new IndexCache.Manifest("test",
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(0, IndexCache.javaHome(), "jrt:/", java))));
+        } finally {
+            System.setProperty("java.home", property);
+        }
+    }
 }
