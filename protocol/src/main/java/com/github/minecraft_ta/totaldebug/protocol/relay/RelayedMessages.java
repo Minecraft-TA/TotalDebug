@@ -1,18 +1,6 @@
 package com.github.minecraft_ta.totaldebug.protocol.relay;
 
-import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ChangeResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.CompanionLeftMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.DatapacksRequestMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerScriptsRequestMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
@@ -20,31 +8,26 @@ import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * The Companion protocol messages that travel through the relay: to the game's server and back. The server decodes and
- * encodes them with the same classes Companion uses. A new server operation adds its messages here.
+ * encodes them with the same classes Companion uses. Which messages they are, each way, {@link ProtocolBindings} says.
  */
 public final class RelayedMessages {
     private record Kind(Class<? extends AbstractMessage> type, Supplier<? extends AbstractMessage> create) {
     }
 
-    private static final Map<Short, Kind> TO_SERVER = Map.of(
-            CompanionProtocol.RUN_SCRIPT, new Kind(RunScriptMessage.class, RunScriptMessage::new),
-            CompanionProtocol.STOP_SCRIPT, new Kind(StopScriptMessage.class, StopScriptMessage::new),
-            CompanionProtocol.SERVER_SCRIPTS_REQUEST, new Kind(ServerScriptsRequestMessage.class, ServerScriptsRequestMessage::new),
-            CompanionProtocol.COMPANION_LEFT, new Kind(CompanionLeftMessage.class, CompanionLeftMessage::new),
-            CompanionProtocol.RELOAD, new Kind(ReloadMessage.class, ReloadMessage::new),
-            CompanionProtocol.CHANGE, new Kind(ChangeMessage.class, ChangeMessage::new),
-            CompanionProtocol.DATAPACKS_REQUEST, new Kind(DatapacksRequestMessage.class, DatapacksRequestMessage::new));
-    private static final Map<Short, Kind> FROM_SERVER = Map.of(
-            CompanionProtocol.EXECUTION_RESULT, new Kind(ExecutionResultMessage.class, ExecutionResultMessage::new),
-            CompanionProtocol.SERVER_SCRIPTS, new Kind(ServerScriptsMessage.class, ServerScriptsMessage::new),
-            CompanionProtocol.RELOAD_RESULT, new Kind(ReloadResultMessage.class, ReloadResultMessage::new),
-            CompanionProtocol.CHANGE_RESULT, new Kind(ChangeResultMessage.class, ChangeResultMessage::new),
-            CompanionProtocol.DATAPACKS, new Kind(DatapacksMessage.class, DatapacksMessage::new));
+    private static final Map<Short, Kind> TO_SERVER = kinds(ProtocolBindings.Relay.TO_SERVER);
+    private static final Map<Short, Kind> FROM_SERVER = kinds(ProtocolBindings.Relay.FROM_SERVER);
 
     private RelayedMessages() {
+    }
+
+    private static Map<Short, Kind> kinds(ProtocolBindings.Relay relay) {
+        return ProtocolBindings.ALL.stream().filter(binding -> binding.relay() == relay)
+                .collect(Collectors.toUnmodifiableMap(ProtocolBindings.Binding::id,
+                        binding -> new Kind(binding.type(), binding.create())));
     }
 
     /** {@code message}, for the server, with the request's correlation and the world it is valid in. */

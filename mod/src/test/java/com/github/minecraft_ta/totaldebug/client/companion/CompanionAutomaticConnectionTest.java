@@ -299,8 +299,8 @@ class CompanionAutomaticConnectionTest {
             // Companion restarts, counting its request ids from the beginning, while the game still works on the change.
             endpoint.server.closeClient();
             await(() -> endpoint.hellos.get() == 2 && client.isConnected());
-            client.sendChangeResult(first, new ChangeResultMessage(ChangeResultPayload.refused(7, "late")));
-            client.sendChangeResult(client.companionConnection(), new ChangeResultMessage(ChangeResultPayload.refused(8, "current")));
+            client.send(first, new ChangeResultMessage(ChangeResultPayload.refused(7, "late")));
+            client.send(client.companionConnection(), new ChangeResultMessage(ChangeResultPayload.refused(8, "current")));
             await(() -> !endpoint.answers.isEmpty());
             Thread.sleep(200);
             assertEquals(List.of(8), endpoint.answers, "an answer for the earlier connection does not reach the new one");
