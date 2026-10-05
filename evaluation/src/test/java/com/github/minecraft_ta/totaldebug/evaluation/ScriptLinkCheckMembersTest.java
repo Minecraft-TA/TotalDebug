@@ -59,7 +59,20 @@ class ScriptLinkCheckMembersTest {
                         "return new Api.Child().pick();", true),
                 new Case("inherited default removed", "public interface Parent { default int pick() { return 1; } } public static class Child implements Parent {}",
                         "public interface Parent {} public static class Child implements Parent {}",
-                        "return new Api.Child().pick();", false)
+                        "return new Api.Child().pick();", false),
+                // javac guards each constant of an enum switch with a handler for NoSuchFieldError (#85).
+                new Case("enum switch over a constant the server lacks", "public enum Color { RED, GREEN, BLUE }",
+                        "public enum Color { RED, GREEN }",
+                        "switch (Api.Color.valueOf(\"RED\")) { case RED: return 7; case BLUE: return 0; default: return 1; }", true),
+                new Case("enum constant the server lacks, used outside a switch too", "public enum Color { RED, GREEN, BLUE }",
+                        "public enum Color { RED, GREEN }",
+                        "switch (Api.Color.valueOf(\"RED\")) { case RED: return Api.Color.BLUE == null ? 0 : 7; default: return 1; }", false),
+                new Case("missing method the script catches", "public static int pick() { return 1; }", "public static int other() { return 0; }",
+                        "try { return Api.pick(); } catch (NoSuchMethodError absent) { return 7; }", true),
+                new Case("missing field used after the handler's range", "public static int value = 1;", "public static int other = 0;",
+                        "try { Api.value = 2; } catch (NoSuchFieldError absent) { } return Api.value;", false),
+                new Case("field that became an instance field, inside a handler for a missing one", "public static int value = 1;",
+                        "public int value = 7;", "try { return Api.value; } catch (NoSuchFieldError absent) { return 7; }", false)
         ).map(test -> DynamicTest.dynamicTest(test.name(), () -> {
             LinkCheckProbe.Outcome outcome = probe(test.client(), test.server(), script(test.body()), List.of());
             assertEquals(test.links(), outcome.unresolved().isEmpty(), () -> test.name() + ": " + outcome);

@@ -48,7 +48,20 @@ public final class ScriptAccessLinker {
         ClassLoader loader = caller.lookupClass().getClassLoader();
         Class<?> owner = Class.forName(ownerName, false, loader);
         MethodHandles.Lookup access = accessLookup(owner, caller);
-        MethodHandle target = switch (operation) {
+        try {
+            return new ConstantCallSite(target(access, owner, memberName, memberDescriptor, operation, loader).asType(invokedType));
+        } catch (NoSuchFieldException missing) {
+            // As the JVM fails a field instruction: an Error leaves the bootstrap unwrapped, so javac's handler around an
+            // enum switch's constants, or the script's own, catches it.
+            throw (NoSuchFieldError) new NoSuchFieldError(missing.getMessage()).initCause(missing);
+        } catch (NoSuchMethodException missing) {
+            throw (NoSuchMethodError) new NoSuchMethodError(missing.getMessage()).initCause(missing);
+        }
+    }
+
+    private static MethodHandle target(MethodHandles.Lookup access, Class<?> owner, String memberName, String memberDescriptor,
+                                       int operation, ClassLoader loader) throws ReflectiveOperationException {
+        return switch (operation) {
             case GET_FIELD -> access.findGetter(owner, memberName, fieldType(memberDescriptor, loader));
             case PUT_FIELD -> access.findSetter(owner, memberName, fieldType(memberDescriptor, loader));
             case GET_STATIC -> access.findStaticGetter(owner, memberName, fieldType(memberDescriptor, loader));
@@ -76,7 +89,6 @@ public final class ScriptAccessLinker {
             case INITIALIZE_CLASS -> MethodHandles.insertArguments(INITIALIZER, 0, access, owner);
             default -> throw new IllegalArgumentException("Unknown script access operation: " + operation);
         };
-        return new ConstantCallSite(target.asType(invokedType));
     }
 
     private static void initialize(MethodHandles.Lookup access, Class<?> owner) throws IllegalAccessException {

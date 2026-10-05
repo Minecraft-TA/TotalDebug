@@ -95,7 +95,10 @@ final class ScriptLinkCheck {
         }
         for (Member member : this.references.members()) {
             String problem = attempt(member.referrer(), member, lookup -> resolve(member, lookup));
-            if (problem != null) unresolved.add(problem.isEmpty() ? member.display() : member.display() + " (" + problem + ")");
+            // A member the server lacks, where the script catches the JVM's error for it, is one it runs without.
+            if (problem != null && !(problem.isEmpty() && member.guarded())) {
+                unresolved.add(problem.isEmpty() ? member.display() : member.display() + " (" + problem + ")");
+            }
         }
         for (Dynamic site : this.references.dynamics()) {
             String problem = attempt(site.referrer(), null, lookup -> link(site, lookup));
@@ -156,7 +159,8 @@ final class ScriptLinkCheck {
                     .replace('/', '.');
             return this.missing.contains(absent) ? null : "needs " + absent + ", which the server does not have";
         }
-        if (cause instanceof NoSuchMethodException || cause instanceof NoSuchFieldException) return "";
+        if (cause instanceof NoSuchMethodException || cause instanceof NoSuchFieldException
+                || cause instanceof NoSuchMethodError || cause instanceof NoSuchFieldError) return "";
         if (cause instanceof IllegalAccessException) {
             if (member == null) return "not accessible";
             String message = String.valueOf(cause.getMessage());
@@ -280,7 +284,7 @@ final class ScriptLinkCheck {
                     && Type.getMethodDescriptor(candidate).equals(member.descriptor()));
             if (declared) {
                 return new Member(type.getName(), member.name(), member.descriptor(), member.operation(), null,
-                        member.referrer(), type.isInterface());
+                        member.referrer(), type.isInterface(), member.guarded());
             }
         }
         throw new NoSuchMethodException(member.owner() + "." + member.name() + member.descriptor());
@@ -313,7 +317,7 @@ final class ScriptLinkCheck {
             case Type type -> methodType("()" + type.getDescriptor()).returnType();
             case Handle handle -> find(new Member(handle.getOwner().replace('/', '.'), handle.getName(), handle.getDesc(),
                     ScriptReferences.operation(handle.getTag(), handle.getName()), null, lookup.lookupClass().getName(),
-                    handle.isInterface()), lookup, true);
+                    handle.isInterface(), false), lookup, true);
             default -> constant;
         };
     }

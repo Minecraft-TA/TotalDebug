@@ -13,6 +13,7 @@ import org.objectweb.asm.Type;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,10 +33,12 @@ public final class ScriptReferences {
     /**
      * A member and how the script uses it, as a {@link ScriptAccessLinker} operation or {@link #SUPER_CONSTRUCTOR}.
      * {@code callSite} is the type of the linker call site that uses it, or null for an instruction or method handle
-     * that uses it directly; {@code referrer} is the script class whose code does.
+     * that uses it directly; {@code referrer} is the script class whose code does. {@code guarded} when a handler at that
+     * place catches the error the JVM raises for a missing member of its kind, as javac's around an enum switch's
+     * constants: the script then runs without it.
      */
     record Member(String owner, String name, String descriptor, int operation, String callSite, String referrer,
-                  boolean isInterface) {
+                  boolean isInterface, boolean guarded) {
         boolean isField() {
             return this.operation >= ScriptAccessLinker.GET_FIELD && this.operation <= ScriptAccessLinker.PUT_STATIC;
         }
@@ -86,6 +89,9 @@ public final class ScriptReferences {
     private final Set<TypeUse> typeUses = new LinkedHashSet<>();
     private final Set<Member> members = new LinkedHashSet<>();
     private final List<Dynamic> dynamics = new ArrayList<>();
+    /** Handlers covering the instruction being read, for a missing field and for a missing method. */
+    private int fieldHandlers;
+    private int methodHandlers;
 
     private ScriptReferences(Map<String, byte[]> script) {
         this.script = Map.copyOf(script);
@@ -177,7 +183,9 @@ public final class ScriptReferences {
         // the script's own classes shares their runtime package, where the JVM allows every constructor.
         String binary = owner.replace('/', '.');
         if (owner.startsWith("[") || operation == SUPER_CONSTRUCTOR && this.script.containsKey(binary)) return;
-        this.members.add(new Member(binary, name, descriptor, operation, callSite, referrer, isInterface));
+        boolean field = operation >= ScriptAccessLinker.GET_FIELD && operation <= ScriptAccessLinker.PUT_STATIC;
+        boolean guarded = (field ? this.fieldHandlers : this.methodHandlers) > 0;
+        this.members.add(new Member(binary, name, descriptor, operation, callSite, referrer, isInterface, guarded));
     }
 
     /** The types of a method descriptor an instruction of {@code referrer} names, which the JVM resolves with access. */
@@ -233,6 +241,12 @@ public final class ScriptReferences {
         }
     }
 
+    /** Whether a handler for {@code type} catches {@code error}, one of the JVM's errors for a missing member. */
+    private static boolean catches(String type, String error) {
+        return type.equals(error) || type.equals("java/lang/IncompatibleClassChangeError") || type.equals("java/lang/LinkageError")
+                || type.equals("java/lang/Error") || type.equals("java/lang/Throwable");
+    }
+
     private final class Reader extends ClassVisitor {
         private String referrer;
 
@@ -258,9 +272,20 @@ public final class ScriptReferences {
             type(Type.getMethodType(descriptor));
             if (exceptions != null) for (String exception : exceptions) internalName(exception);
             String referrer = this.referrer;
+            fieldHandlers = 0;
+            methodHandlers = 0;
             return new MethodVisitor(Opcodes.ASM9) {
                 /** The types allocated and not yet constructed, innermost first: a constructor call pairs with one. */
                 private final ArrayDeque<String> allocations = new ArrayDeque<>();
+                /** Where a handler's range opens (+1) or closes (-1), per error; ASM reads the handlers before the code. */
+                private final Map<Label, Integer> fieldRanges = new HashMap<>();
+                private final Map<Label, Integer> methodRanges = new HashMap<>();
+
+                @Override
+                public void visitLabel(Label label) {
+                    fieldHandlers += this.fieldRanges.getOrDefault(label, 0);
+                    methodHandlers += this.methodRanges.getOrDefault(label, 0);
+                }
 
                 @Override
                 public void visitTypeInsn(int opcode, String type) {
@@ -309,7 +334,21 @@ public final class ScriptReferences {
 
                 @Override
                 public void visitTryCatchBlock(Label start, Label end, Label handler, String type) {
-                    if (type != null) typeUse(referrer, type);
+                    if (type == null) return;
+                    typeUse(referrer, type);
+                    if (catches(type, "java/lang/NoSuchFieldError")) range(this.fieldRanges, start, end);
+                    if (catches(type, "java/lang/NoSuchMethodError")) range(this.methodRanges, start, end);
+                }
+
+                private static void range(Map<Label, Integer> ranges, Label start, Label end) {
+                    ranges.merge(start, 1, Integer::sum);
+                    ranges.merge(end, -1, Integer::sum);
+                }
+
+                @Override
+                public void visitEnd() {
+                    fieldHandlers = 0;
+                    methodHandlers = 0;
                 }
             };
         }
