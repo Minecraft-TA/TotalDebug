@@ -334,6 +334,44 @@ class ConfigPanelTest {
     }
 
     @Test
+    void worldsThatCannotBeListedAreNamedBesideWhatAnEditSays() throws Exception {
+        Path defaults = Files.createDirectories(this.directory.resolve("defaultconfigs")).resolve(FILE.fileName());
+        Files.writeString(defaults, "[widgets]\n\tspeed = 9\n");
+        Files.writeString(this.directory.resolve("saves"), "");
+        String unlisted = ConfigSources.of(GameLocations.of(this.directory, false), FILE).problem();
+        ConfigPanel[] panel = new ConfigPanel[1];
+        SwingUtilities.invokeAndWait(() -> {
+            panel[0] = new ConfigPanel("testmod", ConfigSettingsFixture.of(GameLocations.of(this.directory, false), ChangeRecord.inMemory()), target -> { });
+            panel[0].setFiles(List.of(FILE));
+            UiTestScope.showPages(panel[0]);
+        });
+        ConfigSettingsTable table = component(panel[0], ConfigSettingsTable.class);
+        awaitOnSwing(() -> table.getRowCount() == 4 && "9".equals(table.row(1).value()));
+        component(panel[0], JLabel.class, unlisted);
+
+        SwingUtilities.invokeAndWait(() -> {
+            assertTrue(table.edit(1));
+            ((JTextField) table.getEditorComponent()).setText("20");
+            assertFalse(table.getCellEditor().stopCellEditing());
+            component(panel[0], JLabel.class, unlisted + "; speed: Accepts 1 to 16");
+        });
+    }
+
+    @Test
+    void anEmptyValueTheFileSetsIsChangedFromItsDefault() throws Exception {
+        List<ConfigSettingsTable.Row> rows = ConfigSettingsTable.rows(FILE, ConfigValues.parse("""
+                [widgets]
+                mode = ""
+                """, FILE.fileName()));
+
+        assertTrue(rows.get(2).modified(), "the file sets mode to an empty value");
+        assertFalse(rows.get(1).modified(), "speed is not in the file, so it is the default");
+        PackCatalog.ConfigSetting speed = FILE.settings().getFirst();
+        assertTrue(new ConfigSettingsTable.Row(1, speed.path(), speed.name(), "", speed, "9", null).modified(),
+                "a file Companion cannot edit has no literals, and its values still count");
+    }
+
+    @Test
     void aMissingFileShowsTheDefaults() {
         List<ConfigSettingsTable.Row> rows = ConfigSettingsTable.rows(FILE, null);
 
@@ -349,7 +387,21 @@ class ConfigPanelTest {
         Files.writeString(defaults, "");
 
         assertEquals(List.of(new ConfigSources.Source("New World", newer), new ConfigSources.Source("Old World", older),
-                new ConfigSources.Source("New worlds", defaults)), ConfigSources.of(GameLocations.of(this.directory, false), FILE));
+                new ConfigSources.Source("New worlds", defaults)), ConfigSources.of(GameLocations.of(this.directory, false), FILE).sources());
+    }
+
+    @Test
+    void worldsThatCannotBeListedAreNamedAndTheDefaultsStillListed() throws Exception {
+        Path defaults = Files.createDirectories(this.directory.resolve("defaultconfigs")).resolve(FILE.fileName());
+        Files.writeString(defaults, "");
+        assertEquals(new ConfigSources.Listed(List.of(new ConfigSources.Source("New worlds", defaults)), ""),
+                ConfigSources.of(GameLocations.of(this.directory, false), FILE), "no saves folder is no world");
+
+        Files.writeString(this.directory.resolve("saves"), "");
+        ConfigSources.Listed listed = ConfigSources.of(GameLocations.of(this.directory, false), FILE);
+
+        assertEquals(List.of(new ConfigSources.Source("New worlds", defaults)), listed.sources());
+        assertTrue(listed.problem().startsWith("Could not read the saves folder ("), listed.problem());
     }
 
     @Test
@@ -360,7 +412,7 @@ class ConfigPanelTest {
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE);
              FileLock ignored = channel.lock()) {
             assertEquals(List.of(new ConfigSources.Source("Open World", open), new ConfigSources.Source("New World", newer)),
-                    ConfigSources.of(GameLocations.of(this.directory, true), FILE), "an edit is meant for the world the game has open");
+                    ConfigSources.of(GameLocations.of(this.directory, true), FILE).sources(), "an edit is meant for the world the game has open");
         }
     }
 

@@ -17,8 +17,10 @@ import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -34,21 +36,30 @@ final class ToolsMenu {
     static List<FactsPanel.Part> parts(List<InspectionSession.ToolRead> reads, String problem) {
         List<FactsPanel.Part> parts = new ArrayList<>();
         if (!problem.isEmpty()) {
-            parts.add(new FactsPanel.Part(new FactSection("Tools", List.of(Fact.problem("Status", Fact.clip(problem))), 1), null));
+            Map<String, String> whole = new HashMap<>();
+            parts.add(new FactsPanel.Part(new FactSection("Tools", List.of(Fact.problem("Status", shown(whole, "Status", problem))), 1),
+                    null, whole));
             return parts;
         }
         for (InspectionSession.ToolRead read : reads) {
             FactsPanel.Origin origin = new FactsPanel.Origin(read.tool().name(), read.tool().path());
             for (FactSection section : read.sections()) parts.add(new FactsPanel.Part(section, origin));
             List<Fact> status = new ArrayList<>();
-            if (!read.failure().isEmpty()) status.add(Fact.problem("Status", Fact.clip(read.failure())));
+            Map<String, String> whole = new HashMap<>();
+            if (!read.failure().isEmpty()) status.add(Fact.problem("Status", shown(whole, "Status", read.failure())));
             else if (read.sections().isEmpty()) status.add(Fact.text("Status", read.running() ? "Running…" : "No sections reported"));
-            if (!read.output().isEmpty()) status.add(Fact.text("Output", Fact.clip(read.output())));
+            if (!read.output().isEmpty()) status.add(Fact.text("Output", shown(whole, "Output", read.output())));
             if (!status.isEmpty()) {
-                parts.add(new FactsPanel.Part(new FactSection(read.tool().name(), status, status.size()), origin));
+                parts.add(new FactsPanel.Part(new FactSection(read.tool().name(), status, status.size()), origin, whole));
             }
         }
         return parts;
+    }
+
+    /** {@code text} as a fact shows it, clipped, keeping the whole of it in {@code whole} for its copy button. */
+    private static String shown(Map<String, String> whole, String label, String text) {
+        whole.put(label, text);
+        return Fact.clip(text);
     }
 
     /** The Tools menu: tools running with every inspection of the subject, other scripts to run here, and a new tool. */

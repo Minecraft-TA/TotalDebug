@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -38,6 +39,8 @@ public final class CatalogSearch {
     private final String[] ids;
     private List<ModResources.Resource> resources;
     private List<Path> directories;
+    /** The mods each listed file backs: one, several sharing an archive, or Minecraft for its own assets. */
+    private Map<Path, List<PackCatalog.Mod>> owners;
     /** Where the game keeps its keys, or null without a game directory. */
     private final GameLocation location;
     private final Path options;
@@ -116,10 +119,12 @@ public final class CatalogSearch {
         if (category == Category.RESOURCES) {
             for (ModResources.Resource resource : resources()) {
                 if (!resource.path().toLowerCase(Locale.ROOT).contains(folded)) continue;
+                // A mod's file owns what it holds, whatever namespace that is under.
+                List<PackCatalog.Mod> owners = this.owners.getOrDefault(resource.file(), List.of());
+                if (moduleIds != null && owners.stream().noneMatch(owner -> moduleIds.contains(owner.module()))) continue;
                 String namespace = namespace(resource.path());
-                PackCatalog.Mod owner = this.index.mod(namespace).orElse(null);
-                if (moduleIds != null && (owner == null || !moduleIds.contains(owner.module()))) continue;
-                results.add(new ResourceResult(resource, this.index.ownerName(namespace)));
+                results.add(new ResourceResult(resource, owners.stream().filter(owner -> owner.id().equals(namespace)).findFirst()
+                        .or(() -> owners.stream().findFirst()).map(PackCatalog.Mod::title).orElse(this.index.ownerName(namespace))));
             }
         }
         // Every match is ranked before the limit applies, so a closer match late in the registry is kept.
@@ -179,9 +184,14 @@ public final class CatalogSearch {
     private synchronized List<ModResources.Resource> resources() {
         if (this.resources == null) {
             List<Path> files = new ArrayList<>();
+            Map<Path, List<PackCatalog.Mod>> owners = new HashMap<>();
             for (PackCatalog.Mod mod : this.index.mods()) {
-                for (Path file : this.index.resourceFiles(mod.id())) if (!files.contains(file)) files.add(file);
+                for (Path file : this.index.resourceFiles(mod.id())) {
+                    if (!files.contains(file)) files.add(file);
+                    owners.computeIfAbsent(file, ignored -> new ArrayList<>()).add(mod);
+                }
             }
+            this.owners = Map.copyOf(owners);
             this.directories = files.stream().filter(Files::isDirectory).toList();
             this.resources = List.copyOf(listed(files.stream().filter(file -> !Files.isDirectory(file)).toList()));
         }

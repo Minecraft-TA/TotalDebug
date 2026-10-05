@@ -132,7 +132,9 @@ public final class PackConfigurationPanel extends JPanel {
             boolean modShown = false;
             for (PackCatalog.ConfigFile file : mod.configs()) {
                 if (file.settings().isEmpty()) continue;
-                List<ConfigSources.Source> sources = ConfigSources.of(this.location, file);
+                ConfigSources.Listed copies = ConfigSources.of(this.location, file);
+                if (!copies.problem().isEmpty() && !problems.contains(copies.problem())) problems.add(copies.problem());
+                List<ConfigSources.Source> sources = copies.sources();
                 if (sources.isEmpty()) continue;
                 ConfigSources.Source source = sources.getFirst();
                 ConfigValues values;

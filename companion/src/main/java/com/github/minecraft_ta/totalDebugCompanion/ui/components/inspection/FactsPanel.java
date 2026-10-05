@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.CopyValue;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
@@ -95,10 +96,18 @@ public final class FactsPanel extends JPanel {
         }
     }
 
-    /** A section, with the script that reported it or null for the page's own. */
-    public record Part(FactSection section, Origin origin) {
+    /**
+     * A section, with the script that reported it or null for the page's own, and by label the whole text of facts it
+     * shows clipped, which a copy button beside them gives.
+     */
+    public record Part(FactSection section, Origin origin, Map<String, String> whole) {
         public Part {
             Objects.requireNonNull(section, "section");
+            whole = Map.copyOf(whole);
+        }
+
+        public Part(FactSection section, Origin origin) {
+            this(section, origin, Map.of());
         }
 
         /** Names the section among all parts; data facts are named by it too. */
@@ -269,6 +278,8 @@ public final class FactsPanel extends JPanel {
         private final List<JLabel> labels = new ArrayList<>();
         private final List<SlotCell> slots = new ArrayList<>();
         private final List<JComponent> values = new ArrayList<>();
+        /** The copy buttons beside values the part keeps whole text for, by value. */
+        private final Map<JComponent, CopyValue> copies = new HashMap<>();
         private SectionHeading heading;
 
         private SectionView(Part part) {
@@ -291,10 +302,11 @@ public final class FactsPanel extends JPanel {
 
         /** Updates the rows in place when the newer read has the same shape; returns false when it must be rebuilt. */
         private boolean update(Part next) {
-            if (!Objects.equals(this.part.origin(), next.origin()) || !sameShape(this.part.section(), next.section())) {
+            if (!Objects.equals(this.part.origin(), next.origin()) || !sameShape(this.part.section(), next.section())
+                    || !this.part.whole().keySet().equals(next.whole().keySet())) {
                 return false;
             }
-            updateRows(this.part.section(), next.section());
+            updateRows(this.part.section(), next);
             this.part = next;
             return true;
         }
@@ -353,7 +365,7 @@ public final class FactsPanel extends JPanel {
                 if (fact.kind() != Fact.Kind.STACK) {
                     JComponent value = value(fact);
                     this.values.add(value);
-                    addRow(row++, fact.label(), value);
+                    addRow(row++, fact.label(), copied(value, this.part, fact));
                     continue;
                 }
                 SlotCell cell = this.slots.get(slot++);
@@ -425,26 +437,40 @@ public final class FactsPanel extends JPanel {
             };
         }
 
-        private void updateRows(FactSection before, FactSection after) {
+        private void updateRows(FactSection before, Part next) {
+            FactSection after = next.section();
             int slot = 0;
             int value = 0;
             for (int index = 0; index < after.facts().size(); index++) {
                 Fact previous = before.facts().get(index);
-                Fact next = after.facts().get(index);
-                boolean changed = !previous.equals(next);
-                if (next.kind() == Fact.Kind.STACK) {
-                    this.slots.get(slot++).set(next, changed);
+                Fact fact = after.facts().get(index);
+                boolean changed = !previous.equals(fact);
+                if (fact.kind() == Fact.Kind.STACK) {
+                    this.slots.get(slot++).set(fact, changed);
                     continue;
                 }
-                switch (this.values.get(value++)) {
-                    case ValueLabel label -> label.set(next, changed);
-                    case AmountRow amount -> amount.set(next, changed);
-                    case DataRow data -> data.set(next, changed);
-                    case JLabel problem -> showProblem(problem, next.value());
+                JComponent row = this.values.get(value++);
+                switch (row) {
+                    case ValueLabel label -> label.set(fact, changed);
+                    case AmountRow amount -> amount.set(fact, changed);
+                    case DataRow data -> data.set(fact, changed);
+                    case JLabel problem -> showProblem(problem, fact.value());
                     default -> {
                     }
                 }
+                CopyValue copy = this.copies.get(row);
+                if (copy != null) copy.setValue(next.whole().get(fact.label()));
             }
+        }
+
+        /** {@code value}, with a copy button beside it where {@code part} keeps the fact's whole text. */
+        private JComponent copied(JComponent value, Part part, Fact fact) {
+            String whole = part.whole().get(fact.label());
+            if (whole == null) return value;
+            CopyValue copy = new CopyValue("Copy Value", value);
+            copy.setValue(whole);
+            this.copies.put(value, copy);
+            return copy;
         }
 
         private void reloadIcons() {

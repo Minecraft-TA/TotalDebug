@@ -81,9 +81,15 @@ public final class ConfigSettingsTable extends JTable {
      */
     record Row(int depth, String path, String name, String comment, PackCatalog.ConfigSetting setting, String value,
                String literal) {
+        /**
+         * Whether the file sets a value other than the default. One it does not set is the default; an empty default is
+         * not told apart from an unknown one in the catalog (#56), so nothing counts as changed from it. The file sets a
+         * value it has a literal for, even an empty one; a file Companion cannot edit has none, and its empty values read
+         * as unset.
+         */
         boolean modified() {
-            return this.setting != null && !this.setting.defaultValue().isEmpty() && !this.value.isEmpty()
-                    && !this.value.equals(this.setting.defaultValue());
+            return this.setting != null && (this.literal != null || !this.value.isEmpty())
+                    && !this.setting.defaultValue().isEmpty() && !this.value.equals(this.setting.defaultValue());
         }
 
         String accepts() {
@@ -387,7 +393,7 @@ public final class ConfigSettingsTable extends JTable {
             switch (setting.restart()) {
                 case WORLD -> tooltip.fact("Takes effect", "after rejoining the world");
                 case GAME -> tooltip.fact("Takes effect", "after restarting the game");
-                case NONE -> {
+                case NONE, UNKNOWN -> {
                 }
             }
         }

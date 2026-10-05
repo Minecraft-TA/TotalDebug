@@ -76,6 +76,11 @@ class ConfigEditTest {
         assertEquals("2.0", ConfigEdit.literal("0.5", setting("0.0 ~ 4.0", List.of()), "2"));
         assertEquals("Accepts at least 1", assertThrows(IllegalArgumentException.class,
                 () -> ConfigEdit.literal("5", setting("> 1", List.of()), "0")).getMessage());
+        // An int's limit reads as no bound, but a long ranged to it refuses a larger value, and the refusal names it.
+        assertEquals("Accepts at most 2147483647", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.literal("5", setting("0 ~ 2147483647", List.of()), "3000000000")).getMessage());
+        assertEquals("Accepts at least 0", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.literal("5", setting("0 ~ 2147483647", List.of()), "-1")).getMessage());
 
         assertEquals("false", ConfigEdit.literal("true", null, "False"));
         assertThrows(IllegalArgumentException.class, () -> ConfigEdit.literal("true", null, "yes"));

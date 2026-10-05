@@ -114,6 +114,7 @@ public final class ConfigChanges {
             return Effect.RESTART;
         }
         if (location == Location.WORLD && !state.isOpen(world)) return Effect.WORLD_OPENS;
+        if (restart == PackCatalog.Restart.UNKNOWN) return Effect.UNDESCRIBED;
         if (restart == PackCatalog.Restart.WORLD) return state.openWorld() == null ? Effect.NOW : Effect.REJOIN;
         return Effect.NOW;
     }

@@ -151,21 +151,28 @@ public final class ConfigEdit {
     }
 
     private static void checkRange(BigDecimal number, String range) {
-        BigDecimal minimum = null;
-        BigDecimal maximum = null;
+        String lower = null;
+        String upper = null;
         if (range.startsWith("> ")) {
-            minimum = number(range.substring(2));
+            lower = range.substring(2);
         } else if (range.startsWith("< ")) {
-            maximum = number(range.substring(2));
+            upper = range.substring(2);
         } else {
             Matcher bounds = RANGE.matcher(range);
             if (bounds.matches()) {
-                minimum = number(bounds.group(1));
-                maximum = number(bounds.group(2));
+                lower = bounds.group(1);
+                upper = bounds.group(2);
             }
         }
-        if (minimum != null && number.compareTo(minimum) < 0 || maximum != null && number.compareTo(maximum) > 0) {
-            throw new IllegalArgumentException("Accepts " + readableRange(range));
+        BigDecimal minimum = lower == null ? null : number(lower);
+        BigDecimal maximum = upper == null ? null : number(upper);
+        // A bound at an int's limit reads as none, as NeoForge writes it for an int; the catalog does not know the type,
+        // so for a long it is a real bound, and the value refused for it names it.
+        if (minimum != null && number.compareTo(minimum) < 0) {
+            throw new IllegalArgumentException(unbounded(lower, false) ? "Accepts at least " + trimmed(lower) : "Accepts " + readableRange(range));
+        }
+        if (maximum != null && number.compareTo(maximum) > 0) {
+            throw new IllegalArgumentException(unbounded(upper, true) ? "Accepts at most " + trimmed(upper) : "Accepts " + readableRange(range));
         }
     }
 
@@ -314,8 +321,8 @@ public final class ConfigEdit {
         for (Map.Entry<String, String> entry : afterLiterals.entrySet()) {
             String previous = beforeLiterals.get(entry.getKey());
             if (previous == null || sameValue(previous, entry.getValue())) continue;
-            PackCatalog.ConfigSetting setting = described.getOrDefault(entry.getKey(), new PackCatalog.ConfigSetting(
-                    entry.getKey(), "", "", "", List.of(), PackCatalog.Restart.NONE));
+            PackCatalog.ConfigSetting setting = described.getOrDefault(entry.getKey(),
+                    PackCatalog.ConfigSetting.undescribed(entry.getKey(), ""));
             changes.add(new TextChange(setting, previous, entry.getValue()));
         }
         return changes;

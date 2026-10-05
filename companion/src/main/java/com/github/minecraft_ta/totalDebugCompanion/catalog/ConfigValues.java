@@ -94,7 +94,7 @@ public record ConfigValues(String text, Map<String, String> values, Map<String, 
             } else {
                 String display = PackCatalog.ConfigSetting.display(value);
                 values.put(key, display);
-                settings.add(new PackCatalog.ConfigSetting(key, comment, "", "", List.of(), PackCatalog.Restart.NONE));
+                settings.add(PackCatalog.ConfigSetting.undescribed(key, comment));
             }
         }
     }
