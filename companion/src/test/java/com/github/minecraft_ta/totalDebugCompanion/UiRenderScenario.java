@@ -54,6 +54,7 @@ enum UiRenderScenario {
     INDEXING("indexing", "Runtime index activity in the status bar"),
     MOD_PAGE("mod-page", "Mod page overview with its logo, facts and dependencies"),
     MOD_CONFIGURATION("mod-configuration", "Configuration settings with a modified value"),
+    CONFIGURATION_UNLISTED("configuration-unlisted", "A server configuration whose worlds could not be listed, the defaults shown"),
     MOD_RESOURCES("mod-resources", "Mod resources listed by category"),
     DEFINITION_PAGE("definition-page", "Block definition page with its files"),
     PACK_CONFIGURATION("pack-configuration", "Every setting of the pack under its mod and file, one of them modified"),
@@ -76,7 +77,8 @@ enum UiRenderScenario {
     PACK_ORDER("pack-order", "The resource packs with a pack enabled at the top, waiting for Apply"),
     SAVE_INTO("save-into", "A mod's model open for editing with the pack it is saved into"),
     TEXTURE_EDITOR("texture-editor", "A resource pack's texture with the pencil chosen and a stroke drawn and saved"),
-    INSPECTION("inspection", "A block read from the game with storage that differs by face");
+    INSPECTION("inspection", "A block read from the game with storage that differs by face"),
+    INSPECTION_TOOL_OUTPUT("inspection-tool-output", "A tool's failure and output too long to show whole, each with its copy button");
 
     private final String id;
     private final String description;

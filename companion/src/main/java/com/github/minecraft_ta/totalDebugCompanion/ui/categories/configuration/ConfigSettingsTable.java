@@ -83,11 +83,13 @@ public final class ConfigSettingsTable extends JTable {
                String literal) {
         /**
          * Whether the file sets a value other than the default. One it does not set is the default; an empty default is
-         * not told apart from an unknown one in the catalog (#56), so nothing counts as changed from it.
+         * not told apart from an unknown one in the catalog (#56), so nothing counts as changed from it. The file sets a
+         * value it has a literal for, even an empty one; a file Companion cannot edit has none, and its empty values read
+         * as unset.
          */
         boolean modified() {
-            return this.setting != null && this.literal != null && !this.setting.defaultValue().isEmpty()
-                    && !this.value.equals(this.setting.defaultValue());
+            return this.setting != null && (this.literal != null || !this.value.isEmpty())
+                    && !this.setting.defaultValue().isEmpty() && !this.value.equals(this.setting.defaultValue());
         }
 
         String accepts() {

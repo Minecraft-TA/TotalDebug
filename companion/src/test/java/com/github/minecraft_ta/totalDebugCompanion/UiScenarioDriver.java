@@ -1,5 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.inspection.InspectionTool;
+import com.github.minecraft_ta.totalDebugCompanion.inspection.InspectionSession;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import java.lang.reflect.Method;
+import java.lang.reflect.Field;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.ui.HtmlText;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
@@ -648,11 +654,12 @@ final class UiScenarioDriver {
                 }
                 navigate(new NavigationTarget.World(WorldTab.OVERVIEW));
             });
-            case INSPECTION -> {
+            case INSPECTION, INSPECTION_TOOL_OUTPUT -> {
                 context.once("inspection", () -> navigate(new NavigationTarget.Inspection(InspectionSample.SUBJECT)));
                 SubjectPanel panel = findComponent(mainWindow, SubjectPanel.class);
                 if (panel != null) {
                     context.once("inspection-read", () -> panel.session().present(InspectionSample.read(), null, text -> text));
+                    if (scenario == UiRenderScenario.INSPECTION_TOOL_OUTPUT) context.once("inspection-tool", () -> finishTool(panel.session()));
                 }
             }
             case CHANGES -> context.once("changes", () -> {
@@ -667,6 +674,17 @@ final class UiScenarioDriver {
             });
             case MOD_CONFIGURATION -> context.once("mod-configuration", () ->
                     navigate(new NavigationTarget.ModPage("testmod", ModTab.CONFIGURATION, "")));
+            case CONFIGURATION_UNLISTED -> context.once("configuration-unlisted", () -> {
+                Path saves = mainWindow.editorContext().project().profile().workspaceDirectory().resolve("saves");
+                try {
+                    // A file where the saves folder belongs cannot be listed.
+                    Files.move(saves, saves.resolveSibling("saves-moved"));
+                    Files.writeString(saves, "");
+                } catch (IOException exception) {
+                    throw new UncheckedIOException(exception);
+                }
+                navigate(new NavigationTarget.ModPage("testmod", ModTab.CONFIGURATION, "testmod-server.toml"));
+            });
             case MOD_RESOURCES -> context.once("mod-resources", () ->
                     navigate(new NavigationTarget.ModPage("testmod", ModTab.RESOURCES, "")));
             case DEFINITION_PAGE -> context.once("definition-page", () -> navigate(new NavigationTarget.Definition(
@@ -718,6 +736,26 @@ final class UiScenarioDriver {
                 new PackStackPayload.Pack("mod_data", "Mod Data", ""), new PackStackPayload.Pack("file/Arena", "Arena", "")) : List.of();
         List<PackStackPayload.Pack> others = refusal.isEmpty() ? List.of(new PackStackPayload.Pack("file/Events", "Events", "")) : List.of();
         project.packs().datapacks("", new PackStackPayload(48, enabled, others), refusal);
+    }
+
+    /** A tool run that failed after writing much output; tool runs need the game, so the session is told directly. */
+    private static void finishTool(InspectionSession session) {
+        InspectionTool tool = new InspectionTool(Path.of("tools", "FurnaceTool.tdscript"), "FurnaceTool", "", List.of("testmod:*"));
+        try {
+            Field reads = InspectionSession.class.getDeclaredField("toolReads");
+            reads.setAccessible(true);
+            Map<Path, InspectionSession.ToolRead> running = new LinkedHashMap<>();
+            running.put(tool.path(), new InspectionSession.ToolRead(tool, true, List.of(), "", ""));
+            reads.set(session, running);
+            Method finish = InspectionSession.class.getDeclaredMethod("finishTool", InspectionTool.class, List.class,
+                    String.class, String.class);
+            finish.setAccessible(true);
+            finish.invoke(session, tool, List.of(), "Burn time left: 1,200 ticks; fuel: coal, 8 items; ".repeat(8).strip(),
+                    "java.lang.IllegalStateException: The furnace at 12, 64, -3 has no recipe for its input, "
+                            + "so its progress cannot be read".repeat(4));
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException(failure);
+        }
     }
 
     private boolean showsMessage(String text) {
@@ -790,6 +828,8 @@ final class UiScenarioDriver {
             case DEFINITION_PAGE -> mainWindow.getEditorTabs().getSelectedEditor() instanceof DefinitionView view
                     && "Widget Block".equals(view.getTitle());
             case INSPECTION -> context.completedActions.contains("inspection-read");
+            case INSPECTION_TOOL_OUTPUT -> context.completedActions.contains("inspection-tool");
+            case CONFIGURATION_UNLISTED -> showsMessage("Could not read the saves folder");
             case TAB_MENU -> visibleMenuPopup() != null && mainWindow.getEditorTabs().getSelectedIndex()
                     == mainWindow.getEditorTabs().getTabCount() - 1;
             case TAB_REVEAL -> {

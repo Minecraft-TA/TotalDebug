@@ -366,6 +366,9 @@ class ConfigPanelTest {
 
         assertTrue(rows.get(2).modified(), "the file sets mode to an empty value");
         assertFalse(rows.get(1).modified(), "speed is not in the file, so it is the default");
+        PackCatalog.ConfigSetting speed = FILE.settings().getFirst();
+        assertTrue(new ConfigSettingsTable.Row(1, speed.path(), speed.name(), "", speed, "9", null).modified(),
+                "a file Companion cannot edit has no literals, and its values still count");
     }
 
     @Test

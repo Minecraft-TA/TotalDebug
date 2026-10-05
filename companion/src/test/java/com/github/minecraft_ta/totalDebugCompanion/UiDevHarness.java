@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import java.util.stream.Stream;
+import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.model.OpenedTabs;
 import javax.swing.JLabel;
 
@@ -162,9 +164,23 @@ public final class UiDevHarness {
         Path recipe = Files.createDirectories(tweaks.resolve("data/tweaks/recipe")).resolve("widget_from_goo.json");
         Files.writeString(recipe, "{\"type\":\"minecraft:crafting_shapeless\",\"ingredients\":[],\"result\":{\"id\":\"testmod:widget\"}}");
         LevelDatFixture.datapack(world, "Structures");
+        // The test mod also keeps a server configuration, which each world holds a copy of, with the defaults for new ones.
+        Files.writeString(Files.createDirectories(world.resolve("serverconfig")).resolve("testmod-server.toml"),
+                "[rules]\n\tlimit = 64\n");
+        Files.writeString(Files.createDirectories(scope.profile().workspaceDirectory().resolve("defaultconfigs"))
+                .resolve("testmod-server.toml"), "[rules]\n\tlimit = 64\n");
+        PackCatalog fixture = CatalogFixtures.catalog(jar);
+        PackCatalog.ConfigFile server = new PackCatalog.ConfigFile("testmod-server.toml", PackCatalog.ConfigType.SERVER, null,
+                List.of(), List.of(new PackCatalog.ConfigSetting("rules.limit", "How many widgets a world allows", "64",
+                        "1 ~ 1024", List.of(), PackCatalog.Restart.WORLD)));
+        List<PackCatalog.Mod> mods = fixture.mods().stream().map(mod -> !mod.id().equals("testmod") ? mod
+                : new PackCatalog.Mod(mod.id(), mod.name(), mod.version(), mod.description(), mod.authors(), mod.license(),
+                        mod.urls(), mod.logo(), mod.module(), mod.file(), mod.dependencies(),
+                        Stream.concat(mod.configs().stream(), Stream.of(server)).toList())).toList();
         Path file = scope.paths().catalog();
         Files.createDirectories(file.getParent());
-        CatalogFixtures.catalog(jar).write(file);
+        new PackCatalog(fixture.inventoryId(), fixture.language(), mods, fixture.registries(), fixture.itemAppearances(),
+                fixture.keyBindings(), fixture.keyContexts(), fixture.keyNames()).write(file);
         scope.catalog().accept(CatalogFixtures.INVENTORY, file, Runnable::run);
     }
 
