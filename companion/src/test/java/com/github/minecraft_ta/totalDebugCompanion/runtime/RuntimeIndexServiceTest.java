@@ -8,6 +8,7 @@ import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.util.concurrent.CompletableFuture;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -23,11 +24,28 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RuntimeIndexServiceTest {
     @TempDir
     Path temporaryDirectory;
+
+    @Test void theStatusIsToldAfterItsChangeWithoutTheLifecycleLock() throws Exception {
+        Object lifecycleLock = new Object();
+        try (var service = new RuntimeIndexService(lifecycleLock, ignored -> { })) {
+            CompletableFuture<Boolean> heldWhenTold = new CompletableFuture<>();
+            service.statusChanged().subscribe(() -> heldWhenTold.complete(Thread.holdsLock(lifecycleLock)));
+            synchronized (lifecycleLock) {
+                // As the application changes the status inside a section of its own.
+                service.waiting("Preparing inventory");
+                assertFalse(heldWhenTold.isDone(), "the follower does not run inside the section that changed the status");
+            }
+            assertFalse(heldWhenTold.get(5, TimeUnit.SECONDS), "the follower runs without the lifecycle lock");
+            assertEquals("Preparing inventory", service.status().detail());
+        }
+    }
 
     @Test void forcedRebuildReportsMissingInventoryInsteadOfWaitingForIt() throws Exception {
         var failed = new CountDownLatch(1);
