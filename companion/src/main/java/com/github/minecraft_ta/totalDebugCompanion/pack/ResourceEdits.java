@@ -619,9 +619,8 @@ public final class ResourceEdits {
                 // level.dat is the open world's to write, so a pack it disables stays disabled.
                 String open = "The world " + world.getFileName() + (game.connected()
                         ? " is open, and the game has not said yet that it plays it" : " is open in a game that is not connected to Companion");
-                return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), managed(pack) && disablesManaged(world)
-                        ? open + ", and its level.dat disables the TotalDebug datapack; the next save after the world closes enables it"
-                        : open + "; it uses the change when the world is loaded again"));
+                return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), open + (managed(pack) ? whenLoaded(world)
+                        : "; it uses the change when the world is loaded again")));
             }
             return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), ""));
         }
@@ -643,12 +642,14 @@ public final class ResourceEdits {
         });
     }
 
-    /** Whether {@code world}'s level.dat disables the managed datapack; not when it cannot be read. Blocking. */
-    private static boolean disablesManaged(Path world) {
+    /** Whether an open world uses a change to the managed datapack when it loads again, as its level.dat says. Blocking. */
+    private static String whenLoaded(Path world) {
         try {
-            return DatapackSelection.disables(world, PACK_ID);
+            return DatapackSelection.disables(world, PACK_ID)
+                    ? ", and its level.dat disables the TotalDebug datapack; the next save after the world closes enables it"
+                    : "; it uses the change when the world is loaded again";
         } catch (IOException | RuntimeException unreadable) {
-            return false;
+            return ", and whether its level.dat enables the TotalDebug datapack could not be read: " + unreadable.getMessage();
         }
     }
 

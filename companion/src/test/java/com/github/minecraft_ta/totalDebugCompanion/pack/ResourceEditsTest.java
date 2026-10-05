@@ -372,6 +372,11 @@ class ResourceEditsTest {
             assertEquals(Effect.WORLD_OPENS, saved.effect());
             assertEquals("The world World is open in a game that is not connected to Companion; it uses the change when the world is loaded again",
                     saved.reloadFailure());
+
+            Files.write(world.resolve("level.dat"), new byte[]{1, 2, 3});
+            String unread = edits.save("data/testmod/recipe/gear.json", bytes("{\"a\":1}")).get(5, TimeUnit.SECONDS).reloadFailure();
+            assertTrue(unread.startsWith("The world World is open in a game that is not connected to Companion, and whether its "
+                    + "level.dat enables the TotalDebug datapack could not be read: "), unread);
         }
     }
 
