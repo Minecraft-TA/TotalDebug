@@ -25,7 +25,8 @@ class CompanionRenderingDefaultsTest {
             var builder = new ProcessBuilder(command).redirectErrorStream(true);
             for (String name : List.of("JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS")) builder.environment().remove(name);
             Process process = builder.start();
-            boolean finished = process.waitFor(15, TimeUnit.SECONDS);
+            // A JVM on the whole test class path starts slowly on a loaded runner; the wait ends when it exits.
+            boolean finished = process.waitFor(60, TimeUnit.SECONDS);
             if (!finished) process.destroyForcibly().waitFor();
             String output = new String(process.getInputStream().readAllBytes());
             assertTrue(finished, output);

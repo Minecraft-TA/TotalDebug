@@ -45,4 +45,48 @@ class IndexCacheTest {
             assertThrows(IOException.class, () -> IndexCache.requireSources(manifest));
         }
     }
+
+    @Test
+    void anIndexOfAnotherJavaRuntimeIsNotUsed() throws Exception {
+        var java = new RuntimeInventory.RuntimeModule("java-runtime", "Java Runtime", RuntimeInventory.ModuleKind.JAVA_RUNTIME);
+        IndexCache.requireSourcePaths(new IndexCache.Manifest("test",
+                List.of(new RuntimeSnapshotBytecodeSource.Source(0, IndexCache.javaHome(), "jrt:/", java))));
+        var other = new IndexCache.Manifest("test",
+                List.of(new RuntimeSnapshotBytecodeSource.Source(0, this.home, "jrt:/", java)));
+        assertThrows(IOException.class, () -> IndexCache.requireSourcePaths(other));
+    }
+
+    @Test
+    void anIndexWrittenOnAnotherBuildOfTheJavaRuntimeIsNotUsed() throws Exception {
+        Path file = this.home.resolve("index.jindex");
+        var java = new RuntimeInventory.RuntimeModule("java-runtime", "Java Runtime", RuntimeInventory.ModuleKind.JAVA_RUNTIME);
+        var manifest = new IndexCache.Manifest("test",
+                List.of(new RuntimeSnapshotBytecodeSource.Source(0, IndexCache.javaHome(), "jrt:/", java)));
+        try (var input = IndexCacheTest.class.getResourceAsStream("IndexCacheTest.class");
+             ClassIndex index = ClassIndex.fromBytes(List.of(input.readAllBytes()));
+             ClassIndex ignored = IndexCache.write(file, index, manifest)) {
+            assertEquals(manifest, IndexCache.read(file));
+        }
+        String version = System.getProperty("java.runtime.version");
+        // The same path after an update in place.
+        System.setProperty("java.runtime.version", version + "-updated");
+        try {
+            assertThrows(IOException.class, () -> IndexCache.read(file));
+        } finally {
+            System.setProperty("java.runtime.version", version);
+        }
+    }
+
+    @Test
+    void aJavaHomeWrittenWithRedundantPartsIsTheSameRuntime() throws Exception {
+        var java = new RuntimeInventory.RuntimeModule("java-runtime", "Java Runtime", RuntimeInventory.ModuleKind.JAVA_RUNTIME);
+        String property = System.getProperty("java.home");
+        System.setProperty("java.home", Path.of(property, ".").toString());
+        try {
+            IndexCache.requireSourcePaths(new IndexCache.Manifest("test",
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(0, IndexCache.javaHome(), "jrt:/", java))));
+        } finally {
+            System.setProperty("java.home", property);
+        }
+    }
 }

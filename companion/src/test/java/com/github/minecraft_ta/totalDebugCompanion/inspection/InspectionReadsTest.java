@@ -119,8 +119,8 @@ class InspectionReadsTest {
                     UiTestScope.showPages(panel);
                     panel.session().refresh();
                 });
-                Thread.sleep(500);
                 // A read asks for the snippets twice: whether the side can run, then to run.
+                UiTestScope.await(() -> reads.get() >= asked + 2);
                 assertEquals(asked + 2, reads.get(), "the navigation's read answers the read the live interval asked for");
             } finally {
                 UiTestScope.onEdt(panel::dispose);

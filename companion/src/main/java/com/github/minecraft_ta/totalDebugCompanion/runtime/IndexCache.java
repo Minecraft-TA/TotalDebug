@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.runtime;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource.Source;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory.ModuleKind;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory.RuntimeModule;
 import com.github.tth05.jindex.ClassIndex;
 import com.google.gson.JsonArray;
@@ -119,6 +120,9 @@ final class IndexCache {
             if (JsonFiles.integer(json, "format") != FORMAT) {
                 throw new IOException("Unsupported runtime index format: " + file);
             }
+            if (!javaVersion().equals(JsonFiles.string(json, "javaVersion"))) {
+                throw new IOException("The index holds the classes of another Java runtime: " + JsonFiles.string(json, "javaVersion"));
+            }
             List<Source> sources = new ArrayList<>();
             var ids = new HashSet<Integer>();
             for (var value : JsonFiles.array(json, "sources")) {
@@ -154,12 +158,26 @@ final class IndexCache {
             if (!Files.isRegularFile(path) && !Files.isDirectory(path)) {
                 throw new IOException("Prepared runtime source is unavailable: " + path);
             }
+            if (source.module().kind() == ModuleKind.JAVA_RUNTIME && !path.equals(javaHome())) {
+                throw new IOException("The index holds the classes of another Java runtime: " + path);
+            }
         }
+    }
+
+    /** The Java runtime whose classes an index holds: the one Companion runs on. */
+    static Path javaHome() {
+        return Path.of(System.getProperty("java.home")).toAbsolutePath().normalize();
+    }
+
+    /** The version and build of that runtime, which an update in place changes. */
+    static String javaVersion() {
+        return System.getProperty("java.runtime.version");
     }
 
     private static JsonObject toJson(Manifest manifest) {
         JsonObject json = new JsonObject();
         json.addProperty("format", FORMAT);
+        json.addProperty("javaVersion", javaVersion());
         json.addProperty("sourceKind", manifest.identity().kind().name());
         json.addProperty("sourceIdentity", manifest.identity().value());
         if (!manifest.detail().isBlank()) json.addProperty("detail", manifest.detail());
