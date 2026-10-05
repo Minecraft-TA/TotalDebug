@@ -20,7 +20,6 @@ import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -81,13 +80,12 @@ public final class StorageReader {
 
     /**
      * The contents without a side and what the sides do, or where the sides differ, each one's rows with its own amounts,
-     * the block having no contents of its own to show. Sides that cannot be read leave the contents shown.
+     * the block having no contents of its own to show.
      */
     private static void sided(String section, Supplier<List<SideReader.Group<SideReader.Exposed>>> read, Runnable contents,
                               ScriptFacts facts) {
-        List<SideReader.Group<SideReader.Exposed>> sides = new ArrayList<>();
-        facts.guarded(section, () -> sides.addAll(read.get()));
-        if (sides.size() <= 1) contents.run();
+        List<SideReader.Group<SideReader.Exposed>> sides = read.get();
+        if (sides.size() == 1) contents.run();
         SideReader.write(sides, section, facts);
     }
 

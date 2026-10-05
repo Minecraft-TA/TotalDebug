@@ -106,7 +106,6 @@ public final class SideReader {
      * block's. The groups share the section's facts, as slots do.
      */
     static void write(List<Group<Exposed>> groups, String section, ScriptFacts facts) {
-        if (groups.isEmpty()) return;
         if (groups.size() == 1) {
             String access = groups.getFirst().view().access();
             if (!access.equals(NOT_EXPOSED)) facts.section(section).text(groups.getFirst().label(), access);

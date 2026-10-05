@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totaldebug.inspection;
 
-import com.github.minecraft_ta.totaldebug.script.ScriptFacts;
 import net.minecraft.core.Direction;
 import org.junit.jupiter.api.Test;
 
@@ -66,13 +65,6 @@ class SideReaderTest {
         assertEquals(List.of(SideReader.Exposed.NONE, input, output),
                 SideReader.group(SideReader.Exposed.NONE, faces, null, SideReader.Exposed::same).stream()
                         .map(SideReader.Group::view).toList());
-    }
-
-    @Test
-    void sidesThatCouldNotBeReadWriteNothing() {
-        ScriptFacts facts = new ScriptFacts(message -> { });
-        SideReader.write(List.of(), "Fluids", facts);
-        assertEquals(List.of(), facts.snapshot());
     }
 
     @Test
