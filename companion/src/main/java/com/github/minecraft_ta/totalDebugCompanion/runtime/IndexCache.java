@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.runtime;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource.Source;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory.ModuleKind;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory.RuntimeModule;
 import com.github.tth05.jindex.ClassIndex;
 import com.google.gson.JsonArray;
@@ -154,7 +155,15 @@ final class IndexCache {
             if (!Files.isRegularFile(path) && !Files.isDirectory(path)) {
                 throw new IOException("Prepared runtime source is unavailable: " + path);
             }
+            if (source.module().kind() == ModuleKind.JAVA_RUNTIME && !path.equals(javaHome())) {
+                throw new IOException("The index holds the classes of another Java runtime: " + path);
+            }
         }
+    }
+
+    /** The Java runtime whose classes an index holds: the one Companion runs on. */
+    static Path javaHome() {
+        return Path.of(System.getProperty("java.home"));
     }
 
     private static JsonObject toJson(Manifest manifest) {

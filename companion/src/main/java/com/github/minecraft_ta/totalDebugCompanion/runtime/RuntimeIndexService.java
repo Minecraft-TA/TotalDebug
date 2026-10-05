@@ -353,7 +353,7 @@ public final class RuntimeIndexService implements AutoCloseable {
                 }
                 checkpoint(work);
                 update(work, new Status(Phase.BUILDING, "Building class index", null));
-                return buildSnapshot(work, prepareInputs(inventory), IndexIdentity.runtime(inventory.id()), indexFile, inventory.javaHome());
+                return buildSnapshot(work, prepareInputs(inventory), IndexIdentity.runtime(inventory.id()), indexFile);
             });
             publishReady(work, ready);
         } catch (CancellationException ignored) {
@@ -424,7 +424,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             update(work, new Status(Phase.BUILDING, work.detail + "Building local mod index", null));
             var prepared = LocalModSources.prepare(scan, () -> checkpoint(work));
             work.sourceDetail = prepared.detail();
-            return buildSnapshot(work, prepared.inputs(), identity, indexFile, System.getProperty("java.home"));
+            return buildSnapshot(work, prepared.inputs(), identity, indexFile);
         });
         publishReady(work, ready);
     }
@@ -433,8 +433,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             Work work,
             List<PreparedInput> prepared,
             IndexIdentity identity,
-            Path indexFile,
-            String javaHome
+            Path indexFile
     ) throws IOException {
         AtomicFiles.cleanupAbandonedStaging(indexFile.getParent());
         checkpoint(work);
@@ -459,9 +458,10 @@ public final class RuntimeIndexService implements AutoCloseable {
         try (var phase = RuntimePhase.start("index.jdk-inputs")) {
             addJdkClasses(jdkSourceId, indexSources);
         }
+        // The JDK read is Companion's own, which the mod starts on the game's Java; a cache records it (IndexCache).
         publishedSources.add(new RuntimeSnapshotBytecodeSource.Source(
                 jdkSourceId,
-                Path.of(javaHome),
+                IndexCache.javaHome(),
                 "jrt:/",
                 new RuntimeInventory.RuntimeModule(
                         "java-runtime",

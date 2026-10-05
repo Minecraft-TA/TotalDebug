@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.WorldTab;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeTestSources;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
@@ -423,8 +424,7 @@ class ProjectTreeTest {
     private static void assertReveals(FileTreeView tree, Callable<CompletableFuture<Boolean>> reveal, String name) throws Exception {
         CompletableFuture<Boolean> revealed = UiTestScope.onEdt(reveal);
         assertTrue(revealed.get(10, TimeUnit.SECONDS), name + " is revealed");
-        settle();
-        assertEquals(name, UiTestScope.onEdt(() -> selectedName(tree)), name + " is selected");
+        UiTestScope.await(() -> name.equals(selectedName(tree)));
     }
 
     /** The catalog of a pack with one mod, {@code testmod}, ready. */
@@ -434,12 +434,21 @@ class ProjectTreeTest {
         settle();
     }
 
-    /** A mod archive in the game's {@code mods} folder, which the Runtime root lists before a game runs. */
+    /**
+     * A mod archive in the game's {@code mods} folder, which the Runtime root lists before a game runs, with its index
+     * already cached: the project loads it rather than indexing the JDK, which none of these tests is about.
+     */
     private static void modJar(Path game) throws Exception {
         try (var zip = new ZipOutputStream(Files.newOutputStream(Files.createDirectories(game.resolve("mods")).resolve("sample.jar")))) {
             zip.putNextEntry(new ZipEntry("pack.mcmeta"));
             zip.write("{}".getBytes(StandardCharsets.UTF_8));
+            String fixture = Before.class.getName().replace('.', '/') + ".class";
+            zip.putNextEntry(new ZipEntry(fixture));
+            try (var bytes = ProjectTreeTest.class.getClassLoader().getResourceAsStream(fixture)) {
+                bytes.transferTo(zip);
+            }
         }
+        RuntimeTestSources.writeLocalCache(game);
     }
 
     /** A script in a folder of the instance's Scripts. */

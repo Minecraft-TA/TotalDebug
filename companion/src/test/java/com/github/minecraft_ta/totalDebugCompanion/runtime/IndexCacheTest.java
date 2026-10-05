@@ -45,4 +45,14 @@ class IndexCacheTest {
             assertThrows(IOException.class, () -> IndexCache.requireSources(manifest));
         }
     }
+
+    @Test
+    void anIndexOfAnotherJavaRuntimeIsNotUsed() throws Exception {
+        var java = new RuntimeInventory.RuntimeModule("java-runtime", "Java Runtime", RuntimeInventory.ModuleKind.JAVA_RUNTIME);
+        IndexCache.requireSourcePaths(new IndexCache.Manifest("test",
+                List.of(new RuntimeSnapshotBytecodeSource.Source(0, IndexCache.javaHome(), "jrt:/", java))));
+        var other = new IndexCache.Manifest("test",
+                List.of(new RuntimeSnapshotBytecodeSource.Source(0, this.home, "jrt:/", java)));
+        assertThrows(IOException.class, () -> IndexCache.requireSourcePaths(other));
+    }
 }
