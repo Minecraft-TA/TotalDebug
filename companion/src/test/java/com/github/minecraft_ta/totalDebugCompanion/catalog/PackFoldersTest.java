@@ -36,14 +36,18 @@ class PackFoldersTest {
             output.closeEntry();
         }
         Files.writeString(folder.resolve("readme.txt"), "");
-        // The game reads the description as a text component, and refuses a list without one or an object without content.
+        // The game reads the description as a text component, and refuses a list without one, an object without content,
+        // and one whose type is unknown or names a kind whose content it lacks; NeoForge adds the inserting kind.
         for (String[] pack : new String[][]{{"EmptyList", "[]"}, {"EmptyObject", "{}"}, {"HalfList", "[\"ok\",{}]"},
-                {"Translated", "{\"translate\":\"pack.translated\"}"}}) {
+                {"Translated", "{\"translate\":\"pack.translated\"}"},
+                {"Typed", "{\"type\":\"translatable\",\"translate\":\"pack.typed\"}"},
+                {"Mistyped", "{\"type\":\"translatable\",\"text\":\"x\"}"}, {"UnknownType", "{\"type\":\"bogus\",\"text\":\"x\"}"},
+                {"Inserting", "{\"type\":\"neoforge:inserting\",\"index\":0}"}, {"InsertingUntyped", "{\"index\":0}"}}) {
             Files.createDirectories(folder.resolve(pack[0]));
             Files.writeString(folder.resolve(pack[0] + "/pack.mcmeta"), "{\"pack\":{\"pack_format\":34,\"description\":" + pack[1] + "}}");
         }
 
-        assertEquals(List.of("file/Faithful", "file/Old.zip", "file/Translated"), List.copyOf(PackFolders.list(folder).keySet()),
+        assertEquals(List.of("file/Faithful", "file/Inserting", "file/InsertingUntyped", "file/Old.zip", "file/Translated", "file/Typed"), List.copyOf(PackFolders.list(folder).keySet()),
                 "a folder or zip without readable pack metadata at its root and other files are no packs, as for the game");
         assertEquals("Old.zip", PackFolders.title(folder.resolve("Old.zip")), "the game titles a zip pack with its file name");
         assertTrue(PackFolders.list(this.directory.resolve("missing")).isEmpty());

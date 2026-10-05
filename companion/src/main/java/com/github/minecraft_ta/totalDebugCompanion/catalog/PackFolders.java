@@ -14,7 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
@@ -32,8 +31,12 @@ public final class PackFolders {
     public record Meta(String description, int format) {
     }
 
-    /** The keys naming a component's content, one per kind: text, translation, score, selector, key binding, NBT. */
-    private static final List<String> COMPONENT_CONTENTS = List.of("text", "translate", "score", "selector", "keybind", "nbt");
+    /**
+     * The kinds of a component's content by the name its {@code type} gives, each with the key holding it: text,
+     * translation, key binding, score, selector, NBT, and NeoForge's insertion of a translation's argument.
+     */
+    private static final Map<String, String> COMPONENT_CONTENTS = Map.of("text", "text", "translatable", "translate",
+            "keybind", "keybind", "score", "score", "selector", "selector", "nbt", "nbt", "neoforge:inserting", "index");
 
     private PackFolders() {
     }
@@ -53,7 +56,8 @@ public final class PackFolders {
 
     /**
      * Whether the game reads {@code value} as a text component (its {@code ComponentSerialization}): text, a list of at
-     * least one component, or an object with the content of one of its kinds.
+     * least one component, or an object with the content of the kind its {@code type} names, or without a type, of any
+     * kind.
      */
     private static boolean isComponent(JsonElement value) {
         if (value instanceof JsonPrimitive text) return text.isString();
@@ -62,7 +66,11 @@ public final class PackFolders {
             for (JsonElement element : list) if (!isComponent(element)) return false;
             return true;
         }
-        return value instanceof JsonObject object && COMPONENT_CONTENTS.stream().anyMatch(object::has);
+        if (!(value instanceof JsonObject object)) return false;
+        if (!object.has("type")) return COMPONENT_CONTENTS.values().stream().anyMatch(object::has);
+        String content = object.get("type") instanceof JsonPrimitive type && type.isString()
+                ? COMPONENT_CONTENTS.get(type.getAsString()) : null;
+        return content != null && object.has(content);
     }
 
     /** The {@code pack} section of a pack's {@code pack.mcmeta}, or empty without one it can read. */
