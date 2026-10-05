@@ -601,29 +601,62 @@ public final class ResourceEdits {
                             "The TotalDebug pack could not be enabled in options.txt: " + exception.getMessage()));
                 }
             }
+            if (!assets && managed(pack) && !game.isOpen(world)) {
+                // A world enables a datapack it has not seen when it loads, but not one its level.dat disables, which the
+                // player did; a save into the managed pack enables it, as the reload of a live save does.
+                try {
+                    if (DatapackSelection.enableDisabled(world, PACK_ID)) {
+                        this.landed.incrementAndGet();
+                        this.packs.written(ChangeRecord.PackSide.DATA);
+                    }
+                } catch (IOException | RuntimeException exception) {
+                    return CompletableFuture.completedFuture(new Saved(later, pack, List.of(),
+                            "The TotalDebug datapack could not be enabled in the level.dat of " + world.getFileName() + ": " + exception.getMessage()));
+                }
+            }
             if (!assets && game.isOpen(world)) {
-                // Written all the same: the game only reads a datapack, when it loads the world or its data again.
-                return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), "The world " + world.getFileName()
-                        + (game.connected() ? " is open, and the game has not said yet that it plays it" : " is open in a game that is not connected to Companion")
-                        + "; it uses the change when the world is loaded again"));
+                // Written all the same: the game only reads a datapack, when it loads the world or its data again. Its
+                // level.dat is the open world's to write, so a pack it disables stays disabled.
+                String open = "The world " + world.getFileName() + (game.connected()
+                        ? " is open, and the game has not said yet that it plays it" : " is open in a game that is not connected to Companion");
+                return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), open + (managed(pack) ? whenLoaded(world)
+                        : "; it uses the change when the world is loaded again")));
             }
             return CompletableFuture.completedFuture(new Saved(later, pack, List.of(), ""));
         }
-        if (!assets && apply == ResourcePaths.Apply.WORLD_LOAD) {
+        GameLocation.Connection connection = ((Access.Live) access).connection();
+        // The world reads a world-load file when it loads again, from the managed pack only if it is enabled: such a save
+        // reloads only to enable it, as the reload after any other save does.
+        boolean worldLoad = !assets && apply == ResourcePaths.Apply.WORLD_LOAD;
+        if (worldLoad && (!managed(pack) || serverEnables(PACK_ID))) {
             return CompletableFuture.completedFuture(new Saved(Effect.REJOIN, pack, List.of(), ""));
         }
+        Effect failed = assets ? Effect.GAME_STARTS : worldLoad ? Effect.REJOIN : Effect.WORLD_OPENS;
         // Files written beside it join the same reload, which they are part of.
-        GameLocation.Connection connection = ((Access.Live) access).connection();
         String managedPack = managed(pack) ? PACK_ID : "";
         for (String beside : alsoWatched) reload(connection, world, beside, managedPack);
         return reload(connection, world, path, managedPack).handle((result, failure) -> {
-            if (failure != null) {
-                return new Saved(assets ? Effect.GAME_STARTS : Effect.WORLD_OPENS, pack,
-                        List.of(), message(failure));
-            }
-            return new Saved(result.error().isEmpty() ? Effect.NOW : assets ? Effect.GAME_STARTS
-                    : Effect.WORLD_OPENS, pack, problemsOf(result, path, alsoWatched), result.error());
+            if (failure != null) return new Saved(failed, pack, List.of(), message(failure));
+            return new Saved(!result.error().isEmpty() ? failed : worldLoad ? Effect.REJOIN : Effect.NOW, pack,
+                    problemsOf(result, path, alsoWatched), result.error());
         });
+    }
+
+    /** Whether an open world uses a change to the managed datapack when it loads again, as its level.dat says. Blocking. */
+    private static String whenLoaded(Path world) {
+        try {
+            return DatapackSelection.disables(world, PACK_ID)
+                    ? ", and its level.dat disables the TotalDebug datapack; the next save after the world closes enables it"
+                    : "; it uses the change when the world is loaded again";
+        } catch (IOException | RuntimeException unreadable) {
+            return ", and whether its level.dat enables the TotalDebug datapack could not be read: " + unreadable.getMessage();
+        }
+    }
+
+    /** Whether the server of the world the game plays named {@code id} among its enabled datapacks. */
+    private boolean serverEnables(String id) {
+        PackStackPayload datapacks = this.packs.datapacks();
+        return datapacks != null && datapacks.enabled().stream().anyMatch(enabled -> enabled.id().equals(id));
     }
 
     /** Asks the game to reload what {@code path} needs: the client's resources, or the data of {@code world}. */
