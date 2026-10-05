@@ -116,6 +116,8 @@ public final class RuntimeIndexService implements AutoCloseable {
     private final Object lifecycleLock;
     private final Consumer<ReadySnapshot> readyHandler;
     private final Function<String, ClassIndex> indexLoader;
+    /** The JDK's classes the index takes, by the start of their internal name; empty for all of them. */
+    private final String jdkPackages;
     private final Signal statusChanged = new Signal();
     private final Consumer<Status> failed;
     /** How often the pending work was replaced, so a failure found before a job can tell whether it was superseded. */
@@ -164,15 +166,17 @@ public final class RuntimeIndexService implements AutoCloseable {
      * (docs/SYSTEMS.md, section 1).
      */
     public RuntimeIndexService(Object lifecycleLock, Consumer<Status> failed, Consumer<ReadySnapshot> readyHandler) {
-        this(lifecycleLock, failed, readyHandler, ClassIndex::fromFile);
+        this(lifecycleLock, failed, readyHandler, ClassIndex::fromFile, "");
     }
 
+    /** As Companion's own, with {@code jdkPackages} of the JDK, as tests of the index take a part of it. */
     RuntimeIndexService(Object lifecycleLock, Consumer<Status> failed, Consumer<ReadySnapshot> readyHandler,
-                        Function<String, ClassIndex> indexLoader) {
+                        Function<String, ClassIndex> indexLoader, String jdkPackages) {
         this.lifecycleLock = Objects.requireNonNull(lifecycleLock, "lifecycleLock");
         this.failed = Objects.requireNonNull(failed, "failed");
         this.readyHandler = Objects.requireNonNull(readyHandler, "readyHandler");
         this.indexLoader = Objects.requireNonNull(indexLoader, "indexLoader");
+        this.jdkPackages = Objects.requireNonNull(jdkPackages, "jdkPackages");
     }
 
     public Status status() {
@@ -456,7 +460,7 @@ public final class RuntimeIndexService implements AutoCloseable {
                 .orElse(-1) + 1;
         checkpoint(work);
         try (var phase = RuntimePhase.start("index.jdk-inputs")) {
-            addJdkClasses(jdkSourceId, indexSources);
+            addJdkClasses(jdkSourceId, indexSources, this.jdkPackages);
         }
         // The JDK read is Companion's own, which the mod starts on the game's Java; a cache records it (IndexCache).
         publishedSources.add(new RuntimeSnapshotBytecodeSource.Source(
@@ -537,7 +541,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         return List.copyOf(inputs);
     }
 
-    private static void addJdkClasses(int sourceId, List<IndexSource> sources) throws IOException {
+    private static void addJdkClasses(int sourceId, List<IndexSource> sources, String packages) throws IOException {
         Set<String> seen = new LinkedHashSet<>();
         var jrt = FileSystems.getFileSystem(URI.create("jrt:/"));
         Path modules = jrt.getPath("/modules");
@@ -547,7 +551,7 @@ public final class RuntimeIndexService implements AutoCloseable {
                     for (Path classFile : classPaths.filter(Files::isRegularFile).sorted().toList()) {
                         checkInterrupted();
                         String relativeName = module.relativize(classFile).toString().replace('\\', '/');
-                        if (isIndexableClass(relativeName) && seen.add(relativeName)) {
+                        if (isIndexableClass(relativeName) && relativeName.startsWith(packages) && seen.add(relativeName)) {
                             sources.add(IndexSource.classFile(sourceId, Files.readAllBytes(classFile)));
                         }
                     }

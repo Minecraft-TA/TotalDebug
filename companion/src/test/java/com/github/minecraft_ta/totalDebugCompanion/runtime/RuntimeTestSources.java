@@ -10,9 +10,25 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 public final class RuntimeTestSources {
     private RuntimeTestSources() {
+    }
+
+    /**
+     * A service as Companion's, indexing only {@code java.lang} of the JDK: the index's tests are about building, loading
+     * and replacing it, which the JDK's other 27,000 classes only make slower (docs/TEST_SUITE.md).
+     */
+    public static RuntimeIndexService service(Object lifecycleLock, Consumer<RuntimeIndexService.Status> failed,
+                                              Consumer<RuntimeIndexService.ReadySnapshot> ready) {
+        return service(lifecycleLock, failed, ready, ClassIndex::fromFile);
+    }
+
+    static RuntimeIndexService service(Object lifecycleLock, Consumer<RuntimeIndexService.Status> failed,
+                                       Consumer<RuntimeIndexService.ReadySnapshot> ready, Function<String, ClassIndex> loader) {
+        return new RuntimeIndexService(lifecycleLock, failed, ready, loader, "java/lang/");
     }
 
     /** Seeds cache-loading tests with their fixture classes, without indexing the JDK. */
