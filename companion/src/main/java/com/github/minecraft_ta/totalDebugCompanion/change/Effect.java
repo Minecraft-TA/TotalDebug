@@ -2,7 +2,8 @@ package com.github.minecraft_ta.totalDebugCompanion.change;
 
 /**
  * When a change takes effect in the game (see {@code docs/CHANGE_PIPELINE.md}): at once, after a rejoin or a restart,
- * when the game starts or the world opens, or for worlds created later.
+ * when the game starts or the world opens, or for worlds created later; or unknown, for a setting no specification
+ * describes.
  */
 public enum Effect {
     NOW("the game reloaded it"),
@@ -10,7 +11,8 @@ public enum Effect {
     RESTART("takes effect after restarting the game"),
     GAME_STARTS("applies when the game starts"),
     WORLD_OPENS("applies when the world opens"),
-    NEW_WORLDS("applies to worlds created from now on");
+    NEW_WORLDS("applies to worlds created from now on"),
+    UNDESCRIBED("the catalog does not describe when the game uses it");
 
     private final String description;
 

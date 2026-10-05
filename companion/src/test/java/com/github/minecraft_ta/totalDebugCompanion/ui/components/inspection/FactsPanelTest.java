@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.CopyValue;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import org.junit.jupiter.api.Test;
@@ -10,8 +11,10 @@ import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -88,6 +91,37 @@ class FactsPanelTest {
     void suggestsAToolNameFromTheRegistryPath() {
         assertEquals("BasicEnergyCubeTool", ToolsMenu.suggestedName("mekanism:basic_energy_cube"));
         assertEquals("Tool2x2DoorTool", ToolsMenu.suggestedName("example:2x2_door"));
+    }
+
+    @Test
+    void aClippedValueCopiesItsWholeTextAlsoAfterAnUpdate() throws Exception {
+        String output = "x".repeat(300);
+        String later = "y".repeat(300);
+        List<String> copied = new ArrayList<>();
+        try (ItemIconService icons = new ItemIconService()) {
+            SwingUtilities.invokeAndWait(() -> {
+                FactsPanel panel = new FactsPanel(List.of(tool(output)), icons, FactsPanel.Actions.NONE, new HashSet<>());
+                copies(panel, copied);
+                assertTrue(panel.update(List.of(tool(later))));
+                copies(panel, copied);
+            });
+        }
+
+        assertEquals(List.of(output, output, later, later), copied, "a value shown whole has no copy button");
+    }
+
+    private static FactsPanel.Part tool(String text) {
+        FactSection section = new FactSection("Tool", List.of(Fact.problem("Status", Fact.clip(text)),
+                Fact.text("Output", Fact.clip(text)), Fact.text("Plain", "short")), 3);
+        return new FactsPanel.Part(section, null, Map.of("Status", text, "Output", text));
+    }
+
+    /** What each row's copy button copies, in order. */
+    private static void copies(Container container, List<String> copied) {
+        for (Component child : container.getComponents()) {
+            if (child instanceof CopyValue copy) copied.add(copy.value());
+            if (child instanceof Container nested) copies(nested, copied);
+        }
     }
 
     private static void collect(Container container, List<String> labels, List<String> bars) {

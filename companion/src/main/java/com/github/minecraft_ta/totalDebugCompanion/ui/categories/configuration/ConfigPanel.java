@@ -69,6 +69,8 @@ public final class ConfigPanel extends JPanel {
     private final Consumer<NavigationTarget> navigator;
     /** What the file could not show, such as a read error; it takes the place of {@link #status}. */
     private String problem = "";
+    /** The worlds whose copies of the file could not be listed, or empty; shown before the problem or status. */
+    private String unlisted = "";
     /** The outcome of the last edit, or why a typed value was refused. */
     private String status = "";
 
@@ -150,7 +152,7 @@ public final class ConfigPanel extends JPanel {
     }
 
     /** The copies of a server configuration in the worlds. */
-    private record SourcesRead(PackCatalog.ConfigFile file, List<ConfigSources.Source> found) {
+    private record SourcesRead(PackCatalog.ConfigFile file, ConfigSources.Listed found) {
     }
 
     private void configureFiles() {
@@ -324,13 +326,13 @@ public final class ConfigPanel extends JPanel {
         this.sources.cancel();
         this.modifiedOnly.setVisible(file != null && !file.settings().isEmpty());
         if (file == null || file.type() != PackCatalog.ConfigType.SERVER) {
-            showSources(file, file == null ? List.of() : ConfigSources.of(this.location, file), true);
+            showSources(file, file == null ? new ConfigSources.Listed(List.of(), "") : ConfigSources.of(this.location, file), true);
             return;
         }
         // A server configuration's copies are found by listing the worlds, which reads the disk. Until they are known,
         // the previous file's copies and values leave the page, so nothing can be edited into the wrong file.
         this.values.cancel();
-        showSources(file, List.of(), false);
+        showSources(file, new ConfigSources.Listed(List.of(), ""), false);
         this.sources.load();
     }
 
@@ -342,12 +344,13 @@ public final class ConfigPanel extends JPanel {
     }
 
     /** Shows {@code file}'s copies; {@code known} tells whether they are all listed, so its values can be read. */
-    private void showSources(PackCatalog.ConfigFile file, List<ConfigSources.Source> found, boolean known) {
+    private void showSources(PackCatalog.ConfigFile file, ConfigSources.Listed found, boolean known) {
+        this.unlisted = found.problem();
         this.updating = true;
         try {
             this.sourceModel.removeAllElements();
-            found.forEach(this.sourceModel::addElement);
-            this.source.setVisible(file != null && file.type() == PackCatalog.ConfigType.SERVER && !found.isEmpty());
+            found.sources().forEach(this.sourceModel::addElement);
+            this.source.setVisible(file != null && file.type() == PackCatalog.ConfigType.SERVER && !found.sources().isEmpty());
             this.shownSource = this.source.getSelectedItem();
         } finally {
             this.updating = false;
@@ -380,7 +383,8 @@ public final class ConfigPanel extends JPanel {
         if (file == null) return null;
         if (path == null) {
             this.values.cancel();
-            show(file, null, "", file.type() == PackCatalog.ConfigType.SERVER
+            // Where worlds could not be read, which of them has the file is not known.
+            show(file, null, "", !this.unlisted.isEmpty() ? "" : file.type() == PackCatalog.ConfigType.SERVER
                     ? "No world has created this file yet. A world creates it with these defaults."
                     : "This file does not exist yet. The game creates it with these defaults.");
             return null;
@@ -418,7 +422,8 @@ public final class ConfigPanel extends JPanel {
     }
 
     private void showNotice() {
-        String text = this.problem.isEmpty() ? this.status : this.problem;
+        String own = this.problem.isEmpty() ? this.status : this.problem;
+        String text = this.unlisted.isEmpty() ? own : own.isEmpty() ? this.unlisted : this.unlisted + "; " + own;
         this.notice.setText(text);
         this.notice.setVisible(!text.isEmpty());
     }

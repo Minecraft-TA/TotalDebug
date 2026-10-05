@@ -86,6 +86,17 @@ class ConfigChangesTest {
     }
 
     @Test
+    void aSettingNoSpecificationDescribesIsNotSaidToBeUsedAtOnce() {
+        ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
+        assertEquals(Effect.GAME_STARTS, edit(changes, config(), PackCatalog.Restart.UNKNOWN, "1", "2"));
+
+        this.location.connected(message -> true);
+        assertEquals(Effect.UNDESCRIBED, edit(changes, config(), PackCatalog.Restart.UNKNOWN, "2", "3"));
+        assertNull(changes.pending(config(), "speed"));
+        assertEquals(PackCatalog.Restart.UNKNOWN, PackCatalog.ConfigSetting.undescribed("widgets.speed", "").restart());
+    }
+
+    @Test
     void editsWaitingForARestartOutlastAReconnectToTheSameGame() throws Exception {
         ConfigChanges changes = new ConfigChanges(this.location, ChangeRecord.inMemory());
         try (GameLock ignored = GameLock.hold(InstancePaths.forGame(this.directory).gameLock())) {

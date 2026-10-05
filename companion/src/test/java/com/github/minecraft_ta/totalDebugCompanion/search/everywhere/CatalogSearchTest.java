@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.zip.ZipOutputStream;
+import java.util.zip.ZipEntry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -84,6 +86,22 @@ class CatalogSearchTest {
         assertEquals("assets/testmod/textures/item/widget.png",
                 assertInstanceOf(ResourceResult.class, resources.getFirst()).resource().path());
         assertTrue(search.search(null, catalog, "widget.png", Category.ALL, 20, null, null).isEmpty());
+    }
+
+    @Test
+    void aResourceBelongsToTheModWhoseFileHoldsItWhateverItsNamespace() throws Exception {
+        Path jar = this.directory.resolve("testmod.jar");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
+            zip.putNextEntry(new ZipEntry("assets/c/textures/item/shared_gear.png"));
+            zip.closeEntry();
+        }
+        CatalogSearch catalog = new CatalogSearch(new CatalogIndex(CatalogFixtures.catalog(jar)), null);
+        SearchEverywhereSearch search = new SearchEverywhereSearch();
+
+        ResourceResult found = assertInstanceOf(ResourceResult.class,
+                search.search(null, catalog, "shared_gear", Category.RESOURCES, 20, null, Set.of("testmod")).getFirst());
+        assertEquals("Test Mod", found.owner());
+        assertTrue(search.search(null, catalog, "shared_gear", Category.RESOURCES, 20, null, Set.of("minecraft+neoforge")).isEmpty());
     }
 
     @Test

@@ -5,8 +5,10 @@ import com.github.minecraft_ta.totalDebugCompanion.game.GameState;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
+import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
@@ -25,6 +27,13 @@ public final class ConfigSources {
         @Override
         public String toString() {
             return this.label;
+        }
+    }
+
+    /** The copies of a configuration found, and why worlds that could not be read are missing, or empty. */
+    public record Listed(List<Source> sources, String problem) {
+        public Listed {
+            sources = List.copyOf(sources);
         }
     }
 
@@ -79,35 +88,43 @@ public final class ConfigSources {
     /**
      * A configuration's loaded file, or for a server configuration the file of each world, the open world's first and
      * then the most recently changed, and then the defaults for new worlds. A server configuration's loaded file belongs to the world open when
-     * the catalog was captured, so every world is listed. Blocking for a server configuration; it lists the worlds.
+     * the catalog was captured, so every world is listed. A world that cannot be read is named in the problem and the
+     * others are listed. Blocking for a server configuration; it lists the worlds.
      */
-    public static List<Source> of(GameLocation location, PackCatalog.ConfigFile file) {
+    public static Listed of(GameLocation location, PackCatalog.ConfigFile file) {
         Path workspace = location.workspace();
         if (file.type() != PackCatalog.ConfigType.SERVER) {
             Path loaded = loaded(workspace, file);
-            return loaded == null ? List.of() : List.of(new Source(file.fileName(), loaded));
+            return new Listed(loaded == null ? List.of() : List.of(new Source(file.fileName(), loaded)), "");
         }
         List<Source> worlds = new ArrayList<>();
         Map<Source, FileTime> modified = new HashMap<>();
         Set<Source> open = new HashSet<>();
+        List<String> unread = new ArrayList<>();
         GameState game = location.read();
         try (DirectoryStream<Path> saves = Files.newDirectoryStream(workspace.resolve("saves"), Files::isDirectory)) {
             for (Path world : saves) {
                 Path path = world.resolve("serverconfig").resolve(file.fileName());
                 if (!Files.isRegularFile(path)) continue;
-                Source source = new Source(world.getFileName().toString(), path);
-                worlds.add(source);
-                modified.put(source, Files.getLastModifiedTime(path));
-                if (game.isOpen(world)) open.add(source);
+                try {
+                    Source source = new Source(world.getFileName().toString(), path);
+                    modified.put(source, Files.getLastModifiedTime(path));
+                    worlds.add(source);
+                    if (game.isOpen(world)) open.add(source);
+                } catch (IOException exception) {
+                    unread.add(world.getFileName() + " (" + exception.getMessage() + ")");
+                }
             }
-        } catch (IOException noSaves) {
+        } catch (NoSuchFileException noSaves) {
             // A pack that never created a world has no server configuration yet.
+        } catch (IOException | DirectoryIteratorException exception) {
+            unread.add("the saves folder (" + (exception.getCause() != null ? exception.getCause() : exception).getMessage() + ")");
         }
         // The world the game has open is the one an edit is meant for.
         worlds.sort(Comparator.comparing((Source source) -> !open.contains(source))
                 .thenComparing(Comparator.comparing((Source source) -> modified.get(source)).reversed()));
         Path defaults = workspace.resolve("defaultconfigs").resolve(file.fileName());
         if (Files.isRegularFile(defaults)) worlds.add(new Source("New worlds", defaults));
-        return worlds;
+        return new Listed(worlds, unread.isEmpty() ? "" : "Could not read " + String.join(", ", unread));
     }
 }

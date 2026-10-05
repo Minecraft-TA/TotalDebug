@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.Timer;
@@ -11,7 +12,7 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.util.function.Consumer;
 
-/** A readable value and an explicit copy action with local feedback. */
+/** A readable value, or a component showing one, and an explicit copy action with local feedback. */
 public final class CopyValue extends JPanel {
     private final JLabel label = PopupElements.label("");
     private final JButton copy = new FlatIconButton(Icons.COPY, false);
@@ -24,6 +25,15 @@ public final class CopyValue extends JPanel {
     }
 
     CopyValue(String actionName, Consumer<String> copyAction) {
+        this(actionName, copyAction, null);
+    }
+
+    /** Copy beside {@code shown}, which its owner keeps up to date; {@link #setValue(String)} sets what is copied. */
+    public CopyValue(String actionName, JComponent shown) {
+        this(actionName, PopupElements::copy, shown);
+    }
+
+    private CopyValue(String actionName, Consumer<String> copyAction, JComponent shown) {
         super(new BorderLayout(12, 0));
         this.actionName = actionName;
         setOpaque(false);
@@ -38,18 +48,27 @@ public final class CopyValue extends JPanel {
         });
         feedback.setRepeats(false);
         label.setMinimumSize(new Dimension(0, label.getPreferredSize().height));
-        add(label, BorderLayout.CENTER);
+        add(shown == null ? label : shown, BorderLayout.CENTER);
         add(copy, BorderLayout.EAST);
         setValue("", "");
     }
 
     public void setValue(String display, String value) {
-        if (!this.value.equals(value)) resetFeedback();
-        this.value = value;
         label.setText(display);
         label.setToolTipText(Tooltip.of("").text(value).html());
+        setValue(value);
+    }
+
+    /** What the copy action copies; hidden while it is empty. */
+    public void setValue(String value) {
+        if (!this.value.equals(value)) resetFeedback();
+        this.value = value;
         copy.setEnabled(!value.isEmpty());
         setVisible(!value.isEmpty());
+    }
+
+    public String value() {
+        return this.value;
     }
 
     @Override public Dimension getPreferredSize() {

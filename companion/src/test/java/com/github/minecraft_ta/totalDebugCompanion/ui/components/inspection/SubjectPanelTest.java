@@ -204,7 +204,7 @@ class SubjectPanelTest {
         assertEquals(List.of(new FactsPanel.Part(burn, origin)), finished);
         assertEquals("FurnaceTool › Burning", finished.getFirst().key());
         assertEquals(List.of(new FactsPanel.Part(new FactSection("FurnaceTool",
-                List.of(Fact.problem("Status", failure)), 1), origin)), failed);
+                List.of(Fact.problem("Status", failure)), 1), origin, Map.of("Status", failure))), failed);
     }
 
     private static ExecutionResult completed(List<FactSection> facts) {

@@ -103,7 +103,7 @@ public final class ConfigLabels implements ChangeLabels {
                 if (setting.path().equals(target.setting())) return setting;
             }
         }
-        return new PackCatalog.ConfigSetting(target.setting(), "", "", "", List.of(), PackCatalog.Restart.NONE);
+        return PackCatalog.ConfigSetting.undescribed(target.setting(), "");
     }
 
     private static PackCatalog.ConfigType type(CatalogIndex index, ChangeRecord.Setting target) {

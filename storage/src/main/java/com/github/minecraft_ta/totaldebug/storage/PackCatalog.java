@@ -48,8 +48,11 @@ public record PackCatalog(
     private static final Pattern KEY = Pattern.compile("[a-z][a-z0-9_]*");
 
     public enum ConfigType { COMMON, CLIENT, SERVER, STARTUP }
-    /** What must restart before a changed setting takes effect. */
-    public enum Restart { NONE, WORLD, GAME }
+    /**
+     * What must restart before a changed setting takes effect; {@code UNKNOWN} for a setting no specification describes,
+     * which only Companion makes.
+     */
+    public enum Restart { NONE, WORLD, GAME, UNKNOWN }
     public enum DependencyType { REQUIRED, OPTIONAL, INCOMPATIBLE, DISCOURAGED }
     public enum Side { CLIENT, SERVER, BOTH }
 
@@ -125,6 +128,11 @@ public record PackCatalog(
             range = text(range);
             allowed = List.copyOf(allowed);
             Objects.requireNonNull(restart, "restart of " + path);
+        }
+
+        /** A setting found in a file that no specification describes, so when the game uses a change is unknown. */
+        public static ConfigSetting undescribed(String path, String comment) {
+            return new ConfigSetting(path, comment, "", "", List.of(), Restart.UNKNOWN);
         }
 
         /** The last part of the path, such as {@code maxEnergy} for {@code machines.maxEnergy}. */
